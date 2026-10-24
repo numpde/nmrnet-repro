@@ -613,8 +613,14 @@ deployment_finish() {
     fi
     if [[ -n ${pending_diagnostic-} ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
     if [[ -n ${deployment_diagnostic-} ]]; then printf '%s\n' "$deployment_diagnostic" >&2; fi
-    if [[ -n ${deployment_primary_failure_receipt-} ]]; then printf 'Protected primary Engine cause: %s\n' "$deployment_primary_failure_receipt" >&2; fi
-    if [[ -n ${deployment_additional_failure_receipt-} ]]; then printf 'Protected additional Engine cause: %s\n' "$deployment_additional_failure_receipt" >&2; fi
+    if [[ $status != 0 || ${deployment_recovery_observed-false} == true ]]; then
+        if [[ -n ${deployment_primary_failure_receipt-} ]]; then printf 'Protected primary Engine cause: %s\n' "$deployment_primary_failure_receipt" >&2; fi
+        if [[ -n ${deployment_additional_failure_receipt-} ]]; then printf 'Protected additional Engine cause: %s\n' "$deployment_additional_failure_receipt" >&2; fi
+    elif [[ -n ${deployment_primary_failure_receipt-} || -n ${deployment_additional_failure_receipt-} ]]; then
+        # Successful settlement removes these temporary inspections. Retain the
+        # failed phase/status above, without sending the operator to dead paths.
+        printf 'The requested deployment action completed after those probe failures.\n' >&2
+    fi
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Original operation receipts: %s\n' "${operation_root-not-established}" >&2
     elif [[ ${deployment_recovery_observed-false} == true ]]; then

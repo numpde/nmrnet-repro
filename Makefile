@@ -348,7 +348,7 @@ help:
 		'make test/integration/provider/deployment/capacity Qualify H128/C128 input/output capacity through the connected Compose path (opt-in).' \
 		'make test/integration/provider/deployment/successive Run two distinct Jobs through one service, then check restart without replay (opt-in).' \
 		'make test/integration/provider/deployment/recovery Check lost Engine replies, startup recovery and fenced replacement without scientific work (opt-in).' \
-		'make test/unit/provider/deployment     Check private deployment bundles and successive refreshes offline.' \
+		'make test/unit/provider/deployment     Check finite deployment and API-client orchestration offline.' \
 		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
 		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \

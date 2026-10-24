@@ -119,9 +119,16 @@ build_provider_image() {
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     source "$repository_root/tools/operator_guidance.sh"
-    next_actions=$(next_make_command 'Next, acquire the models if weight.zip and checkpoints.zip are not yet prepared:' weights/download ARCHIVE=weight.zip; \
-        printf '%s\n' 'Before starting, the provider needs all three images, both extracted model archives, API/interpreter credentials and a private service profile.' \
-        'Configure and install the service using https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration')
+    local -a acquisition_interface=()
+    if [[ -n ${NMRNET_WLAN_INTERFACE_INPUT-} ]]; then acquisition_interface=("WLAN_INTERFACE=$NMRNET_WLAN_INTERFACE_INPUT"); fi
+    next_actions=$(
+        next_make_command 'If the model archives are not prepared yet:' weights/download ARCHIVE=weight.zip "${acquisition_interface[@]}"
+        printf '%s\n' 'Starting the provider requires all three images and both prepared model archives.' \
+            'Choose a deployment name. Write config/deployments/<name>/provider.toml and private deployment.toml; put credentials in secrets/deployments/<name>/.'
+        next_make_command 'After configuring that deployment, install its inputs:' provider/deployment/install 'DEPLOYMENT=<name>'
+        next_make_command 'Then start it:' provider/deployment/up 'DEPLOYMENT=<name>'
+        printf '%s\n' 'Configuration: https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration'
+    )
 }
 
 require_provider_image() {

@@ -121,7 +121,7 @@ if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
 
 class ApiQualificationCompositionTests(unittest.TestCase):
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
-        for scenario in ("normal", "query-failure", "existing-output", "ignored-output"):
+        for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 repository, records, output = root / "repository", root / "records", root / "output"
@@ -133,6 +133,8 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 elif scenario == "ignored-output":
                     (repository / ".work").mkdir()
                     output = repository / ".work/client-proof"
+                elif scenario == "missing-parent":
+                    output = root / "missing" / "nested" / "output"
                 script = tools / "provider_api_qualification.sh"
                 shutil.copyfile("/fixture/provider_api_qualification.sh", script)
                 (tools / "provider.sh").write_text(OWNER)
@@ -178,6 +180,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertFalse(output.exists())
                     self.assertFalse((records / "creates").exists())
                 else:
+                    if scenario == "missing-parent":
+                        self.assertEqual(output.parent.stat().st_mode & 0o777, 0o700)
                     self.assertEqual((records / "creates").read_text().splitlines(),
                                      ["client|host|sha256:" + "a" * 64 + "|true"])
                     self.assertEqual((records / "removals").read_text(), "client\n")

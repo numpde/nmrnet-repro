@@ -219,6 +219,7 @@ api_witness_existing_pasted() {
     # separation there before creating any client files beside retained state.
     identity=$(bash "$repository_root/tools/provider_deployment.sh" client-inputs) || return $?
     umask 077
+    mkdir -p -m 700 -- "$(dirname -- "$provider_host_root")" || return $?
     mkdir -m 700 -- "$provider_host_root" || return $?
     mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/source" "$provider_host_root/client"
     printf '%s\n' "$identity" > "$provider_host_root/source/identity.json"

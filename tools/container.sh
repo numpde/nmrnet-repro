@@ -380,17 +380,14 @@ case "$1" in
                 command+=(--init --entrypoint /opt/provider/environment/bin/python --env PYTHONPATH=/fixture
                     --mount "type=bind,src=$repository_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
-                    --mount "type=bind,src=$repository_root/tools/operator_guidance.sh,dst=/fixture/operator_guidance.sh,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_stage_api_config.py,dst=/fixture/test_stage_api_config_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_stage_api_config.py,dst=/fixture/test_stage_api_config_adversarial.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/staging_test_ports.py,dst=/fixture/staging_test_ports.py,readonly"
-                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_qualification.py,dst=/fixture/test_api_qualification_normative.py,readonly"
-                    --mount "type=bind,src=$repository_root/tools/provider_api_qualification.sh,dst=/fixture/provider_api_qualification.sh,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
                     --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
                     --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
                     --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly"
-                    "$provider_image_id" -B -m unittest -v test_stage_api_config_normative test_stage_api_config_adversarial test_api_qualification_normative)
+                    "$provider_image_id" -B -m unittest -v test_stage_api_config_normative test_stage_api_config_adversarial)
                 ;;
             test/unit/provider/api-client)
                 for directory in tools tests/integration/provider_runtime; do require_source_directory "$directory"; done
@@ -711,7 +708,11 @@ case "$1" in
                 unit_tests=(discover -s tests)
                 if [[ "$1" == test/unit/provider/deployment ]]; then
                     unit_tests=(-v tests.test_provider_deployment_launcher
+                        test_api_qualification_normative
                         tests.test_docker_client.DockerClientTests.test_actual_client_sees_empty_private_config_and_fixed_environment)
+                    command+=(--mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_qualification.py,dst=/workspace/test_api_qualification_normative.py,readonly"
+                        --mount "type=bind,src=$repository_root/tools/provider_api_qualification.sh,dst=/fixture/provider_api_qualification.sh,readonly"
+                        --mount "type=bind,src=$repository_root/tools/operator_guidance.sh,dst=/fixture/operator_guidance.sh,readonly")
                 fi
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"

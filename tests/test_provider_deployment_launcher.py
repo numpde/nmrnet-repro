@@ -17,6 +17,26 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_completed_probes_do_not_point_to_removed_receipts_but_held_work_does(self):
+        for held in (False, True):
+            with self.subTest(held=held), tempfile.TemporaryDirectory() as temporary:
+                result = self.shell('''
+caller_uid=$(id -u) operation_root=$2 operation_established=true operation_owner=mutation
+deployment_name=fixture deployment_action=up deployment_recovery_observed=$3
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_diagnostic='Engine request ready-status-provider-0 failed (client status 1).'
+deployment_primary_failure_receipt=$2/probe.stderr deployment_additional_failure_receipt= pending_diagnostic=
+printf 'PRIVATE_ENGINE_DETAIL' > "$deployment_primary_failure_receipt"
+docker_client_cleanup() { :; }
+deployment_next_actions() { :; }
+deployment_finish
+''', temporary, str(held).lower())
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("client status 1", result.stderr)
+                self.assertEqual("Protected primary Engine cause:" in result.stderr, held)
+                self.assertNotIn("PRIVATE_ENGINE_DETAIL", result.stderr)
+                self.assertEqual((Path(temporary) / "probe.stderr").exists(), held)
+
     def test_bundle_pruning_keeps_current_stopped_and_uncertain_references(self):
         for barrier in ("settled", "pending-query", "pending-mutation", "bad-inventory", "busy-query"):
             with self.subTest(barrier=barrier), tempfile.TemporaryDirectory() as temporary:

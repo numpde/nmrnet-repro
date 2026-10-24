@@ -17,9 +17,9 @@
   <main id="main">
     <h1>021 — Portable deployment and persistent scientific runners</h1>
     <p>Started 23 October 2026; updated as implementation progresses.
-      <strong>Compose runners are implemented and locally qualified, including one
-      real API Job with live interpretation. Production delivery and remaining
-      recovery/cleanup obligations are not yet closed.</strong>
+      <strong>Compose runners are implemented, with real API predictions qualified
+      locally and in production using live interpretation. Remaining unattended
+      recovery and cleanup obligations are not yet closed.</strong>
       The <a href="#local-api-delivery">local delivery checkpoint</a> records exact
       identities and numerical comparisons; the implementation record below
       distinguishes source checks, installed witnesses and outstanding work.</p>
@@ -35,6 +35,7 @@
       <li><a href="#decision">Decision, purpose and completion contract</a></li>
       <li><a href="#current">Initial implementation baseline</a></li>
       <li><a href="#local-api-delivery">Observed real local API delivery</a></li>
+      <li><a href="#production-api-delivery">Observed real production API delivery</a></li>
       <li><a href="#end-state">End-state ownership and layout</a></li>
       <li><a href="#lifetimes">Worker lifetimes and scientific identity</a></li>
       <li><a href="#failure">Failure, recovery and diagnostics</a></li>
@@ -1890,6 +1891,80 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       provider/native-runner containers, rather than the removed host worker owner.
       Internal protected effect/retirement facts retain their existing field names.
       These wording/example corrections do not claim another scientific run.</p>
+    <p><strong>Production runtime cutover, 24 October 2026:</strong> source
+      <code>6369e131511af82aa4c6eda8246f33cde1851cb2</code> was built offline and
+      installed as <code>generation-2ADWCLjN</code> for
+      <code>nmr-dapp32-com</code>. Inference imports passed. The seven-role stack
+      became ready and received its initial Hello acknowledgement from
+      <code>https://nmr.dapp32.com</code>, preserving
+      <code>provider:nmrnet-pa-a</code>, <code>lane:nmrnet-pa-a</code>,
+      <code>generation:nmrnet-pa-a-run</code> and the original selected store.
+      The old inactive unit/template, environment profile and empty launcher
+      directory were removed. Both old frozen credential sets matched maintained
+      private inputs byte-for-byte; a one-time cutover mount inventory found no
+      old input/launcher grants. Ordinary pruning remains scoped to the supported
+      named-deployment/query/original-effect owners; it is not coupled to unrelated
+      containers through a host-wide negative proof.</p>
+    <p>Admitted images were controller
+      <code>sha256:8ddec8762ffbb49ae1e50f4e1c3e22f73961b4849b790645eee2f64e45bbad2d</code>,
+      RDKit <code>sha256:8e6296ea65ddcd34ba66fa4bc5e1af040c7b5cd5281dff9e367ab316abb07324</code>
+      and prediction
+      <code>sha256:400e51d38537c87d5cdca7b946aa5f136118e4e26cdb121047eb32e7476960c8</code>.
+      First installation correctly refused the group-writable public definition
+      (0664); only that caller-owned file was tightened to 0644 before installation
+      succeeded. Credential checks were not relaxed. A first client-witness preflight
+      stopped at a missing private evidence parent before creating its client or
+      submitting a Job. The parent was then prepared with mode 0700 and the same
+      single-Job witness started. That startup/Hello checkpoint is distinct from
+      the subsequently received production prediction below.</p>
+    <p id="production-api-delivery"><strong>Real production API delivery,
+      24 October 2026:</strong> the maintained client-only witness completed one
+      <code>demo</code> Job against <code>https://nmr.dapp32.com</code>:
+      <code>job:496e737eaae6eaec6d3627162d1db0132591c6993716fc561e360b6a89bf4f6b</code>.
+      It recorded 24 client API requests, including readback polling, and did not
+      resubmit the Job. The first configured <code>qwen3.8-flash-next</code> endpoint
+      returned HTTP 400; <code>gpt-5.6-luna</code> then selected
+      <code>prepare_pasted</code>. There were two model exchanges and zero input
+      corrections. OpenAI fallback succeeded; the primary endpoint's rejection
+      remains a separate diagnostic/configuration issue.</p>
+    <p>The delivered scientific result was 21,448 bytes, SHA-256
+      <code>338f1b692c5de39b83a88055abc3148be0140a962c8f86e4315f28de99648b9c</code>.
+      The unchanged historical oracle matched selected model artifacts, runtime,
+      frozen requests, float32 coordinates, units and ordered predictions exactly,
+      including the four chloromethane shifts recorded in the local checkpoint.
+      Runtime was Python 3.12.12, Torch 2.13.0+cpu, NumPy 2.4.1, scikit-learn 1.8.0
+      and joblib 1.4.2. The fixture requested 17 significant digits; the normal
+      default remains four. This is repeatability and actual API delivery evidence
+      for the supplied-coordinate path, not experimental accuracy, five-checkpoint
+      ensemble reproduction, production Upload/generated-geometry coverage or GUI
+      qualification.</p>
+    <p>The finite client retired, and a subsequent admitted status query found all
+      seven production roles running, non-restarting and ready from the same
+      <code>generation-2ADWCLjN</code>. It was the only remaining input generation;
+      settled mutation scratch was absent. Private receiving evidence is under
+      <code>.work/qualification/production-api-existing-6369e13/client/</code>.
+      The Job, source revision, image identities, result hash, runtime, selected
+      interpreter route and numerical comparison are retained in this note so its
+      essential findings do not depend on keeping that scratch. No signatures,
+      credential bytes, raw response dumps or model transcripts are copied here.</p>
+    <p><strong>Operator follow-through after the production witness:</strong> the
+      client-only lane now creates missing evidence parents with mode 0700 only
+      after original deployment metadata and disjoint-path admission. Its final
+      output leaf still uses exclusive creation, preserving uncertain-Job protection.
+      The tests-first nested-parent witness reproduced the observed refusal.
+      Recovered startup probes retain their failed phase/status but no longer point
+      to deleted inspection files; genuine command failures and late-effect
+      restrictions retain their protected receipt pointers.</p>
+    <p>The unchanged recording shell-composition module now runs in the existing
+      source-only deployment lane, alongside its related lifecycle checks. Installed
+      configuration staging remains in its separate provider-image lane. All 43
+      focused deployment/client-composition checks and all three documentation
+      checks passed. Independent operator and ownership reviews found no issue.
+      Build follow-up text names the maintained configuration/secrets layout and
+      <code>provider/deployment/install</code>/<code>up</code>; it forwards an already
+      selected <code>WLAN_INTERFACE</code> or leaves the existing acquisition prompt
+      available. No new selector, automatic interface discovery, API Job or model
+      request was introduced for these corrections.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
