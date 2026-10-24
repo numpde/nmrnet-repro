@@ -120,6 +120,71 @@ if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
+    def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
+        for scenario in ("normal", "query-failure", "existing-output", "ignored-output"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                repository, records, output = root / "repository", root / "records", root / "output"
+                tools = repository / "tools"
+                tools.mkdir(parents=True)
+                records.mkdir()
+                if scenario == "existing-output":
+                    output.mkdir()
+                elif scenario == "ignored-output":
+                    (repository / ".work").mkdir()
+                    output = repository / ".work/client-proof"
+                script = tools / "provider_api_qualification.sh"
+                shutil.copyfile("/fixture/provider_api_qualification.sh", script)
+                (tools / "provider.sh").write_text(OWNER)
+                (tools / "docker_client.sh").write_text("docker_client_prepare() { :; }\ndocker_client_cleanup() { :; }\n")
+                (tools / "git_metadata.sh").write_text(
+                    'repository_git() { if [[ $* != *status* ]]; then printf "%040d\\n" 1; fi; }\n'
+                )
+                (tools / "git_inputs.sh").write_text(
+                    'copy_git_blobs() { local source=$2 target=$4; shift 5; '
+                    'for path in "$@"; do mkdir -p "$(dirname -- "$target/$path")"; cp -- "$source/$path" "$target/$path"; done; }\n'
+                )
+                (tools / "provider_deployment.sh").write_text('''set -eu
+[[ $# == 1 && $1 == client-inputs && $NMRNET_DEPLOYMENT_INPUT == original ]]
+printf '%s\\n' "$1" > "$TEST_RECORDS/query"
+[[ $TEST_QUERY_FAILED == false ]] || exit 7
+printf '%s\\n' '{"fixture":"admitted original identity"}'
+''')
+                for name in ("tools/inference_native.sh", "tools/worker_retirement.sh", "tools/bound_http_proxy.py",
+                             "tools/container_guard.py", "tests/integration/provider_runtime/api_prediction.py",
+                             "tests/fixtures/preparation/api_pasted.json"):
+                    path = repository / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+                environment = dict(PATH=os.environ["PATH"], TEST_RECORDS=str(records),
+                    TEST_QUERY_FAILED=str(scenario == "query-failure").lower(), NMRNET_DEPLOYMENT_INPUT="original",
+                    NMRNET_PROJECT_REF_INPUT="project:fixture", NMRNET_USER_ID_INPUT="fixture",
+                    NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT=str(root / "credentials"),
+                    NMRNET_CA_FILE_INPUT=str(root / "ca.pem"), NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
+                    NMRNET_ADDRESS_INPUT="127.0.0.1", NMRNET_INTERFACE_INPUT="fixture0",
+                    NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64, NMRNET_OUTPUT_INPUT=str(output))
+                result = subprocess.run(["bash", str(script), "existing-pasted"], env=environment,
+                                        capture_output=True, text=True, timeout=10, check=False)
+                if scenario == "existing-output":
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("Use fresh client output", result.stderr)
+                    self.assertFalse((records / "query").exists())
+                    self.assertFalse((records / "creates").exists())
+                    continue
+                self.assertEqual(result.returncode, 7 if scenario == "query-failure" else 0, result.stderr)
+                self.assertEqual((records / "query").read_text(), "client-inputs\n")
+                self.assertFalse((records / "deployments").exists())
+                if scenario == "query-failure":
+                    self.assertFalse(output.exists())
+                    self.assertFalse((records / "creates").exists())
+                else:
+                    self.assertEqual((records / "creates").read_text().splitlines(),
+                                     ["client|host|sha256:" + "a" * 64 + "|true"])
+                    self.assertEqual((records / "removals").read_text(), "client\n")
+                    grants = (records / "client.grants").read_bytes()
+                    self.assertNotIn(b"/attempts", grants)
+                    self.assertNotIn(b"model_peer", grants)
+
     def _ambiguity(self, root, *, missing=None, failed=False, changed=False, probe="ambiguity"):
         repository, records, output = root / "repository", root / "records", root / "output"
         records.mkdir()
@@ -326,6 +391,9 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 image_record = repository / ".work/provider/image-id"
                 image_record.parent.mkdir(parents=True)
                 image_record.write_text(image + "\n")
+                prediction_record = repository / ".work/inference/image-id"
+                prediction_record.parent.mkdir(parents=True)
+                prediction_record.write_text(image + "\n")
                 if mode == "real-sdf-zip":
                     # The Git capture owner has separate tests; here record its
                     # closed input grant and copy authored fixture bytes only.

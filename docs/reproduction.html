@@ -206,20 +206,14 @@ service comparison.</p>
 <p><code>make test/integration/native-geometry-worker</code> runs real MOL/SDF parsing across
 the private socket in the recorded RDKit image. It checks original atom/record
 identity, source hashes, unit conversion, selected record order and whole-selection
-rejection. The controller process does not import RDKit. Exact-container retirement
-has separate container-composition lanes below; the native socket tests run child
+rejection. The controller process does not import RDKit. Native retirement
+has separate Compose checks below; the native socket tests run child
 processes inside one contained test.</p>
-<p><code>make test/integration/provider-geometry-worker</code> checks separate checker-image
-containers for XYZ success and retirement of a stalled reader.
-<code>make test/integration/provider-native-geometry-worker</code> checks a separate admitted
-RDKit reader and checker-image controller for MOL/SDF success, source rejection,
-protected native failure and host-confirmed retirement. Its stall case parses a
-real MOL first, then deliberately blocks while ignoring termination. The exact
-allocation marker must already be present when the read timeout is handled; a
-late marker fails qualification. This tests retirement after a controlled stall,
-without claiming an observed RDKit hang. Both lanes are offline and leave engine
-access with the host. Image identities, posture, source hashes and retirement
-receipts stay under <code>.work/qualification</code>; native failure text stays private.</p>
+<p><code>make test/integration/provider-core/runner</code> checks native connections,
+ cancellation and lost-control retirement. <code>make test/integration/provider/deployment/recovery</code>
+ checks lost Docker replies, old-container-ID fencing and an installed reader-supervisor
+ crash without scientific input. These checks establish control and retirement behavior;
+ they do not demonstrate an observed RDKit hang or scientific accuracy.</p>
 <h2 id="retrieve-failure-diagnostics">Retrieve failure diagnostics</h2>
 <p>When a command reports a retained diagnostic path, inspect it first.
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/tools/docker.sh">Acquisition</a> receipts under <code>/tmp/nmrnet-proxy.*</code> include create
@@ -334,33 +328,19 @@ or a benchmark accuracy claim.</p>
 <td><code>make prediction/worker-parity</code></td>
 <td>Direct and process/socket predictions on four retained geometries, with zero absolute and relative tolerances</td>
 </tr>
-<tr>
-<td><code>make test/integration/provider-scientific-worker</code></td>
-<td>Released CPU model execution, retained result bytes and signed publication to a local contract peer</td>
-</tr>
-<tr>
-<td><code>make test/integration/provider-service/references</code></td>
-<td>Four release geometries through the Upload service; all 137 H/C outputs and 64 historical reference positions</td>
-</tr>
-<tr>
-<td><code>make test/integration/provider-service/pasted</code></td>
-<td>Supplied nm table, atom order and independently bounded coordinate conversion</td>
-</tr>
-<tr>
-<td><code>make test/integration/provider-service/uploads</code></td>
-<td>Selected XYZ records in order, including H-only and H/C output coverage</td>
-</tr>
-<tr>
-<td><code>make test/integration/provider-service/smiles</code></td>
-<td>Three generated butane conformers, H-parent mapping and exact downstream coordinates</td>
-</tr>
-<tr>
-<td><code>make test/integration/provider-service/capacity</code></td>
-<td>H128/C128 execution and measured resource use; this is a capacity construction, not an accuracy benchmark</td>
-</tr>
+<tr><td><code>make test/integration/provider/deployment</code></td>
+<td>Supplied chloromethane nm table, atom order, independent binary64 unit-conversion bound and complete finite H/C rows</td></tr>
+<tr><td><code>make test/integration/provider/deployment/references</code></td>
+<td>Four original validation inputs: exact decoded predictions against pinned CPU packets, covering 137 full outputs and 64 historical positions</td></tr>
+<tr><td><code>make test/integration/provider/deployment/smiles</code></td>
+<td>Two generated CCl geometries with distinct conformer IDs; source/H-parent identities and finite coordinates/predictions, without an accuracy claim</td></tr>
+<tr><td><code>make test/integration/provider/deployment/capacity</code></td>
+<td>Synthetic H128/C128 inputs and all 256 indexed outputs: capacity, not chemical accuracy</td></tr>
+<tr><td><code>make test/integration/provider/deployment/successive</code></td>
+<td>Two Jobs in one service process, then restart without a third scientific execution</td></tr>
 </tbody>
 </table>
-<p>These service lanes use local scripted API/store and interpreter peers. A passing
+<p>These Compose lanes use the production factory and installed serial runners with local signed API peers and scripted interpretation. A passing
 lane establishes its recorded comparison, not experimental accuracy or
 cross-platform equality. The <a href="https://numpde.github.io/nmrnet-repro/">scientific guide</a>
 explains how the numerical references differ from published benchmark errors.
@@ -369,7 +349,7 @@ The <a href="provider.html">operator reference</a> covers deployed API checks an
 run outcomes and source/image identities.</p>
 <p>Prediction and input preparation run in separate offline containers. Only the
 prediction worker receives checkpoints; the controller owns API credentials and
-durable state. The host confirms exact-container retirement before publication.
+durable state. The native supervisors own child termination, reaping and scratch cleanup; the host controls the retained runtime containers.
 Successful runs retain source-hashed summaries under <code>.work/qualification/</code>;
 failed runs retain private receipts and diagnostic evidence at the reported
 paths. Runtime output stays in bounded Docker logs; it is not exported beside

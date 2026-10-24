@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -106,7 +107,9 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
     (destination / "deployment.toml").write_text("\n".join(lines) + "\n")
 
 
-def stage(root, origin, topology, *, inputs, interpreter_config):
+def stage(root, origin, topology, *, inputs, interpreter_config, prediction_image_id):
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", prediction_image_id) is None:
+        raise ValueError("Qualification requires the explicit current prediction image identity.")
     """Freeze one qualification's inputs before normal provider startup capture."""
     os.umask(0o077)
     source = root / "source"
@@ -191,18 +194,18 @@ def stage(root, origin, topology, *, inputs, interpreter_config):
         "profile": credential.profile,
         "topology": admitted.api.expected_topology,
         "interpretation_scripted": interpreter_config is None,
+        "prediction_image_id": prediction_image_id,
     }
     if interpreter_config is not None:
-        identity["interpreter_max_turns"] = admitted.interpreter.max_turns
         endpoint_settings = admitted.interpreter.endpoints[0]
-        identity["interpreter"] = json.loads(
+        identity["interpreter"] = {"max_turns": admitted.interpreter.max_turns, "endpoints": [json.loads(
             ChatEndpoint(
                 endpoint_settings.spec,
                 transport=endpoint_settings.http.new_transport(),
                 request_bytes=endpoint_settings.request_bytes,
                 response_bytes=endpoint_settings.response_bytes,
             ).identity
-        )
+        )]}
     (source / "identity.json").write_text(json.dumps(identity) + "\n")
     (source / "host.txt").write_text(host + "\n")
 
@@ -212,6 +215,7 @@ if __name__ == "__main__":
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--origin")
     parser.add_argument("--topology")
+    parser.add_argument("--prediction-image-id")
     parser.add_argument("--deployment", action="store_true")
     parser.add_argument("--api-interface")
     parser.add_argument("--api-address")
@@ -229,9 +233,10 @@ if __name__ == "__main__":
             parser.error("interpreter file inspection does not accept API origin or topology")
         inspect_interpreter(args.inspect_interpreter, args.root)
     else:
-        if args.origin is None or args.topology is None:
-            parser.error("configuration staging requires explicit --origin and --topology")
-        stage(args.root, args.origin, args.topology, inputs=Path("/input"), interpreter_config=args.interpreter_config)
+        if args.origin is None or args.topology is None or args.prediction_image_id is None:
+            parser.error("configuration staging requires explicit --origin, --topology and --prediction-image-id")
+        stage(args.root, args.origin, args.topology, inputs=Path("/input"), interpreter_config=args.interpreter_config,
+              prediction_image_id=args.prediction_image_id)
         if args.deployment:
             stage_deployment(
                 args.root, api_interface=args.api_interface, api_address=args.api_address,

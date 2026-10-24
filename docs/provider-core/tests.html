@@ -70,29 +70,23 @@ It exercises actual core/controllers and local signed TLS: current independent
 Hello, stop/drain/cancellation, late factory adoption, real setup-store I/O,
 held controller settlement, independent failures and exact lost-completion records.
 These are local ordering/ownership proofs, not host engine provisioning, native
-capacity or external/deployed delivery. The first coordinator stops on outages
-and retains all records; automatic recovery and retention policy are separate.
+capacity or external/deployed delivery. Reviewed admission/discovery read failures retry from a fresh complete view; Hello recovery builds the latest complete announcement after each wait. Active Attempt failures and holds stop the service. These loops do not repeat science or other mutations. Confirmed-history maintenance has its own admission policy.
 The service lane also observes an attributed model-input report at the signed TLS
 failure recipient, after durable retention and complete recording-worker retirement.
 It checks full protected evidence and the operational-error path's original cause,
 execution-entered record and absence of a terminal submission. This does not prove
 native fault handling, GUI rendering or operator diagnostic delivery.
-<code>make test/integration/provider-core/native-factory</code> checks partial native setup,
-original setup-read settlement, cancellation plus independent retirement failure,
-and bounded observation of the original channel close. The fixed native
-<code>make test/integration/provider-service/{uploads,pasted,smiles}</code> lanes run the actual service with
-post-admission host allocation and production worker entrypoints, released H/C,
-unchanged route-local molecular/source oracles, host retirement and exact terminal replay.
-Its API/store/model peers remain local scripted fixtures; external/deployed
-qualification and capacity remain separate.
-<code>make test/integration/provider-core/lifecycle</code> selects the shared native-fixture
-setup, cleanup, source-manifest and cancellation fault tests. Native cases skip
-there; the separately selected scientific-worker/{smiles,pasted,uploads} targets
-each run one actual native route through that same lifecycle, configured runtime
-assembly, signed local API and exact durable replay. Molecular expectations stay
-in their route-specific test modules.
-The separately selected make test/integration/provider-scientific-worker lane
-connects installed core to the real NMRNet worker and exact-container retirement.
-Its API peer remains a local wire-contract fixture; it is not deployed API proof.
+<code>make test/integration/provider-core/native-factory</code> checks native setup ownership,
+ cancellation and interrupted setup settlement. <code>make test/integration/provider-core/runner</code>
+ checks actual native connections, cancellation and lost-control retirement.
+ <code>make test/integration/provider-core/lifecycle</code> checks supplied-format correction,
+ source correspondence and pure reference/capacity fixtures.
+ The maintained <code>make test/integration/provider/deployment</code> and its
+ <code>references</code>, <code>smiles</code>, <code>capacity</code>, <code>successive</code> and
+ <code>recovery</code> subtargets check the installed serial runners and production factory in Compose.
+ RDKit and released NMRNet CPU inference run in the scientific cases; interpreter replies
+ are scripted and signed API peers are local. External API delivery is separate, and GUI
+ behavior is outside this repository's system under test. Their exact scientific and recovery
+ scopes are in the <a href="../provider.html">operator reference</a>.
 Use make test/repository/provider-core for the focused guard, source inventory,
 Make and cache conventions. It shares the maintained repository-check launcher.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>

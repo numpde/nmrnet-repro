@@ -17,6 +17,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_finite_recovery_witness_retains_its_command_stop_and_join_owner(self):
+        result = self.shell('''
+source "$1/tools/provider_recovery_qualification.sh"
+provider_host_refuse() { printf '%s\\n' "$1" >&2; return 2; }
+sleep 60 &
+child=$! recovery_command_pid=$! recovery_command_signalled=false
+if recovery_witness_stop_command; then exit 91; fi
+[[ -z $recovery_command_pid && $recovery_command_signalled == true ]]
+if kill -0 "$child" 2>/dev/null; then exit 92; fi
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Finite recovery command failed", result.stderr)
+
     def test_next_action_failure_keeps_completed_action_and_reports_its_own_cause(self):
         with tempfile.TemporaryDirectory() as temporary:
             result = self.shell('''

@@ -1,4 +1,4 @@
-"""Corrupted science and extra interpretation exchanges fail qualification."""
+"""Corrupted science, foreign interpreter routes and exceeded budgets fail qualification."""
 
 from tools.container_guard import require_container
 
@@ -11,6 +11,7 @@ import struct
 import tempfile
 import traceback
 import unittest
+import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -41,6 +42,38 @@ from prediction_test_ports import (
 
 
 class ApiPredictionAdversarialTests(unittest.TestCase):
+    def test_main_rejects_a_changed_oracle_before_constructing_or_submitting_a_client(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for directory in ("credentials", "input", "fixture", "output"):
+                (root / directory).mkdir()
+            for name in ("registration.json", "signing.private.json"):
+                path = root / "credentials" / name
+                path.write_bytes(b"{}")
+                path.chmod(0o600)
+            (root / "input/identity.json").write_text(json.dumps({
+                "profile": "dev-local", "prediction_image_id": "sha256:" + "c" * 64,
+            }))
+            (root / "input/retained-result.json").write_bytes(b"changed oracle")
+            (root / "fixture/case.json").write_text('{"specification":"fixed input"}')
+
+            def fixture_path(value):
+                return root / str(value).lstrip("/")
+
+            with (
+                patch("api_prediction.Path", side_effect=fixture_path),
+                patch("api_prediction.validate_user_credential_artifacts"),
+                patch("api_prediction.signal.signal"), patch("api_prediction.signal.alarm"),
+                patch("api_prediction.Client") as client, patch("api_prediction.submit") as submit_job,
+                patch.object(sys, "argv", ["client", "--address", "192.0.2.1", "--interface", "fixture0",
+                                          "--project-ref", "project:user-demo", "--user-id", "demo",
+                                          "--readback-seconds", "900", "--process-seconds", "960", "--case-kind", "pasted"]),
+                self.assertRaisesRegex(AssertionError, "independent retained scientific receipt differs"),
+            ):
+                main()
+            client.assert_not_called()
+            submit_job.assert_not_called()
+
     def test_explicit_resume_refuses_changed_or_finalized_upload_before_capability_or_transfer(self):
         _actual, retained, _receipt, _metadata, _interpreter, _upload = uploaded_sdf_documents()
         with patch("api_prediction._retained_sdf_science", return_value=retained):
@@ -92,7 +125,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 else:
                     actual["geometries"][1]["source"]["upload_ref"] = "upload:sha256:" + "0" * 64
                 with self.assertRaises(AssertionError):
-                    compare_sdf_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, upload=upload)
+                    compare_sdf_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, upload=upload)
 
     def test_sdf_source_refusal_occurs_before_any_api_dispatch(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -136,7 +169,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                         self.assertRaisesRegex(AssertionError, "17 significant digits"),
                     ):
                         compare_science(
-                            json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter, case_kind=case_kind
+                            json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, case_kind=case_kind
                         )
                     pasted.assert_not_called()
                     smiles.assert_not_called()
@@ -154,7 +187,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     actual["geometries"][1]["source"]["conformer_id"] = actual["geometries"][0]["source"]["conformer_id"]
                 with self.assertRaises(AssertionError):
                     compare_smiles_scientific_documents(
-                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                        actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, expected=expected
                     )
 
     def test_middle_conformer_source_order_native_values_stereo_coverage_or_prediction_cannot_be_skipped(self):
@@ -202,7 +235,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     ).hexdigest()
                 with self.assertRaisesRegex(AssertionError, "parents" if fault == "parents" else "geometry 2"):
                     compare_smiles_scientific_documents(
-                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                        actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, expected=expected
                     )
 
     def test_upload_publication_then_readback_expiry_preserves_both_receipts_without_resubmission(self):
@@ -222,7 +255,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 )
                 mutations = [call for call in calls if call[0] != "GET"]
                 with self.assertRaisesRegex(TimeoutError, "no mutation was retried"):
-                    receive(client, receipt, readback_seconds=900, case_kind="upload")
+                    receive(client, receipt, readback_seconds=900, case_kind="upload", prediction_image_id="sha256:" + "c" * 64)
             self.assertEqual(clock.seconds, 990)
             self.assertEqual([call for call in calls if call[0] != "GET"], mutations)
             self.assertEqual(len(mutations), 8)
@@ -434,7 +467,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                         retained,
                         receipt,
                         metadata,
-                        interpreter=interpreter,
+                        interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64,
                         upload=upload,
                         source=source,
                         expected=expected,
@@ -451,7 +484,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     preparation["stereochemistry_sha256"] = "0" * 64
                 with self.assertRaisesRegex(AssertionError, "stereochemistry"):
                     compare_smiles_scientific_documents(
-                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                        actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, expected=expected
                     )
 
     def test_generated_ccl_wrong_parents_order_chlorine_row_count_or_identity_fail(self):
@@ -495,7 +528,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     actual["interpretation"]["turns_started"] = 2
                 with self.assertRaises(AssertionError):
                     compare_smiles_scientific_documents(
-                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                        actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, expected=expected
                     )
 
     def test_real_atom_order_binary32_coordinate_prediction_and_interpretation_changes_fail(self):
@@ -520,7 +553,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 else:
                     actual["interpretation"]["routes"][0]["endpoint"]["model"] = "different-model"
                 with self.assertRaises(AssertionError):
-                    compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
+                    compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64)
 
     def test_changed_binary64_value_cannot_pass_merely_because_binary32_is_unchanged(self):
         actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
@@ -530,20 +563,20 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
         self.assertEqual(struct.pack("f", original), struct.pack("f", changed))
         request["coordinates"][0][0] = changed
         with self.assertRaisesRegex(AssertionError, "prepared_request"):
-            compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
+            compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64)
 
     def test_pinned_retained_receipt_hash_is_still_checked_before_comparison(self):
         with (
             patch("api_prediction._fixture_bytes", return_value=b"{}"),
             self.assertRaisesRegex(AssertionError, "independent retained"),
         ):
-            compare_science(b"{}", {}, {}, interpreter=None, case_kind="pasted")
+            compare_science(b"{}", {}, {}, interpreter=None, prediction_image_id="sha256:" + "c" * 64, case_kind="pasted")
 
     def test_scripted_source_positions_remain_exact(self):
         actual, retained, receipt, metadata, _interpreter, _source = scientific_documents()
         actual["geometries"][0]["source"]["positions"][0] = 2
         with self.assertRaises(AssertionError):
-            compare_scientific_documents(actual, retained, receipt, metadata, interpreter=None)
+            compare_scientific_documents(actual, retained, receipt, metadata, interpreter=None, prediction_image_id="sha256:" + "c" * 64)
 
     def test_real_source_identity_and_actual_line_positions_are_required(self):
         for fault in (
@@ -569,7 +602,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 else:
                     source["positions"][1] = source["positions"][0]
                 with self.assertRaises(AssertionError):
-                    compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
+                    compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64)
 
     def test_readback_expiry_retains_the_created_job_without_resubmission(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -581,7 +614,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 patch("api_prediction.time.sleep", clock.sleep),
                 self.assertRaisesRegex(TimeoutError, "no mutation was retried"),
             ):
-                receive(client, receipt, readback_seconds=900, case_kind="pasted")
+                receive(client, receipt, readback_seconds=900, case_kind="pasted", prediction_image_id="sha256:" + "c" * 64)
             self.assertEqual(clock.seconds, 900)
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertFalse((client.output / "scientific-result.json").exists())
@@ -646,7 +679,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 patch("api_prediction.compare_science"),
                 self.assertRaisesRegex(TimeoutError, "received result exceeded"),
             ):
-                receive(client, receipt, readback_seconds=900, case_kind="pasted")
+                receive(client, receipt, readback_seconds=900, case_kind="pasted", prediction_image_id="sha256:" + "c" * 64)
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertTrue((client.output / "scientific-result.json").exists())
             self.assertEqual([method for _label, method, *_rest in calls if method != "GET"], ["POST", "PUT", "PUT"])

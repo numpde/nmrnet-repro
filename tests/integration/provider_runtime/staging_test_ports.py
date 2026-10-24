@@ -50,7 +50,7 @@ def staged_real_config(root):
     key.chmod(0o600)
     inspect_interpreter(fragment, selection)
     (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
-    stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
+    stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
     return load_provider_config(root / "source/provider.toml")
 
 

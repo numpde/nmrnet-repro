@@ -358,6 +358,7 @@ help:
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
 		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.html for required selectors.' \
+		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job to the admitted deployment; create only its finite public client (opt-in).' \
 		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
@@ -510,6 +511,10 @@ provider/recovery/run:
 
 provider/qualify/api/pasted:
 	bash tools/provider_api_qualification.sh scripted-pasted
+
+.PHONY: provider/qualify/api/existing-pasted
+provider/qualify/api/existing-pasted:
+	bash tools/provider_api_qualification.sh existing-pasted
 
 provider/qualify/api/real-pasted:
 	bash tools/provider_api_qualification.sh real-pasted

@@ -405,7 +405,7 @@ def publish_reserved_upload(client, upload, source):
     return finalized
 
 
-def receive(client, receipt, *, readback_seconds, case_kind):
+def receive(client, receipt, *, readback_seconds, case_kind, prediction_image_id):
     job = "/v1/jobs/" + receipt["job_ref"]
     deadline = time.monotonic() + readback_seconds
     while time.monotonic() < deadline:
@@ -455,6 +455,7 @@ def receive(client, receipt, *, readback_seconds, case_kind):
                 receipt,
                 metadata,
                 interpreter=None if client.identity["interpretation_scripted"] else client.identity["interpreter"],
+                prediction_image_id=prediction_image_id,
                 case_kind=case_kind,
             )
             if time.monotonic() >= deadline:
@@ -530,7 +531,7 @@ def preflight_sdf_zip():
     return archive.getvalue()
 
 
-def compare_science(content, receipt, metadata, *, interpreter, case_kind):
+def compare_science(content, receipt, metadata, *, interpreter, case_kind, prediction_image_id):
     retained = _retained_sdf_science() if case_kind == "sdf-zip" else _retained_science()
     actual = json.loads(content)
     require(
@@ -547,14 +548,14 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind):
         "Scientific qualification requires the explicitly requested max verbosity and 17 significant digits",
     )
     if case_kind == "pasted":
-        compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
+        compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id)
     elif case_kind == "sdf-zip":
         compare_sdf_scientific_documents(
             actual,
             retained,
             receipt,
             metadata,
-            interpreter=interpreter,
+            interpreter=interpreter, prediction_image_id=prediction_image_id,
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
         )
     elif case_kind in ("smiles", "smiles-multiple"):
@@ -562,21 +563,43 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind):
         expected = next(
             case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == fixture_name
         )
-        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, expected=expected)
+        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id, expected=expected)
     else:
         compare_upload_scientific_documents(
             actual,
             retained,
             receipt,
             metadata,
-            interpreter=interpreter,
+            interpreter=interpreter, prediction_image_id=prediction_image_id,
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
             source=_fixture_bytes("/fixture/atom_order.xyz"),
             expected=json.loads(_fixture_bytes("/fixture/expected.json"))["geometries"]["chloromethane"],
         )
 
 
-def compare_scientific_documents(actual, retained, receipt, metadata, *, interpreter):
+def require_selected_interpretation(observation, interpreter, operation):
+    """Allow configured correction/fallback; retain actual routes in the result.
+
+    ToolConversation owns the total turn ceiling and ordered endpoint fallback.
+    Delivery qualification must not turn a valid correction into another Job.
+    """
+    turns, corrections = observation["turns_started"], observation["corrections"]
+    routes, operations = observation["routes"], observation["operations"]
+    require(
+        observation["schema_id"] == "nmrnet.input_interpretation.v1"
+        and observation["outcome"] == "selected"
+        and type(turns) is int and 0 < turns <= interpreter["max_turns"]
+        and type(corrections) is int and 0 <= corrections < turns
+        and operations and operations[-1] == operation and len(operations) <= turns
+        and 0 < len(routes) <= len(interpreter["endpoints"])
+        and all(route["endpoint"] == endpoint and type(route["turns_started"]) is int and route["turns_started"] > 0
+                for route, endpoint in zip(routes, interpreter["endpoints"]))
+        and sum(route["turns_started"] for route in routes) == turns,
+        "Selected interpretation differs from the admitted endpoints, turn budget or successful input operation",
+    )
+
+
+def compare_scientific_documents(actual, retained, receipt, metadata, *, interpreter, prediction_image_id):
     """Check exact science while preserving a real model's received source text.
 
     Model spelling and line positions may differ. Canonical prepared values,
@@ -594,8 +617,8 @@ def compare_scientific_documents(actual, retained, receipt, metadata, *, interpr
         require(actual[key] == retained[key], f"Scientific {key} differs from the retained qualified receipt")
     require(len(actual["geometries"]) == len(retained["geometries"]) == 1, "Expected exactly one supplied geometry")
     require(
-        actual["execution"]["image_id"] == retained["execution"]["image_id"],
-        "Prediction image differs from the retained scientific receipt",
+        actual["execution"]["image_id"] == prediction_image_id,
+        "Prediction image differs from the admitted current deployment",
     )
     source = actual["geometries"][0]["source"]
     require(
@@ -628,16 +651,7 @@ def compare_scientific_documents(actual, retained, receipt, metadata, *, interpr
             "Real pasted source did not retain its SHA-256, byte length and ordered received line positions",
         )
         preparation = preparation | {"method": {"table": "coordinate_table", "xyz": "xyz"}[source["format"]]}
-        observation = actual["interpretation"]
-        require(
-            observation["schema_id"] == "nmrnet.input_interpretation.v1"
-            and observation["outcome"] == "selected"
-            and observation["operations"] == ["prepare_pasted"]
-            and observation["turns_started"] == 1
-            and observation["corrections"] == 0
-            and observation["routes"] == [{"endpoint": interpreter, "turns_started": 1}],
-            "Real interpretation did not select pasted input in one uncorrected exchange with the admitted endpoint",
-        )
+        require_selected_interpretation(actual["interpretation"], interpreter, "prepare_pasted")
     require(actual["geometries"][0]["preparation"] == preparation, "Scientific source unit, method or conversion differs")
     for key in (
         "request_sha256",
@@ -653,7 +667,7 @@ def compare_scientific_documents(actual, retained, receipt, metadata, *, interpr
         )
 
 
-def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, interpreter, expected):
+def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, interpreter, expected, prediction_image_id):
     """Check the admitted SMILES fixture; retained values supply metadata only.
 
     Native result admission owns complete graph, settings and stereochemistry.
@@ -667,7 +681,7 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
     )
     for key in ("selected_models", "runtime"):
         require(actual[key] == retained[key], f"Generated scientific {key} differs from qualified metadata")
-    require(actual["execution"]["image_id"] == retained["execution"]["image_id"], "Generated prediction image differs")
+    require(actual["execution"]["image_id"] == prediction_image_id, "Generated prediction image differs")
     source = expected["smiles"].encode("utf-8")
     source_sha256 = hashlib.sha256(source).hexdigest()
     generation = actual["generation"]
@@ -772,19 +786,10 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
             and all(type(row["shift_ppm"]) in (int, float) and math.isfinite(row["shift_ppm"]) for row in predictions),
             f"Generated geometry {position}: C/H prediction rows are missing, reordered, nonfinite or include another element",
         )
-    observation = actual["interpretation"]
-    require(
-        observation["schema_id"] == "nmrnet.input_interpretation.v1"
-        and observation["outcome"] == "selected"
-        and observation["operations"] == ["prepare_smiles"]
-        and observation["turns_started"] == 1
-        and observation["corrections"] == 0
-        and observation["routes"] == [{"endpoint": interpreter, "turns_started": 1}],
-        "Real interpretation did not select SMILES in one uncorrected exchange with the admitted endpoint",
-    )
+    require_selected_interpretation(actual["interpretation"], interpreter, "prepare_smiles")
 
 
-def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload, source, expected):
+def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload, source, expected, prediction_image_id):
     """Compare existing XYZ values exactly while retaining the actual wire digest."""
     require(
         actual["job_ref"] == receipt["job_ref"]
@@ -795,7 +800,7 @@ def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, 
     for key in ("selected_models", "runtime"):
         require(actual[key] == retained[key], f"Uploaded scientific {key} differs from the qualified receipt")
     require(
-        actual["execution"]["image_id"] == retained["execution"]["image_id"] and len(actual["geometries"]) == 1,
+        actual["execution"]["image_id"] == prediction_image_id and len(actual["geometries"]) == 1,
         "Uploaded prediction image or geometry count differs",
     )
     geometry = actual["geometries"][0]
@@ -841,19 +846,10 @@ def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, 
             key in geometry and geometry[key] == retained["geometries"][0][key],
             f"Uploaded scientific {key} differs from the pinned predictions",
         )
-    observation = actual["interpretation"]
-    require(
-        observation["schema_id"] == "nmrnet.input_interpretation.v1"
-        and observation["outcome"] == "selected"
-        and observation["operations"] == ["inspect_uploads", "prepare_upload"]
-        and observation["turns_started"] == 2
-        and observation["corrections"] == 0
-        and observation["routes"] == [{"endpoint": interpreter, "turns_started": 2}],
-        "Real interpretation did not inspect then prepare the Upload in two uncorrected turns at the admitted endpoint",
-    )
+    require_selected_interpretation(actual["interpretation"], interpreter, "prepare_upload")
 
 
-def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload):
+def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload, prediction_image_id):
     """Compare supplied SDF science across new API Job and Upload identities.
 
     R46 pins the native reference; R48 owns member-versus-archive provenance.
@@ -875,7 +871,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
     for key in ("selected_models", "runtime"):
         require(actual[key] == retained[key], f"SDF scientific {key} differs from R46")
     require(
-        actual["execution"]["image_id"] == retained["execution"]["image_id"]
+        actual["execution"]["image_id"] == prediction_image_id
         and len(actual["geometries"]) == len(retained["geometries"]) == 2,
         "SDF prediction image or two-record population differs",
     )
@@ -901,24 +897,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
             "coverage",
         ):
             require(actual_geometry[key] == original[key], f"SDF scientific {key} differs from R46")
-    observation = actual["interpretation"]
-    turns = observation["turns_started"]
-    operations = observation["operations"]
-    require(
-        observation["schema_id"] == "nmrnet.input_interpretation.v1"
-        and observation["outcome"] == "selected"
-        and observation["turn_limit"] == 6
-        and type(turns) is int
-        and 0 < turns <= 6
-        and type(observation["corrections"]) is int
-        and 0 <= observation["corrections"] < turns
-        and operations
-        and operations[-1] == "prepare_upload"
-        and all(name in ("inspect_uploads", "inspect_upload") for name in operations[:-1])
-        and len(operations) <= turns
-        and observation["routes"] == [{"endpoint": interpreter, "turns_started": turns}],
-        "SDF interpretation did not remain within its one-endpoint six-turn selection contract",
-    )
+    require_selected_interpretation(actual["interpretation"], interpreter, "prepare_upload")
 
 
 def main():
@@ -969,12 +948,17 @@ def main():
     project_ref = require_project_ref("project_ref", args.project_ref)
     validate_user_credential_artifacts(artifacts=artifacts, profile=identity["profile"], user_id=user.user_id)
     case = json.loads(Path("/fixture/case.json").read_bytes())
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None, "Current prediction image pin is malformed")
+    if args.case_kind == "sdf-zip":
+        _retained_sdf_science()
+    else:
+        _retained_science()
     with tempfile.TemporaryDirectory() as scratch:
         frozen = Path(scratch) / "signing.private.json"
         frozen.write_bytes(artifacts["signing.private.json"])
         client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
         receipt = submit(client, case, case_kind=args.case_kind, upload_receipt=args.upload_receipt)
-        receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind)
+        receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind, prediction_image_id=identity["prediction_image_id"])
         (output / "passed.json").write_text(
             json.dumps(
                 {

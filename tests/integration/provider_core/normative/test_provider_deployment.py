@@ -6,10 +6,36 @@ import unittest
 from pathlib import Path
 
 from tests.integration.nmrnet.compose_ports import deployment_inputs
-from tools.provider_deployment import finalize_deployment, freeze_deployment
+from tools.provider_deployment import client_inputs, finalize_deployment, freeze_deployment
 
 
 class DeploymentBundleTests(unittest.TestCase):
+    def test_client_expectations_use_original_bundle_and_current_image_without_exporting_secrets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            arguments, files = deployment_inputs(Path(directory))
+            freeze_deployment(**arguments)
+            output = Path(directory) / "client.json"
+            client_inputs(bundle=arguments["bundle"], prediction_image_id=arguments["image_id"],
+                          client_root=Path(directory) / "client", output=output)
+            raw = output.read_text()
+            identity = json.loads(raw)
+            self.assertEqual(identity["prediction_image_id"], arguments["image_id"])
+            self.assertEqual(identity["bundle"], arguments["bundle"].name)
+            self.assertEqual(identity["provider_ref"], "provider:example")
+            self.assertNotIn(files.key.read_text().strip(), raw)
+            self.assertNotIn("key_file", raw)
+            self.assertNotIn("credential", raw)
+            self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+            rejected = Path(directory) / "rejected.json"
+            with self.assertRaisesRegex(ValueError, "prediction image differs"):
+                client_inputs(bundle=arguments["bundle"], prediction_image_id="sha256:" + "9" * 64,
+                              client_root=Path(directory) / "client", output=rejected)
+            self.assertFalse(rejected.exists())
+            with self.assertRaisesRegex(ValueError, "overlap"):
+                client_inputs(bundle=arguments["bundle"], prediction_image_id=arguments["image_id"],
+                              client_root=Path(directory) / "attempts/client", output=rejected)
+            self.assertFalse(rejected.exists())
+
     def test_refresh_preserves_old_generation_and_publishes_final_compose_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             arguments, files = deployment_inputs(Path(directory))

@@ -839,11 +839,12 @@ The caller retains the lifecycle claim for subsequent publication or reconciliat
 <p>The binding must supply bounded asynchronous session operations and actual worker
 retirement evidence. The current integration test composes the real signed TLS client,
 store, starter, executor and publisher with a recording scientific session. It proves
-ordering and retention. The separately selected repository target
-<code>test/integration/provider-scientific-worker</code> also joins real released NMRNet science
-and host-confirmed container retirement to local signed publication. Its API peer
-still models wire behavior; deployed API/GUI behavior and the remaining note 003
-obligations require separate qualification.</p>
+ordering and retention. The separately selected repository
+ <code>test/integration/provider/deployment</code> lanes connect the production factory and
+ installed serial runners to local signed API peers and scripted interpretation. Their
+ numerical and retirement checks have distinct scopes; see the
+ <a href="../provider.html">operator reference</a>. External API delivery is separate;
+ GUI behavior is outside this repository's system under test.</p>
 <p>While preparation or execution runs, the executor observes server state at the
 explicit <code>poll_seconds</code> interval and reads again before accepting a successful
 return. This follows <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1287-L1340">NMRPeak's generation observation</a>,

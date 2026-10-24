@@ -85,7 +85,7 @@ def scientific_documents():
         "corrections": 0,
         "routes": [{"endpoint": dict(interpreter), "turns_started": 1}],
     }
-    return actual, retained, receipt, metadata, interpreter, source_text
+    return actual, retained, receipt, metadata, {"endpoints": [interpreter], "max_turns": 6}, source_text
 
 
 def generated_documents():
@@ -417,7 +417,7 @@ def uploaded_sdf_documents():
         operations=["inspect_uploads", "inspect_upload", "prepare_upload"],
         turns_started=3,
         turn_limit=6,
-        routes=[{"endpoint": interpreter, "turns_started": 3}],
+        routes=[{"endpoint": interpreter["endpoints"][0], "turns_started": 3}],
     )
     return actual, retained, receipt, metadata, interpreter, upload
 
@@ -462,7 +462,7 @@ def uploaded_documents():
         },
     )
     actual["interpretation"].update(
-        operations=["inspect_uploads", "prepare_upload"], turns_started=2, routes=[{"endpoint": interpreter, "turns_started": 2}]
+        operations=["inspect_uploads", "prepare_upload"], turns_started=2, routes=[{"endpoint": interpreter["endpoints"][0], "turns_started": 2}]
     )
     upload = {
         "upload_ref": "upload:sha256:" + "d" * 64,

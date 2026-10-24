@@ -99,7 +99,7 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertFalse((root / "unmounted-selection/model.key").exists())
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
-            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
+            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
             admitted = load_provider_config(root / "source/provider.toml")
             endpoint = admitted.interpreter.endpoints[0]
             self.assertIn("https://numpde.github.io/nmrnet-repro/", admitted.service.announcement.description)
@@ -121,8 +121,8 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertNotIn("ca_file", config["interpreter"]["endpoints"][0])
             identity = json.loads((root / "source/identity.json").read_bytes())
             self.assertFalse(identity["interpretation_scripted"])
-            self.assertEqual(identity["interpreter_max_turns"], admitted.interpreter.max_turns)
-            self.assertEqual(identity["interpreter"]["model"], "selected-model")
+            self.assertEqual(identity["interpreter"]["max_turns"], admitted.interpreter.max_turns)
+            self.assertEqual(identity["interpreter"]["endpoints"][0]["model"], "selected-model")
             self.assertNotIn("synthetic-fixture-key", json.dumps(identity))
 
     def test_optional_interpreter_trust_is_frozen_with_the_selected_key(self):
@@ -138,7 +138,7 @@ class StageApiConfigTests(unittest.TestCase):
                 stream.write("ca_file = " + json.dumps(str(selected_ca)) + "\n")
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
-            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
+            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
             self.assertEqual((root / "source/model-ca.pem").read_bytes(), selected_ca.read_bytes())
             self.assertEqual((selection / "ca_file.txt").read_text(), str(selected_ca) + "\n")
             admitted = tomllib.loads((root / "source/provider.toml").read_text())
@@ -157,7 +157,7 @@ class StageApiConfigTests(unittest.TestCase):
             )
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
-            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
+            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
             admitted = load_provider_config(root / "source/provider.toml")
             self.assertEqual(admitted.preparation.seconds, 240)
             self.assertEqual(
@@ -174,7 +174,7 @@ class StageApiConfigTests(unittest.TestCase):
             inputs, _selection, _fragment, _key = staging_inputs(root)
             (inputs / "model-ca.pem").write_bytes((inputs / "api-ca.crt").read_bytes())
             (inputs / "model-ready.json").write_text('{"origin":"https://localhost:9443"}\n')
-            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=None)
+            stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=None, prediction_image_id="sha256:" + "c" * 64)
             admitted = load_provider_config(root / "source/provider.toml")
             self.assertEqual(admitted.interpreter.endpoints[0].spec.model, "fixture-model")
             self.assertEqual(admitted.preparation.seconds, 45)

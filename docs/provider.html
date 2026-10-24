@@ -169,8 +169,7 @@ name override. A configured launch profile is distinct from a completed API run.
 policy. Its seven containers are the provider, three serial native runners
 (prediction, structure reader and conformer generator), and three proxies
 (API, interpreter and Upload access). The up command finishes after checking
-their configuration and current readiness; no host
-process pumps native requests. Docker must itself start after a host reboot.
+their configuration and current readiness. Docker must itself start after a host reboot.
 Keep the public provider definition in
 <code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
 <code>config/deployments/&lt;name&gt;/deployment.toml</code>. Copy the latter from
@@ -327,6 +326,25 @@ targets use fixed supplied chloromethane and compare against an existing pinned
 scientific receipt; generated-SMILES targets check received generation
 provenance and H/C coverage without an independent shift-value oracle. These
 targets are excluded from offline test aggregates:</p>
+<p>To check an already installed deployment, use
+<code>make provider/qualify/api/existing-pasted</code> with explicit
+<code>DEPLOYMENT</code>, <code>PROJECT_REF</code>, <code>USER_ID</code>,
+<code>CLIENT_CREDENTIAL_DIRECTORY</code>, <code>CA_FILE</code>, <code>ADDRESS</code>,
+<code>INTERFACE</code>, <code>OUTPUT</code>, <code>API_CLIENT_IMAGE</code> and
+<code>RETAINED_RESULT</code>. The client directory must contain the entitled user's
+<code>registration.json</code> and <code>signing.private.json</code>; the provider key
+does not authorize user Jobs. Select the historical pasted oracle at
+the absolute path to <code>artifacts/pasted-scientific-oracle.json</code> as
+<code>RETAINED_RESULT</code>. Output, credential and CA paths must also be canonical
+absolute paths.</p>
+<p>This lane creates only one finite public client. It derives API, provider,
+interpreter and current prediction-image expectations from the admitted original
+deployment; it neither launches a second provider nor opens its Attempt store.
+Its received result must match the unchanged numerical oracle and the current
+image pin. Configured correction/fallback is accepted within its existing turn
+budget; actual turns, corrections and routes stay in the retained result. Use a
+fresh private <code>OUTPUT</code>, including an ignored qualification leaf if desired.
+Failed or uncertain submissions are retained and never resubmitted automatically.</p>
 <ul>
 <li><code>make provider/qualify/api/pasted</code> uses the isolated scripted model peer.</li>
 <li><code>make provider/qualify/api/real-pasted</code> uses one explicitly selected real endpoint.</li>
@@ -697,6 +715,12 @@ installed serial runners with local signed API peers and scripted interpretation
 <ul>
 <li><code>make test/integration/provider/deployment</code>: the supplied chloromethane
 nm table, independent binary64 unit-conversion bound and complete finite H/C rows.</li>
+<li><code>make test/integration/provider/deployment/smiles</code>: RDKit-generated CCl,
+two generated geometries with distinct conformer IDs, authored source/H-parent identities and eight finite H/C
+predictions. The retained evidence is
+<code>artifacts/compose-smiles-qualification.json</code> at
+<a href="https://github.com/numpde/nmrnet-repro/blob/9cdc27c6ee34fdf8ddaa6ef3f9ecfdfd634dfabd/artifacts/compose-smiles-qualification.json">the qualification checkpoint</a>;
+there is no independent coordinate or shift-accuracy comparison.</li>
 <li><code>make test/integration/provider/deployment/references</code>: all four original
 validation inputs, with exact decoded predictions against the pinned CPU packets
 (137 full outputs and the original 64 reference positions). This test requests
@@ -719,15 +743,14 @@ container becoming ready alone does not prove it retired.</p>
 <p><code>make test/integration/provider-core/native-factory</code> checks Attempt/source
 handoffs without retained factory history and settlement of interrupted setup.
 <code>make test/integration/provider-core/runner</code> checks the actual native
-connection, cancellation and lost-control retirement. There is no host per-Job
-request pump, request counter or consumption/archive handshake. Durable Attempt
+connection, cancellation and lost-control retirement. Durable Attempt
 records and confirmed history retain their separate storage contract.</p>
-<p>These are local composition checks, not live-model or API/GUI qualification.
+<p>These checks ran actual RDKit and released NMRNet CPU inference. Interpreter
+replies were scripted and the signed API peer was local; live LLM interpretation,
+external API delivery requires separate evidence. GUI behavior is outside this repository's system under test.
 The source/image identities, unchanged scientific inputs, result hashes and limits
 are recorded in <a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>
-and its linked evidence packets. Earlier host-allocation experiments remain
-historical in <a href="notes/003_nmr_api_provider_20261018.html">note 003</a>;
-their removed launch commands are not the current workflow.</p>
+and its linked evidence packets.</p>
 <h2 id="check-the-interpreters-file-format-choices">Check the interpreter's file-format choices</h2>
 <p><code>provider/qualify/interpreter/formats</code> sends three fixed requests to the selected
 real model: one MOL structure, PDB models 2 then 1, and MOL2 records 2 then 1.

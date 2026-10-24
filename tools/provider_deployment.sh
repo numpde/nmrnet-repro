@@ -513,7 +513,7 @@ deployment_begin_operation() {
     operation_generation=${uuid//-/}
     [[ $operation_generation =~ ^[0-9a-f]{32}$ ]] || return 2
     deployment_private_directory "$deployment_root/operation" true || return $?
-    if [[ $deployment_action == status || $deployment_action == logs ]]; then
+    if [[ $deployment_action == status || $deployment_action == logs || $deployment_action == client-inputs ]]; then
         operation_owner=query
         operation_root=$deployment_root/operation/query
         # The receipt leaf is replaced after settlement; its inode cannot own
@@ -955,6 +955,37 @@ deployment_process_status() {
         && cmp -s "$output" <(printf '%s|%s|%s|%s\n' "$deployment_process_phase" "$deployment_process_age" "$pid" "$ticks") || return 2
 }
 
+deployment_client_inputs() {
+    local bundle=${deployment_bundles[provider]-} revision
+    local -a grants=() arguments=()
+    [[ -v deployment_ids[provider] && -v deployment_ids[prediction] \
+        && ${deployment_bundles[prediction]} == "$bundle" ]] \
+        || { deployment_refuse 'the client witness requires an admitted provider/prediction generation.'; return 2; }
+    selected_bundle=$deployment_root/bundles/$bundle
+    # Export identity, not another availability snapshot. Public discovery and
+    # the received result own the client witness's availability/delivery proof.
+    deployment_load_bootstrap "$selected_bundle" || return $?
+    # Inventory stays with the original bundle's reviewed helper. This new
+    # offline exporter is explicitly captured from committed current source;
+    # exporting metadata must never require replacing the running deployment.
+    source "$repository_root/tools/git_inputs.sh"
+    revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?
+    [[ -z $(repository_git -C "$repository_root" status --porcelain -- tools/provider_deployment.py) ]] \
+        || { deployment_refuse 'commit the client metadata exporter before capturing it.'; return 2; }
+    mkdir -m 700 -- "$operation_root/client-exporter" "$operation_root/client-output" || return $?
+    copy_git_blobs 'client metadata exporter' "$repository_root" "$revision" "$operation_root/client-exporter" \
+        "$operation_root/client-export-inputs" tools/provider_deployment.py || return $?
+    deployment_tool_source=$operation_root/client-exporter/tools/provider_deployment.py
+    grants=(--mount "type=bind,src=$selected_bundle,dst=$selected_bundle,readonly"
+        --mount "type=bind,src=$operation_root/client-output,dst=/output")
+    arguments=(client-inputs --bundle "$selected_bundle" --prediction-image-id "${deployment_images[prediction]}"
+        --client-root "$NMRNET_OUTPUT_INPUT"
+        --output /output/identity.json)
+    deployment_helper client-inputs grants arguments || return $?
+    [[ $deployment_helper_retired == true ]] || return 2
+    cat -- "$operation_root/client-output/identity.json"
+}
+
 deployment_dispatch() {
     local role
     declare -gA deployment_ids=() deployment_bundles=() deployment_images=() deployment_states=()
@@ -964,6 +995,7 @@ deployment_dispatch() {
         install) deployment_install ;;
         up) deployment_up ;;
         down) deployment_down ;;
+        client-inputs) deployment_client_inputs ;;
         status)
             for role in provider prediction reader smiles api interpreter store; do
                 [[ -v deployment_ids[$role] ]] || continue
@@ -995,7 +1027,7 @@ deployment_main() {
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     caller_uid=$(id -u) caller_gid=$(id -g)
     deployment_action=${1-} deployment_name=${NMRNET_DEPLOYMENT_INPUT-}
-    [[ $# == 1 && $deployment_action =~ ^(install|up|status|logs|down)$ ]] || { printf '%s\n' 'Run make help for supported provider/deployment commands.' >&2; return 2; }
+    [[ $# == 1 && $deployment_action =~ ^(install|up|status|logs|down|client-inputs)$ ]] || { printf '%s\n' 'Run make help for supported provider/deployment commands.' >&2; return 2; }
     [[ $deployment_name =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || { deployment_refuse 'supply an explicit DEPLOYMENT name, up to 48 letters, digits, underscores or hyphens.'; return 2; }
     [[ $caller_uid != 0 && $caller_gid != 0 ]] || { deployment_refuse 'run as the nonroot deployment owner.'; return 2; }
     [[ $repository_root != *','* && $repository_root != *$'\n'* && $repository_root != *$'\r'* ]] || { deployment_refuse 'the checkout path contains an unsupported bind delimiter.'; return 2; }

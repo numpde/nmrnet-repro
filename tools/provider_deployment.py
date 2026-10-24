@@ -24,12 +24,13 @@ from pathlib import Path
 import tomllib
 
 from nmrnet_provider.config import ConfigurationRejected, _read_provider_config, read_startup_file
-from nmrnet_provider.deployment import admit_container, compose_bytes, inventory_containers, render_compose
+from nmrnet_provider.deployment import _disjoint, admit_container, compose_bytes, inventory_containers, render_compose
 from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.process import _declared_models
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.startup_capture import _bind_path, _source_path
 from provider_core.response_json import ResponseRejected, read_document
+from provider_core.chat import ChatEndpoint
 from tools.artifacts import fsync_directory
 
 INPUT_ROOT = Path("/srv/nmrnet/input")
@@ -354,6 +355,41 @@ def inspect_deployment(*, inspection, identifiers, checkout, deployment, output,
     _write(output, b"".join(rows))
 
 
+def client_inputs(*, bundle, prediction_image_id, client_root, output):
+    """Export nonsecret client expectations from the admitted running generation.
+
+    Host inventory supplies the actual image pin; historical numerical receipts
+    keep their original execution metadata and never supply this current fact.
+    """
+    plan = creation_plan(bundle)
+    if plan["services"]["prediction"]["image"] != prediction_image_id:
+        raise ConfigurationRejected("the running prediction image differs from its admitted bundle.")
+    configuration = bundle / "config/provider.toml"
+    raw = read_startup_file(configuration, maximum_bytes=65536, label="frozen provider configuration")
+
+    def read_file(path, **limits):
+        if Path(path) == configuration:
+            return raw
+        return read_startup_file(path, **limits)
+
+    admitted = _read_provider_config(configuration, read_file)
+    for protected in (bundle.parent.parent, Path(admitted.lifecycle.store_root)):
+        _disjoint(client_root, protected)
+    identity = {
+        "origin": admitted.api.identity.origin, "authority": admitted.api.identity.authority,
+        "profile": tomllib.loads(raw.decode())["api"]["profile"],
+        "topology": admitted.api.expected_topology, "provider_ref": admitted.lifecycle.scope.provider_ref,
+        "interpretation_scripted": False,
+        "interpreter": {"max_turns": admitted.interpreter.max_turns, "endpoints": [
+            json.loads(ChatEndpoint(endpoint.spec, transport=None, request_bytes=endpoint.request_bytes,
+                                    response_bytes=endpoint.response_bytes).identity)
+            for endpoint in admitted.interpreter.endpoints
+        ]},
+        "prediction_image_id": prediction_image_id, "bundle": bundle.name,
+    }
+    _write(output, (json.dumps(identity, sort_keys=True) + "\n").encode())
+
+
 def main(arguments=None):
     parser = argparse.ArgumentParser(description="Admit frozen deployment plans and actual Engine evidence offline.")
     operations = parser.add_subparsers(dest="operation", required=True)
@@ -371,6 +407,11 @@ def main(arguments=None):
     manifest = operations.add_parser("manifest", help="Project fixed host inputs without reading credentials.")
     manifest.add_argument("--bundle", type=Path, required=True)
     manifest.add_argument("--output", type=Path, required=True)
+    client = operations.add_parser("client-inputs", help="Export current nonsecret expectations for one public-client witness.")
+    client.add_argument("--bundle", type=Path, required=True)
+    client.add_argument("--prediction-image-id", required=True)
+    client.add_argument("--client-root", type=Path, required=True)
+    client.add_argument("--output", type=Path, required=True)
     network = operations.add_parser("network", help="Admit one actual local route's bridge and peers.")
     network.add_argument("--bundle", type=Path, required=True)
     network.add_argument("--inspection", type=Path, required=True)
@@ -393,6 +434,8 @@ def main(arguments=None):
             finalize_deployment(**values)
         elif operation == "manifest":
             deployment_manifest(**values)
+        elif operation == "client-inputs":
+            client_inputs(**values)
         elif operation == "network":
             admit_network(**values)
         else:

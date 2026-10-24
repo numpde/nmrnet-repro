@@ -24,22 +24,6 @@ api_witness_wait() {
     provider_host_refuse 'Qualification helper exceeded its host deadline; retain requests and receipts, with no automatic retry.'
 }
 
-api_witness_stop_foreground() {
-    [[ -n $foreground_pid ]] || return 0
-    if [[ $foreground_signalled == false ]]; then
-        foreground_signalled=true
-        if kill -0 "$foreground_pid" 2>/dev/null; then kill -TERM "$foreground_pid" || return $?; fi
-    fi
-    # provider.sh owns cooperative settlement, including held native failures.
-    # Wait for that original owner; a timeout cannot prove it released its work.
-    while :; do
-        if wait "$foreground_pid"; then foreground_pid=; return 0; fi
-        if kill -0 "$foreground_pid" 2>/dev/null; then continue; fi
-        foreground_pid=
-        provider_host_refuse 'Foreground provider failed; inspect its protected diagnostics and durable Attempt state.'
-        return 2
-    done
-}
 
 api_witness_stop_deployment() {
     [[ ${api_deployment_active-false} == true ]] || return 0
@@ -122,7 +106,7 @@ api_witness_ambiguity() {
             || { provider_host_refuse 'External resolvers require literal nonloopback IPv4 addresses.'; return 2; }
     done
     provider_host_initialize || return $?
-    api_witness_mode=real-ambiguity foreground_pid= foreground_signalled=false
+    api_witness_mode=real-ambiguity
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -195,6 +179,87 @@ api_witness_ambiguity() {
     api_witness_wait probe "$host_seconds" || return $?
     sha256sum --check --status "$provider_host_root/qualification-sources.sha256" \
         || { provider_host_refuse 'Qualification source bytes changed during the batch; retain its decisions without claiming source closure.'; return 2; }
+}
+
+api_witness_admission_finish() {
+    local status=$?
+    trap - EXIT
+    if [[ -n ${provider_host_diagnostic-} ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || exit "$status"; fi
+    exit "$status"
+}
+
+api_witness_existing_pasted() {
+    local selector alias value path identity revision
+    local -a required=(DEPLOYMENT PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
+    for selector in "${required[@]}"; do
+        alias=NMRNET_${selector}_INPUT value=
+        value=${!alias-}
+        [[ -n $value ]] || { printf 'Missing explicit command-line selector: %s. This lane creates one persistent Job.\n' "$selector" >&2; return 2; }
+    done
+    [[ $(id -u) != 0 && $(id -g) != 0 ]] || return 2
+    repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+    source "$repository_root/tools/provider.sh"
+    provider_host_diagnostic= provider_host_root=$NMRNET_OUTPUT_INPUT
+    # Before client creation there is nothing to retire, but owned path/source
+    # refusals must still reach the operator. The component owner replaces this
+    # recipient when it adopts the first cleanup obligations below.
+    trap api_witness_admission_finish EXIT
+    provider_host_path "$provider_host_root" || return $?
+    [[ ! -e $provider_host_root && ! -L $provider_host_root ]] \
+        || { provider_host_refuse 'Use fresh client output; preserve any uncertain original Job and do not resubmit it.'; return 2; }
+    for path in "$NMRNET_CA_FILE_INPUT" "$NMRNET_RETAINED_RESULT_INPUT" "$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT"; do
+        provider_host_path "$path" || return $?
+        provider_host_disjoint "$path" "$provider_host_root" || return $?
+    done
+    provider_host_ipv4 "$NMRNET_ADDRESS_INPUT" \
+        && [[ $NMRNET_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || { provider_host_refuse 'Supply a literal API IPv4 address, explicit interface and immutable client image ID.'; return 2; }
+    # The existing deployment owner admits its original bundle/current image.
+    # It neither starts a provider nor opens the Attempt store. Check output
+    # separation there before creating any client files beside retained state.
+    identity=$(bash "$repository_root/tools/provider_deployment.sh" client-inputs) || return $?
+    umask 077
+    mkdir -m 700 -- "$provider_host_root" || return $?
+    mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/source" "$provider_host_root/client"
+    printf '%s\n' "$identity" > "$provider_host_root/source/identity.json"
+    source "$repository_root/tools/git_inputs.sh"
+    source "$repository_root/tools/git_metadata.sh"
+    revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?
+    local -a inputs=(tools/provider_api_qualification.sh tests/integration/provider_runtime/api_prediction.py
+        tests/fixtures/preparation/api_pasted.json tools/bound_http_proxy.py tools/container_guard.py)
+    [[ -z $(repository_git -C "$repository_root" status --porcelain -- "${inputs[@]}") ]] \
+        || { provider_host_refuse 'Commit the client witness inputs before capturing them.'; return 2; }
+    copy_git_blobs 'deployed API client witness' "$repository_root" "$revision" "$provider_host_root/sources" \
+        "$provider_host_root/inputs" "${inputs[@]}" || return $?
+    printf '%s\n' "$revision" > "$provider_host_root/revision"
+    source "$repository_root/tools/docker_client.sh"
+    source "$repository_root/tools/inference_native.sh"
+    source "$repository_root/tools/worker_retirement.sh"
+    docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
+    declare -gA provider_host_ids=()
+    api_witness_mode=existing-pasted api_deployment_active=false provider_host_stop_requested=false
+    trap api_witness_finish EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
+    docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; return 2; }
+    local source=$provider_host_root/sources
+    local -a provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
+        --mount "type=bind,src=$source/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
+        --mount "type=bind,src=$source/tests/fixtures/preparation/api_pasted.json,dst=/fixture/case.json,readonly"
+        --mount "type=bind,src=$source/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
+        --mount "type=bind,src=$source/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
+        --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/registration.json,dst=/credentials/registration.json,readonly"
+        --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/signing.private.json,dst=/credentials/signing.private.json,readonly"
+        --mount "type=bind,src=$NMRNET_CA_FILE_INPUT,dst=/input/api-ca.crt,readonly"
+        --mount "type=bind,src=$provider_host_root/source/identity.json,dst=/input/identity.json,readonly"
+        --mount "type=bind,src=$NMRNET_RETAINED_RESULT_INPUT,dst=/input/retained-result.json,readonly"
+        --mount "type=bind,src=$provider_host_root/client,dst=/output")
+    local -a provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py
+        --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT"
+        --user-id "$NMRNET_USER_ID_INPUT" --readback-seconds 900 --process-seconds 960 --case-kind pasted)
+    provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
+    api_witness_wait client 980 || return $?
+    provider_host_remove client || return $?
 }
 
 api_witness_main() {
@@ -315,8 +380,9 @@ api_witness_main() {
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     docker_client_prepare run || return $?
-    local controller_image network_id network_name internal host deadline interpreter_key interpreter_ca
+    local controller_image prediction_image network_id network_name internal host deadline interpreter_key interpreter_ca
     IFS= read -r controller_image < "$repository_root/.work/provider/image-id"
+    IFS= read -r prediction_image < "$repository_root/.work/inference/image-id"
     [[ $controller_image =~ ^sha256:[0-9a-f]{64}$ ]] || return 2
     if [[ $mode == scripted-pasted ]]; then
         provider_host_command network "$provider_host_root" network inspect --format '{{.Id}}|{{.Name}}|{{.Internal}}' "$local_network" || return $?
@@ -373,6 +439,7 @@ api_witness_main() {
         --mount "type=bind,src=$provider_host_root/deployment,dst=$provider_host_root/deployment")
     provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage.py \
         --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT" \
+        --prediction-image-id "$prediction_image" \
         --deployment --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
         --interpreter-route "$interpreter_route")
     if [[ $mode == scripted-pasted ]]; then
@@ -463,5 +530,7 @@ api_witness_main() {
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     set -euo pipefail
-    api_witness_main "$@"
+    if [[ $# == 1 && $1 == existing-pasted ]]; then api_witness_existing_pasted
+    else api_witness_main "$@"; fi
+    exit "$?"
 fi

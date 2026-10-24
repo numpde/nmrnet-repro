@@ -2,6 +2,23 @@
 # Exercise the installed host commands with synthetic retained work and loopback
 # TLS only. The existing host/client owners retain every unresolved obligation.
 
+recovery_witness_stop_command() {
+    [[ -n $recovery_command_pid ]] || return 0
+    if [[ $recovery_command_signalled == false ]]; then
+        recovery_command_signalled=true
+        if kill -0 "$recovery_command_pid" 2>/dev/null; then kill -TERM "$recovery_command_pid" || return $?; fi
+    fi
+    # The finite inspect/replay command retains its own original cleanup. Join
+    # that owner before releasing its API peer; elapsed time proves no release.
+    while :; do
+        if wait "$recovery_command_pid"; then recovery_command_pid=; return 0; fi
+        if kill -0 "$recovery_command_pid" 2>/dev/null; then continue; fi
+        recovery_command_pid=
+        provider_host_refuse 'Finite recovery command failed; inspect its protected diagnostics and durable Attempt state.'
+        return 2
+    done
+}
+
 recovery_witness_wait_file() {
     local path=$1 deadline=$((SECONDS + 15))
     while [[ ! -f $path || -L $path ]]; do
@@ -13,17 +30,17 @@ recovery_witness_wait_file() {
     done
 }
 
-recovery_witness_wait_foreground() {
+recovery_witness_wait_command() {
     local deadline=$((SECONDS + 30)) status
-    while kill -0 "$foreground_pid" 2>/dev/null; do
+    while kill -0 "$recovery_command_pid" 2>/dev/null; do
         if (( SECONDS >= deadline )); then
             provider_host_refuse 'The recovery host did not finish within thirty seconds; settle the original host before releasing its peer.'
             return 2
         fi
         sleep 0.05 || :
     done
-    if wait "$foreground_pid"; then status=0; else status=$?; fi
-    foreground_pid=
+    if wait "$recovery_command_pid"; then status=0; else status=$?; fi
+    recovery_command_pid=
     if [[ $status != 0 ]]; then
         provider_host_refuse 'The recovery host failed; preserve its protected operation and exact-retirement receipts.'
         return 2
@@ -34,10 +51,10 @@ recovery_witness_finish() {
     local status=$?
     trap - EXIT
     if [[ $inference_retirement_confirmed == true ]]; then
-        if api_witness_stop_foreground; then :; else status=2; fi
+        if recovery_witness_stop_command; then :; else status=2; fi
     fi
-    if [[ -n $foreground_pid ]]; then
-        printf 'The original foreground host remains owned at %q; keep this process and its local TLS peer.\n' "$provider_host_root" >&2 || :
+    if [[ -n $recovery_command_pid ]]; then
+        printf 'The original finite recovery command remains owned at %q; keep this process and its local TLS peer.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
     fi
     if [[ $inference_retirement_confirmed == true ]]; then api_witness_stop_deployment || status=2; fi
@@ -63,7 +80,7 @@ recovery_witness_main() {
     provider_host_root=$scratch/fixture-owner
     provider_host_diagnostic= provider_host_drain_seconds=10 provider_host_recovery_mode=
     provider_host_initialize || return $?
-    foreground_pid= foreground_signalled=false api_deployment_active=false
+    recovery_command_pid= recovery_command_signalled=false api_deployment_active=false
     trap recovery_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -121,15 +138,15 @@ recovery_witness_main() {
         || { provider_host_refuse 'The local fixture returned an invalid record selector or loopback TLS authority.'; return 2; }
     local -a common=("CONFIG=$config" "SOURCE_ROOT=$source_root" MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=10)
     make --no-print-directory -C "$repository_root" provider/recovery/inspect "${common[@]}" "INSTALLATION_ROOT=$scratch/inspect" &
-    foreground_pid=$! foreground_signalled=false
-    recovery_witness_wait_foreground || return $?
+    recovery_command_pid=$! recovery_command_signalled=false
+    recovery_witness_wait_command || return $?
     [[ -f $scratch/inspect/components/controller/diagnostics/result.json ]] || return 2
     : > "$fixture/restore-inputs"
     recovery_witness_wait_file "$fixture/inputs-restored" || return $?
     make --no-print-directory -C "$repository_root" provider/recovery/run "${common[@]}" "INSTALLATION_ROOT=$scratch/recovery" \
         "RECORD_SHA256=$selector" API_ROUTE=mapped MAPPED_INTERFACE=lo MAPPED_ADDRESSES=127.0.0.1=127.0.0.1 &
-    foreground_pid=$! foreground_signalled=false
-    recovery_witness_wait_foreground || return $?
+    recovery_command_pid=$! recovery_command_signalled=false
+    recovery_witness_wait_command || return $?
     : > "$fixture/idle-phase"
     recovery_witness_wait_file "$fixture/recovered" || return $?
     local public private input
