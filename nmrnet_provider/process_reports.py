@@ -24,14 +24,12 @@ from pathlib import Path
 
 from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES
 from nmrnet_provider.admission import AdmissionHeld
-from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, redact_credential_fields
 from nmrnet_provider.native_factory import NativeSetupFailed
 from nmrnet_provider.result import ResultRejected
-from nmrnet_provider.retirement import RetirementUnconfirmed
 from nmrnet_provider.service import ServiceFailed, ServiceRefused
 from nmrnet_provider.session import (
     PredictionRecoveryFailed,
@@ -112,8 +110,6 @@ def _safe_owner_details(error):
         ProviderProcessFailed,
         DiagnosticOutputRefused,
         AdmissionHeld,
-        AllocationUnconfirmed,
-        RetirementUnconfirmed,
         ConfigurationRejected,
         ServiceFailed,
         ServiceRefused,

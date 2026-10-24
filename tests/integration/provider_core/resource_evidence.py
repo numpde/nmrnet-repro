@@ -1,7 +1,5 @@
 """Qualify observations after, and separately from, exact native retirement."""
 
-import json
-
 
 def require_cgroup_resources(facts, *, memory_bytes):
     """Require the fixed launch ceilings and actual positive kernel usage/peak."""
@@ -20,18 +18,3 @@ def require_cgroup_resources(facts, *, memory_bytes):
     if not {"usage_usec", "user_usec", "system_usec"} <= cpu.keys() or cpu["usage_usec"] <= 0:
         raise AssertionError("Observed cgroup CPU usage is missing or nonpositive")
     return facts
-
-
-def retired_worker_resources(receipt, *, role, allocation):
-    """Join a completed small report to its host-confirmed role/allocation."""
-    if (receipt / "result").read_bytes() != f"retired {allocation}\n".encode():
-        raise AssertionError("Native resource evidence requires exact host retirement first")
-    with (receipt / "resources.json").open("rb") as source:
-        content = source.read(16385)
-    if len(content) > 16384:
-        raise AssertionError("Native resource evidence exceeds its fixed 16 KiB bound")
-    report = json.loads(content)
-    if (report["role"], report["allocation"], report["scope"]) != (role, allocation, "cgroup_through_final_snapshot"):
-        raise AssertionError("Native resource evidence differs from the retired role/allocation or observation scope")
-    require_cgroup_resources(report["cgroup"], memory_bytes=4294967296 if role == "prediction" else 536870912)
-    return report

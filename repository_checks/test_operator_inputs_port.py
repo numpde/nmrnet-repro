@@ -38,14 +38,6 @@ class OperatorInputTests(unittest.TestCase):
             self.assertIn("Missing explicit ambiguity qualification selector: INTERPRETER_CONFIG", result.stderr)
             self.assertFalse(fixture.calls())
 
-    def test_explicit_format_subset_rejects_invalid_names_before_engine_effects(self):
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = LauncherFixture(Path(directory))
-            result = fixture.make("test/integration/provider-service/formats", "FORMAT_CASES=not-an-authored-case")
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn("FORMAT_CASES accepts only", result.stderr)
-            self.assertFalse(fixture.calls())
-
     def test_stopped_recovery_requires_explicit_startup_selectors_before_engine_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
@@ -217,7 +209,6 @@ class OperatorInputTests(unittest.TestCase):
                 "MAXIMUM_STARTUP_BYTES",
                 "HOST_DRAIN_SECONDS",
                 "RECORD_SHA256",
-                "FORMAT_CASES",
                 "API_ROUTE",
                 "LOCAL_NETWORK",
                 "LOCAL_INTERFACE",
@@ -264,7 +255,6 @@ class OperatorInputTests(unittest.TestCase):
                 "MAXIMUM_STARTUP_BYTES": "2097152",
                 "HOST_DRAIN_SECONDS": "90",
                 "RECORD_SHA256": "a" * 64,
-                "FORMAT_CASES": "sdf-correction pdb-models pdb-alternate mol2",
                 "API_ROUTE": "local",
                 "LOCAL_NETWORK": "fixture-internal",
                 "LOCAL_INTERFACE": "eth0",

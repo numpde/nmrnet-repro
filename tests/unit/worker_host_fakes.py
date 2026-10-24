@@ -9,7 +9,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-TOKEN = f"{1:032x}"
 IMAGE = "sha256:" + "b" * 64
 CID = "c" * 64
 
@@ -48,9 +47,6 @@ case "$operation" in
         printf '%s\n' "$network" > "$FAKE_STATE/network"
         printf '%s\n' "$log_driver" > "$FAKE_STATE/log-driver"
         printf '%s\n' "$pids" > "$FAKE_STATE/pids"
-        if [[ ${FAKE_RETIRE_DURING_CREATE-} == yes ]]; then
-            printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
-        fi
         if [[ ${FAKE_MISMATCH-} == yes ]]; then printf '%064d\n' 0; else printf '%s\n' "$FAKE_CID"; fi
         exit "${FAKE_CREATE_STATUS-0}"
         ;;
@@ -105,7 +101,7 @@ class HostFixture:
         self.engine.write_text(ENGINE)
         self.environment = dict(os.environ)
         self.environment.update(
-            FAKE_STATE=str(self.root), FAKE_ROOT=str(self.allocation_root), FAKE_TOKEN=TOKEN, FAKE_IMAGE=IMAGE, FAKE_CID=CID
+            FAKE_STATE=str(self.root), FAKE_ROOT=str(self.allocation_root), FAKE_IMAGE=IMAGE, FAKE_CID=CID
         )
 
     def close(self):
@@ -117,13 +113,8 @@ class HostFixture:
 set -euo pipefail
 source tools/inference_native.sh
 source tools/worker_retirement.sh
-source tools/provider_workers.sh
 engine=(bash "$FAKE_STATE/engine.sh")
 repository_root=$PWD
-provider_worker_source_root=$PWD provider_worker_prepared_root=$PWD/.work/prepared
-scientific_image_id=$FAKE_IMAGE geometry_image_id=$FAKE_IMAGE
-provider_worker_accept_seconds=2 provider_worker_io_seconds=2 provider_source_io_seconds=2 provider_generation_io_seconds=5
-provider_worker_seed=17 provider_worker_max_iterations=80 provider_worker_embedding_seconds=1
 inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
 worker_retirement_diagnostic=
 """

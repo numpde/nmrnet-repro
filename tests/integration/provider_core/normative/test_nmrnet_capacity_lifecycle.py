@@ -1,12 +1,9 @@
 """Capacity evidence validates measured cgroup facts without claiming accuracy."""
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
-from tests.integration.nmrnet.capacity_service import require_capacity_inputs
-from tests.integration.nmrnet.resource_evidence import require_cgroup_resources, retired_worker_resources
+from tests.integration.nmrnet.reference_fixtures import require_capacity_inputs
+from tests.integration.nmrnet.resource_evidence import require_cgroup_resources
 
 
 def resource_facts():
@@ -29,20 +26,6 @@ class CapacityResourceTests(unittest.TestCase):
     def test_fixed_limits_and_positive_kernel_observations_are_preserved(self):
         facts = resource_facts()
         self.assertEqual(require_cgroup_resources(facts, memory_bytes=536870912), facts)
-
-    def test_completed_report_joins_the_exact_retired_role_and_allocation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            allocation = "a" * 32
-            report = {
-                "allocation": allocation,
-                "role": "reader",
-                "scope": "cgroup_through_final_snapshot",
-                "cgroup": resource_facts(),
-            }
-            (root / "result").write_text(f"retired {allocation}\n")
-            (root / "resources.json").write_text(json.dumps(report))
-            self.assertEqual(retired_worker_resources(root, role="reader", allocation=allocation), report)
 
 
 def capacity_manifest():

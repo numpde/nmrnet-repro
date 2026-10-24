@@ -441,7 +441,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             await self.session.retire()
         self.assertIs(failure.exception.cause, first)
         self.assertEqual(
-            failure.exception.failures, (("channel_close", first), ("host_retirement", host), ("channel_observation", last))
+            failure.exception.failures, (("channel_close", first), ("native_retirement", host), ("channel_observation", last))
         )
         for cause in (first, host, last):
             self.assertNotIn(str(cause), str(failure.exception))

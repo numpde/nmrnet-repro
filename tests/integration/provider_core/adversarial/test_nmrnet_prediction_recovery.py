@@ -110,7 +110,7 @@ class PredictionRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
             await self.execute()
         self.assertIs(caught.exception.first_failure, self.first)
         self.assertIs(type(caught.exception.cause), SessionRetirementFailed)
-        self.assertIn(("host_retirement", cleanup), caught.exception.cause.failures)
+        self.assertIn(("native_retirement", cleanup), caught.exception.cause.failures)
         self.allocate.assert_not_called()
         self.ports.host.failure = None
         await self.session.retire()

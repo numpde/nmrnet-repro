@@ -54,41 +54,6 @@ class LauncherTests(unittest.TestCase):
             arguments[arguments.index("--pattern") :], ["--pattern", "test_nmrnet_process.py", "test_nmrnet_reports.py"]
         )
 
-    def test_native_service_routes_use_their_fixed_host_qualification_owner(self):
-        for route in ("uploads", "pasted", "smiles", "references", "capacity"):
-            with self.subTest(route=route):
-                result = subprocess.run(
-                    ["make", "--dry-run", "--no-print-directory", "test/integration/provider-service/" + route],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), "bash tools/provider_service_qualification.sh " + route)
-
-    def test_native_service_requires_one_known_route_before_any_host_work(self):
-        for arguments in ([], ["unknown"], ["uploads", "smiles"]):
-            with self.subTest(arguments=arguments):
-                result = subprocess.run(
-                    ["bash", "tools/provider_service_qualification.sh", *arguments],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=5,
-                )
-                self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn(
-                    "Select one native service fixture: uploads, pasted, smiles, references or capacity.", result.stderr
-                )
-
-    def test_allocation_lane_is_focused_offline_and_reaps_child_processes(self):
-        result = self.command("test/unit/provider/allocation")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        arguments = shlex.split(result.stdout)
-        self.assertIn("--init", arguments)
-        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
-        self.assertEqual(arguments[-3:], ["-p", "test_worker_allocation.py", "-v"])
-
     def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/worker-startup")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -96,36 +61,6 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("--init", arguments)
         self.assertEqual(arguments[arguments.index("--network") + 1], "none")
         self.assertEqual(arguments[-3:], ["-p", "test_worker_main.py", "-v"])
-
-    def test_pdb_retirement_target_declares_its_fixed_separate_container_scenario(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "test/integration/provider-geometry-worker/pdb"], capture_output=True, text=True, check=False
-        )
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(["bash tools/worker_qualification.sh geometry-pdb"], result.stdout.splitlines())
-
-    def test_mol2_retirement_target_declares_its_fixed_separate_container_scenario(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "test/integration/provider-geometry-worker/mol2"], capture_output=True, text=True, check=False
-        )
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(["bash tools/worker_qualification.sh geometry-mol2"], result.stdout.splitlines())
-
-    def test_native_geometry_retirement_target_declares_each_fixed_scenario(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "test/integration/provider-native-geometry-worker"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(
-            [
-                f"bash tools/worker_qualification.sh geometry-native-{scenario}"
-                for scenario in ("mol", "sdf", "rejected", "failure", "timeout")
-            ],
-            result.stdout.splitlines(),
-        )
 
     def command(self, lane, archive=None):
         environment = dict(os.environ)

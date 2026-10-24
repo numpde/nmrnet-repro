@@ -1,10 +1,10 @@
-"""Serve one serial scientific connection; only the host owner confirms retirement.
+"""Serve one serial scientific connection; only the serial supervisor confirms child retirement.
 
 PredictionSession retains the actual prepared object here. The wire token only
 correlates one preparation on this connection and never crosses into model code.
 SECS 34f5915c1534278bbf61b4c6592afa44cf94ab08, worker.py::_child_loop separates
 scientific messages from supervisor-owned termination. No stop acknowledgement is
-accepted or issued here. The host supervisor must interrupt blocked computation.
+accepted or issued here. The serial supervisor must interrupt and reap blocked computation.
 """
 
 from tools.container_guard import require_container

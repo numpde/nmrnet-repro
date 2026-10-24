@@ -378,7 +378,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(caught.exception.cause, ApiFailure)
                 self.assertGreaterEqual(len(caught.exception.failures), 2)
                 self.assertNotIn("PRIVATE", str(caught.exception))
-                self.assertIn(("host_retirement", private), service.controller.session.last_retirement_failure.failures)
+                self.assertIn(("native_retirement", private), service.controller.session.last_retirement_failure.failures)
                 self.assertFalse(fixture.allocations[0].host.confirmed)
                 self.assertTrue(service.hello_api.retirement_confirmed)
                 with self.assertRaises(ServiceRefused):
@@ -475,7 +475,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(caught.exception.cause, BaseExceptionGroup)
                 retirement = fixture.allocations[0].session.last_retirement_failure
                 self.assertIs(caught.exception.cause.exceptions[1], retirement)
-                self.assertIn(("host_retirement", fixture.factory_cleanup_failure), retirement.failures)
+                self.assertIn(("native_retirement", fixture.factory_cleanup_failure), retirement.failures)
                 self.assertTrue(service.hello_api.retirement_confirmed)
                 self.assertFalse(fixture.allocations[0].host.confirmed)
                 await service.settle()

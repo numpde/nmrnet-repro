@@ -363,7 +363,7 @@ class NMRNetSession:
         """Replay pure prediction once, never input interpretation or result assembly.
 
         Magnet5578bc3, note033 and E01/E02 unix_runner_backend.generate supply
-        the two-execution contract. Here exact host retirement and consumption,
+        the two-execution contract. Here confirmed native retirement and channel consumption,
         rather than Docker restart/READY, gate replacement. Each worker prepares
         the same frozen bytes and issues its own connection-local token.
         """

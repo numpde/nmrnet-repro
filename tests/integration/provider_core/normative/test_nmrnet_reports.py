@@ -33,7 +33,6 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.allocation import AllocationUnconfirmed, WorkerAllocation
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, _InputProblemReport
@@ -41,7 +40,6 @@ from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, N
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.result import ResultRejected
-from nmrnet_provider.retirement import HostRetirement, RetirementUnconfirmed
 from nmrnet_provider.session import PredictionRecoveryFailed, PreparationEvidenceFailed, ResultAssemblyFailed
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
@@ -190,44 +188,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("execution_attempt_ref", rendered)
         self.assertNotIn("PRIVATE_SERVER_BODY", rendered)
         self.assertNotIn(pending.input.job_ref, rendered)
-
-    def test_consumption_receipt_read_and_close_errors_reach_stderr_via_original_context(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            token = "a" * 32
-            receipt = root / "receipts" / token
-            receipt.mkdir(parents=True)
-            (receipt / "archived").write_bytes(f"archived {token}\n".encode())
-            allocation = WorkerAllocation(
-                role="reader",
-                allocation=token,
-                request_root=root / "requests",
-                receipt_root=root / "receipts",
-                ipc_root=root / "ipc",
-                operation_seconds=1,
-            )
-            primary = OSError(errno.EIO, "PRIVATE_RECEIPT_READ")
-            cleanup = OSError(errno.EBADF, "PRIVATE_RECEIPT_CLOSE")
-            original_close = os.close
-
-            def failed_close(descriptor):
-                original_close(descriptor)
-                raise cleanup
-
-            with (
-                patch("nmrnet_provider.allocation.os.read", side_effect=primary),
-                patch("nmrnet_provider.allocation.os.close", side_effect=failed_close),
-                self.assertRaises(AllocationUnconfirmed) as caught,
-            ):
-                allocation._consume_archive(False)
-            self.assertIs(caught.exception.__cause__, cleanup)
-            self.assertIs(cleanup.__context__, primary)
-            report = self.receive(caught.exception)
-            rendered = json.dumps(report)
-            self.assertIn('"errno": 5', rendered)
-            self.assertIn('"errno": 9', rendered)
-            self.assertIn("capacity renewal", rendered)
-            self.assertNotIn("PRIVATE", rendered)
 
     async def test_pre_start_native_failure_identifies_selected_job_without_an_attempt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -682,9 +642,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
 
     def test_exact_owned_refusal_reasons_remain_distinct_through_receiving_renderer(self):
         for failure in (
-            AllocationUnconfirmed(
-                "The host did not confirm allocation within its observation budget; retire the exact request before replacement."
-            ),
             OwnershipRefused("Attempt claim still owns an operation; settle it before another effect"),
             ExecutionRefused("Exact acknowledgement is not current in storage; reread it before preparing work"),
             StartRefused("Exact pending start is absent or has already advanced; reread storage before recovery"),
@@ -702,28 +659,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         rendered = json.dumps(report)
         self.assertIn("observed Attempt expired and Job closed", rendered)
         self.assertNotIn("ExecutionRefused", rendered)
-
-    def test_real_retirement_receipt_reasons_survive_without_paths_or_token_echo(self):
-        for receipt, expected in (
-            (None, "did not publish retirement confirmation"),
-            (b"PRIVATE malformed", "receipt is malformed"),
-            (b"unconfirmed " + b"a" * 32 + b"\n", "host could not confirm worker retirement"),
-        ):
-            with tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                if receipt is not None:
-                    (root / "result").write_bytes(receipt)
-                owner = HostRetirement(allocation="a" * 32, request_directory=root, receipt_directory=root, operation_seconds=1)
-                with (
-                    patch("nmrnet_provider.retirement.time.monotonic", side_effect=(0, 0, 2)),
-                    patch("nmrnet_provider.retirement.time.sleep"),
-                    self.assertRaises(RetirementUnconfirmed) as caught,
-                ):
-                    owner._run(False)
-                report = self.receive(caught.exception)
-                rendered = json.dumps(report)
-                self.assertIn(expected, rendered)
-                self.assertNotIn("PRIVATE", rendered)
 
     def test_result_shape_identity_and_atom_order_reasons_survive_cleanup(self):
         for reason in (

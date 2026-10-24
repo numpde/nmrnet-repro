@@ -11,7 +11,7 @@ from tests.integration.nmrnet.reference_fixtures import (
     verify_fixture,
 )
 from tests.integration.nmrnet.reference_ports import authored_populations
-from tests.integration.nmrnet.reference_service import require_reference_predictions
+from tests.integration.nmrnet.reference_fixtures import require_reference_predictions
 
 
 class ReferenceFixtureTests(unittest.TestCase):

@@ -111,7 +111,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ControllerFailed) as caught:
                     await controller.run(pending)
                 self.assertNotIn("PRIVATE", str(caught.exception))
-                self.assertEqual(controller.session.last_retirement_failure.failures, (("host_retirement", cleanup),))
+                self.assertEqual(controller.session.last_retirement_failure.failures, (("native_retirement", cleanup),))
                 self.assertFalse(ports.host.confirmed)
                 self.assertIsNone(fixture.result)
             finally:

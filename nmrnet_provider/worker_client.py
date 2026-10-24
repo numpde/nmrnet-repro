@@ -50,7 +50,7 @@ class WorkerResultRejected(WorkerProtocolError):
 class WorkerClient:
     """One serial framed channel; closure never proves stopped scientific work.
 
-    The caller owns startup, the admitted allocation and exact-container retirement.
+    The caller owns startup, the admitted native operation and confirmed child/scratch retirement.
     Geometry reading and prediction share these byte/time bounds and retained close
     observation. Their subclasses own operation-specific state and reply admission.
     """

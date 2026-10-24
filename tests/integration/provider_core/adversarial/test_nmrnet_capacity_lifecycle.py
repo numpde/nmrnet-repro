@@ -1,13 +1,10 @@
 """Absent, foreign or fabricated resource evidence cannot qualify real capacity."""
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
-from tests.integration.nmrnet.capacity_service import require_capacity_inputs
+from tests.integration.nmrnet.reference_fixtures import require_capacity_inputs
 from tests.integration.nmrnet.normative.test_nmrnet_capacity_lifecycle import capacity_manifest, resource_facts
-from tests.integration.nmrnet.resource_evidence import require_cgroup_resources, retired_worker_resources
+from tests.integration.nmrnet.resource_evidence import require_cgroup_resources
 
 
 class CapacityResourceRefusalTests(unittest.TestCase):
@@ -42,29 +39,3 @@ class CapacityResourceRefusalTests(unittest.TestCase):
             with self.subTest(field=next(iter(change))), self.assertRaises(AssertionError) as raised:
                 require_cgroup_resources(facts, memory_bytes=536870912)
             self.assertNotIn("private-canary", str(raised.exception))
-
-    def test_missing_oversized_wrong_allocation_role_or_scope_report_fails_after_retirement(self):
-        for change in ("missing", "oversized", "allocation", "role", "scope", "malformed"):
-            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                token = "a" * 32
-                (root / "result").write_text(f"retired {token}\n")
-                report = {
-                    "allocation": token,
-                    "role": "reader",
-                    "scope": "cgroup_through_final_snapshot",
-                    "cgroup": resource_facts(),
-                }
-                if change in ("allocation", "role", "scope"):
-                    report[change] = "foreign"
-                if change == "oversized":
-                    content = b"x" * 16385
-                elif change == "malformed":
-                    content = b"not JSON"
-                else:
-                    content = json.dumps(report).encode()
-                if change != "missing":
-                    (root / "resources.json").write_bytes(content)
-                with self.assertRaises((AssertionError, FileNotFoundError, ValueError)):
-                    retired_worker_resources(root, role="reader", allocation=token)
-                self.assertEqual((root / "result").read_text(), f"retired {token}\n")

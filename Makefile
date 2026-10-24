@@ -10,7 +10,7 @@ override .DEFAULT_GOAL := help
 test/unit/provider/worker:
 	bash tools/container.sh $@
 .PHONY: test/unit/provider-geometry-worker
-.PHONY: test/unit/smiles-protocol test/unit/smiles-worker test/unit/smiles-qualification
+.PHONY: test/unit/smiles-protocol test/unit/smiles-worker
 
 test/unit/smiles-protocol:
 	bash tools/container.sh $@
@@ -18,8 +18,6 @@ test/unit/smiles-protocol:
 test/unit/smiles-worker:
 	bash tools/container.sh $@
 
-test/unit/smiles-qualification:
-	bash tools/container.sh $@
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
 .PHONY: test/unit/provider-core/credential
@@ -44,19 +42,11 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-core/lifecycle
 .PHONY: test/integration/provider-core/chat
 .PHONY: test/contract/provider-core test/integration/provider-core
-.PHONY: test/integration/provider-worker
+
 .PHONY: test/integration/provider/prediction-recovery
 test/integration/provider/prediction-recovery:
 	bash tools/prediction_recovery_qualification.sh
 
-.PHONY: test/integration/provider-scientific-worker
-.PHONY: test/integration/provider-scientific-worker/smiles
-.PHONY: test/integration/provider-geometry-worker
-.PHONY: test/integration/provider-geometry-worker/pdb
-.PHONY: test/integration/provider-geometry-worker/mol2
-.PHONY: test/integration/provider-geometry-worker/uploads
-.PHONY: test/integration/provider-geometry-worker/smiles
-.PHONY: test/integration/provider-native-geometry-worker
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
 .PHONY: provider/image/build
@@ -102,47 +92,6 @@ test/unit/provider/proxy test/integration/provider/proxy:
 test/integration/rdkit-runtime:
 	bash tools/container.sh $@
 
-test/integration/provider-geometry-worker:
-	bash tools/worker_qualification.sh geometry-success
-	bash tools/worker_qualification.sh geometry-timeout
-
-test/integration/provider-geometry-worker/pdb:
-	bash tools/worker_qualification.sh geometry-pdb
-
-test/integration/provider-geometry-worker/mol2:
-	bash tools/worker_qualification.sh geometry-mol2
-
-test/integration/provider-geometry-worker/uploads:
-	bash tools/worker_qualification.sh geometry-upload
-
-test/integration/provider-geometry-worker/smiles:
-	bash tools/worker_qualification.sh geometry-smiles
-	bash tools/worker_qualification.sh geometry-smiles-timeout
-
-test/integration/provider-native-geometry-worker:
-	bash tools/worker_qualification.sh geometry-native-mol
-	bash tools/worker_qualification.sh geometry-native-sdf
-	bash tools/worker_qualification.sh geometry-native-rejected
-	bash tools/worker_qualification.sh geometry-native-failure
-	bash tools/worker_qualification.sh geometry-native-timeout
-
-test/integration/provider-scientific-worker:
-	bash tools/worker_qualification.sh scientific
-
-test/integration/provider-scientific-worker/smiles:
-	bash tools/worker_qualification.sh scientific-smiles
-
-.PHONY: test/integration/provider-scientific-worker/pasted test/integration/provider-scientific-worker/uploads
-test/integration/provider-scientific-worker/pasted:
-	bash tools/worker_qualification.sh scientific-pasted
-
-test/integration/provider-scientific-worker/uploads:
-	bash tools/worker_qualification.sh scientific-upload
-
-test/integration/provider-worker:
-	bash tools/worker_qualification.sh unstarted
-	bash tools/worker_qualification.sh success
-	bash tools/worker_qualification.sh grant-failure
 .PHONY: test/repository/provider-core test/repository/operator-inputs test/repository/documentation
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/lock/stage packages/provider-core/lock/apply
@@ -242,31 +191,9 @@ test/integration/provider-core/runtime:
 test/integration/provider-core/native-factory:
 	bash tools/container.sh $@
 
-.PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
-.PHONY: test/integration/provider-service/references
-.PHONY: test/integration/provider-service/formats
 .PHONY: test/integration/provider/deployment/store-recovery
 test/integration/provider/deployment/store-recovery:
 	bash tools/provider_recovery_qualification.sh
-
-test/integration/provider-service/formats:
-	bash tools/provider_service_qualification.sh formats
-
-.PHONY: test/integration/provider-service/capacity
-test/integration/provider-service/capacity:
-	bash tools/provider_service_qualification.sh capacity
-
-test/integration/provider-service/references:
-	bash tools/provider_service_qualification.sh references
-
-test/integration/provider-service/uploads:
-	bash tools/provider_service_qualification.sh uploads
-
-test/integration/provider-service/pasted:
-	bash tools/provider_service_qualification.sh pasted
-
-test/integration/provider-service/smiles:
-	bash tools/provider_service_qualification.sh smiles
 
 test/integration/provider-core/admission:
 	bash tools/container.sh $@
@@ -351,7 +278,6 @@ override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin D
 unexport UPLOAD_RECEIPT
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
-unexport FORMAT_CASES
 unexport API_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
@@ -369,7 +295,6 @@ override export NMRNET_INSTALLATION_ROOT_INPUT := $(if $(filter command line,$(o
 override export NMRNET_MAXIMUM_STARTUP_BYTES_INPUT := $(if $(filter command line,$(origin MAXIMUM_STARTUP_BYTES)),$(value MAXIMUM_STARTUP_BYTES))
 override export NMRNET_HOST_DRAIN_SECONDS_INPUT := $(if $(filter command line,$(origin HOST_DRAIN_SECONDS)),$(value HOST_DRAIN_SECONDS))
 override export NMRNET_RECORD_SHA256_INPUT := $(if $(filter command line,$(origin RECORD_SHA256)),$(value RECORD_SHA256))
-override export NMRNET_FORMAT_CASES_INPUT := $(if $(filter command line,$(origin FORMAT_CASES)),$(value FORMAT_CASES))
 override export NMRNET_API_ROUTE_INPUT := $(if $(filter command line,$(origin API_ROUTE)),$(value API_ROUTE))
 override export NMRNET_LOCAL_NETWORK_INPUT := $(if $(filter command line,$(origin LOCAL_NETWORK)),$(value LOCAL_NETWORK))
 override export NMRNET_LOCAL_INTERFACE_INPUT := $(if $(filter command line,$(origin LOCAL_INTERFACE)),$(value LOCAL_INTERFACE))
@@ -404,18 +329,10 @@ help:
 		'make test/unit/provider/worker-startup Check one-use native worker startup and source channels offline.' \
 		'make test/unit/provider/host            Check provider host orchestration and shutdown ownership offline.' \
 		'make test/unit/provider-geometry-worker Run only the contained structure-reading process tests.' \
-		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
-		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
-		'make test/integration/provider-geometry-worker/pdb Check PDB alternate selection in a separate contained reader offline.' \
-		'make test/integration/provider-geometry-worker/mol2 Check ordered MOL2 records in a separate contained reader offline.' \
-		'make test/integration/provider-geometry-worker/uploads Check verified Uploads through the isolated reader and Job lifecycle.' \
 		'make test/integration/smiles-generator Check generated 3D conformers and atom mapping from SMILES offline.' \
 		'make test/unit/smiles-protocol          Check exact generated bytes, provenance, shortfall and frame limits without RDKit.' \
 		'make test/unit/smiles-worker            Check one-use generation, explicit budgets and private failure delivery offline.' \
 		'make test/integration/native-smiles-worker Check real RDKit generation across the private process channel offline.' \
-		'make test/unit/smiles-qualification     Check generation fixture and controlled-stall qualification failures offline.' \
-		'make test/integration/provider-geometry-worker/smiles Check native generation, controlled stalls and exact host retirement offline.' \
-		'make test/integration/provider-native-geometry-worker Check separate RDKit reader containers, private failures and host retirement offline.' \
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
@@ -451,8 +368,6 @@ help:
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
 		'make test/integration/native-geometry-worker Check real MOL/SDF parsing across the private worker channel in the recorded RDKit image.' \
-		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
-		'make test/integration/provider-scientific-worker/smiles Generate conformers, predict H/C and replay retained local Job publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/runner    Test fresh native children and independent lifecycle retirement offline.' \
 		'make test/integration/provider-core/runner Test native task cancellation and lost-control recovery offline.' \
@@ -464,23 +379,14 @@ help:
 		'make test/integration/provider-core/pasted Test exact pasted Job coordinates, units and source mapping.' \
 		'make test/integration/provider-core/interpreter Test NMRNet input-choice lifecycle offline.' \
 		'make test/integration/provider-core/config Test explicit provider startup configuration offline.' \
-		'make test/integration/provider-scientific-worker/pasted Qualify pasted nm coordinates with isolated reader and released models.' \
-		'make test/integration/provider-scientific-worker/uploads Qualify uploaded records with isolated reader and released models.' \
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
 		'make test/integration/provider-core/recovery Test explicit retained-record recovery offline.' \
 		'make test/integration/provider-core/interpreter-ambiguity Test the fixed interpreter-probe mechanics offline.' \
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
-		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
-		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
-		'make test/integration/provider-service/formats Check supplied-format cases; FORMAT_CASES selects distinct authored names, e.g. sdf-carbon-only.' \
 		'make test/integration/provider/deployment/store-recovery Check installed host inspection, exact replay and idle restart against synthetic local TLS.' \
-		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
-		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
-		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \
-		'make test/integration/provider-service/capacity Qualify synthetic H128/C128 service capacity and measured container resources.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Uploads, Job results and the proposed SECS byte-consumption boundary.' \
@@ -573,10 +479,6 @@ test/unit/provider/mol2:
 
 .PHONY: test/unit/provider/worker-startup
 test/unit/provider/worker-startup:
-	bash tools/container.sh $@
-
-.PHONY: test/unit/provider/allocation
-test/unit/provider/allocation:
 	bash tools/container.sh $@
 
 .PHONY: provider/prepare

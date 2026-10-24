@@ -1,4 +1,4 @@
-"""Fixed supplied-format fixtures for the existing native service qualification.
+"""Authored source records and scripted selections for format correction tests.
 
 The authored expected.json owns coordinates and source correspondence. Scripted
 tool choices exercise reading, not language-model understanding or NMR accuracy.
@@ -6,12 +6,12 @@ tool choices exercise reading, not language-model understanding or NMR accuracy.
 
 import hashlib
 import json
-import struct
 from decimal import Decimal
 from pathlib import Path
 
-from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import SuppliedLifecycle
 from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
+from tests.integration.nmrnet.interpreter_ports import tool_reply
+from tests.fakes.uploads import UPLOAD_REF
 
 FORMAT_CASES = (
     "json",
@@ -27,14 +27,11 @@ FORMAT_CASES = (
 )
 
 
-class FormatsServiceLifecycle(SuppliedLifecycle):
-    """Assemble authored fixtures; normal service/factory owners execute them."""
+class FormatFixture:
+    """Keep independent molecular facts beside their selected source records."""
 
     input_kind = "upload"
     fixture_root = Path("/input/preparation")
-
-    def expected_reader_options(self):
-        return self.reader_options
 
     def load_case(self):
         oracle = (self.fixture_root / "expected.json").read_bytes()
@@ -107,49 +104,16 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
             "Keep supplied atoms and coordinates. Return shifts with 17 significant digits."
         ).encode()
 
-    def fixture_sources(self):
-        sources = [
-            ("tests/integration/provider_core/formats_service.py", Path(__file__)),
-            ("tests/fixtures/preparation/expected.json", self.fixture_root / "expected.json"),
-            ("docs/fixtures/preparation.html", self.fixture_root / "documentation.html"),
-        ]
-        if self.relative_source is not None:
-            sources.append(("tests/fixtures/preparation/" + self.relative_source, self.fixture_root / self.relative_source))
-        return sources
-
-    def retain_allocation_intent(self, allocation):
-        """Join a qualification request to this case's admitted Job, not new authority."""
-        body = (
-            json.dumps(
-                {
-                    "case": self.format_case,
-                    "job_ref": self.selected_input.job_ref,
-                    "input_fingerprint": self.selected_input.input_fingerprint,
-                    "fixture_source_sha256": self.fixture_sha256,
-                    "fixture_source_bytes": len(self.source),
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("ascii")
-            + b"\n"
-        )
-        selection = self.state_root / "selection.json"
-        if selection.exists():
-            self.assertEqual(selection.read_bytes(), body)
-        else:
-            with selection.open("xb") as stream:
-                stream.write(body)
-            with (self.state_root / "admission-events.json").open("x") as stream:
-                json.dump(self.events, stream)
-        with (self.state_root / "allocation-intents" / allocation.allocation).open("xb") as stream:
-            stream.write((self.state_root / "selected").read_bytes())
-            stream.write(body)
-
     async def model_reply(self, request, raw):
-        response = json.loads(await super().model_reply(request, raw))
+        self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
+        self.assertNotIn(b"signature:", request.lower())
+        self.model_calls += 1
+        messages = json.loads(raw)["messages"]
+        self.assertEqual(messages[1]["content"], self.instructions.decode())
+        if messages[-1]["role"] != "tool":
+            return tool_reply(f"inspect_uploads-{self.model_calls}", "inspect_uploads", {})
+        response = json.loads(tool_reply(f"prepare_upload-{self.model_calls}", "prepare_upload", {"upload_ref": UPLOAD_REF}))
         function = response["choices"][0]["message"]["tool_calls"][0]["function"]
-        if function["name"] != "prepare_upload":
-            return json.dumps(response).encode()
         options = dict(self.reader_options)
         if self.expected_preparation_calls == 2:
             messages = json.loads(raw)["messages"]
@@ -167,29 +131,3 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
         arguments.update(options, output={"verbosity": "max", "shift_significant_digits": 17})
         function["arguments"] = json.dumps(arguments)
         return json.dumps(response).encode()
-
-    def assert_result(self, terminal):
-        result = super().assert_result(terminal)
-        self.assertEqual(result["output"], {"shift_significant_digits": 17, "verbosity": "max"})
-        self.assertEqual(result["interpretation"]["corrections"], self.expected_preparation_calls - 1)
-        if self.format_case == "sdf-carbon-only":
-            self.assertNotIn("generation", result)
-        evidence = json.loads(terminal.evidence.content)["geometries"]
-        for public, private, expected in zip(result["geometries"], evidence, self.expected, strict=True):
-            if self.format_case == "sdf-carbon-only":
-                self.assertEqual(public["preparation"]["method"], "sdf")
-                self.assertEqual(
-                    public["coverage"],
-                    {
-                        "basis": "supplied_coordinates",
-                        "supplied_hydrogen_atoms": 0,
-                        "predicted_hydrogen_atoms": 0,
-                        "hydrogen_completeness": "not_established_from_coordinates",
-                    },
-                )
-            self.assertEqual(public["predictions"], private["prediction"]["predictions"])
-            self.assertEqual(
-                public["float32_coordinates"],
-                [[struct.unpack("!f", struct.pack("!f", value))[0] for value in row] for row in expected["coordinates_angstrom"]],
-            )
-        return result

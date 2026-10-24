@@ -1,18 +1,15 @@
 """Verified Upload selection reaches one retained, complete signed Job result.
 
-The routine fixture invokes the pure XYZ parser in this container and records
-reader retirement. The separate host lane uses an actual isolated GeometryClient
-and exact host retirement. Choice and science remain recording ports in both;
-neither fixture establishes model accuracy or an external interpreter workflow.
+The fixture invokes the pure XYZ parser in this container and records reader
+retirement. Choice and science are recording ports; this establishes neither
+model accuracy nor an external interpreter workflow.
 """
 
 import asyncio
 import base64
 import copy
 import hashlib
-import importlib.metadata
 import json
-import os
 import tempfile
 import unittest
 from collections import Counter
@@ -31,9 +28,8 @@ from tests.fakes.publication import api
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
-from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.input_preparation import InputPreparation
-from nmrnet_provider.retirement import HostRetirement, retire_worker_channel
+from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
@@ -80,31 +76,6 @@ class Retirement:
 
     async def retire_channel(self, worker):
         return await retire_worker_channel(worker, self)
-
-
-class ObservedReader(GeometryClient):
-    """Record actual channel closure without replacing any reader operation."""
-
-    closed = False
-    observed = False
-
-    def close(self):
-        super().close()
-        self.closed = True
-
-    async def wait_closed(self):
-        await super().wait_closed()
-        self.observed = True
-
-
-class ObservedHostRetirement(HostRetirement):
-    confirmed = False
-
-    async def retire(self):
-        await super().retire()
-        if Path("/ipc/geometry.sock").exists() or Path("/ipc/ready").exists():
-            raise AssertionError("Host confirmed reader retirement before releasing its IPC grants")
-        self.confirmed = True
 
 
 class Chooser:
@@ -198,7 +169,6 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
         self.worker, self.host = ScientificWorker(self), Retirement()
         self.reader, self.reader_host, self.chooser = Reader(), Retirement(), Chooser()
         self.counts = Counter()
-        self.live_reader = False
 
     def assert_sources(self, geometries):
         self.assertEqual([row["source"]["record_number"] for row in geometries], [2, 1])
@@ -215,16 +185,6 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
     async def allocate_reader(self):
         self.counts["reader"] += 1
         self.assertEqual(self.counts["reader"], 1)
-        if self.live_reader:
-            allocation = os.environ["NMRNET_QUALIFICATION_ALLOCATION"]
-            reader, writer = await asyncio.open_unix_connection("/ipc/geometry.sock")
-            self.reader = ObservedReader(reader, writer, allocation=allocation, operation_seconds=10)
-            self.reader_host = ObservedHostRetirement(
-                allocation=allocation,
-                request_directory=Path("/control/request"),
-                receipt_directory=Path("/control/receipt"),
-                operation_seconds=30,
-            )
         return self.reader, self.reader_host
 
     async def reply(self, request, body):
@@ -280,40 +240,6 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_verified_upload_selected_2_1_is_retained_before_one_batch_and_published_whole(self):
         await self.run_lifecycle()
 
-    @unittest.skipUnless(
-        os.environ.get("NMRNET_LIVE_UPLOAD_READER") == "1", "run make test/integration/provider-geometry-worker/uploads"
-    )
-    async def test_isolated_upload_reader_retires_before_batch_dispatch_and_publication(self):
-        self.live_reader = True
-        async with asyncio.timeout(90):
-            await self.run_lifecycle()
-        allocation = os.environ["NMRNET_QUALIFICATION_ALLOCATION"]
-        Path("/control/request/evidence.json").write_text(
-            json.dumps(
-                {
-                    "schema_id": "nmrnet.upload_reader.qualification.v1",
-                    "scope": "actual TLS Upload acquisition, isolated XYZ reader, host retirement and durable lifecycle; recording choice and science",
-                    "allocation": allocation,
-                    "worker_image_id": os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
-                    "installed_core_version": importlib.metadata.version("provider-core"),
-                    "source_sha256": self.digest,
-                    "request_sha256": [hashlib.sha256(raw).hexdigest() for raw in self.worker.requests],
-                    "selected_records": [2, 1],
-                    "reader_host_retirement_confirmed": self.reader_host.confirmed,
-                    "terminal_confirmation_reopened": True,
-                    "scientific_result": {
-                        "sha256": hashlib.sha256(self.result_content).hexdigest(),
-                        "size": len(self.result_content),
-                    },
-                    "operations": dict(self.counts),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n"
-        )
-        Path("/control/request/observed").write_text("retired " + allocation + "\n")
-
     async def run_lifecycle(self):
         headers = tuple((name, value) for name, value in store_headers(self.source) if name != b"content-length")
         async with (
@@ -341,7 +267,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                 allocate_generator=AsyncMock(side_effect=AssertionError("Upload fixture unexpectedly allocated a generator.")),
                 generation_settings=GenerationSettings(17, 200, 1),
                 generation_seconds=2,
-                seconds=45 if self.live_reader else 10,
+                seconds=10,
             )
             session = NMRNetSession(
                 worker=self.worker,

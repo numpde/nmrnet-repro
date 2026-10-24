@@ -41,7 +41,6 @@ class ImageSource:
             "tools/bound_http_proxy.py",
             "tools/container_resources.py",
             "tools/baseline_prepare.py",
-            "tools/provider_workers.sh",
             "requirements/inference.lock",
             "requirements/unicore-source.json",
             "artifacts/prediction-models.json",

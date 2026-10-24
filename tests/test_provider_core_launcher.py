@@ -15,32 +15,6 @@ from unittest.mock import patch
 
 
 class CoreLauncherTests(unittest.TestCase):
-    def test_native_science_lanes_use_the_existing_host_qualification_owner(self):
-        for lane, scenario in (
-            ("smiles", "scientific-smiles"),
-            ("pasted", "scientific-pasted"),
-            ("uploads", "scientific-upload"),
-        ):
-            with self.subTest(lane=lane):
-                result = subprocess.run(
-                    ["make", "--dry-run", "--no-print-directory", "test/integration/provider-scientific-worker/" + lane],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), "bash tools/worker_qualification.sh " + scenario)
-
-    def test_upload_reader_lane_uses_the_existing_host_qualification_owner(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "--no-print-directory", "test/integration/provider-geometry-worker/uploads"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "bash tools/worker_qualification.sh geometry-upload")
-
     def checkout(self, root):
         selection = patch.dict(
             os.environ,
