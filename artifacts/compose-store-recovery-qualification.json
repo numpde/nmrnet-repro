@@ -1,0 +1,36 @@
+{
+  "schema_id": "nmrnet.compose_store_recovery_qualification.v1",
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "7ec1494456a74a6c10c845971055e9e313f2f687",
+  "command": "make test/integration/provider-service/recovery",
+  "deployment": "qualification-recovery-RyUkJm42",
+  "bundle": "generation-05yPg5a4",
+  "scope": "Installed credential-free stopped-store inspection, one exact synthetic retained COMPLETE replay through the API-only route, then ordinary named Compose startup against that same Attempt store and empty discovery. Local signed TLS fixture; no new Job or live model.",
+  "observations": {
+    "complete_requests": 1,
+    "jobs_supplied": 0,
+    "terminal_body_sha256": "71cd6d8cd3c8b497baab30a336005d3a292125e632e16932648cd6da44284f4c",
+    "protected_evidence_sha256": "9bba4530deba412c748fa3cd2e9976d586f2f9e7c5729698031d194d48013e12",
+    "confirmed_history_record_sha256": "74c6501583a8cf47a58340cf93f23c630c87895d0c897e4c1d512eec701bae33",
+    "storage_transition": "After exact replay the active TerminalConfirmed record was captured as original stored bytes. Ordinary service startup archived it; final active inventory was empty and private history contained exactly its canonical file with identical bytes.",
+    "readiness": "Initial API Hello accepted. A transient not-ready process-status read was preserved before readiness succeeded.",
+    "native_child_events_observed": {
+      "prediction": 0,
+      "reader": 0,
+      "smiles": 0
+    },
+    "tls_handlers_settled": true
+  },
+  "final_state": "All seven Compose roles stopped with bounded Docker logs retained. Finite inspection, replay and fixture peer containers retired through exact-ID confirmation and direct bounded log delivery.",
+  "retained_outputs": [
+    {
+      "path": "artifacts/compose-runner/recovered-store/summary.json",
+      "sha256": "7f63da3297d78571729d517f4bd2c94e13a456f5d0fac1ee54628ec8d26e2666"
+    },
+    {
+      "path": "artifacts/compose-runner/recovered-store/replayed.json",
+      "sha256": "9967d6f03d60ef9990e7bc0f9aba8789f735f75da68bc8d27956e8c3d301c848"
+    }
+  ],
+  "limits": "Synthetic retained publication tests exact replay and storage preservation, not new scientific accuracy, interpreter semantics, external API/GUI delivery or host reboot. Empty log projections alone are not child-retirement proof."
+}
