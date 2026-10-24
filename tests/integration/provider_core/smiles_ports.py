@@ -123,10 +123,11 @@ class SessionPorts(InputPorts):
 
     def make_session(self, preparation):
         return NMRNetSession(
-            worker=self.worker,
-            retirement=self.host,
+            allocate_prediction=self.allocate_prediction,
             execution_identity={"image_id": "fixture"},
             selected_artifacts=self.worker.artifacts,
-            runtime_expectations=self.worker.runtime,
             input_preparation=preparation,
         )
+
+    async def allocate_prediction(self):
+        return self.worker, self.host, self.worker.runtime

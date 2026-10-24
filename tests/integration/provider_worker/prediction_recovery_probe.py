@@ -23,7 +23,7 @@ from types import SimpleNamespace
 if sys.argv[1:] == ["controller"]:
     from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
     from nmrnet_provider.process_reports import failure_evidence
-    from nmrnet_provider.session import NMRNetSession, PredictionRecovery
+    from nmrnet_provider.session import NMRNetSession
     from provider_core.attempt_record import RecoveryScope, StartPending, acknowledge_start
     from provider_core.attempt_request import start_body
     from provider_core.attempt_response import AttemptAdmission
@@ -145,16 +145,16 @@ async def controller():
             False,
         ),
     )
-    first, retirement, runtime = await factory.allocate_prediction(job_ref=facts.job_ref)
-    owners = [retirement]
+    owners = []
 
     async def allocate():
-        original, = owners
-        if (original.session.retirement.returncode != -signal.SIGKILL
-                or not original.session.retirement.scratch_released
-                or not original._retirement.done() or original._retirement.result() is not None
-                or not original._science_closure.done() or original._science_closure.result() is not None):
-            raise AssertionError("Replacement preceded the original OOM reap, scratch release or local closure")
+        if owners:
+            original, = owners
+            if (original.session.retirement.returncode != -signal.SIGKILL
+                    or not original.session.retirement.scratch_released
+                    or not original._retirement.done() or original._retirement.result() is not None
+                    or not original._science_closure.done() or original._science_closure.result() is not None):
+                raise AssertionError("Replacement preceded the original OOM reap, scratch release or local closure")
         worker, owner, observed = await factory.allocate_prediction(job_ref=facts.job_ref)
         owners.append(owner)
         return worker, owner, observed
@@ -169,12 +169,10 @@ async def controller():
         })
 
     session = NMRNetSession(
-        worker=first,
-        retirement=retirement,
+        allocate_prediction=allocate,
         execution_identity={"fixture": "synthetic OOM"},
         selected_artifacts=ARTIFACTS,
-        runtime_expectations=runtime,
-        prediction_recovery=PredictionRecovery(allocate, notice),
+        on_prediction_retry=notice,
     )
     try:
         prepared = await session.prepare(admitted, VerifiedJobInput(facts, RAW), report_condition=unexpected)

@@ -108,22 +108,16 @@ class NativeAttemptFactory:
 
     async def __call__(self, pending):
         self._begin_setup()
-        allocation = None
         try:
-            worker, allocation = await self._open_role("prediction", job_ref=pending.input.job_ref)
-            runtime = allocation.runtime
-            controller = await assemble_attempt(
+            return await assemble_attempt(
                 config=self.config,
                 pending=pending,
                 api=self.api,
                 store=self.store,
                 setup_owner=self,
                 claims=self.claims,
-                worker=worker,
-                retirement=allocation.retirement,
                 execution_identity=self.execution_identity,
                 selected_artifacts=self.selected_artifacts,
-                runtime_expectations=runtime,
                 allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
                 on_prediction_retry=self.on_prediction_retry,
                 allocate_reader=self.allocate_reader,
@@ -134,19 +128,8 @@ class NativeAttemptFactory:
                 start_recovery=self.start_recovery,
                 terminal_recovery=self.terminal_recovery,
             )
-            self._release(allocation)
-            return controller
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-            if allocation is None:
-                # _open_role owns its partial setup and already retained every
-                # cleanup cause. In particular, do not wrap its cancellation again.
-                raise
-            failures = []
-            failures.extend(await self._settle_store())
-            cleanup = await self._retire(allocation)
-            failures.extend(cleanup)
-            if not cleanup:
-                self._release(allocation)
+            failures = await self._settle_store()
             self._raise_setup(cause, failures, job_ref=pending.input.job_ref)
         finally:
             self._operation = None

@@ -15,7 +15,6 @@ import asyncio
 import copy
 import hashlib
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -65,23 +64,6 @@ class SessionRetirementFailed(RuntimeError):
         self.failures = tuple(failures)
         self.cause = self.failures[0][1]
         self.interruption_cause = None
-
-
-@dataclass(frozen=True, slots=True)
-class PredictionRecovery:
-    """Replace only retired prediction allocations; diagnostics belong to the process.
-
-    allocate returns a new client, its retirement owner and observed runtime.
-    The factory retains incomplete setup. on_retry receives the original Attempt
-    and first fault, plus its retired operation owner, for the protected sink.
-    """
-
-    allocate: Callable
-    on_retry: Callable
-
-    def __post_init__(self):
-        if not callable(self.allocate) or not callable(self.on_retry):
-            raise ValueError("Prediction recovery requires an allocation owner and a protected diagnostic observer.")
 
 
 class PredictionRecoveryFailed(RuntimeError):
@@ -202,36 +184,36 @@ class _PreparedExecution:
 class NMRNetSession:
     """A single-use session created before preparation acquires worker resources.
 
-    Composition supplies allocation-bound worker/retirement ports and admitted
-    runtime facts. Metadata is copied now so later caller mutation cannot alter
-    result planning. This object has no API credentials or publication authority.
+    Composition supplies a Job-bound allocator used only after input succeeds.
+    Its returned runtime is observed at acquisition. Metadata is copied so later
+    caller mutation cannot alter result planning. This object has no API
+    credentials or publication authority.
     """
 
     def __init__(
         self,
         *,
-        worker,
-        retirement,
+        allocate_prediction,
         execution_identity,
         selected_artifacts,
-        runtime_expectations,
         input_preparation=None,
-        prediction_recovery=None,
+        on_prediction_retry=None,
     ):
-        if prediction_recovery is not None and type(prediction_recovery) is not PredictionRecovery:
-            raise ValueError("Scientific session requires an admitted prediction recovery policy or explicit disabled recovery.")
-        self._worker = worker
-        self._retirement = retirement
+        if not callable(allocate_prediction):
+            raise ValueError("Scientific session requires a prediction allocation owner.")
+        if on_prediction_retry is not None and not callable(on_prediction_retry):
+            raise ValueError("Prediction recovery requires a protected diagnostic observer or explicit disabled recovery.")
+        self._allocate_prediction = allocate_prediction
+        self._on_prediction_retry = on_prediction_retry
+        self._worker = self._retirement = None
         self._input_preparation = input_preparation
-        self._prediction_recovery = prediction_recovery
-        self._replacement_pending = False
+        self._prediction_pending = False
         self.prediction_failure = None
         self._acknowledged = None
         self._facts = copy.deepcopy(
             {
                 "execution_identity": execution_identity,
                 "selected_artifacts": selected_artifacts,
-                "runtime_expectations": runtime_expectations,
             }
         )
         self._phase = _Phase.NEW
@@ -241,7 +223,7 @@ class NMRNetSession:
     # Core requires this named port; NMRNet currently emits no preparation conditions.
     async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
         if self._phase is not _Phase.NEW:
-            raise ValueError("Scientific session already accepted preparation or retirement; create a new owned allocation.")
+            raise ValueError("Scientific session already accepted preparation or retirement; create a new session.")
         self._phase = _Phase.PREPARING
         if (
             type(acknowledged) is not AcknowledgedAttempt
@@ -270,6 +252,7 @@ class NMRNetSession:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
         if type(prepared) not in (PreparedJobInput, GeneratedJobInput):
             raise TypeError("Scientific preparation requires the input owner's frozen supplied or generated geometry collection.")
+        self._facts["runtime_expectations"] = await self._acquire_prediction(_Phase.PREPARING)
         plan = ResultPlan(
             prepared,
             job_ref=instructions.job_ref,
@@ -381,7 +364,7 @@ class NMRNetSession:
                     ConnectionResetError,
                     BrokenPipeError,
                 ) as cause:
-                    if execution == 1 or self._prediction_recovery is None:
+                    if execution == 1 or self._on_prediction_retry is None:
                         raise
                     self.prediction_failure = cause
                     await self._replace_prediction()
@@ -400,21 +383,26 @@ class NMRNetSession:
         if failures:
             self._raise_retirement_failure(failures)
         self._require_prediction_active()
-        self._prediction_recovery.on_retry(self._acknowledged, self.prediction_failure, self._retirement)
+        self._on_prediction_retry(self._acknowledged, self.prediction_failure, self._retirement)
         self._require_prediction_active()
-        self._replacement_pending = True
+        runtime = await self._acquire_prediction(_Phase.EXECUTING)
+        if runtime != self._facts["runtime_expectations"]:
+            raise ValueError(
+                "Replacement prediction runtime differs from the admitted original runtime; prediction is blocked."
+            )
+
+    async def _acquire_prediction(self, phase):
+        self._prediction_pending = True
         try:
-            worker, retirement, runtime = await self._prediction_recovery.allocate()
+            worker, retirement, runtime = await self._allocate_prediction()
             # No await separates handoff from adoption. Even a late return after
             # retirement began remains owned here and must be retired later.
             self._worker, self._retirement = worker, retirement
-            self._require_prediction_active()
-            if runtime != self._facts["runtime_expectations"]:
-                raise ValueError(
-                    "Replacement prediction runtime differs from the admitted original runtime; prediction is blocked."
-                )
+            if self._phase is not phase:
+                raise ValueError("Prediction acquisition finished after retirement began; scientific dispatch is blocked.")
+            return copy.deepcopy(runtime)
         finally:
-            self._replacement_pending = False
+            self._prediction_pending = False
 
     async def retire(self):
         if self._phase is _Phase.RETIRED:
@@ -428,13 +416,14 @@ class NMRNetSession:
             except (Exception, asyncio.CancelledError) as cause:
                 failures.append(("input_retirement", cause))
         worker, retirement = self._worker, self._retirement
-        failures.extend(await retirement.retire_channel(worker))
-        if self._replacement_pending or self._worker is not worker or self._retirement is not retirement:
+        if retirement is not None:
+            failures.extend(await retirement.retire_channel(worker))
+        if self._prediction_pending or self._worker is not worker or self._retirement is not retirement:
             failures.append(
                 (
-                    "prediction_replacement",
+                    "prediction_acquisition",
                     RuntimeError(
-                        "Prediction replacement changed or is still completing its handoff; settle the current worker before confirming retirement."
+                        "Prediction acquisition changed or is still completing its handoff; settle the current worker before confirming retirement."
                     ),
                 )
             )

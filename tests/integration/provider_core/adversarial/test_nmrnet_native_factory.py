@@ -16,6 +16,18 @@ from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_controller_assembly_does_not_allocate_prediction_before_start(self):
+        factory = self.factory(seconds=1)
+        controller = object()
+        with (
+            patch.object(factory, "_open_role", new=AsyncMock(side_effect=AssertionError("Prediction allocated before START"))) as opened,
+            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(return_value=controller)),
+        ):
+            self.assertIs(await factory(record()), controller)
+        opened.assert_not_called()
+        self.assertEqual(factory.allocations, [])
+        self.assertEqual(factory.clients, {})
+
     async def test_missing_condition_recovery_is_refused_before_native_allocation(self):
         with (
             patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
@@ -132,7 +144,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch.object(allocation, "start", new=AsyncMock(return_value=(object(), writer))),
             patch("nmrnet_provider.native_factory.PredictionClient", side_effect=primary),
         ):
-            task = asyncio.create_task(factory(record()))
+            task = asyncio.create_task(factory.allocate_prediction(job_ref="job:example"))
             async with asyncio.timeout(2):
                 await entered.wait()
                 task.cancel()
@@ -181,7 +193,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
             self.assertRaises(asyncio.CancelledError) as failure,
         ):
-            await factory(record())
+            await factory.allocate_prediction(job_ref="job:example")
         self.assertIs(failure.exception, interrupted)
         self.assertIs(interrupted.__cause__, factory.last_failure)
         self.assertIs(factory.last_failure.interruption_cause, original)
@@ -209,7 +221,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         store.settle.assert_awaited_once_with(owner=factory)
         self.assertEqual(factory.allocations, [])
 
-    async def test_failed_assembly_settles_owned_setup_read_and_retires_original_prediction(self):
+    async def test_failed_assembly_settles_owned_setup_read_without_allocating_prediction(self):
         events = []
         store = SimpleNamespace(pending_operation=None, pending_owner=None, settle=AsyncMock())
         allocation = Mock(metadata=b'{"runtime":{}}', retire=AsyncMock(), settle=AsyncMock())
@@ -252,7 +264,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
 
         store.settle.side_effect = settle_store
         with (
-            patch.object(factory, "_open_role", side_effect=opened),
+            patch.object(factory, "_open_role", side_effect=opened) as acquire,
             patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=failed_assembly),
             self.assertRaises(RuntimeError) as failure,
         ):
@@ -260,10 +272,11 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(failure.exception.cause, primary)
         self.assertNotIn("PRIVATE_ASSEMBLY_CAUSE", str(failure.exception))
         self.assertEqual(events, ["store"])
-        allocation.retire.assert_awaited_once()
-        allocation.settle.assert_awaited_once()
-        worker.close.assert_called_once()
-        worker.wait_closed.assert_awaited_once()
+        acquire.assert_not_called()
+        allocation.retire.assert_not_awaited()
+        allocation.settle.assert_not_awaited()
+        worker.close.assert_not_called()
+        worker.wait_closed.assert_not_called()
 
     async def test_refused_assembly_and_later_settlement_never_steal_an_unrelated_unowned_read(self):
         factory = self.factory(seconds=1)
@@ -291,7 +304,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(factory.store.pending_owner)
         self.assertEqual(factory.allocations, [])
 
-    async def test_held_store_read_does_not_retain_a_successfully_retired_prediction(self):
+    async def test_held_store_read_does_not_acquire_prediction(self):
         factory = self.factory(seconds=1)
         allocation = self.allocation()
         allocation.metadata = b'{"runtime":{}}'
@@ -321,7 +334,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(factory.store.pending_operation, original_read)
         self.assertEqual(factory.allocations, [])
         self.assertEqual(factory.clients, {})
-        allocation.retire.assert_awaited_once()
+        allocation.retire.assert_not_awaited()
         with self.assertRaisesRegex(RuntimeError, "settle"):
             await factory(record())
 
@@ -333,4 +346,4 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         factory.store.settle.side_effect = settled
         await factory.settle()
         self.assertIsNone(factory.last_failure)
-        allocation.retire.assert_awaited_once()
+        allocation.retire.assert_not_awaited()

@@ -8,6 +8,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.execution import unexpected_condition
+from tests.fakes.attempts import start_response
 from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF, member
 from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
@@ -16,13 +17,30 @@ from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
-from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed
+from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, TerminalConfirmed
 from provider_core.attempt_store import AttemptStore
 from provider_core.job_input import verify_job_input
 from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_terminal_start_replay_never_acquires_prediction_or_interprets_input(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            with patch("tests.integration.nmrnet.runtime_ports.start_response", return_value=start_response(
+                analysis_kind_ref=pending.analysis_kind_ref, state="failed", replayed=True,
+            )):
+                outcome = await controller.run(pending)
+            self.assertIsInstance(outcome, AcknowledgedAttempt)
+            fixture.allocate_prediction.assert_not_awaited()
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(ports.worker.events, [])
+            ports.allocate_generator.assert_not_awaited()
+            ports.allocate_reader.assert_not_awaited()
+
     async def test_prediction_replacement_keeps_one_interpretation_and_one_terminal_publication(self):
         ports = SessionPorts()
         replacement = type(ports.worker)(ports.worker.artifacts, ports.worker.runtime)
@@ -30,8 +48,12 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
         first = asyncio.IncompleteReadError(b"PRIVATE incomplete response", 4)
         ports.worker.execute = AsyncMock(side_effect=first)
         notices = Mock()
+        acquired = []
 
         async def allocate():
+            if not acquired:
+                acquired.append(ports.worker)
+                return await ports.allocate_prediction()
             self.assertTrue(ports.host.confirmed)
             self.assertEqual(ports.worker.events[-2:], ["close", "closed"])
             return replacement, host, replacement.runtime
@@ -267,14 +289,15 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             ports.allocate_reader.assert_awaited_once()
             self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
 
-    async def test_returned_controller_retires_its_allocation_even_when_never_run(self):
+    async def test_returned_controller_never_acquires_prediction_when_not_run(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             await controller.settle()
-            self.assertTrue(ports.host.confirmed)
-            self.assertEqual(ports.worker.events, ["close", "closed"])
+            self.assertFalse(ports.host.confirmed)
+            self.assertEqual(ports.worker.events, [])
+            fixture.allocate_prediction.assert_not_awaited()
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(len(fixture.api_peer.requests), 1)
             self.assertEqual(await fixture.store.records(), ())

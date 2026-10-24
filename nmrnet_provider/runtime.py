@@ -15,7 +15,7 @@ require_container()
 from nmrnet_provider.config import ANALYSIS_KIND_REF, ProviderConfig
 from nmrnet_provider.input_preparation import InputPreparation
 from nmrnet_provider.interpreter import InputInterpreter
-from nmrnet_provider.session import NMRNetSession, PredictionRecovery
+from nmrnet_provider.session import NMRNetSession
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending, TerminalConfirmed
 from provider_core.chat import ChatEndpoint
@@ -31,11 +31,8 @@ async def assemble_attempt(
     store,
     setup_owner,
     claims,
-    worker,
-    retirement,
     execution_identity,
     selected_artifacts,
-    runtime_expectations,
     allocate_prediction,
     on_prediction_retry,
     allocate_reader,
@@ -49,9 +46,8 @@ async def assemble_attempt(
     """Return the existing controller, which must run this same selected pending.
 
     The caller obtains pending.input from authenticated ProviderAPI.jobs and owns
-    the opened store, lifecycle API and supplied scientific allocation. Refusal
-    leaves that allocation with the caller. Successful return transfers it to
-    the controller, including pre-start failure cleanup. Reader/generator factories
+    the opened store and lifecycle API. Prediction is acquired only after START
+    acknowledgement and successful input preparation. Reader/generator factories
     keep partial allocations until they return their client/retirement pair.
 
     Inventory is an early refusal check, not a claim: core checks again at run.
@@ -109,13 +105,11 @@ async def assemble_attempt(
         seconds=settings.seconds,
     )
     session = NMRNetSession(
-        worker=worker,
-        retirement=retirement,
+        allocate_prediction=allocate_prediction,
         execution_identity=execution_identity,
         selected_artifacts=selected_artifacts,
-        runtime_expectations=runtime_expectations,
         input_preparation=preparation,
-        prediction_recovery=None if allocate_prediction is None else PredictionRecovery(allocate_prediction, on_prediction_retry),
+        on_prediction_retry=on_prediction_retry,
     )
     settings = config.lifecycle
     return AttemptController(

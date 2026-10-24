@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.native_session import NativeOperation
-from nmrnet_provider.session import NMRNetSession, PredictionRecovery
+from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.worker_client import PredictionExecutionFailed
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
@@ -95,6 +95,8 @@ class RunnerPredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
             notice = Mock()
 
             async def replace():
+                if not operations:
+                    return await factory.allocate_prediction(job_ref="job:example")
                 old, = operations
                 self.assertTrue(old.session.retirement.scratch_released)
                 self.assertTrue(old.writer.is_closing())
@@ -108,11 +110,10 @@ class RunnerPredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
             session = None
             try:
                 with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
-                    worker, retirement, runtime = await factory.allocate_prediction(job_ref="job:example")
                     session = NMRNetSession(
-                        worker=worker, retirement=retirement, execution_identity={"image_id": "fixture"},
-                        selected_artifacts=ports.worker.artifacts, runtime_expectations=runtime,
-                        prediction_recovery=PredictionRecovery(replace, notice), input_preparation=ports.preparation,
+                        allocate_prediction=replace, execution_identity={"image_id": "fixture"},
+                        selected_artifacts=ports.worker.artifacts,
+                        on_prediction_retry=notice, input_preparation=ports.preparation,
                     )
                     prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
                     frozen_requests = [raw.hex() for raw in session._prepared.requests]

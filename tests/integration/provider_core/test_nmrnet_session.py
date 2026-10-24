@@ -119,14 +119,58 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.instructions = verify_job_input(response(RAW), feed=facts(RAW))
 
     def make_session(self, preparation=None):
+        self.allocate_prediction = AsyncMock(return_value=(self.worker, self.host, self.worker.runtime))
         return NMRNetSession(
-            worker=self.worker,
-            retirement=self.host,
+            allocate_prediction=self.allocate_prediction,
             execution_identity={"image_id": "fixture"},
             selected_artifacts=self.worker.artifacts,
-            runtime_expectations=self.worker.runtime,
             input_preparation=preparation,
         )
+
+    async def test_initial_prediction_is_acquired_after_input_and_before_result_planning(self):
+        preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
+        preparation.prepare.return_value = PreparedJobInput((prepare_json(RAW),), "direct_coordinate_json")
+        self.session = self.make_session(preparation)
+
+        async def acquire():
+            preparation.prepare.assert_awaited_once_with(self.instructions)
+            self.assertEqual(self.worker.events, [])
+            return self.worker, self.host, self.worker.runtime
+
+        self.allocate_prediction.side_effect = acquire
+        self.allocate_prediction.assert_not_called()
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        self.allocate_prediction.assert_awaited_once_with()
+        self.assertEqual(self.worker.events, [])
+        await self.session.retire()
+
+    async def test_retirement_cannot_release_an_initial_allocation_still_handing_off(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def acquire():
+            entered.set()
+            await release.wait()
+            return self.worker, self.host, self.worker.runtime
+
+        self.allocate_prediction.side_effect = acquire
+        preparing = asyncio.create_task(
+            self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            with self.assertRaises(SessionRetirementFailed):
+                await self.session.retire()
+            self.assertFalse(self.host.confirmed)
+            release.set()
+            with self.assertRaisesRegex(ValueError, "retirement"):
+                await preparing
+            await self.session.retire()
+            self.assertTrue(self.host.confirmed)
+            self.assertEqual(self.worker.events, ["close", "closed"])
+        finally:
+            release.set()
+            await asyncio.gather(preparing, return_exceptions=True)
 
     async def test_preparation_owner_supplies_one_ordered_batch_and_retires_with_session(self):
         first = prepare_json(RAW)
@@ -159,8 +203,10 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         failure = OSError("private source cleanup evidence")
         preparation = AsyncMock()
         preparation.interpreter_diagnostics = None
+        preparation.prepare.return_value = PreparedJobInput((prepare_json(RAW),), "direct_coordinate_json")
         preparation.retire.side_effect = failure
         self.session = self.make_session(preparation)
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         with self.assertRaises(SessionRetirementFailed) as caught:
             await self.session.retire()
         self.assertEqual(caught.exception.failures, (("input_retirement", failure),))
@@ -195,7 +241,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         release.set()
         with self.assertRaisesRegex(ValueError, "retirement"):
             await task
-        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertEqual(self.worker.events, [])
+        self.allocate_prediction.assert_not_awaited()
 
     async def test_identity_capacity_stops_dispatch_even_when_the_whole_result_fits(self):
         """Inject a planned batch at the binding seam; this does not qualify batch execution."""
@@ -265,11 +312,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         acknowledged = acknowledge_start(replace(record(), input=facts(raw)), admission())
         manifest = {f"tools/module_{index}.py": {"sha256": "a" * 64, "size": index} for index in range(MAX_EVIDENCE_BYTES // 80)}
         self.session = NMRNetSession(
-            worker=self.worker,
-            retirement=self.host,
+            allocate_prediction=AsyncMock(return_value=(self.worker, self.host, self.worker.runtime)),
             execution_identity={"image_id": "fixture", "tool_sources": manifest},
             selected_artifacts=self.worker.artifacts,
-            runtime_expectations=self.worker.runtime,
         )
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await self.session.prepare(acknowledged, verified, report_condition=unexpected_condition)
@@ -289,7 +334,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         await self.session.retire()
-        self.assertTrue(self.host.confirmed)
+        self.assertFalse(self.host.confirmed)
+        self.allocate_prediction.assert_not_awaited()
 
     async def test_reader_diagnostic_is_retained_privately_with_expected_input_failure(self):
         preparation = AsyncMock()
@@ -420,6 +466,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.confirmed)
 
     async def test_local_close_failure_does_not_skip_host_cleanup(self):
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         with (
             patch.object(self.worker, "close", side_effect=OSError("private local failure")),
             self.assertRaises(SessionRetirementFailed),
@@ -429,6 +476,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         await self.session.retire()
 
     async def test_cleanup_preserves_primary_and_all_later_failures(self):
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         first = OSError("private close failure")
         host = RuntimeError("private host failure")
         last = OSError("private wait failure")
@@ -448,6 +496,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         wait.assert_awaited_once()
 
     async def test_cancelled_host_retirement_keeps_prior_failure_and_observes_local_close(self):
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         first = OSError("private close failure")
         cancelled = asyncio.CancelledError()
         self.host.failure = cancelled

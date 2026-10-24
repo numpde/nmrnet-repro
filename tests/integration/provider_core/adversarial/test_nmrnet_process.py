@@ -32,7 +32,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     ProcessPeers(model_peer=model) as fixture,
                 ):
                     if cleanup_failure:
-                        (fixture.diagnostics / "inject-native-cleanup-failure").write_bytes(b"test-only\n")
+                        (fixture.diagnostics / "inject-input-cleanup-failure").write_bytes(b"test-only\n")
                     process = await fixture.start(child_script="interrupted_model_process.py")
                     await fixture.observed("model-head-received")
                     process.send_signal(signal.SIGTERM)

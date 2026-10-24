@@ -54,7 +54,10 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(arguments["on_prediction_retry"], factory.on_prediction_retry)
             self.assertEqual(arguments["allocate_prediction"].keywords, {"job_ref": "job:example"})
             self.assertIs(arguments["on_unconfirmed_phase_progress"], factory.on_unconfirmed_phase_progress)
-            return SimpleNamespace(worker=arguments["worker"], retirement=arguments["retirement"])
+            self.assertNotIn("worker", arguments)
+            self.assertNotIn("retirement", arguments)
+            self.assertNotIn("runtime_expectations", arguments)
+            return SimpleNamespace(allocate_prediction=arguments["allocate_prediction"])
 
         with (
             patch.object(factory, "_open_role", side_effect=opened),
@@ -64,13 +67,14 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
                 controller = await factory(record())
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})
+                worker, retirement, runtime = await controller.allocate_prediction()
                 reader, reader_retirement = await factory.allocate_reader()
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})
                 generator, generator_retirement = await factory.allocate_generator(settings=settings, operation_seconds=2)
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})
-                self.assertIs(controller.worker, ports[-3][0])
+                self.assertIs(worker, ports[-3][0])
                 self.assertIs(reader, ports[-2][0])
                 self.assertIs(generator, ports[-1][0])
                 replacement, replacement_retirement, runtime = await factory.allocate_prediction(job_ref="job:example")
@@ -78,7 +82,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(runtime, {})
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})
-                for owner in (controller.retirement, reader_retirement, generator_retirement, replacement_retirement):
+                for owner in (retirement, reader_retirement, generator_retirement, replacement_retirement):
                     owner.retire.assert_not_awaited()
                     await owner.retire()
         self.assertEqual(len(ports), 8)

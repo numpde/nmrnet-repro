@@ -36,8 +36,6 @@ async def recording_factory(factory, pending):
     ports.worker.prepare = forbidden_science
     ports.worker.execute = forbidden_science
     root = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
-    if (root / "inject-native-cleanup-failure").exists():
-        ports.host.failure = OSError(errno.EIO, "PRIVATE_NATIVE_CLEANUP")
     controller = await assemble_attempt(
         config=factory.config,
         pending=pending,
@@ -45,12 +43,9 @@ async def recording_factory(factory, pending):
         store=factory.store,
         setup_owner=factory,
         claims=factory.claims,
-        worker=ports.worker,
-        retirement=ports.host,
         execution_identity=factory.execution_identity,
         selected_artifacts=factory.selected_artifacts,
-        runtime_expectations=ports.worker.runtime,
-        allocate_prediction=None,
+        allocate_prediction=ports.allocate_prediction,
         on_prediction_retry=None,
         allocate_reader=ports.allocate_reader,
         allocate_generator=ports.allocate_generator,
@@ -60,6 +55,14 @@ async def recording_factory(factory, pending):
         on_unconfirmed_phase_progress=factory.on_unconfirmed_phase_progress,
         terminal_recovery=factory.terminal_recovery,
     )
+    if (root / "inject-input-cleanup-failure").exists():
+        retire = controller.session._input_preparation.retire
+
+        async def failed_input_retirement():
+            await retire()
+            raise OSError(errno.EIO, "PRIVATE_INPUT_CLEANUP")
+
+        controller.session._input_preparation.retire = failed_input_retirement
     if (root / "inject-condition-before-input").exists():
         prepare = controller.session.prepare
 

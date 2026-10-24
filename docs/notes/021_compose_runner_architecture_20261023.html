@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Plan for persistent Docker Compose runners: final ownership, worker lifetimes, migration, deletion and focused qualification.">
+  <meta name="description" content="Architecture and implementation record for persistent Docker Compose runners: ownership, migration, local API delivery and remaining qualification.">
   <title>021 — Portable deployment and persistent scientific runners — NMRNet++</title>
   <link rel="stylesheet" href="../site.css">
 </head>
@@ -16,18 +16,25 @@
   </nav>
   <main id="main">
     <h1>021 — Portable deployment and persistent scientific runners</h1>
-    <p>23 October 2026. <strong>Architecture and implementation plan; not an implemented or qualified deployment.</strong>
-      Source checkpoint: <a href="https://github.com/numpde/nmrnet-repro/commit/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484">87c3bad</a>.
+    <p>Started 23 October 2026; updated as implementation progresses.
+      <strong>Compose runners are implemented and locally qualified, including one
+      real API Job with live interpretation. Production delivery and remaining
+      recovery/cleanup obligations are not yet closed.</strong>
+      The <a href="#local-api-delivery">local delivery checkpoint</a> records exact
+      identities and numerical comparisons; the implementation record below
+      distinguishes source checks, installed witnesses and outstanding work.</p>
+    <p>Initial planning source checkpoint:
+      <a href="https://github.com/numpde/nmrnet-repro/commit/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484">87c3bad</a>.
       The user requested a portable, copyable architecture following sibling precedent,
       then a thorough note with transition distinguished from end-state. Writing this
-      plan does not start a deployment, change credentials or create API Jobs.</p>
+      initial plan did not start a deployment, change credentials or create API Jobs.</p>
     <p>This plan supersedes <a href="004_persistent_local_service_20261023.html">004</a>'s
-      systemd/host-supervisor choice for the proposed production end-state. It retains
-      that record's historical evidence. The current operator guide describes the
-      implemented system until the replacement is qualified and delivered.</p>
-    <nav aria-label="Plan sections"><ul>
+      systemd/host-supervisor choice. It retains that record's historical evidence.
+      The operator guide now describes the maintained Compose commands.</p>
+    <nav aria-label="Record sections"><ul>
       <li><a href="#decision">Decision, purpose and completion contract</a></li>
-      <li><a href="#current">Current implementation and actual changes</a></li>
+      <li><a href="#current">Initial implementation baseline</a></li>
+      <li><a href="#local-api-delivery">Observed real local API delivery</a></li>
       <li><a href="#end-state">End-state ownership and layout</a></li>
       <li><a href="#lifetimes">Worker lifetimes and scientific identity</a></li>
       <li><a href="#failure">Failure, recovery and diagnostics</a></li>
@@ -71,8 +78,10 @@
         launchers, selectors, tests and guidance are removed, with historical rationale preserved.</li>
     </ol>
 
-    <h2 id="current">Current implementation and actual changes</h2>
-    <p>At the checkpoint, <code>tools/provider.sh::provider_host_monitor</code> repeatedly
+    <h2 id="current">Initial implementation baseline — 87c3bad</h2>
+    <p>This section describes the initial planning checkpoint, before the removals
+      and qualification recorded below. At that revision,
+      <code>tools/provider.sh::provider_host_monitor</code> repeatedly
       services <code>provider_workers.sh</code>'s allocation requests. The host creates
       separate native containers, publishes receipts and proves exact container retirement.
       <code>NativeAttemptFactory</code> connects admitted Attempts to these ports.
@@ -80,7 +89,7 @@
       <code>provider/deployment/install</code> freezes inputs and installs its service profile.
       This is why replacing only systemd with a Docker restart option would be incomplete.
       <a href="#N1">Source N1</a>.</p>
-    <p>The scientific connection is currently single-use. <code>PredictionSession</code>
+    <p>At that revision the scientific connection is single-use. <code>PredictionSession</code>
       consumes one prepared handle; <code>SelectedReleaseModels</code> explicitly releases
       model/scaler references between heads. No current warm-model qualification is implied.
       The existing private protocol token correlates preparation and execution on a native
@@ -1667,11 +1676,13 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       ownership/error review found no regression.</p>
     <p>START and active-science observation remain separate. Active freshness expiry
       cannot authorize continued or renewed science. Continuous START retry also needs
-      initial prediction acquisition moved after verified START admission: currently
+      initial prediction acquisition moved after verified START admission: at that checkpoint,
       its scientific idle timeout can expire during an extended START outage. That
-      resource-ordering issue remains work before complete unattended closure; merely
-      making its window infinite would be incomplete. The next qualification priority
-      was one real local API Job (now passed below), then named production delivery.</p>
+      resource-ordering issue still blocked unattended closure; merely making its
+      window infinite would have been incomplete. The later source-ordering repair
+      is recorded below. Continuous START retry remains separate work. The next
+      qualification priority was one real local API Job (now passed below), then
+      named production delivery.</p>
     <p><strong>Local legacy teardown, 24 October 2026:</strong> startup preflight
       missed an active legacy user-service instance; the candidate Compose stack
       briefly overlapped it before both were stopped. No qualification Job had
@@ -1695,7 +1706,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       caller ownership and mode 0700 continuity were verified. No duplicate store or
       symlink remains. Candidate obsolete frozen generations still require pruning
       after their stopped container references and original control obligations settle.</p>
-    <p><strong>Real local API delivery, 24 October 2026:</strong> the maintained
+    <p id="local-api-delivery"><strong>Real local API delivery, 24 October 2026:</strong> the maintained
       <code>provider/qualify/api/existing-pasted</code> lane submitted exactly one
       <code>demo</code> Job to the existing seven-role <code>nmr-localhost</code>
       deployment and real API at <code>https://nmr.localhost:10443</code>.
@@ -1801,13 +1812,42 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       production dependency or weakened failure coverage. The installed module
       observations above describe their earlier image checkpoint, not this later
       source deletion.</p>
-    <p>Documentation validation on 24 October 2026:
+    <p><strong>Prediction acquisition after input admission, 24 October 2026:</strong>
+      controller assembly no longer allocates a prediction child. One Job-bound
+      allocator supplies both initial and replacement prediction ports. Initial
+      acquisition follows the acknowledged START and successful input interpretation,
+      reading or generation, immediately before result planning. Its actual runtime
+      observation becomes the result-plan expectation; replacements must match it
+      exactly. Scientific preparation and shift inference still follow core's durable
+      prepared-identity write. The old preallocated constructor and separate recovery
+      policy carrier are removed rather than retained as compatibility modes.</p>
+    <p>A pending initial handoff prevents session retirement. A pair returned after
+      retirement begins is adopted before dispatch is refused, so its actual owner
+      can still retire it. Rejected input, cancelled interpretation, controller
+      construction failure and terminal START replay acquire no predictor. Cleanup
+      witnesses that require a real prediction obligation now explicitly acquire it
+      first. The SIGTERM receiving fixture injects independent cleanup failure into
+      the input owner that exists during interpretation, preserving interruption,
+      EIO evidence and the held-store assertion without inventing a predictor.</p>
+    <p>The tests-first factory witness reproduced allocation before START. Focused
+      contained checks passed: factory 12, output/preparation/prediction recovery 40,
+      configured runtime 16, native runner 13, Uploads 39, process/receiving reports
+      64 and documentation 3. Initial late-handoff and
+      terminal START-replay witnesses cover the new ordering; existing exact frozen
+      request, runtime-drift, one-interpretation and retirement-before-replacement
+      controls remain. Independent ownership and scientific-order reviews found no
+      remaining signal. The installed local deployment still uses its earlier
+      admitted images; this source repair requires the final image refresh and does
+      not claim new installed scientific qualification.</p>
+    <p>Earlier documentation-only validation at source
+      <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,
       preserved historical source bytes). This validates the document, not the proposed
-      runner architecture. Source review exposed and recorded the current one-use model
-      lifecycle, bounded pure-prediction retry and journald dependency; no new runtime or
-      scientific qualification was performed.</p>
+      runner architecture. At that checkpoint, source review recorded the one-use model
+      lifecycle, bounded pure-prediction retry and then-current journald dependency;
+      that documentation check performed no runtime or scientific qualification.
+      Later installed and real-API evidence is recorded above.</p>
   </main>
   <footer><p><a href="index.html">All design records</a> · <a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
 </body>

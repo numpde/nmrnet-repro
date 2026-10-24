@@ -189,7 +189,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("PRIVATE_SERVER_BODY", rendered)
         self.assertNotIn(pending.input.job_ref, rendered)
 
-    async def test_pre_start_native_failure_identifies_selected_job_without_an_attempt(self):
+    async def test_native_allocation_failure_identifies_selected_job_at_factory_boundary(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)
             transport = Transport()
@@ -218,7 +218,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
                     self.assertRaises(NativeSetupFailed) as caught,
                 ):
-                    await factory(record())
+                    await factory.allocate_prediction(job_ref="job:example")
                 report = self.receive(caught.exception)
                 rendered = json.dumps(report)
                 self.assertIn('"job_ref": "job:example"', rendered)
@@ -420,8 +420,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"independently_verified": false', rendered)
         self.assertIn('"errno": 5', rendered)
         self.assertNotIn("PRIVATE", rendered)
-        self.assertEqual(ports.worker.events, ["close", "closed"])
-        self.assertTrue(ports.host.confirmed)
+        self.assertEqual(ports.worker.events, [])
+        self.assertFalse(ports.host.confirmed)
 
     async def test_exhausted_real_endpoints_report_unsent_and_http_failures_without_payloads(self):
         async with (

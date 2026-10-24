@@ -622,7 +622,7 @@ case "$1" in
                     command+=(--pattern test_nmrnet_interpreter.py test_nmrnet_interpreter_preparation.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/output ]]; then
-                    command+=(--pattern test_nmrnet_input.py test_nmrnet_session.py)
+                    command+=(--pattern test_nmrnet_input.py test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/native-factory ]]; then
                     command+=(--pattern test_nmrnet_native_factory.py)

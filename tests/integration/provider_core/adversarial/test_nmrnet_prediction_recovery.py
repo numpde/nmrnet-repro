@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.session import NMRNetSession, PredictionRecovery, PredictionRecoveryFailed, SessionRetirementFailed
+from nmrnet_provider.session import NMRNetSession, PredictionRecoveryFailed, SessionRetirementFailed
 from nmrnet_provider.worker_client import PredictionExecutionFailed, WorkerReportedFailure
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 
@@ -21,14 +21,20 @@ class PredictionRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
         self.notice = Mock()
         self.first = PredictionExecutionFailed("Authored first prediction failure")
         self.ports.worker.execute = AsyncMock(side_effect=self.first)
+        self.acquired_initial = False
+
+        async def acquire():
+            if not self.acquired_initial:
+                self.acquired_initial = True
+                return await self.ports.allocate_prediction()
+            return await self.allocate()
+
         self.session = NMRNetSession(
-            worker=self.ports.worker,
-            retirement=self.ports.host,
+            allocate_prediction=acquire,
             execution_identity={"image_id": "fixture"},
             selected_artifacts=self.ports.worker.artifacts,
-            runtime_expectations=self.ports.worker.runtime,
             input_preparation=self.ports.preparation,
-            prediction_recovery=PredictionRecovery(self.allocate, self.notice),
+            on_prediction_retry=self.notice,
         )
 
     async def execute(self):

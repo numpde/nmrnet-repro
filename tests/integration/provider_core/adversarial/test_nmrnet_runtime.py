@@ -61,7 +61,8 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(fixture.result)
             ports.allocate_reader.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
-            self.assertEqual(ports.worker.events, ["close", "closed"])
+            self.assertEqual(ports.worker.events, [])
+            fixture.allocate_prediction.assert_not_awaited()
 
     async def test_same_signing_identity_with_wrong_topology_refuses_before_inventory_or_adoption(self):
         ports = SessionPorts()
@@ -83,7 +84,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
                 await foreign.retire()
                 await ports.session.retire()
 
-    async def test_construction_failure_leaves_preallocated_science_with_the_caller(self):
+    async def test_construction_failure_does_not_acquire_prediction(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
@@ -97,7 +98,8 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, [])
             self.assertFalse(ports.host.confirmed)
             await ports.session.retire()
-            self.assertTrue(ports.host.confirmed)
+            self.assertFalse(ports.host.confirmed)
+            fixture.allocate_prediction.assert_not_awaited()
 
     async def test_unconfirmed_scientific_retirement_blocks_publication_without_repeating_science(self):
         ports = SessionPorts()
@@ -121,7 +123,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events.count("execute"), 1)
             self.assertIsNone(fixture.result)
 
-    async def test_cancelled_model_exchange_retires_the_adopted_allocation_without_dispatch(self):
+    async def test_cancelled_model_exchange_never_acquires_prediction(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
@@ -134,8 +136,9 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await task
             await controller.settle()
-            self.assertTrue(ports.host.confirmed)
-            self.assertEqual(ports.worker.events, ["close", "closed"])
+            self.assertFalse(ports.host.confirmed)
+            self.assertEqual(ports.worker.events, [])
+            fixture.allocate_prediction.assert_not_awaited()
             self.assertIsNone(fixture.result)
             ports.allocate_generator.assert_not_awaited()
             ports.allocate_reader.assert_not_awaited()
@@ -150,8 +153,9 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ControllerFailed):
                 await controller.run(pending)
             self.assertEqual(fixture.model_peer.requests, [])
-            self.assertEqual(ports.worker.events, ["close", "closed"])
-            self.assertTrue(ports.host.confirmed)
+            self.assertEqual(ports.worker.events, [])
+            self.assertFalse(ports.host.confirmed)
+            fixture.allocate_prediction.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
             ports.allocate_reader.assert_not_awaited()
             (retained,) = await fixture.store.records()
@@ -210,7 +214,8 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             ports.allocate_generator.assert_not_awaited()
             ports.allocate_reader.assert_not_awaited()
             await ports.session.retire()
-            self.assertTrue(ports.host.confirmed)
+            self.assertFalse(ports.host.confirmed)
+            fixture.allocate_prediction.assert_not_awaited()
 
     async def test_wrong_kind_scope_or_api_identity_refuses_before_start(self):
         ports = SessionPorts()

@@ -270,11 +270,9 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                 seconds=10,
             )
             session = NMRNetSession(
-                worker=self.worker,
-                retirement=self.host,
+                allocate_prediction=AsyncMock(return_value=(self.worker, self.host, self.runtime)),
                 execution_identity={"image_id": "fixture"},
                 selected_artifacts=self.artifacts,
-                runtime_expectations=self.runtime,
                 input_preparation=preparation,
             )
             recovery_scope = replace(scope(), api_origin=peer.origin)

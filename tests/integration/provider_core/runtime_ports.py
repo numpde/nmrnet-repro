@@ -14,6 +14,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
+from unittest.mock import AsyncMock
 
 from http_sf import parse
 from tests.fakes.acquisition import store_headers
@@ -61,6 +62,7 @@ def require_download_credentials(request, body):
 class RuntimePeers:
     def __init__(self, ports, route, *, maximum_records=1):
         self.ports, self.route = ports, route
+        self.allocate_prediction = AsyncMock(side_effect=ports.allocate_prediction)
         self.maximum_records = maximum_records
         self.claims = AttemptClaims()
         self.progress_notices = []
@@ -136,12 +138,9 @@ class RuntimePeers:
             "api": self.api,
             "store": self.store,
             "claims": self.claims,
-            "worker": self.ports.worker,
-            "retirement": self.ports.host,
             "execution_identity": {"image_id": "fixture"},
             "selected_artifacts": self.ports.worker.artifacts,
-            "runtime_expectations": self.ports.worker.runtime,
-            "allocate_prediction": None,
+            "allocate_prediction": self.allocate_prediction,
             "on_prediction_retry": None,
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
