@@ -366,9 +366,9 @@ help:
 		'make delivery/deployment/logs          Read bounded shared delivery Docker logs.' \
 		'make delivery/deployment/down          Stop shared delivery; retain queued outcomes and IPC volumes.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
-		'make provider/deployment/status DEPLOYMENT=<name> Inspect the actual deployment containers against their original bundles.' \
+		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
-		'make provider/deployment/down DEPLOYMENT=<name> Stop provider, native runners, then proxies; retain containers and logs.' \
+		'make provider/deployment/down DEPLOYMENT=<name> Stop/remove this provider stack; retain data volumes.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
 		'make test/integration/provider/deployment/smiles Generate two CCl conformers and predict H/C through the Compose native path (opt-in).' \
 		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \

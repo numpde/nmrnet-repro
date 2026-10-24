@@ -106,13 +106,14 @@ not in this deferred list.
    handoff; this entry concerns idle admission, not an accepted result's delivery.
 
 9. Read-only deployment command receipts (U13/U17/U23/U27, A05/A11).
-   New tools/delivery_deployment.sh, worktree after 376c97a, reviewed 24 October
-   at 20:57 UTC: status/logs use a persistent query receipt directory and refuse
-   another query if its previous complete marker is absent. These are read-only
-   operations. Later, narrow this mechanism so a failed diagnostic read does not
-   require manual receipt reconciliation before another status/logs call, and
-   minimize retained copies of Docker-owned logs. Surface normal stderr now;
-   simplifying the receipt policy is deferred, without a new recovery framework.
+   No longer deferred: direct user correction on 25 October (local date).
+   The new launcher retained operation/query inspection, intent and log dumps,
+   then gated later commands on a success marker. The user rejected both this
+   pollution and a proposed temporary handoff-file substitute. Remove the extra
+   Engine-observation checker/file-handoff path and its receipt gates. Use the
+   maintained Docker/Compose owner directly, with normal bounded output and
+   Docker-backed logs. Actual configuration/secrets and required queue/control
+   databases remain. Do not invent another validator or recovery framework.
 
 10. Producer checkpoint mount (U13/U14/U27).
     Resolved in 673e8fc. The initial unpublished 2d12648 used a private, bounded

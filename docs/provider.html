@@ -8,7 +8,7 @@ inputs, units, per-atom results and scientific limits, start with the
   <a href="#provider-startup-configuration">Configuration</a> ·
   <a href="#persistent-user-service">Persistent service</a> ·
   <a href="#routine-logs-and-private-diagnostics">Logs</a> ·
-  <a href="#recovering-a-stopped-store">Recovery</a> ·
+  <a href="#result-delivery-and-storage">Delivery and storage</a> ·
   <a href="#checking-api-delivery">API qualification</a> ·
   <a href="#check-the-interpreters-file-format-choices">Interpreter format choices</a>
 </nav>
@@ -19,8 +19,9 @@ medium or max verbosity and 1–17 significant digits</a>; the defaults are medi
 and 4. Interpretation records, warnings and scientific limitations remain at
 every level. Medium includes both coordinate representations; max adds the
 software-file manifest. The selected <code>output</code> object is frozen before
-scientific execution and retained with the Attempt. Completed result bytes are
-replayed exactly; reopening a store does not rerender them with new defaults.
+scientific execution. The provider encodes the final API request once and hands
+those exact bytes to the shared delivery service. Delivery retries preserve the
+request body; they do not rerender results with new defaults.
 Source: <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/result.py">result planning and publication projection</a>.</p>
 <p>The API/GUI provider description is the entry point to the scientific guide.
 Include its URL in the configured <code>service.description</code>, for example:</p>
@@ -82,7 +83,12 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>lifecycle</code></td>
-<td><code>consumer_id</code>, <code>generation_id</code>, <code>store_root</code>, <code>maximum_records</code>, <code>confirmed_history_records</code>, <code>filesystem_reserve_bytes</code>, <code>store_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code></td>
+<td><code>consumer_id</code>, <code>generation_id</code>, <code>store_root</code>, <code>maximum_records</code>, <code>maximum_checkpoint_bytes</code>, <code>store_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>delivery</code></td>
+<td><code>socket_path</code>, <code>request_seconds</code>, <code>retirement_seconds</code>, <code>retry_initial_seconds</code>, <code>retry_max_seconds</code></td>
 <td>none</td>
 </tr>
 <tr>
@@ -170,57 +176,65 @@ policy. Its seven containers are the provider, three serial native runners
 (prediction, structure reader and conformer generator), and three proxies
 (API, interpreter and Upload access). The up command finishes after checking
 their configuration and current readiness. Docker must itself start after a host reboot.
-On restart, saved completion or failure results can finish publication after the
-provider proves retirement through all three native runners. It reuses the saved
-request; interpretation, structure generation and prediction are not repeated.
-The complete retained inventory must contain only pending terminal results or
-confirmed receipts. Unknown entered work, conflicting identities and damaged
-records still block startup for explicit recovery. Sources:
-<a href="https://github.com/numpde/nmrnet-repro/blob/fff41ae/nmrnet_provider/service.py">startup recovery and shutdown ownership</a> and
+A separate shared delivery service on the same Docker host owns outstanding
+completion and failure requests. It can finish delivery while a provider is
+stopped or being replaced. On restart, the provider reconciles its small control
+checkpoints with the delivery service and API; it never repeats prediction to
+recover a result. Unresolved execution or conflicting identities require
+operator diagnosis. Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/service.py">service admission and recovery</a> and
 <a href="https://github.com/numpde/nmrnet-repro/blob/4e7d897/nmrnet_provider/native_factory.py">native retirement barriers</a>.
 Keep the public provider definition in
 <code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
 <code>config/deployments/&lt;name&gt;/deployment.toml</code>. Copy the latter from
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">the deployment settings example</a>.
-Select the existing host Attempt-store directory there; changing the launch
-mechanism must not create a new scientific history.</p>
+Keep the path and network settings in that private deployment definition.
+The producer's checkpoint database uses a provider-only Docker volume; final
+request bodies use the delivery service's separate queue volume.</p>
 <p>Put the credential, interpreter keys and CA files directly in
 <code>secrets/deployments/&lt;name&gt;/</code>, named as in the public definition.
 Private directories require mode 0700; secret source files require 0400 or 0600
 and must belong to the deployment caller. Images must already be built or loaded;
 these commands never pull them implicitly.</p>
 <pre><code class="language-sh">make provider/deployment/install DEPLOYMENT=&lt;name&gt;
+make delivery/deployment/install DEPLOYMENTS=&lt;name&gt;
+make delivery/deployment/up
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;
 make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
 make provider/deployment/down DEPLOYMENT=&lt;name&gt;
 </code></pre>
-<p>Install runs short-lived offline validation containers, freezes a new input
-generation and selects it only after those checks pass. It does not start the
+<p>Build or load both the controller and delivery images before installation;
+<code>make delivery/image/build WHEELHOUSE=&lt;path&gt;</code> uses the same selected
+wheelhouse as the other image builds. Install each provider's inputs before
+installing the shared service. For several providers, supply their profile names
+as <code>DEPLOYMENTS="name1 name2"</code>. The shared project has one stable host
+identity, independent of the provider's project or checkout.</p>
+<p>Install freezes a new input generation through an offline setup helper.
+It does not start the
 seven runtime containers. It refuses live work owned by an earlier generation.
-Next, run up: it checks actual images, mounts, isolation and resource limits
-against the frozen definition, then starts proxies and serial native runners before the
+Next, run up: it starts the declared proxies and serial native runners before the
 provider, and waits for current readiness. Provider readiness includes an accepted
 API Hello; it does not establish scientific accuracy or successful model
 interpretation. The ready provider then polls for matching Jobs. Use status/logs
 to inspect it. Repeated up observes an already-running stack; after down, up
-restarts matching stopped containers. Down stops the
-provider first, native runners second and proxies last, retaining containers,
-Attempt state and bounded logs.</p>
-<p>After an interrupted Docker request, keep the original private control receipts
-under <code>secrets/deployments/&lt;name&gt;/operation/</code>. Use status to inspect,
-then repeat the intended install, up or down command; it reconciles the original request
-before new effects and refuses when it cannot establish safe control. Up preserves
-matching running or restarting containers and starts missing or stopped roles. An unknown
-start/stop is not settled by a snapshot alone; opposing control must fence its
-exact old container ID. If the command refuses, inspect the protected diagnostic
-paths it prints. Do not delete those receipts to force a retry. Architecture,
-transition constraints and qualification are recorded in
+restarts matching stopped containers. Down stops the provider first, native
+runners second and its proxies last. It does not stop the shared delivery
+service or delete its queue.</p>
+<p>Inspect the shared service separately:</p>
+<pre><code class="language-sh">make delivery/deployment/status
+make delivery/deployment/logs
+make delivery/deployment/down
+</code></pre>
+<p>Stopping the shared service retains its queue and socket volumes. Its API
+proxies belong to that shared project, so stopping a producer does not remove
+delivery's route to the API. Architecture and qualification are recorded in
 <a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>.
 The superseded systemd design remains a historical record in
 <a href="notes/004_persistent_local_service_20261023.html">note 004</a>.</p>
 <h2 id="routine-logs-and-private-diagnostics">Routine logs and private diagnostics</h2>
-<p>All seven production roles send stdout and stderr to bounded Docker logs:
+<p>The provider, native runners, proxies and shared delivery service send stdout
+and stderr to bounded Docker logs:
 <code>json-file</code>, three files of at most 10 MiB each per container, with a
 1 MiB nonblocking delivery buffer. A stalled sink may drop messages; old files
 rotate. Container removal deletes its logs, so a command warns before replacing
@@ -228,109 +242,50 @@ an obsolete generation. There are no parallel application log dumps.</p>
 <p><code>make provider/deployment/logs DEPLOYMENT=&lt;name&gt;</code> reads the latest
 80 messages per retained component. Logs may include native tracebacks, molecular
 inputs and completed predictions after a failed reply; restrict Docker access.
-Private bounded control receipts, Attempt evidence and scientific results have
-separate owners. Missing log messages do not prove that a request failed or that
+Scientific results belong to the API after confirmed publication; outstanding
+request bodies belong to the delivery queue. Missing log messages do not prove that a request failed or that
 work retired. The historical journald qualification in
 <a href="notes/019_runtime_logging_20261023.html">note 019</a> does not qualify
 this Compose logging configuration. Docker documents
 <a href="https://docs.docker.com/engine/logging/drivers/json-file/">rotation limits</a>
 and <a href="https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver">nonblocking delivery</a>.</p>
-<h2 id="recovering-a-stopped-store">Recovering a stopped store</h2>
-<p>Stop the original host and confirm it has released the store. Preserve its evidence
-and choose a <strong>fresh empty installation root</strong> for each recovery command. Keep the
-TOML and <code>SOURCE_ROOT</code> unchanged, including the configured existing store, scope and
-API identity. The bounds below are examples, not defaults:</p>
-<pre><code class="language-sh">make provider/recovery/inspect \
-  CONFIG=/srv/nmrnet/input/provider.toml SOURCE_ROOT=/srv/nmrnet/input \
-  INSTALLATION_ROOT=/srv/nmrnet/recovery-inspect \
-  MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=90
-</code></pre>
-<p>Inspection is offline: it grants only the TOML and retained store, without API
-credentials, CA files, model keys or worker access. It prints the protected
-<code>result.json</code> path after cleanup. Set <code>record_sha256</code> to the exact
-<code>records[].record_sha256</code> of one selected record. For this mapped example, set
-<code>api_interface</code> and <code>api_addresses</code> to your previously verified API-only binding:</p>
-<pre><code class="language-sh">make provider/recovery/run \
-  CONFIG=/srv/nmrnet/input/provider.toml SOURCE_ROOT=/srv/nmrnet/input \
-  INSTALLATION_ROOT=/srv/nmrnet/recovery-run \
-  MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=90 \
-  RECORD_SHA256=&quot;$record_sha256&quot; API_ROUTE=mapped \
-  MAPPED_INTERFACE=&quot;$api_interface&quot; MAPPED_ADDRESSES=&quot;$api_addresses&quot;
-</code></pre>
-<p>The mapped hostname must match the unchanged TOML's API origin. Other route modes
-use their selectors described above. Run adds only the declared API credential,
-optional CA and selected API route. Pending terminal commands are replayed exactly;
-confirmed records send nothing. A read-required terminal record performs one state
-read and retains that observation; it never resends the terminal command.
-Already-observed or not-visible records send nothing and remain unresolved: a
-state read is not a matching receipt for the original result. Entered work is
-observed without rerunning science. A changed record digest refuses selection.
-Neither command starts science, deletes records or automatically retries a failure.
-Unsettled original I/O keeps its owner and lock held for exact host retirement.</p>
-<p><code>local_obligations_settled = true</code> means local records are confirmed; ordinary
-startup must still pass storage capacity and provider-wide API admission.
-The isolated regression is <code>make test/integration/provider/deployment/store-recovery</code>:
-synthetic loopback TLS, one exact completion replay and empty-discovery restart,
-with no real credentials, Jobs, model calls or scientific work.
-See the <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/recovery.py">recovery entrypoint</a> and
-<a href="notes/003_nmr_api_provider_20261018.html#R38">R38</a> and
-<a href="notes/003_nmr_api_provider_20261018.html#R39">R39</a> for source and evidence.</p>
-<h2 id="retained-history-and-a-full-store">Retained history and a full store</h2>
-<p><code>lifecycle.maximum_records</code> bounds <strong>active storage records</strong>. Before fresh
-admission, the service archives confirmed completions and failures after their
-controller has returned and released its claim. Startup first recovers eligible
-pending terminal results, then archives an entirely confirmed inventory. An
-unresolved neighbor prevents the entire archive batch and fresh work. Stop before the complete
-inventory gate admits no maintenance. Once admitted, the original maintenance
-batch finishes <strong>archive → history expiry</strong>,
-including during shutdown. Shutdown observes the same task within its drain and
-settlement budgets; unfinished work holds its native and storage dependencies.
-It never starts a replacement batch or repeats science.</p>
-<p>Each archive preserves the record's exact original requests, receipts and
-protected scientific evidence under <code>store_root/history-&lt;scope digest&gt;/</code> before
-releasing its active slot. Files remain mode0600 inside mode0700 directories.
-The <a href="provider-core/index.html">core storage contract</a>
-describes filename lookup and interrupted-copy handling. Recovery inspection
-lists active obligations; archived confirmations remain available as portable
-files. An archived key cannot become a fresh Attempt while its record remains.</p>
-<p><code>lifecycle.confirmed_history_records</code> is a <strong>required positive integer</strong>, for
-example <code>confirmed_history_records = 64</code>; there is no implicit or unlimited
-setting. After archiving the admitted batch, the store keeps
-the newest complete records by API receipt <code>committed_at</code>, with canonical
-filename breaking ties. It expires older whole records and syncs the history
-directory before fresh admission. Copy evidence needing longer retention outside
-store history before expiry. There is no selection exemption within the window;
-only independent copies and qualification capsules outside it are unaffected.
-After expiry, the API still owns its public result; local unrounded predictions,
-exact command bytes and private historical diagnostics are no longer available.
-Rounded public values cannot reconstruct those original scientific bytes.</p>
-<p>Existing history above the configured window blocks ordinary startup and fresh
-work; startup does not purge it as a migration. Stopped storage inspection can
-open the bounded archival transition of history plus active slots. A hard crash
-or failed maintenance may need explicit operator reconciliation; retain the
-records rather than deleting unknown files to bypass that check. An ordinary stop
-lets its original batch finish, so it does not create that excess-history state.</p>
-<p>For history limit H, active slots A and record budget R, the logical peak record
-budget is <code>(H + A + 1) × R</code>, including one complete staging/archive copy. With
-H=64, A=2 and production R=3,725,916 bytes, that is 249,636,372 bytes (about
-238 MiB), before filesystem metadata and the configured reserve. This is a
-healthy-operation record bound, not a filesystem quota. Each native session owns
-its local channels and confirms supervisor-owned child retirement and scratch release. The three
-runner containers remain available between Jobs. Archiving or expiring a record
-does not grant native cleanup authority or settle uncertain execution.</p>
-<p>History still consumes disk. The provider rechecks space for full outstanding
-records, a temporary full-record write and <code>filesystem_reserve_bytes</code>, then the
-complete provider-wide API admission view. These checks reserve no physical
-blocks. If active obligations or actual disk headroom prevent admission, stop
-and settle the provider and inspect the retained evidence. Keep the existing
-<code>store_root</code>, API/provider identity, <code>consumer_id</code> and <code>generation_id</code>; do not
-discard records or change their scope to make room. Raising a record limit does
-not settle an obligation, retire a worker or bypass API admission.
-The owning <a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/packages/provider-core/src/provider_core/attempt_files.py">capacity check</a>,
-<a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/nmrnet_provider/admission.py">service admission</a> and
-<a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/nmrnet_provider/service.py">archive-and-trim owner</a>
-enforce this behavior; native retirement remains with
-<a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/nmrnet_provider/native_session.py">the session owner</a>.</p>
+<h2 id="result-delivery-and-storage">Result delivery and storage</h2>
+<p>The provider decides whether a scientific outcome is suitable for publication
+and encodes its final completion or failure request. It sends those bytes over
+its configured Unix socket to the shared service. The service commits them to
+its private SQLite queue before acknowledging the handoff. Its signing identity
+and API destination come from deployment configuration, not the submitted body.</p>
+<p>The provider can release its in-memory result after that acknowledgement.
+The service delivers the unchanged body, with fresh request signing and capped
+backoff for permitted retries. A verified matching API receipt removes the queued
+body. Completed results are available through the API; the provider keeps no
+completed-result archive, per-Attempt result file or transcript history.</p>
+<p>The producer keeps only small recovery checkpoints: the original START
+identity, API admission, execution-entry digest, selected request digest and
+handoff or suppression facts. It clears them after the relevant handoff or
+terminal API observation and confirmed native cleanup. A terminal API observation
+closes lifecycle uncertainty; it does not prove that a particular candidate
+result was accepted.</p>
+<p>The delivery queue has explicit item and byte allowances for each provider.
+Held items still count against that allowance. A full queue pauses fresh
+computation; a result already selected for handoff waits and retries the same
+bytes. Native cleanup proceeds independently of delivery. Unconfirmed cleanup
+prevents another scientific execution, while an approved result can still reach
+the API.</p>
+<p>After a restart, the service resumes committed queue entries. The provider
+uses its scoped relay inventory and API observations to reconcile control
+metadata, and excludes relay-owned Jobs from new computation. If a producer dies
+before durable handoff, a result held only in memory can be lost. An absent queue
+row never authorizes another prediction. Preserve unresolved identities and
+diagnose them through the API and Docker logs.</p>
+<p>Storage and recovery owners:
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/delivery_store.py">pending queue</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/checkpoint_store.py">producer checkpoints</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/recovery.py">recovery without scientific replay</a>.
+The design and existing evidence are in
+<a href="notes/021_compose_runner_architecture_20261023.html#shared-delivery">note 021</a>;
+deferred refinements and further testing are tracked in
+<a href="notes/022_shared_delivery_deferred_20261024.txt">note 022</a>.</p>
 <h2 id="checking-api-delivery">Checking API delivery</h2>
 <p>Each opt-in target creates one <strong>persistent Job</strong> on the selected API. Pasted
 targets use fixed supplied chloromethane and compare against an existing pinned
@@ -529,20 +484,16 @@ Successful return transfers the supplied allocation to that controller, includin
 cleanup if it is never run. Refusal leaves allocation cleanup with the caller.
 The caller retains lifecycle API/store ownership and must settle any interrupted
 inventory read before reuse. All HTTP roles have separate transport owners.</p>
-<p><code>make test/integration/provider-core/runtime</code> checks signed local discovery through
-all three interpreted routes, durable publication and ownership failures, with
-recording scientific ports. It verifies that changed Job input cannot reach the
-interpreter or native dispatch, and that unconfirmed host retirement blocks
-publication. These are local wiring tests. Direct coordinate-JSON admission
-retains its separate existing session binding.</p>
+<p>The controller selects the final request before handoff. Native retirement
+and delivery are independent: a cleanup failure holds worker reuse, while the
+approved request can still be delivered. Direct coordinate-JSON input uses the
+same result fragment and delivery owner as interpreted input.</p>
 <p><code>nmrnet_provider.service.ProviderService</code> coordinates one Attempt at a time:
 retained-work/capacity and live-inventory checks precede Hello, fresh discovery
-and allocation. Explicit confirmed-history archival precedes capacity checks,
-outside API retry loops. It refreshes the current announcement through independent I/O,
+and allocation. Verified relay-owned Attempts do not block unrelated Jobs, and
+those Jobs are excluded from new computation. It refreshes the current announcement through independent I/O,
 drains or cancels original work on stop, and retains unsettled tasks/controllers.
-<code>make test/integration/provider-core/service</code> checks this ordering with local TLS
-and recording workers created inside the allocation factory. Startup acceptance
-does not establish scientific readiness.</p>
+Startup acceptance does not establish scientific readiness.</p>
 <p>Startup admission and idle discovery automatically retry reviewed GET failures
 after the original API I/O retires. Each retry repeats complete admission and
 discovery from the first page, before allocating work. Initial and periodic Hello
@@ -579,12 +530,13 @@ that arrives after the window cannot grant that permission.</p>
 original read remains owned until it settles; neither elapsed time nor requested
 cancellation proves that work stopped. Expiry, observed server stop and other
 active Attempt failures still stop the service;
-preserve retained records, settle the original owners and use the stopped-store
-recovery procedure before restart. No allocation, Attempt
+preserve unresolved control identities and settle their original owners before
+restart. No allocation, Attempt
 mutation or science is retried by the read loop. A Hello receipt confirms the new
 announcement, without resolving whether an earlier send was accepted. Between
-settled Jobs, confirmed records move to private scope-bound history with their
-original bytes preserved. Unresolved records stay active and block fresh work.</p>
+settled Jobs, the provider clears handed-off control metadata after cleanup.
+Unresolved producer control blocks fresh work; delivery-owned requests stay in
+the shared queue until publication or explicit operator disposition.</p>
 <p>The foreground process emits bounded, redacted <code>api_read_retry</code> and
 <code>api_read_recovered</code> notices to stderr/Docker logs; Hello uses <code>api_hello_retry</code> and
 <code>api_hello_recovered</code>. Their <code>latest_hello_send_confirmed</code> flag describes the last
@@ -602,23 +554,13 @@ and output causes in the owned exception; unresolved work stays held.</p>
 with the acknowledged Job and Attempt references. Recovery confirms a fresh API
 observation, not completion or publication; observed server stop still wins.
 If reporting fails, these notices use the same bounded in-memory diagnostic owner.
-This observation recovery does not retry mutations. After science has retired, terminal publication remains with its original controller: the controller may replay the same durably retained COMPLETE/FAIL bytes
-for reviewed availability failures, HTTP 500, a protocol failure before any
-verified response head, or the verified no-effect timing refusals
-<code>authentication_window_closed</code> and <code>signature_expired</code>.
-Each send is freshly signed; temporary availability does not expire this durable command.
-Other explicit refusals, wrong environment, malformed received receipts, cancellation, failed cleanup and
-receipt-storage failures do not trigger replay. The same publisher confirms
-original I/O retirement and rechecks durable command identity before another send.</p>
-<p>Reviewed terminal retries continue with capped jittered waits until resolution or
-cancellation. Each exchange and its settlement retain their existing finite bounds.
-Permanent refusals and unresolved cleanup still stop replay. <code>api_terminal_retry</code> and <code>api_terminal_recovered</code> use the same
-protected notices and failed-output fallback; recovery means the matching terminal
-receipt was durably retained. These retries never repeat interpretation, geometry
-generation or prediction. Unreviewed or exhausted condition-report recovery,
-unreviewed phase-delivery failures and operational deadlines still stop the
-service; preserve retained records, settle the original owners and follow
-the stopped-store recovery procedure before restart. The exact replay authority is the retained
+This observation recovery does not retry mutations. Final request delivery belongs
+to the shared service after durable handoff. It follows the existing API owner's
+exact-request replay policy, freshly signing the same body and retiring each
+original exchange before a permitted retry. Permanent binding failures pause
+that binding; an item-specific conflict holds its request. These facts remain
+visible in Docker logs, without repeating interpretation, geometry generation
+or prediction. The replay authority is the
 <a href="provider-core/fixtures.html">API contract fixture</a> and
 its terminal POST <code>x-nmr-recovery</code>/HTTP 500 descriptions, identified in that manifest.</p>
 <p>For the fixed <code>preparing</code> and <code>running</code> labels, a reviewed delivery failure can
@@ -665,7 +607,7 @@ coordinate reading/generation or API lifecycle operations. There are at most two
 native executions; input/protocol rejection, caller cancellation, foreign timeouts
 and result assembly do not permit replacement. Exhaustion, failed allocation or
 unconfirmed cleanup remain operational failures with both causes retained for
-stopped recovery. Resource limits and model selection remain fixed. The policy
+operator diagnosis. Resource limits and model selection remain fixed. The policy
 is implemented by <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>, using the
 existing <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_session.py"><code>NativeOperation</code></a> retirement owners.</p>
@@ -717,41 +659,25 @@ attribution and owned guidance for unclear units, conformer count or Upload reco
 selection. Its freeform explanation stays in protected evidence. An operational
 science error keeps its original cause and sends neither a failure nor a completion.
 This does not qualify GUI presentation or an operator diagnostic renderer.</p>
-<p>The maintained Compose connection checks use the production factory and
-installed serial runners with local signed API peers and scripted interpretation:</p>
-<ul>
-<li><code>make test/integration/provider/deployment</code>: the supplied chloromethane
-nm table, independent binary64 unit-conversion bound and complete finite H/C rows.</li>
-<li><code>make test/integration/provider/deployment/smiles</code>: RDKit-generated CCl,
-two generated geometries with distinct conformer IDs, authored source/H-parent identities and eight finite H/C
-predictions. The retained evidence is
-<code>artifacts/compose-smiles-qualification.json</code> at
-<a href="https://github.com/numpde/nmrnet-repro/blob/9cdc27c6ee34fdf8ddaa6ef3f9ecfdfd634dfabd/artifacts/compose-smiles-qualification.json">the qualification checkpoint</a>;
-there is no independent coordinate or shift-accuracy comparison.</li>
-<li><code>make test/integration/provider/deployment/references</code>: all four original
-validation inputs, with exact decoded predictions against the pinned CPU packets
-(137 full outputs and the original 64 reference positions). This test requests
-17 digits to preserve binary64 round trips; it does not change product defaults.</li>
-<li><code>make test/integration/provider/deployment/capacity</code>: synthetic H128/C128
-inputs and all 256 indexed outputs. This tests capacity, not chemical accuracy.</li>
-<li><code>make test/integration/provider/deployment/successive</code>: two distinct Jobs
-in one service process, then restart without a third scientific execution.</li>
-<li><code>make test/integration/provider/deployment/recovery</code>: lost Engine replies,
-old-ID fencing and an installed reader-supervisor crash without scientific input.</li>
-<li><code>make test/integration/provider/deployment/store-recovery</code>: credential-free
-inspection, one exact retained result replay and Compose startup against that same
-store. The original confirmation must survive byte-for-byte in private history.</li>
-</ul>
+<p>Numerical qualification evidence uses the production factory and installed
+serial runners. It includes supplied chloromethane with explicit nm units,
+RDKit-generated CCl geometries, 137 decoded predictions and the original 64
+reference positions, plus an H128/C128 capacity case. Source/image identities,
+result hashes and scope limits are recorded in
+<a href="notes/021_compose_runner_architecture_20261023.html">note 021</a> and its
+linked evidence. Capacity is distinct from chemical accuracy, and scripted
+interpretation or local API peers do not establish live external-model behavior.
+Further delivery-refactor testing is tracked separately in
+<a href="notes/022_shared_delivery_deferred_20261024.txt">note 022</a>.</p>
 <p>Prediction, supplied-geometry reading and SMILES generation each have a persistent
 serial runner. Each operation gets a fresh child and private scratch. The native
 supervisor owns child termination, reaping and scratch cleanup. A stable lease and
 correlated generation/operation identify that ownership; a socket closing or a
 container becoming ready alone does not prove it retired.</p>
-<p><code>make test/integration/provider-core/native-factory</code> checks Attempt/source
-handoffs without retained factory history and settlement of interrupted setup.
-<code>make test/integration/provider-core/runner</code> checks the actual native
-connection, cancellation and lost-control retirement. Durable Attempt
-records and confirmed history retain their separate storage contract.</p>
+<p>The native factory owns source/operation handoff and interrupted setup;
+the runner owns its connection, cancellation and retirement. Producer control
+metadata and the delivery queue have the separate storage responsibilities
+described <a href="#result-delivery-and-storage">above</a>.</p>
 <p>These checks ran actual RDKit and released NMRNet CPU inference. Interpreter
 replies were scripted and the signed API peer was local; live LLM interpretation,
 external API delivery requires separate evidence. GUI behavior is outside this repository's system under test.

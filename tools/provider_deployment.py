@@ -44,17 +44,16 @@ def _write(path, raw):
         os.fsync(stream.fileno())
 
 
-def freeze_deployment(definition, settings, secrets, bundle, native_capture, models,
-                      *, deployment, checkout, uid, gid, prepared, **identities):
+def freeze_deployment(definition, settings, secrets, bundle, source_root, models,
+                      *, source_names, deployment, checkout, uid, gid, prepared, **identities):
     """Freeze admitted inputs into a fresh generation for Compose normalization.
 
     No API/model request, store opening or worker allocation occurs. Failed
-    generations remain private evidence, and previous generations stay intact.
-    This stage publishes no completion or selection. The caller must retire this
-    helper, normalize the recipe, and finish through finalize_deployment.
+    generations retain their actual configuration, and previous generations stay intact.
+    The caller receives the resulting Compose configuration directly.
     """
-    definition, settings, secrets, bundle, native_capture, models = map(
-        _bind_path, (definition, settings, secrets, bundle, native_capture, models)
+    definition, settings, secrets, bundle, source_root, models = map(
+        _bind_path, (definition, settings, secrets, bundle, source_root, models)
     )
     if any(bundle.iterdir()):
         raise ConfigurationRejected("choose a fresh empty deployment bundle; existing generations were preserved.")
@@ -139,15 +138,7 @@ def freeze_deployment(definition, settings, secrets, bundle, native_capture, mod
     config = _read_provider_config(path, read_frozen)
     if store.is_relative_to(bundle) or bundle.is_relative_to(store):
         raise ConfigurationRejected("the deployment Attempt store must remain separate from its frozen input bundle.")
-    capture_execution(native_capture, bundle, **identities)
-    (bundle / "helper").mkdir(mode=0o700)
-    _write(bundle / "helper/provider_deployment.py", read_startup_file(
-        native_capture / "sources/tools/provider_deployment.py", maximum_bytes=1024 * 1024,
-        label="captured offline deployment helper"))
-    # This bootstrap locator lets status/down use the original installed helper
-    # and image even when today's checkout or image records have changed. It is
-    # not a live-container registry or a substitute for Engine image admission.
-    _write(bundle / "controller-image-id", (identities["controller_image_id"] + "\n").encode())
+    capture_execution(source_root, bundle, source_names, **identities)
     model_raw = read_startup_file(models, maximum_bytes=65536, label="prediction model declaration")
     try:
         _declared_models(read_document(model_raw, 65536))
@@ -156,7 +147,7 @@ def freeze_deployment(definition, settings, secrets, bundle, native_capture, mod
         raise ConfigurationRejected("deployment execution/model declarations require strict JSON.", cause=cause) from None
     _write(bundle / "prediction-models.json", model_raw)
     for name in ("inference.lock", "unicore-source.json"):
-        _write(bundle / name, read_startup_file(native_capture / "sources/requirements" / name,
+        _write(bundle / name, read_startup_file(_source_path(source_root / "requirements" / name, source_root),
                                                maximum_bytes=1024 * 1024, label="frozen inference declaration"))
     plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
                           uid=uid, gid=gid, prepared=prepared, execution=execution, routes=local["routes"])
@@ -175,15 +166,6 @@ def freeze_deployment(definition, settings, secrets, bundle, native_capture, mod
     elif "resolvers" in local:
         raise ConfigurationRejected("resolvers are unused by local/mapped routes; remove that grant.")
     _write(bundle / "compose.json", compose_bytes(plan))
-    receipt = (
-        "Public definition: " + str(definition) + "\n"
-        "Public definition SHA-256: " + hashlib.sha256(raw).hexdigest() + "\n"
-        "Private settings SHA-256: " + hashlib.sha256(local_raw).hexdigest() + "\n"
-        "Frozen configuration SHA-256: " + config.source_sha256 + "\n"
-        "Only input file locations and the machine-owned store path were rebased.\n"
-        "Refresh owner: make provider/deployment/install DEPLOYMENT=" + deployment + "\n"
-    )
-    _write(bundle / "SOURCE.txt", receipt.encode())
     return bundle
 
 
@@ -355,7 +337,7 @@ def inspect_deployment(*, inspection, identifiers, checkout, deployment, output,
     _write(output, b"".join(rows))
 
 
-def client_inputs(*, bundle, prediction_image_id, client_root, output):
+def client_inputs(*, bundle, prediction_image_id, client_root):
     """Export nonsecret client expectations from the admitted running generation.
 
     Host inventory supplies the actual image pin; historical numerical receipts
@@ -387,15 +369,16 @@ def client_inputs(*, bundle, prediction_image_id, client_root, output):
         ]},
         "prediction_image_id": prediction_image_id, "bundle": bundle.name,
     }
-    _write(output, (json.dumps(identity, sort_keys=True) + "\n").encode())
+    sys.stdout.write(json.dumps(identity, sort_keys=True) + "\n")
 
 
 def main(arguments=None):
     parser = argparse.ArgumentParser(description="Admit frozen deployment plans and actual Engine evidence offline.")
     operations = parser.add_subparsers(dest="operation", required=True)
     freeze = operations.add_parser("freeze", help="Freeze one deployment generation without starting services.")
-    for name in ("definition", "settings", "secrets", "bundle", "native-capture", "models", "checkout", "prepared"):
+    for name in ("definition", "settings", "secrets", "bundle", "source-root", "models", "checkout", "prepared"):
         freeze.add_argument("--" + name, type=Path, required=True)
+    freeze.add_argument("--source", dest="source_names", action="append", required=True)
     freeze.add_argument("--deployment", required=True)
     for name in ("uid", "gid"):
         freeze.add_argument("--" + name, type=int, required=True)
@@ -411,7 +394,6 @@ def main(arguments=None):
     client.add_argument("--bundle", type=Path, required=True)
     client.add_argument("--prediction-image-id", required=True)
     client.add_argument("--client-root", type=Path, required=True)
-    client.add_argument("--output", type=Path, required=True)
     network = operations.add_parser("network", help="Admit one actual local route's bridge and peers.")
     network.add_argument("--bundle", type=Path, required=True)
     network.add_argument("--inspection", type=Path, required=True)
@@ -436,6 +418,7 @@ def main(arguments=None):
             deployment_manifest(**values)
         elif operation == "client-inputs":
             client_inputs(**values)
+            return 0
         elif operation == "network":
             admit_network(**values)
         else:

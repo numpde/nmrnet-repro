@@ -15,7 +15,7 @@ import tomllib
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from nmrnet_provider.deployment import _bind, _service, admit_container, compose_bytes
+from nmrnet_provider.deployment import _bind, _service, compose_bytes
 from nmrnet_provider.process_reports import _owned_relationships, _safe_owner_details
 from provider_core.api_config import api_settings
 from provider_core.attempt_record import RecoveryScope
@@ -146,14 +146,12 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
     (output / "bindings").mkdir(mode=0o700)
     (output / "runtime").mkdir(mode=0o700)
     services, networks, volumes, bindings, roots, seen = {}, {}, {}, [], [], set()
-    volumes[QUEUE] = {"name": QUEUE, "external": True}
+    volumes[QUEUE] = {"name": QUEUE}
     roots.append({"volume": QUEUE, "target": "/volumes/queue", "mode": 0o700})
     for bundle in bundles:
         facts = bundle.lstat()
         if not stat.S_ISDIR(facts.st_mode) or facts.st_uid != uid or stat.S_IMODE(facts.st_mode) != 0o500:
             raise DeliveryDeploymentRejected("Delivery consumes only original caller-owned sealed mode 0500 provider bundles.")
-        if read_startup_file(bundle / "complete", maximum_bytes=16, label="installed provider seal", secret=True) != b"complete\n":
-            raise DeliveryDeploymentRejected("The original provider bundle has no complete installation seal.")
         document = tomllib.loads(read_startup_file(bundle / "config/provider.toml", maximum_bytes=65536,
                                                   label="installed provider API configuration", secret=True).decode("utf-8"))
         table = document["api"]
@@ -196,11 +194,11 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
             raise DeliveryDeploymentRejected("Delivery proxy service identities collide; no ambiguous recipe was published.")
         services[role] = proxy
         networks.update(attached)
-        volumes[ipc_volume] = {"name": ipc_volume, "external": True}
+        volumes[ipc_volume] = {"name": ipc_volume}
         roots.append({"volume": ipc_volume, "target": f"/volumes/ipc-{key}", "mode": 0o710})
         lifecycle = document["lifecycle"]
         control = checkpoint_volume_name(RecoveryScope(*identity, lifecycle["consumer_id"], lifecycle["generation_id"]))
-        volumes[control] = {"name": control, "external": True}
+        volumes[control] = {"name": control}
         roots.append({"volume": control, "target": "/volumes/control-" + control.removeprefix(PROJECT + "-control-"), "mode": 0o700})
         socket_leaf = Path(document["delivery"]["socket_path"]).name
         bindings.append((key, ipc_volume, route_root, api, socket_leaf))
@@ -222,103 +220,36 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
     initializer = _service(controller_image, "/opt/provider/environment/bin/python",
         "nmrnet_provider.delivery_deployment", uid=0, gid=0,
         labels={"io.nmrnet-repro.delivery": PROJECT}, stop_seconds=10)
+    initialize_command = ["initialize", "--uid", str(uid), "--gid", str(gid)]
+    for root in roots:
+        kind = "queue" if root["volume"] == QUEUE else "ipc" if root["mode"] == 0o710 else "control"
+        initialize_command += ["--" + kind, root["target"]]
     initializer.update(container_name=PROJECT + "-init", restart="no", cap_add=["CHOWN"],
-        command=["initialize", "--metadata", "/input/initialize.json"],
-        volumes=[_bind(output / "initialize.json", "/input/initialize.json")]
-            + [_volume(root["volume"], root["target"]) for root in roots])
+        command=initialize_command, volumes=[_volume(root["volume"], root["target"]) for root in roots])
     services["init"] = initializer
     daemon["depends_on"] = {"init": {"condition": "service_completed_successfully"}}
     _write(output / "daemon.toml", ("\n".join(text) + "\n").encode())
     _write(output / "compose.json", compose_bytes({"name": PROJECT, "services": services, "networks": networks, "volumes": volumes}))
-    _write(output / "image-ids", ("\n".join(sorted({delivery_image, controller_image})) + "\n").encode())
-    _write(output / "volume-names", ("\n".join(sorted(volumes)) + "\n").encode())
-    # Public initialization facts are world-readable only through the explicit
-    # file grant; no credential/configuration body enters this manifest.
-    initialize = {"project": PROJECT, "uid": uid, "gid": gid, "image": controller_image, "roots": roots}
-    _write(output / "initialize.json", (json.dumps(initialize, sort_keys=True) + "\n").encode(), 0o444)
     for directory in (output / "bindings", *(output / "bindings").iterdir(), output / "runtime", output):
         fsync_directory(directory)
 
 
-def admit(plan_path, inspection, images, output):
-    plan = read_document(read_startup_file(plan_path, maximum_bytes=1048576, label="original delivery recipe", secret=True).replace(b"$$", b"$"), 1048576)
-    records = read_document(read_startup_file(inspection, maximum_bytes=2097152, label="delivery container observations", secret=True), 2097152)
-    image_records = read_document(read_startup_file(images, maximum_bytes=2097152, label="delivery image observations", secret=True), 2097152)
-    if (type(plan) is not dict or plan.get("name") != PROJECT or type(plan.get("services")) is not dict
-            or type(records) is not list or type(image_records) is not list):
-        raise DeliveryDeploymentRejected("Delivery admission requires the original fixed project plan and complete Engine observations.")
-    roles = plan["services"]
-    if (not {"delivery", "init"} <= roles.keys() or not 3 <= len(roles) <= 18
-            or any(role not in ("delivery", "init") and re.fullmatch(r"api-[0-9a-f]{16}", role) is None for role in roles)):
-        raise DeliveryDeploymentRejected("Delivery admission refused an unsupported shared project role.")
-    by_image = {}
-    for image in image_records:
-        if type(image) is not dict or image.get("Id") in by_image:
-            raise DeliveryDeploymentRejected("Delivery image observations contain malformed or duplicate identities.")
-        by_image[image.get("Id")] = image
-    if set(by_image) != {service["image"] for service in roles.values()}:
-        raise DeliveryDeploymentRejected("Delivery image observations do not cover exactly the original images.")
-    admitted = {}
-    identifiers = set()
-    for record in records:
-        if type(record) is not dict or type(record.get("Config")) is not dict:
-            raise DeliveryDeploymentRejected("Delivery container observation is malformed.")
-        labels = record["Config"].get("Labels")
-        if (type(labels) is not dict or labels.get("com.docker.compose.project") != PROJECT
-                or labels.get("com.docker.compose.oneoff") not in ("False", "false")):
-            raise DeliveryDeploymentRejected("Delivery observation includes a foreign project or one-off helper.")
-        role = labels.get("com.docker.compose.service")
-        identifier = record.get("Id")
-        if role not in roles or role in admitted or type(identifier) is not str or re.fullmatch(r"[0-9a-f]{64}", identifier) is None or identifier in identifiers:
-            raise DeliveryDeploymentRejected("Delivery observation repeats or omits an original role identity.")
-        admit_container(record, role=role, original_plan=plan, image=by_image[roles[role]["image"]])
-        admitted[role] = identifier
-        identifiers.add(identifier)
-    if set(admitted) != set(roles):
-        raise DeliveryDeploymentRejected("Delivery observation does not cover every original project role.")
-    _write(output, ("\n".join(admitted[role] for role in sorted(admitted)) + "\n").encode())
-
-
-def initialize(metadata):
-    if os.geteuid() != 0:
-        raise DeliveryDeploymentRejected("Volume initialization requires the explicit root helper with CHOWN capability only.")
-    descriptor = os.open(metadata, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
-    with os.fdopen(descriptor, "rb") as stream:
-        facts = os.fstat(stream.fileno())
-        if not stat.S_ISREG(facts.st_mode) or stat.S_IMODE(facts.st_mode) != 0o444:
-            raise DeliveryDeploymentRejected("Volume initialization requires its read-only public manifest.")
-        document = read_document(stream.read(65537), 65536)
-    if (type(document) is not dict or set(document) != {"project", "uid", "gid", "image", "roots"}
-            or document["project"] != PROJECT or any(type(document[name]) is not int or document[name] <= 0 for name in ("uid", "gid"))
-            or facts.st_uid != document["uid"] or type(document["roots"]) is not list or not 3 <= len(document["roots"]) <= 33):
-        raise DeliveryDeploymentRejected("Volume initialization manifest does not match the fixed shared delivery grants.")
-    seen = set()
-    for root in document["roots"]:
-        if type(root) is not dict or set(root) != {"volume", "target", "mode"}:
-            raise DeliveryDeploymentRejected("Volume initialization requires only its exact fixed root grants.")
-        name, target, mode = root["volume"], root["target"], root["mode"]
-        match = re.fullmatch(r"/volumes/(ipc|control)-([0-9a-f]{64})", target) if type(target) is str else None
-        valid = target == "/volumes/queue" and name == QUEUE and mode == 0o700
-        if match:
-            valid = name == PROJECT + "-" + match[1] + "-" + match[2] and mode == (0o710 if match[1] == "ipc" else 0o700)
-        if not valid or target in seen:
-            raise DeliveryDeploymentRejected("Volume initializer refused a non-delivery or repeated root grant.")
-        seen.add(target)
+def initialize(uid, gid, queue, ipc, control):
+    if os.geteuid() != 0 or uid <= 0 or gid <= 0:
+        raise DeliveryDeploymentRejected("Volume initialization requires root with CHOWN and explicit nonzero target UID/GID.")
+    for target, mode in [(queue, 0o700), *((path, 0o710) for path in ipc), *((path, 0o700) for path in control)]:
         path = _path(target)
         observed = path.lstat()
         if not stat.S_ISDIR(observed.st_mode):
             raise DeliveryDeploymentRejected("Delivery volume root must be a real directory.")
-        expected = document["uid"], document["gid"], mode
-        if (observed.st_uid, observed.st_gid, stat.S_IMODE(observed.st_mode)) == expected:
+        if (observed.st_uid, observed.st_gid, stat.S_IMODE(observed.st_mode)) == (uid, gid, mode):
             continue
         if observed.st_uid != 0 or any(path.iterdir()):
             raise DeliveryDeploymentRejected("Refusing to change an existing delivery volume with unexpected ownership, mode or contents.")
-        # chmod precedes chown: CHOWN is the only added capability; after the
-        # ownership transfer this root no longer belongs to the initializer.
         descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         try:
             os.fchmod(descriptor, mode)
-            os.fchown(descriptor, document["uid"], document["gid"])
+            os.fchown(descriptor, uid, gid)
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
@@ -335,17 +266,16 @@ def main():
     for name in ("delivery-image", "controller-image"):
         prepare_parser.add_argument("--" + name, required=True)
     initializer = commands.add_parser("initialize")
-    initializer.add_argument("--metadata", type=Path, required=True)
-    admission = commands.add_parser("admit")
-    for name in ("plan", "inspection", "images", "output"):
-        admission.add_argument("--" + name, type=Path, required=True)
+    for name in ("uid", "gid"):
+        initializer.add_argument("--" + name, type=int, required=True)
+    initializer.add_argument("--queue", type=Path, required=True)
+    initializer.add_argument("--ipc", type=Path, action="append", required=True)
+    initializer.add_argument("--control", type=Path, action="append", required=True)
     options = parser.parse_args()
     if options.command == "prepare":
         prepare(options.provider_bundle, options.output, options.uid, options.gid, options.delivery_image, options.controller_image)
-    elif options.command == "initialize":
-        initialize(options.metadata)
     else:
-        admit(options.plan, options.inspection, options.images, options.output)
+        initialize(options.uid, options.gid, options.queue, options.ipc, options.control)
 
 
 if __name__ == "__main__":
