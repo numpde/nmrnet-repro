@@ -15,8 +15,9 @@ import asyncio
 
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import StartPending, acknowledge_start
-from provider_core.attempt_store import StoreFailed, StoreRefused
+from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
 from provider_core.ownership import OwnershipRefused
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.transport import ExchangeFailed
 
 
@@ -75,18 +76,21 @@ class AttemptStarter:
         self.last_failure = None
         try:
             if retain_new:
-                await self.store.admit(pending, owner=self)
-            elif pending not in await self.store.records(owner=self):
-                raise StartRefused("Exact pending start is absent or has already advanced; reread storage before recovery")
+                await self.store.retain_start(pending, owner=self)
+            else:
+                await self.store.require_start(pending, owner=self)
             self._unretained = await self._send(pending)
             self.claim.bind_attempt(self.store.scope, self._unretained.admission.execution_attempt_ref, owner=self)
-            result = await self.store.replace(pending, self._unretained, owner=self)
+            await self.store.acknowledge_start(pending, self._unretained.admission, owner=self)
+            # Return the actual received admission. Historical disk metadata is
+            # deliberately a different type and cannot recreate this live path.
+            result = self._unretained
             self._unretained = None
             return result
         except asyncio.CancelledError as cause:
             self._remember("Attempt start was cancelled; preserve its exact request and settle owned I/O before reuse", cause)
             raise
-        except (ApiFailure, StoreFailed, StoreRefused, OwnershipRefused) as cause:
+        except (ApiFailure, CheckpointFailed, CheckpointRefused, OwnershipRefused) as cause:
             raise self._remember(
                 "Attempt start lacks a durable owned acknowledgement; preserve the original request and protected admission evidence",
                 cause,
@@ -124,21 +128,22 @@ class AttemptStarter:
             if self.store.pending_owner is self:
                 settled = await self.store.settle(owner=self)
                 if self._unretained is not None:
-                    if settled.value != self._unretained:
-                        raise StoreFailed(
+                    expected = AcknowledgedCheckpoint(self._pending, self._unretained.admission)
+                    if settled.value != expected:
+                        raise CheckpointFailed(
                             "Settled storage result differs from the received acknowledgement; preserve storage for reconciliation"
                         )
                     result = self._unretained
                     self._unretained = None
             if self._unretained is not None:
-                raise StoreFailed(
+                raise CheckpointFailed(
                     "Received acknowledgement lacks durable ownership; reconcile storage and claims before preparation"
                 )
             return result
         except asyncio.CancelledError as cause:
             self._remember("Start settlement was cancelled; original ownership remains retained", cause, settlement=True)
             raise
-        except (StoreFailed, StoreRefused, ExchangeFailed) as cause:
+        except (CheckpointFailed, CheckpointRefused, ExchangeFailed) as cause:
             raise self._remember(
                 "Cannot settle Attempt start; preserve primary evidence and the start claim", cause, settlement=True
             ) from None

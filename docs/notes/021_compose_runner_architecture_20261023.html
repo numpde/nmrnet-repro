@@ -210,6 +210,21 @@
       rollback, capacity and protected error rendering. START/execution consumer
       integration and deployment remain outstanding; this store alone changes no
       running provider.</p>
+    <p>The START owner now uses those explicit checkpoint transitions. It retains
+      the pending request before POST, then binds and persists the verified API
+      admission before returning the actual received acknowledgement. Restored
+      metadata is never converted into a live acknowledgement. A late ACK write
+      settles its original operation without another POST; a storage refusal
+      retains its actual reason rather than being relabelled as a missing record.
+      The focused unit lane passes eight checks. The isolated core-only TLS lane
+      passes its receiving-side witness: both original and replay POSTs have the
+      same retained bytes before dispatch and valid independently checked request
+      signatures. Commands are <code>make test/unit/provider-core/starting</code>
+      and <code>make test/integration/provider-core/starting</code>, each with an
+      explicit <code>WHEELHOUSE</code>. This is a producer migration in progress:
+      executor, controller, recovery and service consumers still need their direct
+      checkpoint/relay cutover. Do not publish or deploy this intermediate branch
+      as a complete replacement of the file-backed producer.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.

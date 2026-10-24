@@ -4,8 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from provider_core.attempt_record import MAX_RECORD_BYTES, LocalExecutionPhase
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.attempt_record import LocalExecutionPhase
+from provider_core.checkpoint_store import CheckpointStore, CheckpointLimits
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.starting import AttemptStarter
 from tests.fakes.api import Transport, reply
@@ -22,13 +23,13 @@ class StartingTests(unittest.IsolatedAsyncioTestCase):
                 transport = Transport(reply(start_response(state=state, replayed=state != "in_progress")))
                 claims = AttemptClaims()
                 claim = claims.claim_start(pending)
-                store = AttemptStore(
-                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
+                store = CheckpointStore(
+                    Path(directory), scope=scope(), limits=CheckpointLimits(1, 150000), operation_seconds=1
                 )
                 await store.open()
                 try:
                     acknowledged = await AttemptStarter(api(transport, scope().api_origin), store, claim).start(pending)
-                    self.assertEqual(await store.records(), (acknowledged,))
+                    self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(pending, acknowledged.admission),))
                     self.assertEqual(acknowledged.admission.state, state)
                     self.assertIs(acknowledged.local_phase, LocalExecutionPhase.NOT_ENTERED)
                     self.assertEqual(transport.calls[0][0].content, pending.body)

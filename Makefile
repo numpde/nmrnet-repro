@@ -30,6 +30,7 @@ test/unit/smiles-worker:
 .PHONY: test/unit/provider-core/diagnostics
 .PHONY: test/unit/provider-core/delivery
 .PHONY: test/unit/provider-core/checkpoints
+.PHONY: test/unit/provider-core/starting test/integration/provider-core/starting
 .PHONY: test/integration/provider-core/delivery
 .PHONY: test/unit/provider-core/recovery
 .PHONY: test/integration/provider-core/api
@@ -237,6 +238,12 @@ test/unit/provider-core/delivery:
 test/unit/provider-core/checkpoints:
 	bash tools/container.sh $@
 
+test/unit/provider-core/starting:
+	bash tools/container.sh $@
+
+test/integration/provider-core/starting:
+	bash tools/container.sh $@
+
 test/integration/provider-core/delivery:
 	bash tools/container.sh $@
 
@@ -417,6 +424,8 @@ help:
 		'make test/unit/provider-core/diagnostics Test protected core error facts and owned causes.' \
 		'make test/unit/provider-core/delivery Test pending delivery storage, limits and payload removal.' \
 		'make test/unit/provider-core/checkpoints Test compact producer control without scientific payload retention.' \
+		'make test/unit/provider-core/starting Test durable START admission and interrupted storage ownership.' \
+		'make test/integration/provider-core/starting Test exact START replay through signed TLS after a lost reply.' \
 		'make test/integration/provider-core/delivery Test actual local delivery handoff and recovery.' \
 		'make test/unit/provider-core/recovery Test retained publication, read-only recovery and claim ownership.' \
 		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
