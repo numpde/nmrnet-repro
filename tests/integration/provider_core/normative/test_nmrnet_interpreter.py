@@ -174,7 +174,8 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             TlsPeer("success", response_factory=second_reply) as second_peer,
         ):
             endpoints = (chat_endpoint(first_peer, identifier="first"), chat_endpoint(second_peer, identifier="second"))
-            chooser = InputInterpreter(endpoints, max_turns=2)
+            notices = Mock()
+            chooser = InputInterpreter(endpoints, max_turns=2, on_endpoint_failure=notices)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
@@ -186,6 +187,9 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             self.assertEqual(json.loads(outcome.content)["interpretation"], observation)
             self.assertEqual(ports.worker.events, ["prepare", "execute"])
+            self.assertEqual(notices.call_args.args, (0, chooser._conversation.endpoint_failures[0][1]))
+            await session.retire()
+            notices.assert_called_once()
 
     async def test_three_interpreted_routes_reach_prediction_with_bound_provenance(
         self,

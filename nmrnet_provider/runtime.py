@@ -35,6 +35,7 @@ async def assemble_attempt(
     selected_artifacts,
     allocate_prediction,
     on_prediction_retry,
+    on_interpreter_failure,
     allocate_reader,
     allocate_generator,
     observation_recovery,
@@ -58,6 +59,8 @@ async def assemble_attempt(
     """
     if type(config) is not ProviderConfig or type(pending) is not StartPending:
         raise ValueError("Cannot assemble NMRNet Attempt: admitted configuration and selected pending start are required.")
+    if not callable(on_interpreter_failure):
+        raise ValueError("Cannot assemble NMRNet Attempt: interpreter failures require an operator diagnostic recipient.")
     if api.identity is not config.api.identity:
         raise ValueError("Cannot assemble NMRNet Attempt: lifecycle API must use the configured signing identity.")
     if api.expected_topology != config.api.expected_topology:
@@ -90,7 +93,9 @@ async def assemble_attempt(
         )
         for settings in config.interpreter.endpoints
     )
-    chooser = InputInterpreter(endpoints, max_turns=config.interpreter.max_turns)
+    chooser = InputInterpreter(
+        endpoints, max_turns=config.interpreter.max_turns, on_endpoint_failure=on_interpreter_failure
+    )
     settings = config.preparation
     preparation = InputPreparation(
         uploads=uploads,

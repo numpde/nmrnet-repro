@@ -72,7 +72,7 @@ class NativeAttemptFactory:
         condition_recovery,
         on_unconfirmed_phase_progress,
         on_prediction_retry,
-        on_native_notice,
+        on_operator_notice,
         start_recovery,
         terminal_recovery,
     ):
@@ -98,9 +98,9 @@ class NativeAttemptFactory:
         self.condition_recovery = condition_recovery
         self.on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
         self.on_prediction_retry = on_prediction_retry
-        if not callable(on_native_notice):
-            raise ValueError("Native factory requires a protected native lifecycle diagnostic observer.")
-        self.on_native_notice = on_native_notice
+        if not callable(on_operator_notice):
+            raise ValueError("Native factory requires a protected operator diagnostic observer.")
+        self.on_operator_notice = on_operator_notice
         self.start_recovery = start_recovery
         self.terminal_recovery = terminal_recovery
         self.allocations, self.clients = [], {}
@@ -121,6 +121,9 @@ class NativeAttemptFactory:
                 selected_artifacts=self.selected_artifacts,
                 allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
                 on_prediction_retry=self.on_prediction_retry,
+                on_interpreter_failure=lambda index, failure: self.on_operator_notice(
+                    failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
+                ),
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
                 observation_recovery=self.observation_recovery,
@@ -252,7 +255,7 @@ class NativeAttemptFactory:
             role=role,
             endpoint=Path("/native") / role / "runner.sock",
             operation_seconds=self.policy.allocation_seconds,
-            on_notice=lambda failure, facts: self.on_native_notice(failure, {**facts, "job_ref": job_ref}),
+            on_notice=lambda failure, facts: self.on_operator_notice(failure, {**facts, "job_ref": job_ref}),
         )
         self.allocations.append(allocation)
         return allocation

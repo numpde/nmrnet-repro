@@ -406,7 +406,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             claims=AttemptClaims(),
             execution_identity=execution_identity,
             selected_artifacts=selected_artifacts,
-            on_native_notice=report_operator_notice,
+            on_operator_notice=report_operator_notice,
             policy=config.service.native,
             observation_recovery=ObservationRecovery(
                 config.lifecycle.observation_gap_seconds,

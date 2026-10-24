@@ -65,6 +65,7 @@ class RuntimePeers:
         self.allocate_prediction = AsyncMock(side_effect=self._allocate_prediction)
         self.maximum_records = maximum_records
         self.claims = AttemptClaims()
+        self.operator_notices = []
         self.progress_notices = []
         self.result = None
         # These lifecycle witnesses inspect the complete public audit record.
@@ -145,6 +146,7 @@ class RuntimePeers:
             "selected_artifacts": self.ports.worker.artifacts,
             "allocate_prediction": self.allocate_prediction,
             "on_prediction_retry": None,
+            "on_interpreter_failure": lambda index, failure: self.operator_notices.append((index, failure)),
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
             "observation_recovery": ObservationRecovery(

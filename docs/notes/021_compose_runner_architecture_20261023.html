@@ -194,6 +194,18 @@ make delivery/down</code></pre>
       Durable handoff, payload deletion, provider isolation and independent cleanup
       are adaptations agreed here; Magnet's retained confirmed rows are not copied.</p>
 
+    <p><strong>Implementation start:</strong> interpreter fallback failures now
+      have an explicit production operator recipient as well as their existing
+      protected evidence snapshot. The NMR interpreter reports each failed
+      endpoint once, including after successful fallback; repeated retirement
+      does not repeat notices. Factory and runtime composition carry the existing
+      protected process reporter with Job/endpoint identity. No core logging hook
+      or extra diagnostic history was added. Focused contained checks passed:
+      interpreter 39, runtime 16, native factory 14, service 53 and process 66.
+      The process witness also required updating its actual interrupted-model
+      composition to supply the mandatory recipient. The delivery service itself
+      is not implemented by this preliminary slice.</p>
+
     <h2 id="decision">Decision, purpose and completion contract</h2>
     <p>The product remains a provider of atom-indexed H/C chemical shifts from
       admitted molecular geometries. Operating it should require a named deployment,

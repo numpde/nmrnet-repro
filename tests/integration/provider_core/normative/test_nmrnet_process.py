@@ -162,7 +162,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
                 def __init__(self, **arguments):
                     if recovery_kind == "native":
-                        self.policy = arguments["open_attempt"].on_native_notice
+                        self.policy = arguments["open_attempt"].on_operator_notice
                     elif recovery_kind == "prediction":
                         self.policy = arguments["open_attempt"].on_prediction_retry
                     else:
@@ -657,7 +657,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     "No phase-progress outage expected before admission"
                 ),
                 on_prediction_retry=lambda _attempt, _failure, _retired: self.fail("No prediction retry expected before admission"),
-                on_native_notice=Mock(),
+                on_operator_notice=Mock(),
                 terminal_recovery=TerminalRecovery(
                     config.service.policy.api_backoff_max_seconds,
                     lambda _attempt, _failure, _seconds: self.fail("No terminal retry expected before admission"),

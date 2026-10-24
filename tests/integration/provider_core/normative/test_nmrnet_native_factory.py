@@ -31,7 +31,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, Mock(), Mock()),
             on_prediction_retry=Mock(),
-            on_native_notice=Mock(),
+            on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
         )

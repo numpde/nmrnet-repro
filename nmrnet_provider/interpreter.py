@@ -280,8 +280,12 @@ class InputInterpreter:
     InputPreparation object holds prepared structures for later prediction.
     """
 
-    def __init__(self, endpoints, *, max_turns):
+    # silent-defaults: allow-contract -- Direct scientific callers may retain diagnostics without streaming notices; production assembly requires an explicit operator recipient.
+    def __init__(self, endpoints, *, max_turns, on_endpoint_failure=None):
         """Configure ordered model services and the total conversation-turn limit."""
+        if on_endpoint_failure is not None and not callable(on_endpoint_failure):
+            raise ValueError("Interpreter endpoint failures require a callable diagnostic recipient.")
+        self._on_endpoint_failure = on_endpoint_failure
         self._secrets = tuple(e.spec.api_key for e in endpoints)
         self._conversation = ToolConversation(
             endpoints,
@@ -317,7 +321,15 @@ class InputInterpreter:
             {"role": "system", "content": PROMPT},
             {"role": "user", "content": instructions.specification_text},
         ]
-        result = await self._conversation.run(messages, self._tools, dispatch)
+        try:
+            result = await self._conversation.run(messages, self._tools, dispatch)
+        finally:
+            # This single-use run reports fallback failures once, including a
+            # successful fallback. Repeated retirement still snapshots late
+            # protected evidence without replaying these operator notices.
+            if self._on_endpoint_failure is not None:
+                for index, failure in self._conversation.endpoint_failures:
+                    self._on_endpoint_failure(index, failure)
         observation = {
             "schema_id": "nmrnet.input_interpretation.v1",
             "prompt_sha256": hashlib.sha256(PROMPT.encode()).hexdigest(),

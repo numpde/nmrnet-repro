@@ -436,6 +436,10 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
             fixture.allocations[0].allocate_generator.assert_awaited_once()
             self.assertEqual(len(unavailable.requests), 1)
+            self.assertEqual(
+                [(index, failure.reason) for index, failure in fixture.operator_notices],
+                [(0, "request_limit"), (1, "http_status")],
+            )
             self.assertEqual(len(fixture.model_peer.requests), 1)
 
     async def test_fallback_evidence_survives_fresh_store_reopen_without_starting_prediction(self):

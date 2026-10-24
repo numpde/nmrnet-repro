@@ -217,7 +217,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(ports.host.confirmed)
             fixture.allocate_prediction.assert_not_awaited()
 
-    async def test_wrong_kind_scope_or_api_identity_refuses_before_start(self):
+    async def test_invalid_context_or_missing_diagnostic_recipient_refuses_before_start(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
@@ -227,6 +227,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
                 {"pending": replace(pending, analysis_kind_ref="nmr_predict")},
                 {"pending": replace(pending, scope=replace(pending.scope, generation_id="other"))},
                 {"api": other_api},
+                {"on_interpreter_failure": None},
             ):
                 with self.subTest(changes=tuple(changes)), self.assertRaises(ValueError):
                     await assemble_attempt(**(fixture.arguments(pending) | changes))

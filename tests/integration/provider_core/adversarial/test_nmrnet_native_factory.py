@@ -61,12 +61,17 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         controller = object()
         with (
             patch.object(factory, "_open_role", new=AsyncMock(side_effect=AssertionError("Prediction allocated before START"))) as opened,
-            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(return_value=controller)),
+            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(return_value=controller)) as assembly,
         ):
             self.assertIs(await factory(record()), controller)
         opened.assert_not_called()
         self.assertEqual(factory.allocations, [])
         self.assertEqual(factory.clients, {})
+        failure = RuntimeError("Fixture model refusal")
+        assembly.call_args.kwargs["on_interpreter_failure"](1, failure)
+        factory.on_operator_notice.assert_called_once_with(
+            failure, {"event": "interpreter_endpoint_failed", "job_ref": record().input.job_ref, "endpoint_index": 1}
+        )
 
     async def test_missing_condition_recovery_is_refused_before_native_allocation(self):
         with (
@@ -86,7 +91,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 start_recovery=StartRecovery(1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
-                on_native_notice=Mock(),
+                on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
             )
         allocation.assert_not_called()
@@ -109,7 +114,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 start_recovery=StartRecovery(1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
-                on_native_notice=Mock(),
+                on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=None,
             )
         allocation.assert_not_called()
@@ -131,7 +136,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=None,
                 on_prediction_retry=Mock(),
-                on_native_notice=Mock(),
+                on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
             )
@@ -154,7 +159,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
-                on_native_notice=Mock(),
+                on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=None,
             )
@@ -209,7 +214,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, Mock(), Mock()),
             on_prediction_retry=Mock(),
-            on_native_notice=Mock(),
+            on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
         )
@@ -281,7 +286,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, Mock(), Mock()),
             on_prediction_retry=Mock(),
-            on_native_notice=Mock(),
+            on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
         )

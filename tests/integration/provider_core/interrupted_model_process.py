@@ -47,6 +47,9 @@ async def recording_factory(factory, pending):
         selected_artifacts=factory.selected_artifacts,
         allocate_prediction=ports.allocate_prediction,
         on_prediction_retry=None,
+        on_interpreter_failure=lambda index, failure: factory.on_operator_notice(
+            failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
+        ),
         allocate_reader=ports.allocate_reader,
         allocate_generator=ports.allocate_generator,
         observation_recovery=factory.observation_recovery,
