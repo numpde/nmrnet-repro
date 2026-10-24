@@ -14,6 +14,52 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_interrupted_helper_is_retired_by_original_id_without_reexecution(self):
+        for failure in ("none", "stop", "remove", "absence", "logs"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                engine = root / "engine.sh"
+                engine.write_text('''set -euo pipefail
+root=$1 failure=$2; shift 2
+identifier=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+printf '%s\\n' "$1" >> "$root/engine-calls"
+case $1 in
+    ps) if [[ -f $root/present ]]; then printf '%s\\n' "$identifier"; fi ;;
+    stop) [[ $failure != stop ]] || exit 7 ;;
+    inspect) printf '%s exited false 0 false\\n' "$identifier" ;;
+    logs) [[ $failure != logs ]] || exit 8 ;;
+    rm) [[ $failure != remove ]] || exit 9
+        if [[ $failure != absence ]]; then rm -- "$root/present"; fi ;;
+    *) exit 91 ;;
+esac
+''')
+                result = self.shell('''
+caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
+inference_retirement_confirmed=true deployment_helper_retired=true inference_cancellation_status=0
+deployment_diagnostic= inference_diagnostic=
+engine=(bash "$3" "$2" "$4")
+inference_native() { shift 3; "$@"; }
+deployment_begin_operation
+original=$operation_root
+mkdir -m 700 -- "$original/inspection" "$original/inspection/create" "$original/inspection/start"
+identifier=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+printf '%s' "$identifier" > "$original/inspection/helper.cid"
+printf '%s\\n' "$identifier" > "$original/inspection/create/response.stdout"
+printf '%s\\0' inspection-create 30 "$original/inspection/create" create > "$original/effects/inspection-create.intent"
+printf '%s\\0' inspection-start 30 "$original/inspection/start" start "$identifier" > "$original/effects/inspection-start.intent"
+: > "$2/present"
+if deployment_begin_operation; then
+    [[ $4 == none && ! -e $original/inspection ]]
+else
+    [[ $4 != none && -f $original/effects/inspection-create.intent && ! -e $original/inspection/retired ]]
+fi
+''', root, engine, failure)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = (root / "engine-calls").read_text().splitlines()
+                self.assertNotIn("create", calls)
+                self.assertNotIn("start", calls)
+                self.assertEqual(calls.count("stop"), 1)
+
     def test_cached_docker_health_cannot_accept_an_expired_record_or_borrow_another_role_budget(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.shell('''

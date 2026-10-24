@@ -78,11 +78,8 @@ deployment_helper() {
         --mount "type=bind,src=$deployment_tool_source,dst=/source/tools/provider_deployment.py,readonly" \
         --entrypoint /opt/provider/environment/bin/python \
         "${helper_grants[@]}" "$controller_image_id" -I -B /source/tools/provider_deployment.py "${helper_arguments[@]}" || return $?
-    [[ -f $directory/helper.cid && ! -L $directory/helper.cid ]] || return 2
-    IFS= read -r -N 64 identifier < "$directory/helper.cid" || return 2
-    [[ $identifier =~ ^[0-9a-f]{64}$ ]] \
-        && { cmp -s "$directory/helper.cid" <(printf '%s' "$identifier") || cmp -s "$directory/helper.cid" <(printf '%s\n' "$identifier"); } \
-        && cmp -s "$directory/create/response.stdout" <(printf '%s\n' "$identifier") || return 2
+    deployment_created_helper "$directory" || return $?
+    identifier=$deployment_created_helper_id
     remaining=$((deadline - SECONDS - 25))
     (( remaining > 0 )) || return 2
     deployment_command "$phase-posture" "$remaining" "$directory/posture" false inspect --type container --format \
@@ -118,6 +115,25 @@ deployment_helper() {
     sync -f -- "$directory/retired" "$directory" || return $?
     deployment_helper_retired=true
     return "$result"
+}
+
+deployment_created_helper() {
+    # Cleanup authority follows worker_container_created: the private CID and
+    # complete original create reply must agree. A failed CLI can still return
+    # this cleanup handle; it never authorizes starting or replaying the helper.
+    local directory=$1 candidate path
+    deployment_created_helper_id=
+    [[ -d $directory/create && ! -L $directory/create \
+        && $(realpath -m -- "$directory/create") == "$directory/create" \
+        && $(stat -c '%u:%a' -- "$directory/create") == "$caller_uid:700" ]] || return 2
+    for path in "$directory/helper.cid" "$directory/create/response.stdout"; do
+        [[ -f $path && ! -L $path && $(stat -c '%u:%a' -- "$path") == "$caller_uid:600" ]] || return 2
+    done
+    IFS= read -r -N 64 candidate < "$directory/helper.cid" || return 2
+    [[ $candidate =~ ^[0-9a-f]{64}$ ]] \
+        && { cmp -s "$directory/helper.cid" <(printf '%s' "$candidate") || cmp -s "$directory/helper.cid" <(printf '%s\n' "$candidate"); } \
+        && cmp -s "$directory/create/response.stdout" <(printf '%s\n' "$candidate") || return 2
+    deployment_created_helper_id=$candidate
 }
 
 deployment_selected_bundle() {
@@ -281,8 +297,12 @@ deployment_effects_settled() {
         [[ $phase =~ ^[A-Za-z0-9_-]+$ && $intent == "$root/effects/$phase.intent" \
             && $receipts == "$root/"* && $(realpath -m -- "$receipts") == "$receipts" ]] || return 2
         deployment_seconds "$budget" || return 2
-        if [[ $phase =~ ^(.+)-(create|start|stop|remove)$ ]]; then
+        if [[ $phase =~ ^(.+)-recovery-[0-9a-f]{32}-(stop|remove)$ ]]; then
             helper=${BASH_REMATCH[1]}
+        elif [[ $phase =~ ^(.+)-(create|start|stop|remove)$ ]]; then
+            helper=${BASH_REMATCH[1]}
+        else helper=; fi
+        if [[ -n $helper ]]; then
             status=$root/$helper/retired
             if [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]]; then
                 IFS=' ' read -r status identifier < "$root/$helper/retired" || return 2
@@ -299,6 +319,76 @@ deployment_effects_settled() {
         [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]] \
             && cmp -s "$status" <(printf '0\n') || return 2
     done
+}
+
+deployment_recover_known_helpers() {
+    local root=$1 intent helper directory identifier recovery phase present path
+    local deadline=$((SECONDS + 60)) remaining budget
+    local -a fields=()
+    [[ $root == "$operation_root" && -d $root/effects && ! -L $root/effects ]] || return 2
+    for intent in "$root/effects/"*-create.intent; do
+        [[ -e $intent || -L $intent ]] || continue
+        [[ -f $intent && ! -L $intent && $(stat -c '%u:%a' -- "$intent") == "$caller_uid:600" ]] \
+            && (( $(stat -c '%s' -- "$intent") < 65536 )) \
+            && cmp -s <(tail -c 1 -- "$intent") <(printf '\0') || return 2
+        mapfile -d '' -t fields < "$intent"
+        (( ${#fields[@]} >= 4 )) && [[ ${fields[3]} == create ]] || return 2
+        phase=${fields[0]} helper=${fields[0]%-create}
+        [[ $phase == "$helper-create" && $helper =~ ^[A-Za-z0-9_-]+$ \
+            && $intent == "$root/effects/$phase.intent" && ${fields[2]} == "$root/$helper/create" ]] || return 2
+        directory=$root/$helper
+        [[ -d $directory && ! -L $directory && $(realpath -m -- "$directory") == "$directory" \
+            && $(stat -c '%u:%a' -- "$directory") == "$caller_uid:700" ]] || return 2
+        if [[ -f $directory/retired && ! -L $directory/retired ]]; then continue; fi
+        deployment_created_helper "$directory" \
+            || { deployment_refuse "$helper has no matching private CID and complete original create reply; its creation remains held."; return 2; }
+        identifier=$deployment_created_helper_id
+        IFS= read -r recovery < /proc/sys/kernel/random/uuid
+        recovery=${recovery//-/}
+        [[ $recovery =~ ^[0-9a-f]{32}$ ]] || return 2
+        path=$directory/recovery-$recovery
+        mkdir -m 700 -- "$path" || return $?
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+        budget=10; if (( remaining < budget )); then budget=$remaining; fi
+        deployment_command "$helper-recovery-$recovery-query" "$budget" "$path/query" false \
+            ps --all --no-trunc --quiet --filter "id=$identifier" || return $?
+        present=false
+        if [[ -s $path/query/response.stdout ]]; then
+            cmp -s "$path/query/response.stdout" <(printf '%s\n' "$identifier") || return 2
+            present=true
+        fi
+        if [[ $present == true ]]; then
+            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+            budget=10; if (( remaining < budget )); then budget=$remaining; fi
+            deployment_command "$helper-recovery-$recovery-stop" "$budget" "$path/stop" true \
+                stop --time 5 "$identifier" || return $?
+            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+            budget=10; if (( remaining < budget )); then budget=$remaining; fi
+            deployment_command "$helper-recovery-$recovery-stopped" "$budget" "$path/stopped" false inspect --type container --format \
+                '{{.Id}} {{.State.Status}} {{.State.Running}} {{.State.Pid}} {{.State.Restarting}}' "$identifier" || return $?
+            if ! cmp -s "$path/stopped/response.stdout" <(printf '%s exited false 0 false\n' "$identifier") \
+                && ! cmp -s "$path/stopped/response.stdout" <(printf '%s created false 0 false\n' "$identifier"); then return 2; fi
+            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+            # Keep the existing protected receiving route before discarding the
+            # helper's only logs. A broken sink retains the stopped helper.
+            if ! inference_native 'interrupted deployment helper diagnostics' "$remaining" stdio \
+                "${engine[@]}" logs --tail 80 "$identifier"; then
+                deployment_diagnostic+=$inference_diagnostic
+                return 2
+            fi
+            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+            budget=10; if (( remaining < budget )); then budget=$remaining; fi
+            deployment_command "$helper-recovery-$recovery-remove" "$budget" "$path/remove" true rm "$identifier" || return $?
+        fi
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+        budget=10; if (( remaining < budget )); then budget=$remaining; fi
+        deployment_command "$helper-recovery-$recovery-absent" "$budget" "$path/absent" false \
+            ps --all --no-trunc --quiet --filter "id=$identifier" || return $?
+        [[ ! -s $path/absent/response.stdout ]] || return 2
+        (set -o noclobber; printf 'retired %s\n' "$identifier" > "$directory/retired") || return $?
+        sync -f -- "$directory/retired" "$directory" || return $?
+    done
+    deployment_effects_settled "$root"
 }
 
 deployment_begin_operation() {
@@ -322,7 +412,7 @@ deployment_begin_operation() {
             exec {deployment_query_lock}< "$operation_root"
             flock --nonblock "$deployment_query_lock" || return 2
         elif [[ -e $operation_root/intent || -L $operation_root/intent ]]; then
-            if deployment_effects_settled "$operation_root"; then
+            if deployment_effects_settled "$operation_root" || deployment_recover_known_helpers "$operation_root"; then
                 deployment_remove_operation "$operation_root" || return $?
                 mkdir -m 700 -- "$operation_root"
                 exec {deployment_query_lock}<&-
@@ -341,6 +431,7 @@ deployment_begin_operation() {
                 && $(stat -c '%u:%a' -- "$operation_root/complete") == "$caller_uid:600" ]] \
                 && cmp -s "$operation_root/complete" <(printf 'complete\n') \
                 || deployment_effects_settled "$operation_root" \
+                || deployment_recover_known_helpers "$operation_root" \
                 || { deployment_refuse 'the previous command has unresolved effects; preserve its current operation receipts before another mutation.'; return 2; }
             deployment_remove_operation "$operation_root" || return $?
         fi

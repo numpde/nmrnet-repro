@@ -1328,6 +1328,25 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       real 128-atom path proofs, interrupted-effect recovery, named cutover and legacy
       deletion remain required; neither live-model nor external API/GUI completion
       is claimed.</p>
+    <p><strong>T3 acknowledged-helper interruption recovery, 24 October 2026:</strong>
+      recovery now reuses the original private CID plus complete matching create
+      reply as cleanup authority, following <code>tools/worker_retirement.sh</code>'s
+      existing created-container owner. It never reruns or starts that helper.
+      Under one sixty-second recovery deadline it stops the exact old ID, confirms
+      stopped/non-restarting state, delivers bounded protected diagnostics, removes
+      that ID, confirms absence, then publishes the original retirement marker.
+      Removal fences a delayed start for that old ID. A failed log sink preserves
+      the stopped helper; failed stop/removal/absence preserves the original receipts.
+      No duplicate CLI parser, grant-policy copy or recovery-helper recursion was added.</p>
+    <p>Ten focused launcher/client tests pass, including original create-only or
+      started-helper receipts, successful retirement without another create/start,
+      independent stop/removal/absence/log failures, and retained missing replies.
+      Independent lifetime review found no further material issue in this bounded
+      correction. These synthetic Engine controls qualify host ownership logic;
+      delayed-request qualification against the installed Engine remains required.
+      Lost create replies still require original-name discovery/admission; persistent
+      runtime requests with missing replies still require their own settlement/fence.
+      This checkpoint does not close the complete interruption contract.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,
