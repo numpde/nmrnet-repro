@@ -1740,6 +1740,16 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       additional container, scientific operation or API request. Named production
       delivery, START resource ordering and safe superseded-bundle cleanup remain
       separate outstanding obligations.</p>
+    <p><strong>Settled command scratch, 24 October 2026:</strong> successful
+      deployment mutations now remove their own copied inputs and inspection
+      receipts after durable completion and successful next-action reporting.
+      Failed commands, failed reporting and original late-request restrictions
+      retain their receiving evidence. The tests-first regression failed on the
+      old retained scratch and passed after the change; all 35 focused contained
+      deployment tests passed. Independent review found no lost ownership or
+      evidence obligation. Attempt state, immutable bundles, runtime leaves,
+      containers and bounded Docker logs are outside this removal root.
+      Superseded-bundle and completed qualification cleanup remain separate work.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

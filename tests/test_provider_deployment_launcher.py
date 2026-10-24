@@ -17,6 +17,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_success_removes_only_settled_command_scratch(self):
+        for held in (False, True):
+            with self.subTest(held=held), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                operation = root / "mutation"
+                operation.mkdir(mode=0o700)
+                (operation / "copied-config").write_text("temporary input")
+                store = root / "attempts"
+                store.mkdir()
+                (store / "retained-attempt").write_text("durable work")
+                result = self.shell('''
+caller_uid=$(id -u) operation_root=$2 operation_established=true operation_owner=mutation
+deployment_name=fixture deployment_action=up deployment_recovery_observed=$3
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_diagnostic= deployment_primary_failure_receipt= deployment_additional_failure_receipt= pending_diagnostic=
+docker_client_cleanup() { :; }
+deployment_next_actions() { :; }
+deployment_finish
+''', operation, str(held).lower())
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(operation.exists(), held)
+                self.assertEqual((store / "retained-attempt").read_text(), "durable work")
+
     def test_finite_recovery_witness_retains_its_command_stop_and_join_owner(self):
         result = self.shell('''
 source "$1/tools/provider_recovery_qualification.sh"

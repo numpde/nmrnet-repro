@@ -601,6 +601,12 @@ deployment_finish() {
             fi
         fi
     fi
+    if [[ $status == 0 && $operation_owner == mutation && ${deployment_recovery_observed-false} != true ]]; then
+        # Successful control has no pending replay obligation. Keep actual
+        # containers, Docker logs and Attempt state; discard this command's
+        # copied inputs/inspection receipts after its completion is durable.
+        deployment_remove_operation "$operation_root" || status=$?
+    fi
     exit "$status"
 }
 
