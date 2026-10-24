@@ -5,9 +5,11 @@ import threading
 import unittest
 from contextlib import suppress
 from dataclasses import replace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
+from tests.fakes.attempt_inventory import response as inventory_response
+from tests.fakes.api import response_headers
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.service import ServiceFailed
@@ -18,9 +20,123 @@ from provider_core.attempt_request import start_body
 from provider_core.attempt_store import StoreRefused
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.recovery import AttemptRecovery
+from provider_core.publication import TerminalRecovery
 
 
 class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_during_startup_native_proof_terminal_send_and_backoff_retains_exact_pending_work(self):
+        for boundary in ("native", "send", "backoff"):
+            with self.subTest(boundary=boundary):
+                async with ServicePeers() as fixture:
+                    fixture.lose_completion = True
+                    original = fixture.service()
+                    with self.assertRaises(ServiceFailed):
+                        await original.run(fixture.stop)
+                    await original.settle()
+                    (pending,) = await fixture.store.records()
+                    before = len(fixture.api_peer.requests)
+                    fixture.stop = asyncio.Event()
+                    fixture.lose_completion = False
+                    fixture.stop_after_complete = False
+                    entered, release = asyncio.Event(), asyncio.Event()
+                    original_reply = fixture.api_peer.response_factory
+
+                    async def response(request, body):
+                        if b"/execution-attempts/complete " in request.split(b"\r\n", 1)[0]:
+                            if boundary == "send":
+                                entered.set()
+                                await release.wait()
+                            elif boundary == "backoff":
+                                fixture.api_peer.response_status = 503
+                                fixture.api_peer.response_headers = response_headers(status=503)
+                                return b"gateway unavailable"
+                        return await original_reply(request, body)
+
+                    async def retire_native():
+                        if boundary == "native":
+                            entered.set()
+                            await release.wait()
+
+                    fixture.api_peer.response_factory = response
+                    replacement = fixture.service(
+                        retire_native=retire_native,
+                        terminal_recovery=TerminalRecovery(10, lambda *_: entered.set(), Mock()),
+                    )
+                    task = asyncio.create_task(replacement.run(fixture.stop))
+                    try:
+                        await asyncio.wait_for(entered.wait(), 2)
+                        fixture.stop.set()
+                        if boundary == "native":
+                            await asyncio.wait_for(task, 2)
+                        else:
+                            with self.assertRaises(ServiceFailed):
+                                await asyncio.wait_for(task, 2)
+                        await replacement.settle()
+                        self.assertEqual(await fixture.store.records(), (pending,))
+                        claim = fixture.claims.claim_record(pending)
+                        claim.release()
+                        sent = [body for request, body in zip(
+                            fixture.api_peer.requests[before:], fixture.api_peer.request_bodies[before:], strict=True
+                        ) if b"/execution-attempts/complete " in request.split(b"\r\n", 1)[0]]
+                        self.assertEqual(sent, [] if boundary == "native" else [pending.body])
+                        self.assertEqual(len(fixture.allocations), 1)
+                        self.assertEqual(len(fixture.hellos), 1)
+                    finally:
+                        release.set()
+                        fixture.stop.set()
+                        await asyncio.gather(task, return_exceptions=True)
+                        await replacement.settle()
+
+    async def test_ordinary_restart_replays_retained_terminal_only_after_native_barrier(self):
+        async with ServicePeers() as fixture:
+            fixture.lose_completion = True
+            original = fixture.service()
+            with self.assertRaises(ServiceFailed):
+                await original.run(fixture.stop)
+            await original.settle()
+            (pending,) = await fixture.store.records()
+            self.assertIs(type(pending), TerminalPending)
+            before = len(fixture.api_peer.requests)
+            fixture.stop = asyncio.Event()
+            fixture.lose_completion = False
+            fixture.stop_after_complete = False
+            fixture.inventory_replies = [inventory_response(attempts=[], next_cursor=None)]
+            barrier = AsyncMock()
+
+            async def retire_native():
+                self.assertEqual(len(fixture.api_peer.requests), before)
+                self.assertEqual(len(fixture.allocations), 1)
+                await barrier()
+
+            replacement = fixture.service(retire_native=retire_native, on_started=fixture.stop.set)
+            await asyncio.wait_for(replacement.run(fixture.stop), 4)
+            await replacement.settle()
+            barrier.assert_awaited_once()
+            self.assertEqual(len(fixture.allocations), 1)
+            sent = [body for request, body in zip(fixture.api_peer.requests[before:], fixture.api_peer.request_bodies[before:], strict=True)
+                    if b"/execution-attempts/complete " in request.split(b"\r\n", 1)[0]]
+            self.assertEqual(sent, [pending.body])
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(len(fixture.hellos), 2)
+
+    async def test_failed_native_restart_barrier_makes_no_api_or_scientific_effect(self):
+        async with ServicePeers() as fixture:
+            original = fixture.service()
+            await original.run(fixture.stop)
+            await original.settle()
+            records = await fixture.store.records()
+            requests = tuple(fixture.api_peer.requests)
+            fixture.stop = asyncio.Event()
+            barrier = AsyncMock(side_effect=TimeoutError("Native proof remains unresolved"))
+            replacement = fixture.service(retire_native=barrier)
+            with self.assertRaises(ServiceFailed):
+                await replacement.run(fixture.stop)
+            await replacement.settle()
+            barrier.assert_awaited_once()
+            self.assertEqual(await fixture.store.records(), records)
+            self.assertEqual(tuple(fixture.api_peer.requests), requests)
+            self.assertEqual(len(fixture.allocations), 1)
+
     async def test_stop_during_full_window_archival_finishes_the_original_batch_and_restarts_without_repeating_science(self):
         for boundary in ("startup", "between_jobs"):
             with self.subTest(boundary=boundary):
@@ -271,7 +387,7 @@ class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         await asyncio.gather(task, return_exceptions=True)
                     await service.settle()
 
-    async def test_cancelled_terminal_recovery_keeps_the_original_request_without_another_job_or_automatic_retry(self):
+    async def test_cancelled_explicit_recovery_keeps_shared_claims_and_blocks_startup_until_release(self):
         async with SuccessiveServicePeers() as fixture:
             service = fixture.service()
             fixture.stack.push_async_callback(service.settle)
@@ -282,7 +398,7 @@ class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             records = await fixture.store.records()
             (pending,) = [record for record in records if type(record) is TerminalPending]
             (confirmed,) = [record for record in await fixture.retained_records() if type(record) is TerminalConfirmed]
-            claims = AttemptClaims().claim_records(records)
+            claims = fixture.claims.claim_records(records)
             pending_claim = claims[records.index(pending)]
             recovery = AttemptRecovery(fixture.api, fixture.store, pending_claim)
             fixture.recovery_release = asyncio.Event()
@@ -306,7 +422,7 @@ class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 fixture.stack.push_async_callback(replacement.settle)
                 with self.assertRaises(ServiceFailed) as caught:
                     await replacement.run(asyncio.Event())
-                self.assertIsInstance(caught.exception.cause, AdmissionHeld)
+                self.assertIsInstance(caught.exception.cause, OwnershipRefused)
                 await replacement.settle()
                 self.assertEqual(len(fixture.api_peer.requests), requests)
                 self.assertEqual(len(fixture.allocations), 2)

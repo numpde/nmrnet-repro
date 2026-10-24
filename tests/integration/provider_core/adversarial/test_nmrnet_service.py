@@ -27,6 +27,45 @@ from provider_core.transport import ExchangeFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_in_storage_after_read_retry_does_not_attach_the_previous_api_failure(self):
+        async with ServicePeers() as fixture:
+            reply = fixture.api_peer.response_factory
+            inventory = fixture.store.admission_inventory
+            entered = asyncio.Event()
+
+            async def unavailable(request, body):
+                if b"/execution-attempts?" in request.split(b"\r\n", 1)[0]:
+                    fixture.api_peer.response_status = 503
+                    fixture.api_peer.response_headers = response_headers(status=503)
+                    return b"gateway unavailable"
+                return await reply(request, body)
+
+            async def admission_inventory(*, owner):
+                if fixture.api_notices:
+                    entered.set()
+                    await asyncio.Event().wait()
+                return await inventory(owner=owner)
+
+            fixture.api_peer.response_factory = unavailable
+            service = fixture.service()
+            with patch.object(fixture.store, "admission_inventory", new=AsyncMock(side_effect=admission_inventory)):
+                task = asyncio.create_task(service.run(fixture.stop))
+                try:
+                    await asyncio.wait_for(entered.wait(), 2)
+                    retained = fixture.api.last_failure
+                    self.assertEqual(retained.status, 503)
+                    fixture.stop.set()
+                    await asyncio.wait_for(task, 2)
+                    await service.settle()
+                    self.assertIs(fixture.api.last_failure, retained)
+                    self.assertIsNone(service.last_failure)
+                    self.assertEqual(fixture.allocations, [])
+                    self.assertEqual(len(fixture.api_peer.requests), 1)
+                finally:
+                    fixture.stop.set()
+                    await asyncio.gather(task, return_exceptions=True)
+                    await service.settle()
+
     async def test_repeated_timing_refusals_remain_stop_responsive_without_science(self):
         for code in ("authentication_window_closed", "signature_expired"):
             for route in ("execution-attempts", "hello"):
@@ -206,7 +245,10 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(asyncio.CancelledError):
                     await task
                 self.assertIsInstance(service.last_failure.cause, asyncio.CancelledError)
-                self.assertIs(service.last_failure.cause, fixture.api.last_failure.cause.primary)
+                self.assertTrue(any(
+                    cause is fixture.api.last_failure.cause.primary
+                    for _operation, cause in service.last_failure.failures
+                ))
                 self.assertNotIn("PRIVATE", str(service.last_failure))
                 self.assertEqual(len(fixture.api_peer.requests), 1)
                 self.assertEqual(fixture.allocations, [])
@@ -399,7 +441,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                         await task
                 await service.settle()
 
-    async def test_lost_completion_preserves_exact_request_without_rerun_or_automatic_replay(self):
+    async def test_lost_completion_cannot_replay_before_native_retirement_is_proved(self):
         async with ServicePeers(maximum_records=1) as fixture:
             fixture.lose_completion = True
             service = fixture.service()
@@ -410,10 +452,12 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             (retained,) = await fixture.store.records()
             self.assertIsInstance(retained, TerminalPending)
             fixture.stop = asyncio.Event()
-            replacement = fixture.service()
+            barrier = AsyncMock(side_effect=TimeoutError("Native retirement is not proved"))
+            replacement = fixture.service(retire_native=barrier)
             with self.assertRaises(ServiceFailed) as caught:
                 await replacement.run(fixture.stop)
-            self.assertIsInstance(caught.exception.cause, AdmissionHeld)
+            self.assertIsInstance(caught.exception.cause, TimeoutError)
+            barrier.assert_awaited_once()
             await replacement.settle()
             complete_bodies = [
                 body

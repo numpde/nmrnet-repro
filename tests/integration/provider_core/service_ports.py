@@ -32,6 +32,7 @@ from provider_core.attempt_record import StartPending, TerminalConfirmed, Termin
 from provider_core.attempt_store import AttemptStore
 from provider_core.hello import AnalysisOffering
 from provider_core.job_input import verify_job_input
+from provider_core.publication import TerminalRecovery
 
 
 class ServicePeers(AdmissionPeers):
@@ -77,6 +78,13 @@ class ServicePeers(AdmissionPeers):
             "store": self.store,
             "api": self.api,
             "open_attempt": self.open_attempt,
+            "claims": self.claims,
+            "retire_native": AsyncMock(),
+            "terminal_recovery": TerminalRecovery(
+                policy.api_backoff_max_seconds,
+                lambda attempt, failure, seconds: self.api_notices.append(("retry", "terminal", failure, seconds, attempt.admission)),
+                lambda attempt, failure: self.api_notices.append(("recovered", "terminal", failure, attempt.admission)),
+            ),
             "current_announcement": lambda: self.snapshot,
             "policy": policy,
             "on_started": lambda: self.events.append("started"),

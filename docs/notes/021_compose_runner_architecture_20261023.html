@@ -2021,6 +2021,17 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       secrets directory excludes Qwen's key; the original private key remains
       retained. The existing Attempt store was preserved. This is configuration
       and startup evidence, not another scientific/API prediction witness.</p>
+    <p><strong>Subsequent production stability check:</strong> the fresh ready
+      observations above did not establish sustained operation. At 12:17–12:20 UTC
+      the provider's restart counter advanced from 10 to 14. Its bounded Docker
+      logs showed idle Attempt/Job-list failures caused by
+      <code>httpcore.ProxyError</code>, with no retained origin response head.
+      The API proxy's inspected tail reported forwarding
+      <code>BrokenPipeError</code>/<code>EPIPE</code>; that does not establish the
+      original connection or DNS cause. Store metadata showed the earlier history
+      file and no active record. No reset, record deletion, further Job or blind
+      restart was used for this diagnosis. Production is therefore unstable at
+      this checkpoint, despite the earlier actual prediction and startup proof.</p>
     <p><strong>Next ownership sequence: ordinary terminal restart recovery.</strong>
       Before archive, fresh admission or Hello, the already-open store must admit
       its complete inventory as only <code>TerminalPending</code> or
@@ -2073,6 +2084,29 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       during backoff with the pending record and original failure preserved.
       Independent ownership and maintenance reviews found no issue. Startup must
       still establish native retirement before selecting this policy.</p>
+    <p><strong>Ordinary startup recovery connected:</strong> service startup now
+      reads and claims the complete admitted terminal inventory, establishes all
+      native barriers through the factory, and replays pending bytes through the
+      same retained recovery/publication owners before archive, Hello or fresh
+      admission. Startup uses the cancellable work-task lane; shutdown joins it,
+      settles its exact recovery and releases only unborrowed claims. No new
+      lifecycle registry, scientific reconstruction or inference path was added.</p>
+    <p>Focused contained service 52 and foreground/receiving process 65 checks
+      passed. New controls cover ordinary exact terminal replay with no second
+      scientific allocation, native proof refusal before API effects, and stop
+      during proof, terminal send and retry backoff. Existing mixed/corrupt and
+      unknown-work holds remain. Earlier manual-only startup expectations now
+      exercise the actual shared claim exclusion or unconfirmed native barrier;
+      their source/output identity and no-repeat assertions remain.</p>
+    <p>Independent review caught a stale-cause risk introduced by retaining
+      startup in its own task: cancelling a later storage read could inherit a
+      previous API 503. The read owner now links only a newly installed API failure
+      and preserves an existing cause. Its regression checks clean stop during
+      storage after API retry. Hello retains its separate uncertainty report and
+      clean shutdown behavior; actual child API cancellation remains visible
+      alongside caller interruption. These are composition/diagnostic proofs;
+      the new recovery code has not yet been installed in production or used to
+      repeat a scientific witness.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker

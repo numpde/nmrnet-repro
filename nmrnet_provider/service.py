@@ -18,10 +18,14 @@ from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from nmrnet_provider.admission import AdmissionPolicy, archive_confirmed_history, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, archive_confirmed_history, read_terminal_recovery_inventory, require_admission_ready, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
+from provider_core.attempt_record import TerminalConfirmed, TerminalPending
 from provider_core.hello import AnalysisOffering
+from provider_core.ownership import AttemptClaims
+from provider_core.publication import TerminalRecovery
+from provider_core.recovery import AttemptRecovery
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +125,9 @@ class ProviderService:
         store,
         api,
         open_attempt,
+        claims,
+        retire_native,
+        terminal_recovery,
         current_announcement,
         policy,
         on_started,
@@ -129,13 +136,17 @@ class ProviderService:
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
-                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered)
+                callable, (open_attempt, retire_native, current_announcement, on_started, on_api_retry, on_api_recovered)
             )
         ):
             raise ValueError(
                 "Cannot configure NMRNet service: explicit policy, allocation factory, announcement supplier and lifecycle/diagnostic callbacks are required."
             )
+        if type(claims) is not AttemptClaims or type(terminal_recovery) is not TerminalRecovery:
+            raise ValueError("NMRNet service requires the shared Attempt claims and an explicit terminal recovery policy.")
         self.config, self.store, self.api = config, store, api
+        self._claims, self._retire_native, self._terminal_recovery = claims, retire_native, terminal_recovery
+        self._recovery_claims, self._recovery = (), None
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self.policy = policy
@@ -166,7 +177,7 @@ class ProviderService:
         cancellation = None
         clean = False
         try:
-            if not stop.is_set() and await self._startup():
+            if not stop.is_set() and await self._await_startup():
                 self._hello_task = self._start_task(self._hello_loop())
                 self.work_task = self._start_task(self._work_loop())
                 await self._watch()
@@ -192,7 +203,22 @@ class ProviderService:
         if self.last_failure is not None:
             raise self.last_failure from None
 
+    async def _await_startup(self):
+        # Startup may wait for publication availability. Keep its original task
+        # in the same cancellable lane as ordinary work, not maintenance.
+        self.work_task = self._start_task(self._startup())
+        stopped = asyncio.create_task(self._stop.wait())
+        try:
+            await asyncio.wait({self.work_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            return self.work_task.result() if self.work_task.done() else False
+        finally:
+            stopped.cancel()
+            await asyncio.gather(stopped, return_exceptions=True)
+
     async def _startup(self):
+        await self._recover_retained()
+        if self._stop.is_set():
+            return False
         await self._archive_completed()
         await self._read_until_available(self._admission)
         if self._stop.is_set():
@@ -202,6 +228,48 @@ class ProviderService:
             return False
         self._on_started()
         return not self._stop.is_set()
+
+    async def _recover_retained(self):
+        records = await read_terminal_recovery_inventory(
+            self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
+        )
+        if not records:
+            return
+        self._recovery_claims = self._claims.claim_records(records)
+        await self._retire_native()
+        for record, claim in zip(records, self._recovery_claims, strict=True):
+            if self._stop.is_set():
+                break
+            if type(record) is TerminalPending:
+                self._recovery = AttemptRecovery(
+                    self.api, self.store, claim, terminal_recovery=self._terminal_recovery
+                )
+                try:
+                    outcome = await self._recovery.recover(record)
+                except asyncio.CancelledError as cause:
+                    if self._recovery.last_failure is not None:
+                        raise cause from self._recovery.last_failure
+                    raise
+                if type(outcome) is not TerminalConfirmed:
+                    raise AdmissionHeld(
+                        "Retained terminal recovery did not confirm the outcome. Preserve its disposition before admitting new work."
+                    )
+                self._recovery = None
+        self._release_recovery_claims()
+
+    def _release_recovery_claims(self):
+        if any(claim.operation_owner is not None for claim in self._recovery_claims):
+            raise ServiceRefused("Retained startup recovery still owns I/O; settle its exact operation before releasing claims.")
+        for claim in self._recovery_claims:
+            claim.release()
+        self._recovery_claims = ()
+
+    async def _settle_recovery(self):
+        if self._recovery is not None:
+            if self._recovery.claim.operation_owner is not None:
+                await self._recovery.settle()
+            self._recovery = None
+        self._release_recovery_claims()
 
     async def _archive_completed(self):
         if self._stop.is_set():
@@ -261,8 +329,18 @@ class ProviderService:
         """
         delay, outage = self.policy.idle_seconds, None
         while not self._stop.is_set():
+            previous_failure = api.last_failure
             try:
                 result = await operation()
+            except asyncio.CancelledError as cause:
+                if (
+                    api is self.api and cause.__cause__ is None
+                    and api.last_failure is not None and api.last_failure is not previous_failure
+                ):
+                    # Startup reads now run in a retained child task. Preserve
+                    # its new interruption; Hello has its own uncertainty output.
+                    raise cause from api.last_failure
+                raise
             except ApiFailure as failure:
                 try:
                     await api.retire(owner=self)
@@ -407,6 +485,7 @@ class ProviderService:
             failures.append(failure)
         if (self.work_task is None or self.work_task.done()) and self._maintenance_task is None:
             for operation, function in (
+                ("startup terminal recovery settlement", self._settle_recovery),
                 ("Attempt settlement", lambda: self._settle_controller(retry=retry_settlement)),
                 ("execution API retirement", self._retire_api),
                 ("preflight storage settlement", self._settle_store),

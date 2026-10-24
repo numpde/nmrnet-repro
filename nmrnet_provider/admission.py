@@ -19,7 +19,7 @@ import secrets
 from dataclasses import dataclass
 
 from nmrnet_provider.config import ANALYSIS_KIND_REF, ProviderConfig
-from provider_core.attempt_record import StartPending, TerminalConfirmed
+from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalPending
 from provider_core.attempt_request import start_body
 from provider_core.paging import paging_query
 
@@ -88,6 +88,25 @@ async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
     for record in records:
         await store.archive_confirmed(record, owner=owner)
     return len(records)
+
+
+async def read_terminal_recovery_inventory(config, api, store, *, policy, owner, stop):
+    """Admit the complete stopped inventory before native or publication effects.
+
+    Pending terminal bytes may be replayed after physical retirement proof.
+    Unknown entered work and every other unresolved disposition still require
+    explicit reconciliation; they cannot be skipped to recover a neighbor.
+    """
+    _require_store_context(config, api, store, policy, owner)
+    records = await store.records(owner=owner)
+    if stop.is_set():
+        return ()
+    if any(type(record) not in (TerminalPending, TerminalConfirmed) for record in records):
+        raise AdmissionHeld(
+            "Cannot recover NMRNet startup automatically: retained Attempt obligations require explicit recovery. "
+            "Only pending terminal results and confirmed receipts can resume automatically; preserve the complete inventory."
+        )
+    return records
 
 
 async def require_admission_ready(config, api, store, *, policy, owner):

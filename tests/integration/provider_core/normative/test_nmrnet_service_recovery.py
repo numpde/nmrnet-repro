@@ -21,6 +21,7 @@ from provider_core.attempt_files import history_directory_name, record_name
 from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed, StartRecovery, TerminalRecovery
+from provider_core.ownership import OwnershipRefused
 from provider_core.publication import PublicationFailed
 
 
@@ -284,12 +285,17 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             await fixture.reopen_store()
             self.assertEqual(await fixture.retained_records(), records)
             requests = len(fixture.api_peer.requests)
+            explicit_claims = fixture.claims.claim_records(await fixture.store.records())
             blocked = fixture.service()
             fixture.stack.push_async_callback(blocked.settle)
-            with self.assertRaises(ServiceFailed) as refused:
-                await blocked.run(asyncio.Event())
-            self.assertIsInstance(refused.exception.cause, AdmissionHeld)
-            await blocked.settle()
+            try:
+                with self.assertRaises(ServiceFailed) as refused:
+                    await asyncio.wait_for(blocked.run(asyncio.Event()), 3)
+                self.assertIsInstance(refused.exception.cause, OwnershipRefused)
+                await blocked.settle()
+            finally:
+                for claim in explicit_claims:
+                    claim.release()
             self.assertEqual(len(fixture.api_peer.requests), requests)
             self.assertEqual(len(fixture.allocations), 2)
 
