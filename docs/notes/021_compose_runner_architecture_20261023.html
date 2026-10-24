@@ -1764,8 +1764,12 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       inventory-failure, stopped-reference and unsafe-candidate controls. Independent
       ownership review found no issue. Cleanup errors report the deployment action
       as completed while retaining original operation receipts. These are source
-      checks; actual pruning of retained local generations is recorded separately
-      when observed.</p>
+      checks. The maintained idempotent <code>provider/deployment/up</code> was
+      then exercised against the healthy local stack: it requested no role starts,
+      kept <code>generation-HZlSw8Un</code> selected and running, removed the
+      unreferenced failed-cutover input copy <code>generation-GYcTeKGk</code>, and
+      left no settled mutation scratch. No new Job or scientific operation was
+      requested for this cleanup.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,
