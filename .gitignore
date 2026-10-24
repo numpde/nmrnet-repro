@@ -4,6 +4,9 @@
 !/config/deployments/nmr-dapp32-com/
 /config/deployments/nmr-dapp32-com/*
 !/config/deployments/nmr-dapp32-com/provider.toml
+!/config/deployments/nmr-localhost/
+/config/deployments/nmr-localhost/*
+!/config/deployments/nmr-localhost/provider.toml
 /secrets/
 __pycache__/
 *.py[cod]

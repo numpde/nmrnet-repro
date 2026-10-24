@@ -1,0 +1,97 @@
+schema_id = "nmrnet.provider.runtime_config.v1"
+
+# Local API definition, adapted from nmr-dapp32-com at 654eef9cef6cba2297e905d46129cd1777643b54. Logical input/store paths are bound by
+# make provider/deployment/install; machine-local paths stay in deployment.toml.
+# Public API/layout precedent: magnet-deploy 0619d9ffd92a4326758b442c532aa09496161098,
+# config/deployments/nmr-dapp32-com/provider.toml and scripts/provider-deployment.sh.
+# Interpreter settings were copied from private deployment inputs; Git does not
+# identify those ignored files. Their source paths are retained privately.
+[api]
+origin = "https://nmr.localhost:10443"
+profile = "dev-local"
+topology = "dev-local"
+provider_ref = "provider:nmrnet-fw-a"
+credential_file = "/srv/nmrnet/input/signing.private.json"
+ca_file = "/srv/nmrnet/input/api-ca.crt"
+exchange_seconds = 10
+retirement_seconds = 5
+
+[interpreter]
+max_turns = 6
+
+[[interpreter.endpoints]]
+configuration_id = "qwen3.8-flash-next"
+url = "https://chat.randompile.net/api/chat/completions"
+model = "qwen3.8-flash-next"
+key_file = "/srv/nmrnet/input/qwen.key"
+request_bytes = 65536
+response_bytes = 262144
+exchange_seconds = 25
+retirement_seconds = 5
+reasoning_effort = "medium"
+
+[[interpreter.endpoints]]
+configuration_id = "openai-gpt-5-6-luna"
+url = "https://api.openai.com/v1/chat/completions"
+model = "gpt-5.6-luna"
+key_file = "/srv/nmrnet/input/openai.key"
+request_bytes = 65536
+response_bytes = 262144
+exchange_seconds = 25
+retirement_seconds = 5
+reasoning_effort = "none"
+
+[uploads]
+store_origin = "https://nmr.localhost:10443"
+per_source_bytes = 1048576
+total_bytes = 2097152
+requests = 8
+seconds = 300
+exchange_seconds = 10
+retirement_seconds = 5
+
+[preparation]
+seed = 17
+max_iterations = 200
+timeout_seconds = 1
+generation_seconds = 5
+max_worker_calls = 2
+seconds = 240
+
+[lifecycle]
+consumer_id = "lane:nmrnet-fw-a"
+generation_id = "generation:nmrnet-fw-a-run"
+store_root = "/srv/nmrnet/attempts"
+maximum_records = 2
+confirmed_history_records = 64
+filesystem_reserve_bytes = 1073741824
+store_seconds = 10
+allowed_job_states = ["open"]
+poll_seconds = 2
+task_settle_seconds = 10
+observation_gap_seconds = 60
+start_retry_window_seconds = 30
+
+[service]
+display_name = "NMRNet++"
+description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"
+offering_description = """
+Predict per-atom 1H and 13C chemical shifts (ppm) with NMRNet++. Provide 3D coordinates with units, select structures from an attached structure file, or give SMILES with a conformer count.
+
+Each geometry is predicted separately; conformers are not averaged. Supplied structures keep atom order; H shifts require supplied H coordinates, and missing H atoms are not added. SMILES preparation generates coordinates and makes implicit hydrogens explicit. Atom numbering starts at 0; mappings identify input atoms and added hydrogens.
+
+Request verbosity: low for shifts and atom mapping; medium (default) also returns the coordinates used for prediction; max adds a record of the software files used for reproducibility checks. All levels retain warnings and scientific limitations.
+
+Shifts default to 4 significant digits; request 1-17. Extra digits do not imply greater accuracy. Verbosity and rounding leave prediction settings unchanged.
+
+Scientific guide: https://numpde.github.io/nmrnet-repro/"""
+page_size = 100
+maximum_pages = 10
+idle_seconds = 2
+api_backoff_max_seconds = 30
+hello_seconds = 60
+drain_seconds = 120
+settle_seconds = 10
+allocation_seconds = 30
+prediction_seconds = 90
+source_seconds = 10
