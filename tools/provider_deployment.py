@@ -28,7 +28,7 @@ from nmrnet_provider.deployment import admit_container, compose_bytes, inventory
 from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.process import _declared_models
 from nmrnet_provider.process_reports import failure_evidence
-from nmrnet_provider.startup_capture import _bind_path, _host_plan, _source_path
+from nmrnet_provider.startup_capture import _bind_path, _source_path
 from provider_core.response_json import ResponseRejected, read_document
 from tools.artifacts import fsync_directory
 
@@ -136,7 +136,6 @@ def freeze_deployment(definition, settings, secrets, bundle, native_capture, mod
         return read_startup_file(_source_path(value, bundle), **limits)
 
     config = _read_provider_config(path, read_frozen)
-    _host_plan(config, bundle, path)
     if store.is_relative_to(bundle) or bundle.is_relative_to(store):
         raise ConfigurationRejected("the deployment Attempt store must remain separate from its frozen input bundle.")
     capture_execution(native_capture, bundle, **identities)
@@ -399,7 +398,7 @@ def main(arguments=None):
         else:
             inspect_deployment(**values)
     except (ConfigurationRejected, OSError) as failure:
-        # Same protected Docker-stderr projection as startup_capture.main:
+        # Protected Docker-stderr projection for this finite receiving boundary:
         # preserve owned causal evidence without arbitrary exception stringify.
         sys.stderr.write(json.dumps(failure_evidence(failure, secrets=())) + "\n")
         return 2

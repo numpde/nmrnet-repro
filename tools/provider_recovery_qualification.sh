@@ -51,7 +51,7 @@ recovery_witness_finish() {
 
 recovery_witness_main() {
     if (( $# != 0 )) || [[ $(id -u) == 0 || $(id -g) == 0 ]]; then
-        printf '%s\n' 'Use make test/integration/provider-service/recovery as a nonroot caller; this fixed local fixture accepts no selectors.' >&2
+        printf '%s\n' 'Use make test/integration/provider/deployment/store-recovery as a nonroot caller; this fixed local fixture accepts no selectors.' >&2
         return 2
     fi
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -61,7 +61,7 @@ recovery_witness_main() {
     local scratch fixture namespace config source_root state selector authority print_command=false controller_image path
     scratch=$(mktemp -d /tmp/nmrnet-recovery-service.XXXXXXXX)
     provider_host_root=$scratch/fixture-owner
-    provider_host_diagnostic= provider_host_drain_seconds=10 provider_host_recovery_mode=service
+    provider_host_diagnostic= provider_host_drain_seconds=10 provider_host_recovery_mode=
     provider_host_initialize || return $?
     foreground_pid= foreground_signalled=false api_deployment_active=false
     trap recovery_witness_finish EXIT
@@ -70,8 +70,8 @@ recovery_witness_main() {
     source "$repository_root/tools/provider_image.sh"
     require_provider_image
     controller_image=$provider_image_id
-    local -a source_files=(Makefile tools/provider_recovery_qualification.sh tools/provider.sh
-        tools/provider_api_qualification.sh tools/provider_image.sh tools/provider_workers.sh tools/provider_logging.sh
+    local -a source_files=(Makefile tools/provider_recovery_qualification.sh tools/provider_recovery.sh tools/provider.sh
+        tools/provider_api_qualification.sh tools/provider_image.sh tools/provider_logging.sh
         tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh
         requirements/provider-core.lock requirements/provider-core-build.lock .work/provider/image-id
         tools/provider_deployment.sh tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh

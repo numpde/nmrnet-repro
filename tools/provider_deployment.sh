@@ -974,7 +974,7 @@ deployment_main() {
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     caller_uid=$(id -u) caller_gid=$(id -g)
     deployment_action=${1-} deployment_name=${NMRNET_DEPLOYMENT_INPUT-}
-    [[ $# == 1 && $deployment_action =~ ^(install|up|status|logs|down)$ ]] || { printf '%s\n' 'Use make provider/deployment/{install,up,status,logs,down} DEPLOYMENT=<name>.' >&2; return 2; }
+    [[ $# == 1 && $deployment_action =~ ^(install|up|status|logs|down)$ ]] || { printf '%s\n' 'Run make help for supported provider/deployment commands.' >&2; return 2; }
     [[ $deployment_name =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || { deployment_refuse 'supply an explicit DEPLOYMENT name, up to 48 letters, digits, underscores or hyphens.'; return 2; }
     [[ $caller_uid != 0 && $caller_gid != 0 ]] || { deployment_refuse 'run as the nonroot deployment owner.'; return 2; }
     [[ $repository_root != *','* && $repository_root != *$'\n'* && $repository_root != *$'\r'* ]] || { deployment_refuse 'the checkout path contains an unsupported bind delimiter.'; return 2; }

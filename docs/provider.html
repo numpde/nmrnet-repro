@@ -166,7 +166,10 @@ using this repository's existing interface-bound proxy instead of an ambient hos
 name override. A configured launch profile is distinct from a completed API run.</p>
 <h2 id="persistent-user-service">Persistent deployment</h2>
 <p>A named deployment uses Docker Compose and <code>unless-stopped</code> restart
-policy. The host command finishes after admission and current readiness; no host
+policy. Its seven containers are the provider, three serial native runners
+(prediction, structure reader and conformer generator), and three proxies
+(API, interpreter and Upload access). The up command finishes after checking
+their configuration and current readiness; no host
 process pumps native requests. Docker must itself start after a host reboot.
 Keep the public provider definition in
 <code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
@@ -185,16 +188,23 @@ make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
 make provider/deployment/down DEPLOYMENT=&lt;name&gt;
 </code></pre>
-<p>Install freezes a new input generation and selects it only after the contained
-checks pass. It refuses live work owned by an earlier generation. Up admits the
-actual Engine grants, starts proxies and serial native runners before the
+<p>Install runs short-lived offline validation containers, freezes a new input
+generation and selects it only after those checks pass. It does not start the
+seven runtime containers. It refuses live work owned by an earlier generation.
+Next, run up: it checks actual images, mounts, isolation and resource limits
+against the frozen definition, then starts proxies and serial native runners before the
 provider, and waits for current readiness. Provider readiness includes an accepted
 API Hello; it does not establish scientific accuracy or successful model
-interpretation. Repeated up observes an already-running stack. Down stops the
+interpretation. The ready provider then polls for matching Jobs. Use status/logs
+to inspect it. Repeated up observes an already-running stack; after down, up
+restarts matching stopped containers. Down stops the
 provider first, native runners second and proxies last, retaining containers,
 Attempt state and bounded logs.</p>
-<p>After an interrupted Engine request, keep the original private operation
-receipts. A later command reconciles that request before new effects. An unknown
+<p>After an interrupted Docker request, keep the original private control receipts
+under <code>secrets/deployments/&lt;name&gt;/operation/</code>. Use status to inspect,
+then repeat the intended install, up or down command; it reconciles the original request
+before new effects and refuses when it cannot establish safe control. If up
+reports a partially running stack, run down before retrying up. An unknown
 start/stop is not settled by a snapshot alone; opposing control must fence its
 exact old container ID. If the command refuses, inspect the protected diagnostic
 paths it prints. Do not delete those receipts to force a retry. Architecture,
@@ -252,7 +262,7 @@ Neither command starts science, deletes records or automatically retries a failu
 Unsettled original I/O keeps its owner and lock held for exact host retirement.</p>
 <p><code>local_obligations_settled = true</code> means local records are confirmed; ordinary
 startup must still pass storage capacity and provider-wide API admission.
-The isolated regression is <code>make test/integration/provider-service/recovery</code>:
+The isolated regression is <code>make test/integration/provider/deployment/store-recovery</code>:
 synthetic loopback TLS, one exact completion replay and empty-discovery restart,
 with no real credentials, Jobs, model calls or scientific work.
 See the <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/recovery.py">recovery entrypoint</a> and
@@ -618,7 +628,7 @@ fence an independently deployed provider. Source:
 the same pinned progress PUT recovery contract above.</p>
 <p>Native prediction can recover once within the same Attempt. After an admitted
 prediction fails or its response is lost, the provider confirms exact old-worker
-retirement, local channel closure and host capacity handoff before allocating a
+retirement, scratch release and local channel closure before acquiring a
 replacement. The replacement prepares the same ordered geometry bytes with a new
 worker-local token and must report the original runtime. Existing result checks
 still verify the complete batch and selected artifacts.</p>
@@ -633,14 +643,15 @@ unconfirmed cleanup remain operational failures with both causes retained for
 stopped recovery. Resource limits and model selection remain fixed. The policy
 is implemented by <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>, using the
 existing <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/allocation.py"><code>WorkerAllocation</code></a> retirement owners.</p>
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_session.py"><code>NativeOperation</code></a> retirement owners.</p>
 <p>The opt-in offline target
 <code>make test/integration/provider/prediction-recovery</code> forces a real kernel OOM in
-a synthetic 64 MiB worker, then checks unchanged requests, one replacement and
-both retirement/archive handoffs. It uses the recorded provider image and loads
-no released models. This establishes allocation/session recovery, not model
+a synthetic child under the fixed 512 MiB runner profile, then checks unchanged
+requests, one replacement, the original reap receipt and settled scratch/channel
+ownership in the same runner generation. It uses the recorded provider image and loads
+no released models. This establishes synthetic kernel-OOM and serial-runner recovery, not model
 memory capacity, GPU behavior or numerical equivalence. Precise source/image and
-retained evidence hashes are in <a href="notes/017_provider_core_plan_20261018.html">note 017</a>.</p>
+retained evidence hashes are in <a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>.</p>
 <p>The Job's own <code>preparation.seconds</code> limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure
 <code>input_selection_time_limit</code>. Protected evidence retains the configured limit,
@@ -681,58 +692,42 @@ attribution and owned guidance for unclear units, conformer count or Upload reco
 selection. Its freeform explanation stays in protected evidence. An operational
 science error keeps its original cause and sends neither a failure nor a completion.
 This does not qualify GUI presentation or an operator diagnostic renderer.</p>
-<p>The native service lanes use the production factory and worker entrypoints:</p>
+<p>The maintained Compose connection checks use the production factory and
+installed serial runners with local signed API peers and scripted interpretation:</p>
 <ul>
-<li><code>make test/integration/provider-service/uploads</code>: XYZ Upload records 2,1, with
-  exact source/atom/coordinate correspondence and H-only versus H/C prediction.</li>
-<li><code>make test/integration/provider-service/pasted</code>: the interpreter-supplied nm
-  table, with its independent binary64 conversion bound in angstroms.</li>
-<li><code>make test/integration/provider-service/smiles</code>: CCCC with three generated
-  conformers, the fixed atom/hydrogen-parent oracle and exact downstream coordinates.</li>
-<li><code>make test/integration/provider-service/references</code>: four original validation
-  inputs through the Upload service, matching all 137 predictions and the original
-  64 reference positions exactly, with source and request identities retained.</li>
-<li><code>make test/integration/provider-service/capacity</code>: synthetic H128/C128 inputs
-  through the same service, with all 256 atom-index/nucleus outputs and measured
-  container CPU usage and peak memory. This tests capacity, not chemistry.</li>
+<li><code>make test/integration/provider/deployment</code>: the supplied chloromethane
+nm table, independent binary64 unit-conversion bound and complete finite H/C rows.</li>
+<li><code>make test/integration/provider/deployment/references</code>: all four original
+validation inputs, with exact decoded predictions against the pinned CPU packets
+(137 full outputs and the original 64 reference positions). This test requests
+17 digits to preserve binary64 round trips; it does not change product defaults.</li>
+<li><code>make test/integration/provider/deployment/capacity</code>: synthetic H128/C128
+inputs and all 256 indexed outputs. This tests capacity, not chemical accuracy.</li>
+<li><code>make test/integration/provider/deployment/successive</code>: two distinct Jobs
+in one service process, then restart without a third scientific execution.</li>
+<li><code>make test/integration/provider/deployment/recovery</code>: lost Engine replies,
+old-ID fencing and an installed reader-supervisor crash without scientific input.</li>
+<li><code>make test/integration/provider/deployment/store-recovery</code>: credential-free
+inspection, one exact retained result replay and Compose startup against that same
+store. The original confirmation must survive byte-for-byte in private history.</li>
 </ul>
-<p>The host creates prediction and reader/generator containers only after signed
-admission/discovery, enforces fixed offline profiles, and confirms exact-container
-retirement and IPC release. Each lane executes science once and recovers a lost
-completion acknowledgement by replaying retained bytes after reopening storage.
-Its receipt also records periodic Hello exchanges.
-Resource observations retain each native role/allocation after exact retirement,
-plus the controller after replay and peer cleanup. Exported input fixtures also
-retain their separate producer observation. These are per-container observations
-through their sampling instants, not full-lifetime or simultaneous aggregate peaks.
-API/store and interpreter peers are local scripted fixtures. These lanes verify
-local service composition. Recorded API experiments and their exact evidence
-identities are kept in <a href="notes/003_nmr_api_provider_20261018.html">note 003</a>.</p>
-<p><code>make test/unit/provider/allocation</code> checks request publication, cancellation,
-late retirement, exact-CID ownership and exclusive host roots with a recording
-engine. <code>make test/integration/provider-core/native-factory</code> checks successive
-Attempt/source handoffs without retained factory references, original cancellation
-causes and later settlement of held setup or channel closure. Host startup requires
-a fresh installation root; retain prior allocation evidence for stopped inspection.
-It does not erase evidence or retry uncertain creates.</p>
-<p><code>MAXIMUM_NATIVE_REQUESTS</code> bounds active native request leaves. After an adopted
-channel closes, its original setup settles and exact host retirement is confirmed,
-the client acknowledges consumption. The host preserves its original request and
-worker diagnostic trees in <code>INSTALLATION_ROOT/native/history/&lt;token&gt;/</code>, keeps
-receipts at <code>native/receipts/&lt;token&gt;/</code>, and confirms the archive before the client
-releases that handoff. This renews the active slot without repeating native work.
-Failed or unadopted factory setup leaves its evidence unconsumed for stopped
-inspection. A partial transfer or uncertain receipt holds renewal and retains the
-original owners; it does not authorize another create.</p>
-<p>After confirmed Attempt archival, the service awaits the host's native-history
-release acknowledgement before admitting more work. Only known, completely
-retired archives are removed; partial or unknown release evidence blocks new
-admission. Preserve evidence needed for longer scientific reproduction outside
-that expiring history first. Its filesystem may differ from the Attempt store's
-and has no separate configured free-space reserve or quota. These directory
-operations establish no power-loss guarantee; fsynced Attempt records retain
-their separate storage contract. Qualification capsules identify the exact
-scientific/resource/control evidence they retained.</p>
+<p>Prediction, supplied-geometry reading and SMILES generation each have a persistent
+serial runner. Each operation gets a fresh child and private scratch. The native
+supervisor owns child termination, reaping and scratch cleanup. A stable lease and
+correlated generation/operation identify that ownership; a socket closing or a
+container becoming ready alone does not prove it retired.</p>
+<p><code>make test/integration/provider-core/native-factory</code> checks Attempt/source
+handoffs without retained factory history and settlement of interrupted setup.
+<code>make test/integration/provider-core/runner</code> checks the actual native
+connection, cancellation and lost-control retirement. There is no host per-Job
+request pump, request counter or consumption/archive handshake. Durable Attempt
+records and confirmed history retain their separate storage contract.</p>
+<p>These are local composition checks, not live-model or API/GUI qualification.
+The source/image identities, unchanged scientific inputs, result hashes and limits
+are recorded in <a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>
+and its linked evidence packets. Earlier host-allocation experiments remain
+historical in <a href="notes/003_nmr_api_provider_20261018.html">note 003</a>;
+their removed launch commands are not the current workflow.</p>
 <h2 id="check-the-interpreters-file-format-choices">Check the interpreter's file-format choices</h2>
 <p><code>provider/qualify/interpreter/formats</code> sends three fixed requests to the selected
 real model: one MOL structure, PDB models 2 then 1, and MOL2 records 2 then 1.

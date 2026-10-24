@@ -245,8 +245,8 @@ test/integration/provider-core/native-factory:
 .PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
 .PHONY: test/integration/provider-service/references
 .PHONY: test/integration/provider-service/formats
-.PHONY: test/integration/provider-service/recovery
-test/integration/provider-service/recovery:
+.PHONY: test/integration/provider/deployment/store-recovery
+test/integration/provider/deployment/store-recovery:
 	bash tools/provider_recovery_qualification.sh
 
 test/integration/provider-service/formats:
@@ -343,7 +343,7 @@ unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport WHEELHOUSE
 override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin WHEELHOUSE)),$(value WHEELHOUSE))
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
-unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
+unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
 unexport LOG_LEVEL
 unexport DEPLOYMENT
@@ -352,7 +352,7 @@ unexport UPLOAD_RECEIPT
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
 unexport FORMAT_CASES
-unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
+unexport API_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
@@ -367,13 +367,10 @@ override export NMRNET_CONFIG_INPUT := $(if $(filter command line,$(origin CONFI
 override export NMRNET_SOURCE_ROOT_INPUT := $(if $(filter command line,$(origin SOURCE_ROOT)),$(value SOURCE_ROOT))
 override export NMRNET_INSTALLATION_ROOT_INPUT := $(if $(filter command line,$(origin INSTALLATION_ROOT)),$(value INSTALLATION_ROOT))
 override export NMRNET_MAXIMUM_STARTUP_BYTES_INPUT := $(if $(filter command line,$(origin MAXIMUM_STARTUP_BYTES)),$(value MAXIMUM_STARTUP_BYTES))
-override export NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT := $(if $(filter command line,$(origin MAXIMUM_NATIVE_REQUESTS)),$(value MAXIMUM_NATIVE_REQUESTS))
 override export NMRNET_HOST_DRAIN_SECONDS_INPUT := $(if $(filter command line,$(origin HOST_DRAIN_SECONDS)),$(value HOST_DRAIN_SECONDS))
 override export NMRNET_RECORD_SHA256_INPUT := $(if $(filter command line,$(origin RECORD_SHA256)),$(value RECORD_SHA256))
 override export NMRNET_FORMAT_CASES_INPUT := $(if $(filter command line,$(origin FORMAT_CASES)),$(value FORMAT_CASES))
 override export NMRNET_API_ROUTE_INPUT := $(if $(filter command line,$(origin API_ROUTE)),$(value API_ROUTE))
-override export NMRNET_INTERPRETER_ROUTE_INPUT := $(if $(filter command line,$(origin INTERPRETER_ROUTE)),$(value INTERPRETER_ROUTE))
-override export NMRNET_STORE_ROUTE_INPUT := $(if $(filter command line,$(origin STORE_ROUTE)),$(value STORE_ROUTE))
 override export NMRNET_LOCAL_NETWORK_INPUT := $(if $(filter command line,$(origin LOCAL_NETWORK)),$(value LOCAL_NETWORK))
 override export NMRNET_LOCAL_INTERFACE_INPUT := $(if $(filter command line,$(origin LOCAL_INTERFACE)),$(value LOCAL_INTERFACE))
 override export NMRNET_LOCAL_PEERS_INPUT := $(if $(filter command line,$(origin LOCAL_PEERS)),$(value LOCAL_PEERS))
@@ -434,7 +431,6 @@ help:
 		'make test/integration/provider/deployment/successive Run two distinct Jobs through one service, then check restart without replay (opt-in).' \
 		'make test/integration/provider/deployment/recovery Check lost Engine replies, startup recovery and fenced replacement without scientific work (opt-in).' \
 		'make test/unit/provider/deployment     Check private deployment bundles and successive refreshes offline.' \
-		'make provider/run                      Run the provider service with explicit host and route configuration.' \
 		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
 		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
@@ -480,7 +476,7 @@ help:
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
 		'make test/integration/provider-service/formats Check supplied-format cases; FORMAT_CASES selects distinct authored names, e.g. sdf-carbon-only.' \
-		'make test/integration/provider-service/recovery Check installed host inspection, exact replay and idle restart against synthetic local TLS.' \
+		'make test/integration/provider/deployment/store-recovery Check installed host inspection, exact replay and idle restart against synthetic local TLS.' \
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
 		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \
@@ -587,10 +583,7 @@ test/unit/provider/allocation:
 provider/prepare:
 	bash tools/provider_prepare.sh
 
-.PHONY: provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
-provider/run:
-	bash tools/provider.sh
-
+.PHONY: provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 .PHONY: provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
@@ -607,10 +600,10 @@ test/unit/provider/deployment:
 	bash tools/container.sh $@
 
 provider/recovery/inspect:
-	bash tools/provider.sh recovery-inspect
+	bash tools/provider_recovery.sh inspect
 
 provider/recovery/run:
-	bash tools/provider.sh recovery-run
+	bash tools/provider_recovery.sh run
 
 provider/qualify/api/pasted:
 	bash tools/provider_api_qualification.sh scripted-pasted

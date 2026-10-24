@@ -18,7 +18,7 @@ import re
 
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.process import _declared_execution
-from nmrnet_provider.startup_capture import _bind_path, _host_plan, prediction_lifetime_seconds
+from nmrnet_provider.startup_capture import _bind_path, startup_authorities, prediction_lifetime_seconds
 from tools.provider_proxy import ServicePolicy, ServiceRefused
 from tools.bound_http_proxy import require_interface_name
 
@@ -377,7 +377,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         service["tmpfs"].append(f"/scratch:rw,nosuid,nodev,noexec,size=64m,mode=0700,uid={uid},gid={gid}")
         services[role] = service
         provider["volumes"].append(_bind(runtime / role, f"/native/{role}"))
-    authorities = _host_plan(config, bundle, bundle / "config/provider.toml")["authorities"]
+    authorities = startup_authorities(config)
     networks = {}
     for role in ("api", "interpreter", "store"):
         route = routes[role]
