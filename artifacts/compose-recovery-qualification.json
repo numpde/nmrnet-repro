@@ -1,0 +1,33 @@
+{
+  "schema_id": "nmrnet.compose_recovery_qualification.v1",
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "08fb58e425d82f9c450ef0c284d1bcb9c94f88c7",
+  "command": "make test/integration/provider/deployment/recovery",
+  "scope": "Actual local Compose/Engine control with disposable signed TLS peers. No provider startup, interpretation, model call or scientific operation.",
+  "deployment": "qualification-ynuKx7wK",
+  "bundle": "generation-TqIpfKOl",
+  "fault": {
+    "owner": "tools/compose_create_reply_loss.sh at source_revision",
+    "effect": "The real per-role Compose create completed; the wrapper withheld stdout and returned status 7. Original status, stderr and empty stdout were retained without manual receipt deletion."
+  },
+  "recovery": {
+    "owner": "tools/provider_deployment.sh::deployment_recover_creates at source_revision",
+    "original_container_id": "7f08f00a6a3eac4cc045af4e45d5d02ce50dc29e071c8255a3010a2f87ccef8b",
+    "role": "api",
+    "admission": "Original literal create request and sealed bundle, then existing full inventory/image/grant comparison before the original create is marked realized.",
+    "received_admitted_frame_sha256": "ade1a42c1a9e59710b98b783e3409dd47a23819e832d93dec3a4ce9203b9041b",
+    "observed_state": "created",
+    "running": false,
+    "pid": 0,
+    "next_command": "The finite command owner admitted the next operation and observed exactly the same full ID, still created and unstarted. No repeated runtime create or start.",
+    "final_down": "Confirmed original API container stopped with exit 0 and OOMKilled false; container retained."
+  },
+  "final_peer_receipt": {
+    "sha256": "a65e0a89d4bb016cde86fa9cf6c4ae5c7c2501c30634edfb737865e789b8df33",
+    "calls": {"model": 0, "start": 0, "complete": 0, "download": 0, "hello": 0}
+  },
+  "limits": [
+    "This controlled lost-create reply does not qualify delayed start/stop fencing, daemon failure, live external models or external API/GUI deployment.",
+    "The first setup at 9b571d7 omitted runtime bind directories and Docker refused creation. Its failed control receipts remain private. The fixture now uses the same runtime-directory owner as production startup; that failed run is not counted as successful qualification."
+  ]
+}

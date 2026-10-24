@@ -14,6 +14,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_failed_recovery_witness_closes_its_local_lock_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+source "$1/tools/compose_qualification.sh"
+private=$2
+compose_witness_lost_create_effects() { return 7; }
+if compose_witness_lost_create; then exit 91; else [[ $? == 7 ]]; fi
+flock --nonblock "$private" true
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_lost_role_create_uses_original_bundle_admission_without_repeating_create(self):
         for outcome in ("realized", "absent", "foreign", "changed-command"):
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:

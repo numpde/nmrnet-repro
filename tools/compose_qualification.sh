@@ -67,6 +67,18 @@ compose_witness_native_events() {
 }
 
 compose_witness_lost_create() {
+    local lock status=0
+    exec {lock}< "$private" || return $?
+    if flock --nonblock "$lock"; then
+        if compose_witness_lost_create_effects; then :; else status=$?; fi
+    else status=$?; fi
+    # Releasing the finite caller's lock does not settle Engine effects. The
+    # original operation receipts remain the next command's recovery barrier.
+    exec {lock}<&- || return $?
+    return "$status"
+}
+
+compose_witness_lost_create_effects() {
     source "$repository_root/tools/provider_deployment.sh"
     local caller_uid=$(id -u) caller_gid=$(id -g) digest identifier
     local deployment_name=$deployment deployment_action=up deployment_root=$private
@@ -74,9 +86,6 @@ compose_witness_lost_create() {
     local deployment_helper_retired=true deployment_diagnostic=
     local deployment_primary_failure_receipt= deployment_additional_failure_receipt=
     local -a original_engine=("${engine[@]}")
-    local lock
-    exec {lock}< "$deployment_root"
-    flock --nonblock "$lock" || return 2
     deployment_begin_operation || return $?
     deployment_selected_bundle || return $?
     deployment_load_bootstrap "$selected_bundle" || return $?
@@ -104,7 +113,6 @@ compose_witness_lost_create() {
     deployment_inventory recovered || return $?
     [[ ${#deployment_ids[@]} == 1 && ${deployment_ids[api]} == "$identifier" \
         && ${deployment_states[api]} == created && ${deployment_running[api]} == false ]] || return 2
-    exec {lock}<&-
     printf 'Lost create reply recovered original API container %s without starting it.\n' "$identifier"
 }
 
