@@ -297,7 +297,8 @@ unexport DEPLOYMENTS
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
 override export NMRNET_DELIVERY_DEPLOYMENTS_INPUT := $(if $(filter command line,$(origin DEPLOYMENTS)),$(value DEPLOYMENTS))
 unexport UPLOAD_RECEIPT
-unexport JOB_RECEIPT
+unexport JOB_RECEIPT JOB_IDENTITY
+override export NMRNET_JOB_IDENTITY_INPUT := $(if $(filter command line,$(origin JOB_IDENTITY)),$(value JOB_IDENTITY))
 unexport PROVIDER_REF EXECUTION_ATTEMPT_REF BODY_SHA256
 override export NMRNET_PROVIDER_REF_INPUT := $(if $(filter command line,$(origin PROVIDER_REF)),$(value PROVIDER_REF))
 override export NMRNET_EXECUTION_ATTEMPT_REF_INPUT := $(if $(filter command line,$(origin EXECUTION_ATTEMPT_REF)),$(value EXECUTION_ATTEMPT_REF))
@@ -391,7 +392,7 @@ help:
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
 		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.html for required selectors.' \
-		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job; JOB_RECEIPT=<created.json> instead reads that original Job only. Fresh OUTPUT required (opt-in).' \
+		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job; paired JOB_RECEIPT=<created.json> JOB_IDENTITY=<original source/identity.json> instead reads the original Job only. Fresh OUTPUT required (opt-in).' \
 		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
@@ -417,7 +418,7 @@ help:
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
-		'make test/integration/provider-core/recovery Test explicit retained-record recovery offline.' \
+		'make test/integration/provider-core/recovery Test signed compact-checkpoint readback without scientific replay.' \
 		'make test/integration/provider-core/interpreter-ambiguity Test the fixed interpreter-probe mechanics offline.' \
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
@@ -439,7 +440,7 @@ help:
 		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
 		'make test/unit/provider-core/transport Test bounded HTTPS exchange and retained failures.' \
 		'make test/unit/provider-core/api Test signed API responses and mutation uncertainty.' \
-		'make test/unit/provider-core/admission Test active storage capacity and confirmed-history preservation.' \
+		'make test/unit/provider-core/admission Test compact control inventory, metadata capacity and outstanding delivery limits.' \
 		'make test/unit/provider-core/uploads Test Upload input limits, acquisition and cumulative budgets.' \
 		'make test/integration/provider-core/api Test API environment and request correlation over local TLS.' \
 		'make test/integration/provider-core/transport Test received metadata after actual TLS body failures.' \

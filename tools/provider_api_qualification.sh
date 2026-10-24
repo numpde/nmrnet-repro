@@ -190,11 +190,16 @@ api_witness_admission_finish() {
 
 api_witness_existing_pasted() {
     local selector alias value path identity revision
-    local -a required=(DEPLOYMENT PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
+    local -a required=(PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
+    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} || -n ${NMRNET_JOB_IDENTITY_INPUT-} ]]; then
+        required+=(JOB_RECEIPT JOB_IDENTITY)
+    else
+        required+=(DEPLOYMENT)
+    fi
     for selector in "${required[@]}"; do
         alias=NMRNET_${selector}_INPUT value=
         value=${!alias-}
-        [[ -n $value ]] || { printf 'Missing explicit command-line selector: %s. This lane creates one persistent Job.\n' "$selector" >&2; return 2; }
+        [[ -n $value ]] || { printf 'Missing explicit command-line selector: %s. Fresh submission needs DEPLOYMENT; readback needs paired JOB_RECEIPT and JOB_IDENTITY. No API request was sent.\n' "$selector" >&2; return 2; }
     done
     [[ $(id -u) != 0 && $(id -g) != 0 ]] || return 2
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -214,15 +219,28 @@ api_witness_existing_pasted() {
     provider_host_ipv4 "$NMRNET_ADDRESS_INPUT" \
         && [[ $NMRNET_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { provider_host_refuse 'Supply a literal API IPv4 address, explicit interface and immutable client image ID.'; return 2; }
-    # The existing deployment owner admits its original bundle/current image.
-    # It neither starts a provider nor opens the Attempt store. Check output
-    # separation there before creating any client files beside retained state.
-    identity=$(bash "$repository_root/tools/provider_deployment.sh" client-inputs) || return $?
+    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+        # Historical readback uses the original caller capture, even after the
+        # producer stops or its image changes. Received results cannot self-pin.
+        for path in "$NMRNET_JOB_RECEIPT_INPUT" "$NMRNET_JOB_IDENTITY_INPUT"; do
+            provider_host_path "$path" || return $?
+            provider_host_disjoint "$path" "$provider_host_root" || return $?
+            [[ -f $path && ! -L $path && $(stat -c %s -- "$path") -le 65536 ]] || return 2
+        done
+    else
+        # Fresh submission derives expectations from the actual deployment.
+        identity=$(bash "$repository_root/tools/provider_deployment.sh" client-inputs) || return $?
+    fi
     umask 077
     mkdir -p -m 700 -- "$(dirname -- "$provider_host_root")" || return $?
     mkdir -m 700 -- "$provider_host_root" || return $?
     mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/source" "$provider_host_root/client"
-    printf '%s\n' "$identity" > "$provider_host_root/source/identity.json"
+    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+        cp -- "$NMRNET_JOB_IDENTITY_INPUT" "$provider_host_root/source/identity.json"
+        chmod 600 "$provider_host_root/source/identity.json"
+    else
+        printf '%s\n' "$identity" > "$provider_host_root/source/identity.json"
+    fi
     source "$repository_root/tools/git_inputs.sh"
     source "$repository_root/tools/git_metadata.sh"
     revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?

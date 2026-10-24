@@ -973,7 +973,7 @@ def main():
     project_ref = require_project_ref("project_ref", args.project_ref)
     validate_user_credential_artifacts(artifacts=artifacts, profile=identity["profile"], user_id=user.user_id)
     case = json.loads(Path("/fixture/case.json").read_bytes())
-    require(re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None, "Current prediction image pin is malformed")
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None, "Expected prediction image pin is malformed")
     if args.case_kind == "sdf-zip":
         _retained_sdf_science()
     else:

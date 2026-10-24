@@ -8,6 +8,8 @@ import copy
 import hashlib
 import io
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -37,6 +39,97 @@ from prediction_test_ports import (
     uploaded_documents,
     uploaded_sdf_documents,
 )
+
+
+class QualificationContextTests(unittest.TestCase):
+    """Historical readback uses the original capture even after producer replacement.
+
+    Execute the actual shell coordinator through context capture. Existing path
+    admission is held constant; Git/Engine work stops at the capture boundary.
+    No credential, API request, Job or scientific operation is involved.
+    """
+
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        tools = self.root / "tools"
+        tools.mkdir()
+        source = Path("/fixture/provider_api_qualification.sh").read_text()
+        body = source.split("api_witness_existing_pasted() {\n", 1)[1].split("\n}\n", 1)[0]
+        self.script = tools / "coordinate.sh"
+        self.script.write_text(
+            "set -euo pipefail\napi_witness_admission_finish() { :; }\n"
+            "api_witness_existing_pasted() {\n" + body + "\n}\napi_witness_existing_pasted\n"
+        )
+        (tools / "provider.sh").write_text(
+            "provider_host_path() { :; }\nprovider_host_disjoint() { :; }\n"
+            "provider_host_ipv4() { :; }\n"
+            "provider_host_refuse() { printf '%s\\n' \"$1\" >&2; return 2; }\n"
+        )
+        (tools / "git_metadata.sh").write_text(
+            "repository_git() { case \"$*\" in *rev-parse*) printf '%040d\\n' 0;; esac; }\n"
+        )
+        (tools / "git_inputs.sh").write_text("copy_git_blobs() { exit 0; }\n")
+        self.old_identity = {"origin": "https://api.example", "prediction_image_id": "sha256:" + "a" * 64}
+        self.new_identity = self.old_identity | {"prediction_image_id": "sha256:" + "b" * 64}
+        self.original = self.root / "original identity.json"
+        self.original.write_bytes((json.dumps(self.old_identity) + "\n").encode())
+        self.original.chmod(0o600)
+        self.receipt = self.root / "created.json"
+        self.receipt.write_text('{"project_ref":"project:test","job_ref":"job:test"}\n')
+        self.marker = self.root / "current-helper-used"
+        (tools / "provider_deployment.sh").write_text(
+            "[[ $1 == client-inputs ]] || exit 2\n"
+            ': > "$(dirname -- "${BASH_SOURCE[0]}")/../current-helper-used"\n'
+            "printf '%s\\n' '" + json.dumps(self.new_identity) + "'\n"
+        )
+        self.invocations = 0
+
+    def coordinate(self, *, receipt=False, identity=False):
+        self.invocations += 1
+        output = self.root / f"output-{self.invocations}"
+        self.marker.unlink(missing_ok=True)
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("NMRNET_")}
+        values = {
+            "PROJECT_REF": "project:test", "USER_ID": "user:test",
+            "CLIENT_CREDENTIAL_DIRECTORY": str(self.root / "credentials"),
+            "CA_FILE": str(self.root / "ca.pem"), "ADDRESS": "127.0.0.1", "INTERFACE": "lo",
+            "OUTPUT": str(output), "API_CLIENT_IMAGE": "sha256:" + "c" * 64,
+            "RETAINED_RESULT": str(self.root / "independent-oracle.json"),
+            "DEPLOYMENT": "" if receipt or identity else "replacement",
+        }
+        if receipt:
+            values["JOB_RECEIPT"] = str(self.receipt)
+        if identity:
+            values["JOB_IDENTITY"] = str(self.original)
+        environment.update({"NMRNET_" + key + "_INPUT": value for key, value in values.items()})
+        result = subprocess.run(["bash", str(self.script)], env=environment, capture_output=True, text=True, timeout=5)
+        return result, output
+
+    def test_old_job_readback_preserves_original_pin_without_consulting_replacement_deployment(self):
+        result, output = self.coordinate(receipt=True, identity=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        captured = output / "source/identity.json"
+        self.assertEqual(captured.read_bytes(), self.original.read_bytes())
+        self.assertEqual(captured.stat().st_mode & 0o777, 0o600)
+        self.assertNotEqual(json.loads(captured.read_bytes())["prediction_image_id"], self.new_identity["prediction_image_id"])
+        self.assertFalse(self.marker.exists())
+
+    def test_fresh_submission_still_uses_the_actual_deployment_identity(self):
+        result, output = self.coordinate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads((output / "source/identity.json").read_bytes()), self.new_identity)
+        self.assertTrue(self.marker.exists())
+
+    def test_readback_requires_both_original_evidence_inputs_before_output_or_deployment_work(self):
+        for receipt, identity, missing in ((True, False, "JOB_IDENTITY"), (False, True, "JOB_RECEIPT")):
+            with self.subTest(missing=missing):
+                result, output = self.coordinate(receipt=receipt, identity=identity)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(missing, result.stderr)
+                self.assertFalse(output.exists())
+                self.assertFalse(self.marker.exists())
 
 
 class ApiReadSigningTests(unittest.TestCase):
