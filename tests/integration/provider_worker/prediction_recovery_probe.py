@@ -1,11 +1,12 @@
-"""Synthetic cgroup OOM through real framing, allocation and session recovery.
+"""Synthetic cgroup OOM through installed serial-runner/session recovery.
 
 Port Magnet9374f1a tests/unit/oom_recovery.py's kernel counter/reap witnesses;
-use NMRNet's exact host retirement/consumption instead of Docker restart.
+use the serial supervisor's reap/scratch receipt instead of Docker restart.
 This fixture loads no released models and contacts no API or interpreter.
 """
 
 import asyncio
+import argparse
 import hashlib
 import json
 import os
@@ -13,10 +14,11 @@ import signal
 import socket
 import sys
 from datetime import UTC, datetime
+from contextlib import AsyncExitStack
 from pathlib import Path
 from types import SimpleNamespace
 
-# Workers keep controller dependencies out of their 64 MiB budget so the
+# Workers keep controller dependencies out of their fixed native budget so the
 # deliberate prediction allocation, rather than import startup, triggers OOM.
 if sys.argv[1:] == ["controller"]:
     from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
@@ -45,26 +47,35 @@ def oom_kills():
 
 
 class SyntheticPrediction:
-    def __init__(self, execution):
-        self.execution = execution
+    def __init__(self, operation):
+        self.operation = operation
+        self.before = oom_kills()
+        try:
+            with Path("/proof/observations/first-execution").open("xb"):
+                pass
+        except FileExistsError:
+            self.first = False
+        else:
+            self.first = True
 
     def prepare(self, requests):
         self.requests, self.handle = requests, object()
-        write(Path("/diagnostics/requests.json"), [raw.hex() for raw in requests])
+        write(Path("/proof/observations") / (self.operation + ".json"), {
+            "requests": [raw.hex() for raw in requests], "oom_kills": self.before,
+        })
         return self.handle
 
     def execute(self, handle):
         if handle is not self.handle:
             raise AssertionError("Synthetic prediction received another preparation's handle")
-        Path("/diagnostics/execution-entered").write_bytes(b"entered\n")
-        if self.execution == 1:
+        if self.first:
             blocks = []
-            for _ in range(64):
+            for _ in range(256):
                 block = bytearray(4 * 1024 * 1024)
                 for offset in range(0, len(block), 4096):
                     block[offset] = 1
                 blocks.append(block)
-            raise AssertionError("Synthetic allocation reached 256 MiB without a kernel kill")
+            raise AssertionError("Synthetic allocation reached 1 GiB without a kernel kill")
         return tuple(
             {
                 "request_sha256": hashlib.sha256(raw).hexdigest(),
@@ -76,41 +87,21 @@ class SyntheticPrediction:
         )
 
 
-def worker(allocation, execution):
+def worker(options):
     from nmrnet_inference.worker import serve_connection  # noqa: PLC0415 -- Mounted only into the worker role.
+    from nmrnet_provider.worker_protocol import send  # noqa: PLC0415 -- Keep controller dependencies out of the native cgroup.
 
-    if Path("/sys/fs/cgroup/memory.max").read_text().strip() != str(64 * 1024 * 1024):
-        raise AssertionError("Synthetic OOM requires a 64 MiB worker cgroup")
+    # Reuse the normal finite component's fixed 512 MiB profile. The bounded
+    # 1 GiB allocation exceeds it; no second launch-policy implementation is needed.
+    if Path("/sys/fs/cgroup/memory.max").read_text().strip() != str(512 * 1024 * 1024):
+        raise AssertionError("Synthetic OOM requires the declared 512 MiB runner cgroup")
     if Path("/sys/fs/cgroup/memory.swap.max").read_text().strip() != "0":
         raise AssertionError("Synthetic OOM requires zero additional swap")
-    before = oom_kills()
-    with socket.socket(socket.AF_UNIX) as listener:
-        listener.bind("/ipc/science.sock")
-        listener.listen(1)
-        listener.settimeout(20)
-        write(Path("/ipc/metadata.json"), {"runtime": RUNTIME})
-        Path("/ipc/ready").write_text(allocation + "\n")
-        connection, _ = listener.accept()
-    child = os.fork()
-    if child == 0:
-        with connection:
-            serve_connection(connection, SyntheticPrediction(execution), allocation=allocation, io_seconds=20)
-        os._exit(0)
-    # Keep this duplicate stream open until the kernel witness is published;
-    # otherwise child death could expose EOF and trigger retirement too early.
-    _pid, status = os.waitpid(child, 0)
-    child_signal = os.WTERMSIG(status) if os.WIFSIGNALED(status) else None
-    child_exit = os.WEXITSTATUS(status) if os.WIFEXITED(status) else None
-    write(
-        Path("/diagnostics/kernel.json"),
-        {
-            "oom_kill_delta": oom_kills() - before,
-            "child_signal": child_signal,
-            "child_exit": child_exit,
-        },
-    )
-    connection.close()
-    raise SystemExit(128 + child_signal if child_signal is not None else child_exit)
+    if Path("/sys/fs/cgroup/memory.oom.group").read_text().strip() != "0":
+        raise AssertionError("Synthetic child OOM requires independent process selection, not whole-cgroup killing")
+    with socket.socket(fileno=options.session_fd) as connection:
+        send(connection, {"kind": "startup", "allocation": options.operation, "runtime": RUNTIME}, 20)
+        serve_connection(connection, SyntheticPrediction(options.operation), allocation=options.operation, io_seconds=20)
 
 
 async def controller():
@@ -131,6 +122,7 @@ async def controller():
         terminal_recovery=TerminalRecovery(1, 1, unexpected, unexpected),
         on_unconfirmed_phase_progress=unexpected,
         on_prediction_retry=unexpected,
+        on_native_notice=unexpected,
     )
     facts = FeedInputFacts(
         "job:oom-proof", "nmr.job.specification.text.v1", "sha256:" + hashlib.sha256(RAW).hexdigest(), len(RAW)
@@ -154,15 +146,17 @@ async def controller():
         ),
     )
     first, retirement, runtime = await factory.allocate_prediction(job_ref=facts.job_ref)
-    tokens = [first._allocation]
+    owners = [retirement]
 
     async def allocate():
-        # The host only publishes archived after exact retirement/consumption.
-        receipt = Path("/native/receipts") / tokens[0]
-        if (receipt / "archived").read_text() != f"archived {tokens[0]}\n":
-            raise AssertionError("Replacement preceded old allocation consumption")
+        original, = owners
+        if (original.session.retirement.returncode != -signal.SIGKILL
+                or not original.session.retirement.scratch_released
+                or not original._retirement.done() or original._retirement.result() is not None
+                or not original._science_closure.done() or original._science_closure.result() is not None):
+            raise AssertionError("Replacement preceded the original OOM reap, scratch release or local closure")
         worker, owner, observed = await factory.allocate_prediction(job_ref=facts.job_ref)
-        tokens.append(worker._allocation)
+        owners.append(owner)
         return worker, owner, observed
 
     def notice(attempt, failure):
@@ -183,31 +177,32 @@ async def controller():
         result = await session.execute(prepared, report_condition=unexpected)
         write(Path("/output/result.json"), json.loads(result.content))
     finally:
-        await session.retire()
-        await factory.settle()
-    if len(tokens) != 2 or tokens[0] == tokens[1]:
-        raise AssertionError("Recovery must allocate exactly one new prediction worker")
-    requests = []
-    kernels = []
-    for token in tokens:
-        receipt = Path("/native/receipts") / token
-        requests.append(json.loads((receipt / "requests.json").read_bytes()))
-        kernels.append(json.loads((receipt / "kernel.json").read_bytes()))
-        if (receipt / "archived").read_text() != f"archived {token}\n":
-            raise AssertionError("Synthetic worker was not retired and consumed")
-    if requests != [[RAW.hex()], [RAW.hex()]]:
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(factory.settle)
+            for owner in owners:
+                cleanup.push_async_callback(owner.settle)
+                cleanup.push_async_callback(owner.retire)
+            cleanup.push_async_callback(session.retire)
+    operations = [owner.allocation for owner in owners]
+    if len(owners) != 2 or operations[0] == operations[1]:
+        raise AssertionError("Recovery must acquire exactly one new prediction child")
+    if owners[0].session.generation != owners[1].session.generation:
+        raise AssertionError("Synthetic OOM unexpectedly replaced the runner generation")
+    observations = [json.loads((Path("/proof/observations") / (operation + ".json")).read_bytes()) for operation in operations]
+    if [item["requests"] for item in observations] != [[RAW.hex()], [RAW.hex()]]:
         raise AssertionError("Prediction changed its admitted scientific bytes across replacement")
-    if kernels != [
-        {"oom_kill_delta": 1, "child_signal": signal.SIGKILL, "child_exit": None},
-        {"oom_kill_delta": 0, "child_signal": None, "child_exit": 0},
-    ]:
-        raise AssertionError("Synthetic worker lacks the expected independent kernel and reap witnesses")
+    if observations[1]["oom_kills"] - observations[0]["oom_kills"] != 1:
+        raise AssertionError("The same persistent cgroup did not independently report exactly one kernel OOM kill")
+    if any(not owner.session.retirement.scratch_released for owner in owners) or factory.allocations or factory.clients:
+        raise AssertionError("Completed native ownership did not settle and transfer cleanly")
     write(
         Path("/output/summary.json"),
         {
-            "scope": "synthetic kernel OOM and allocation/session recovery",
-            "allocations": tokens,
-            "kernels": kernels,
+            "scope": "synthetic kernel OOM and serial-runner/session recovery; no released models or API",
+            "operations": operations,
+            "generation": owners[0].session.generation,
+            "oom_kill_delta": 1,
+            "retirement_returncodes": [owner.session.retirement.returncode for owner in owners],
             "executions": 2,
             "scientific_request_sha256": hashlib.sha256(RAW).hexdigest(),
         },
@@ -218,7 +213,11 @@ if __name__ == "__main__":
     os.umask(0o077)
     if sys.argv[1:] == ["controller"]:
         asyncio.run(controller())
-    elif len(sys.argv) == 4 and sys.argv[1] == "worker" and sys.argv[3] in ("1", "2"):
-        worker(sys.argv[2], int(sys.argv[3]))
+    elif sys.argv[1:2] == ["worker"]:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--session-fd", type=int, required=True)
+        parser.add_argument("--lease-fd", type=int, required=True)
+        parser.add_argument("--operation", required=True)
+        worker(parser.parse_args(sys.argv[2:]))
     else:
         raise ValueError("Select the fixed prediction-recovery qualification controller or worker")
