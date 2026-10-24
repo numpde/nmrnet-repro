@@ -128,6 +128,19 @@ class NativeOperation:
             raise LifecycleRejected("Native operation was retired during startup; do not adopt its channel.")
         return self.reader, self.writer
 
+    async def connect_for_retirement(self):
+        """Acquire the runner's serial barrier without adopting scientific I/O.
+
+        A greeting follows retirement of the preceding session. This new proof
+        child must itself retire through this operation before the caller reuses
+        the runner; its exit status says nothing about historical science.
+        """
+        if self._opening is not None or self._stop_requested:
+            raise LifecycleRejected("Retirement barrier requires an unused native operation.")
+        self._opening = asyncio.create_task(asyncio.to_thread(self._connect))
+        self._opening.add_done_callback(self._observe)
+        await self._wait(self._opening, time.monotonic() + self._seconds)
+
     def _request_stop(self):
         self._stop_requested = True
         if self.session is not None:

@@ -12,6 +12,48 @@ from tests.fakes.runner import RunningSupervisor
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_retirement_barrier_does_not_adopt_or_send_scientific_input(self):
+        operation = self.operation()
+        with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=AssertionError("Scientific channel adopted")):
+            await operation.connect_for_retirement()
+            self.assertIsNotNone(operation.allocation)
+            self.assertIsNone(operation.reader)
+            self.assertIsNone(operation.writer)
+            self.assertIsNone(operation.runtime)
+            await operation.retire()
+            await operation.settle()
+        self.assertTrue(operation.session.retirement.scratch_released)
+        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.runner.close()
+        self.assertNotIn(b"event=fixture_scientific_input", self.runner.diagnostic)
+
+    async def test_cancelled_retirement_barrier_retains_its_original_connection(self):
+        operation = self.operation()
+        entered, release = threading.Event(), threading.Event()
+        connect = operation._connect
+
+        def held_connect():
+            entered.set()
+            if not release.wait(timeout=3):
+                raise TimeoutError("Fixture did not release barrier connection")
+            connect()
+
+        with patch.object(operation, "_connect", held_connect):
+            caller = asyncio.create_task(operation.connect_for_retirement())
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+                original = operation._opening
+                caller.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await caller
+                self.assertFalse(original.cancelled())
+            finally:
+                release.set()
+                await operation.retire()
+                await operation.settle()
+        self.assertIs(operation._opening, original)
+        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+
     async def test_pending_close_deadline_keeps_original_observation_held(self):
         operation = self.operation()
         await operation.start()

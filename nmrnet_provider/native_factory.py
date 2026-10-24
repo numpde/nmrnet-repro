@@ -174,6 +174,30 @@ class NativeAttemptFactory:
         finally:
             self._operation = None
 
+    async def prove_previous_retired(self):
+        """Settle all three runner barriers before replaying retained outcomes.
+
+        No client or scientific request is created. Partial setup and cleanup
+        remain in the same factory obligations used by ordinary allocations.
+        """
+        self._begin_setup()
+        try:
+            for role in ("prediction", "reader", "smiles"):
+                allocation = self._new_operation(role, job_ref=None)
+                try:
+                    await allocation.connect_for_retirement()
+                except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
+                    failures = await self._retire(allocation)
+                    if not failures:
+                        self._release(allocation)
+                    self._raise_setup(cause, failures, job_ref=None)
+                failures = await self._retire(allocation)
+                if failures:
+                    self._raise_setup(failures[0][1], failures, job_ref=None)
+                self._release(allocation)
+        finally:
+            self._operation = None
+
     def _begin_setup(self):
         if (
             self._operation is not None
@@ -223,7 +247,7 @@ class NativeAttemptFactory:
                 return [("setup storage read", cause)]
         return []
 
-    async def _open_role(self, role, *, job_ref):
+    def _new_operation(self, role, *, job_ref):
         allocation = NativeOperation(
             role=role,
             endpoint=Path("/native") / role / "runner.sock",
@@ -231,6 +255,10 @@ class NativeAttemptFactory:
             on_notice=lambda failure, facts: self.on_native_notice(failure, {**facts, "job_ref": job_ref}),
         )
         self.allocations.append(allocation)
+        return allocation
+
+    async def _open_role(self, role, *, job_ref):
+        allocation = self._new_operation(role, job_ref=job_ref)
         writer = None
         try:
             reader, writer = await allocation.start()

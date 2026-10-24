@@ -16,6 +16,46 @@ from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_restart_barrier_retires_all_roles_without_scientific_clients(self):
+        factory = self.factory(seconds=1)
+        allocations = [self.allocation() for _role in range(3)]
+        for allocation in allocations:
+            allocation.connect_for_retirement = AsyncMock()
+        with (
+            patch("nmrnet_provider.native_factory.NativeOperation", side_effect=allocations) as created,
+            patch("nmrnet_provider.native_factory.PredictionClient", side_effect=AssertionError("Scientific client created")),
+            patch("nmrnet_provider.native_factory.GeometryClient", side_effect=AssertionError("Scientific client created")),
+            patch("nmrnet_provider.native_factory.SmilesClient", side_effect=AssertionError("Scientific client created")),
+        ):
+            await factory.prove_previous_retired()
+        self.assertEqual([call.kwargs["role"] for call in created.call_args_list], ["prediction", "reader", "smiles"])
+        for allocation in allocations:
+            allocation.connect_for_retirement.assert_awaited_once()
+            allocation.start.assert_not_awaited()
+            allocation.retire.assert_awaited_once()
+            allocation.settle.assert_awaited_once()
+        self.assertEqual(factory.allocations, [])
+        self.assertEqual(factory.clients, {})
+
+    async def test_failed_restart_barrier_retains_only_unresolved_cleanup(self):
+        factory = self.factory(seconds=1)
+        allocation = self.allocation()
+        primary, cleanup = OSError("barrier refused"), TimeoutError("retirement remains pending")
+        allocation.connect_for_retirement = AsyncMock(side_effect=primary)
+        allocation.retire.side_effect = cleanup
+        with patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation) as created:
+            with self.assertRaises(NativeSetupFailed) as refused:
+                await factory.prove_previous_retired()
+        self.assertIs(refused.exception.cause, primary)
+        created.assert_called_once()
+        self.assertEqual(factory.allocations, [allocation])
+        self.assertEqual(factory.clients, {})
+        allocation.retire.side_effect = None
+        await factory.settle()
+        allocation.connect_for_retirement.assert_awaited_once()
+        self.assertEqual(factory.allocations, [])
+        self.assertIsNone(factory.last_failure)
+
     async def test_controller_assembly_does_not_allocate_prediction_before_start(self):
         factory = self.factory(seconds=1)
         controller = object()
