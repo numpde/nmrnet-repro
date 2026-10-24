@@ -66,6 +66,47 @@ compose_witness_native_events() {
     done
 }
 
+compose_witness_lost_create() {
+    source "$repository_root/tools/provider_deployment.sh"
+    local caller_uid=$(id -u) caller_gid=$(id -g) digest identifier
+    local deployment_name=$deployment deployment_action=up deployment_root=$private
+    local operation_root= operation_owner=unestablished operation_established=false
+    local deployment_helper_retired=true deployment_diagnostic=
+    local deployment_primary_failure_receipt= deployment_additional_failure_receipt=
+    local -a original_engine=("${engine[@]}")
+    local lock
+    exec {lock}< "$deployment_root"
+    flock --nonblock "$lock" || return 2
+    deployment_begin_operation || return $?
+    deployment_selected_bundle || return $?
+    deployment_load_bootstrap "$selected_bundle" || return $?
+    digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
+    deployment_project=nmrnet-${digest:0:20}
+    deployment_create_arguments "$selected_bundle" api
+    engine=(bash "$capture/tools/compose_create_reply_loss.sh" "${original_engine[@]}")
+    if deployment_command create-api 60 "$operation_root/create-api" true "${deployment_role_create_arguments[@]}"; then
+        engine=("${original_engine[@]}")
+        printf 'Create-reply loss was not exercised.\n' >&2
+        return 2
+    fi
+    engine=("${original_engine[@]}")
+    cmp -s "$operation_root/create-api/response.status" <(printf '7\n') \
+        && [[ ! -s $operation_root/create-api/response.stdout ]] || return 2
+    deployment_recover_creates "$operation_root" || return $?
+    [[ ${#deployment_ids[@]} == 1 && ${deployment_states[api]} == created \
+        && ${deployment_running[api]} == false && ${deployment_pids[api]} == 0 ]] || return 2
+    identifier=${deployment_ids[api]}
+    cp -a -- "$operation_root" "$scratch/lost-create-receipts" || return $?
+    # Exercise the public command owner's next-operation admission. Its recovery
+    # proof, retained above, must allow progress without another runtime create.
+    deployment_begin_operation || return $?
+    deployment_inventory recovered || return $?
+    [[ ${#deployment_ids[@]} == 1 && ${deployment_ids[api]} == "$identifier" \
+        && ${deployment_states[api]} == created && ${deployment_running[api]} == false ]] || return 2
+    exec {lock}<&-
+    printf 'Lost create reply recovered original API container %s without starting it.\n' "$identifier"
+}
+
 compose_witness_finish() {
     local status=$? cleanup=0
     trap - EXIT
@@ -102,7 +143,7 @@ compose_witness_main() {
     umask 077
     [[ $# -le 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
     local scientific_case=${1-pasted}
-    case $scientific_case in pasted|references|capacity|successive) ;; *) return 2 ;; esac
+    case $scientific_case in pasted|references|capacity|successive|recovery) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
@@ -129,7 +170,8 @@ compose_witness_main() {
     printf '%s\n' "$revision" > "$scratch/source-revision"
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
-        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests tools/compose_runner_events.sh \
+        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests \
+        tools/compose_runner_events.sh tools/compose_create_reply_loss.sh \
         tests/fixtures/preparation/expected.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0
@@ -163,6 +205,16 @@ compose_witness_main() {
     done
     make --no-print-directory -C "$repository_root" provider/deployment/install DEPLOYMENT="$deployment" || return $?
     deployment_installed=true
+    if [[ $scientific_case == recovery ]]; then
+        compose_witness_lost_create || return $?
+        make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
+        deployment_installed=false
+        : > "$peer_data/done"
+        compose_witness_wait "$peer_data/receipt.json" 15 || return $?
+        worker_retirement_command wait "$scratch/peer" "${engine[@]}" wait "$peer_id" || return $?
+        cmp -s "$scratch/peer/wait.stdout" <(printf '0\n') || return 2
+        return 0
+    fi
     make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
     compose_witness_wait "$peer_data/completed.json" 180 || return $?
     if [[ $scientific_case == successive ]]; then compose_witness_native_events before-restart || return $?; fi

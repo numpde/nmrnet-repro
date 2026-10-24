@@ -123,8 +123,8 @@ async def serve(root, store_root, seconds, case):
 
     os.umask(0o077)
     peer = ProcessPeers()
-    pasted_case = case in ("pasted", "successive")
-    expected_jobs = 2 if case == "successive" else 1
+    pasted_case = case in ("pasted", "successive", "recovery")
+    expected_jobs = {"successive": 2, "recovery": 0}.get(case, 1)
     peer.output = {"verbosity": "max"}
     if case == "references":
         # Seventeen digits preserve a binary64 scalar's round trip. Compare the
@@ -187,7 +187,7 @@ async def serve(root, store_root, seconds, case):
             calls["start"] += 1
             if calls["start"] > expected_jobs:
                 raise AssertionError("The connected witness must not create another Attempt")
-        if path == "/provider/v1/jobs" and peer.result is not None and case != "successive":
+        if path == "/provider/v1/jobs" and (case == "recovery" or (peer.result is not None and case != "successive")):
             # Keep discovery signed even after withdrawing the completed fixture.
             from tests.fakes.api_tls import verify_signed_request
 
@@ -272,11 +272,15 @@ async def serve(root, store_root, seconds, case):
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin})
         while not (root / "done").exists():
             await asyncio.sleep(0.1)
-        if calls["model"] != expected_model_calls or any(calls[name] != expected_jobs for name in ("start", "complete")) or calls["hello"] < 2:
+        minimum_hellos = 0 if case == "recovery" else 2
+        if calls["model"] != expected_model_calls or any(calls[name] != expected_jobs for name in ("start", "complete")) or calls["hello"] < minimum_hellos:
             raise AssertionError("Connected initial/restart witness changed the intended number of scientific executions")
         if calls["download"] != (0 if pasted_case else 1):
             raise AssertionError("Connected initial/restart witness repeated or omitted Upload acquisition")
-        publish("receipt.json", {"calls": calls, "scope": "local signed API; scripted model; actual Compose/native path"})
+        if case == "recovery" and calls["hello"] != 0:
+            raise AssertionError("Create recovery unexpectedly started a provider")
+        scope = "local signed API peers; actual Compose control; no model or scientific operation" if case == "recovery" else "local signed API; scripted model; actual Compose/native path"
+        publish("receipt.json", {"calls": calls, "scope": scope})
 
 
 def main():
@@ -284,7 +288,7 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--store-root", type=Path, required=True)
     parser.add_argument("--seconds", type=float, required=True)
-    parser.add_argument("--case", choices=("pasted", "references", "capacity", "successive"), required=True)
+    parser.add_argument("--case", choices=("pasted", "references", "capacity", "successive", "recovery"), required=True)
     options = parser.parse_args()
     asyncio.run(serve(options.root, options.store_root, options.seconds, options.case))
 

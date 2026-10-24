@@ -216,6 +216,13 @@ deployment_seconds() {
         || { (( ${#value} == 19 )) && [[ $value < 9223372036854775803 ]]; }; }
 }
 
+deployment_create_arguments() {
+    local bundle=$1 role=$2
+    deployment_role_create_arguments=(compose --env-file /dev/null --project-name "$deployment_project"
+        --project-directory "$repository_root" --file "$bundle/compose.json"
+        create --no-build --pull never --no-recreate "$role")
+}
+
 deployment_inventory() {
     local phase=$1 directory=$operation_root/$1 identifier inspection image_inspection role bundle image original snapshot path
     local -a identifiers=() images=() grants=() arguments=()
@@ -325,6 +332,10 @@ deployment_effects_settled() {
             # not retirement of the finite helper or release of its grants.
             return 2
         fi
+        if [[ $phase =~ ^create-(api|interpreter|store|prediction|reader|smiles|provider)$ \
+            && -f $receipts/reconciled && ! -L $receipts/reconciled \
+            && $(stat -c '%u:%a' -- "$receipts/reconciled") == "$caller_uid:600" ]] \
+            && cmp -s "$receipts/reconciled" <(printf 'realized\n'); then continue; fi
         status=$receipts/response.status
         [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]] \
             && cmp -s "$status" <(printf '0\n') || return 2
@@ -423,6 +434,65 @@ deployment_recover_helpers() {
     deployment_effects_settled "$root"
 }
 
+deployment_recover_creates() {
+    local root=$1 intent role bundle original_bundle= digest receipt
+    local -a fields=()
+    local -A pending=()
+    [[ $root == "$operation_root" ]] || return 2
+    digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
+    deployment_project=nmrnet-${digest:0:20}
+    for intent in "$root/effects/"create-*.intent; do
+        [[ -e $intent || -L $intent ]] || continue
+        [[ -f $intent && ! -L $intent && $(stat -c '%u:%a' -- "$intent") == "$caller_uid:600" ]] \
+            && (( $(stat -c '%s' -- "$intent") < 65536 )) \
+            && cmp -s <(tail -c 1 -- "$intent") <(printf '\0') || return 2
+        mapfile -d '' -t fields < "$intent"
+        (( ${#fields[@]} == 18 )) || return 2
+        role=${fields[0]#create-}
+        [[ $role =~ ^(api|interpreter|store|prediction|reader|smiles|provider)$ \
+            && $intent == "$root/effects/create-$role.intent" ]] || return 2
+        receipt=$root/create-$role
+        bundle=${fields[11]%/compose.json}
+        [[ $bundle == "$deployment_root/bundles/${bundle##*/}" \
+            && ${bundle##*/} =~ ^generation-[A-Za-z0-9_-]{1,64}$ \
+            && $(realpath -m -- "$bundle") == "$bundle" ]] || return 2
+        deployment_create_arguments "$bundle" "$role"
+        cmp -s "$intent" <(printf '%s\0' "create-$role" 60 "$receipt" "${deployment_role_create_arguments[@]}") || return 2
+        if [[ -f $receipt/response.status && ! -L $receipt/response.status \
+            && $(stat -c '%u:%a' -- "$receipt/response.status") == "$caller_uid:600" ]] \
+            && cmp -s "$receipt/response.status" <(printf '0\n'); then continue; fi
+        if [[ -f $receipt/reconciled && ! -L $receipt/reconciled \
+            && $(stat -c '%u:%a' -- "$receipt/reconciled") == "$caller_uid:600" ]] \
+            && cmp -s "$receipt/reconciled" <(printf 'realized\n'); then continue; fi
+        [[ -z $original_bundle || $original_bundle == "$bundle" ]] || return 2
+        original_bundle=$bundle pending[$role]=true
+    done
+    (( ${#pending[@]} )) || return 2
+    deployment_load_bootstrap "$original_bundle" || return $?
+    # One replaceable receiving root, below the original operation. Its finite
+    # helpers must settle before replacement; no retry history or live-ID ledger.
+    local operation_root=$root/create-recovery
+    if [[ -e $operation_root || -L $operation_root ]]; then
+        deployment_private_directory "$operation_root" false || return $?
+        deployment_effects_settled "$operation_root" || deployment_recover_helpers "$operation_root" || return 2
+        deployment_remove_operation "$operation_root" || return $?
+    fi
+    mkdir -m 700 -- "$operation_root" "$operation_root/effects" || return $?
+    deployment_inventory observation || return $?
+    for role in "${!pending[@]}"; do
+        [[ -v deployment_ids[$role] && ${deployment_bundles[$role]} == "${original_bundle##*/}" ]] \
+            || { deployment_refuse "$role creation has no admitted original realization yet; an absent or foreign object cannot settle the pending create."; return 2; }
+    done
+    # Inventory retains the received full-ID/grant proof before these markers.
+    # Creation establishes identity only; recovery never starts the object.
+    for role in "${!pending[@]}"; do
+        receipt=$root/create-$role
+        (set -o noclobber; printf 'realized\n' > "$receipt/reconciled") || return $?
+        sync -f -- "$receipt/reconciled" "$receipt" || return $?
+    done
+    deployment_effects_settled "$root"
+}
+
 deployment_begin_operation() {
     local uuid
     IFS= read -r uuid < /proc/sys/kernel/random/uuid
@@ -461,6 +531,7 @@ deployment_begin_operation() {
                 && cmp -s "$operation_root/complete" <(printf 'complete\n') \
                 || deployment_effects_settled "$operation_root" \
                 || deployment_recover_helpers "$operation_root" \
+                || deployment_recover_creates "$operation_root" \
                 || { deployment_refuse 'the previous command has unresolved effects; preserve its current operation receipts before another mutation.'; return 2; }
             deployment_remove_operation "$operation_root" || return $?
         fi
@@ -761,9 +832,8 @@ deployment_up() {
     # generation. A lost reply therefore leaves only one named create to settle.
     for role in api interpreter store prediction reader smiles provider; do
         if [[ -v deployment_ids[$role] && ${deployment_bundles[$role]} == "$name" ]]; then continue; fi
-        deployment_command "create-$role" 60 "$operation_root/create-$role" true compose --env-file /dev/null \
-            --project-name "$deployment_project" --project-directory "$repository_root" --file "$selected_bundle/compose.json" \
-            create --no-build --pull never --no-recreate "$role" || return $?
+        deployment_create_arguments "$selected_bundle" "$role"
+        deployment_command "create-$role" 60 "$operation_root/create-$role" true "${deployment_role_create_arguments[@]}" || return $?
         deployment_inventory "created-$role" || return $?
         [[ -v deployment_ids[$role] && ${deployment_bundles[$role]} == "$name" ]] \
             || { deployment_refuse "$role creation did not yield an admitted container from the selected bundle."; return 2; }

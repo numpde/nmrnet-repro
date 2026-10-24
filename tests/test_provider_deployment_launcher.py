@@ -14,6 +14,44 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_lost_role_create_uses_original_bundle_admission_without_repeating_create(self):
+        for outcome in ("realized", "absent", "foreign", "changed-command"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:
+                result = self.shell('''
+caller_uid=$(id -u) caller_gid=$(id -g) repository_root=$1 deployment_root=$2
+deployment_name=fixture deployment_action=up operation_root=$2/mutation
+operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
+mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/create-api" "$2/bundles" "$2/bundles/generation-original"
+digest=$(printf '%s\\0%s' "$repository_root" "$deployment_name" | sha256sum)
+deployment_project=nmrnet-${digest:0:20}
+bundle=$2/bundles/generation-original
+arguments=(compose --env-file /dev/null --project-name "$deployment_project" --project-directory "$repository_root" --file "$bundle/compose.json" create --no-build --pull never --no-recreate api)
+if [[ $3 == changed-command ]]; then arguments[9]=up; fi
+printf '%s\\0' create-api 60 "$operation_root/create-api" "${arguments[@]}" > "$operation_root/effects/create-api.intent"
+admissions=0
+expected_bundle=$bundle
+deployment_load_bootstrap() { [[ $1 == "$expected_bundle" ]] || return 91; }
+fixture_outcome=$3
+deployment_inventory() {
+    admissions=$((admissions + 1))
+    [[ $fixture_outcome != foreign ]] || return 2
+    declare -gA deployment_ids=() deployment_bundles=()
+    if [[ $fixture_outcome != absent ]]; then
+        deployment_ids[api]=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+        deployment_bundles[api]=generation-original
+    fi
+}
+deployment_command() { printf 'Unexpected Engine control\\n' >&2; return 92; }
+if deployment_recover_creates "$operation_root"; then
+    [[ $3 == realized && $admissions == 1 && -f $operation_root/create-api/reconciled ]]
+else
+    [[ $3 != realized && ! -e $operation_root/create-api/reconciled ]]
+    if [[ $3 == changed-command ]]; then [[ $admissions == 0 ]]; else [[ $admissions == 1 ]]; fi
+fi
+''', directory, outcome)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_native_event_receipts_exclude_application_output_and_preserve_engine_failure(self):
         operation = "a" * 32
         for status in (0, 7):
