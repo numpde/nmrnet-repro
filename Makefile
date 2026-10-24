@@ -49,9 +49,6 @@ test/unit/smiles-qualification:
 test/integration/provider/prediction-recovery:
 	bash tools/prediction_recovery_qualification.sh
 
-.PHONY: test/integration/provider/logging
-test/integration/provider/logging:
-	bash tools/provider_logging_qualification.sh
 .PHONY: test/integration/provider-scientific-worker
 .PHONY: test/integration/provider-scientific-worker/smiles
 .PHONY: test/integration/provider-geometry-worker
@@ -348,13 +345,12 @@ override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin W
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
-unexport LOG_LEVEL CONTAINER_ID
+unexport LOG_LEVEL
 unexport DEPLOYMENT
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
 unexport UPLOAD_RECEIPT
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
-override export NMRNET_CONTAINER_ID_INPUT := $(if $(filter command line,$(origin CONTAINER_ID)),$(value CONTAINER_ID))
 unexport FORMAT_CASES
 unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
@@ -439,7 +435,6 @@ help:
 		'make test/integration/provider/deployment/recovery Check lost Engine replies, startup recovery and fenced replacement without scientific work (opt-in).' \
 		'make test/unit/provider/deployment     Check private deployment bundles and successive refreshes offline.' \
 		'make provider/run                      Run the provider service with explicit host and route configuration.' \
-		'make provider/logs CONTAINER_ID=<id>   Read the last 200 journal messages for one full container ID, including removed workers.' \
 		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
 		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
@@ -467,7 +462,6 @@ help:
 		'make test/integration/provider-core/runner Test native task cancellation and lost-control recovery offline.' \
 		'make test/unit/provider/worker Test prediction worker framing and exchange failures.' \
 		'make test/integration/provider/prediction-recovery Prove one prediction replacement after a real synthetic kernel OOM (opt-in).' \
-		'make test/integration/provider/logging  Prove routine/private output and post-removal journal access (opt-in).' \
 		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/integration/provider-core/smiles Test Job-bound SMILES choices with installed core.' \
@@ -593,10 +587,7 @@ test/unit/provider/allocation:
 provider/prepare:
 	bash tools/provider_prepare.sh
 
-.PHONY: provider/logs provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
-provider/logs:
-	bash tools/provider_logs.sh
-
+.PHONY: provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 provider/run:
 	bash tools/provider.sh
 

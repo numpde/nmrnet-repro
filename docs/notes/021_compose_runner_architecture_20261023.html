@@ -1504,6 +1504,17 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       install/up/down controls. The staging container receives two narrow writable
       output leaves, never the host receipt root. This is fixture/source evidence;
       no additional actual API Job or model call was issued for this migration.</p>
+    <p><strong>T6 finite-helper logging:</strong> retained finite callers now use
+      the same json-file 10 MiB × 3 and nonblocking 1 MiB policy as production.
+      Shared exact-container retirement confirms stop, delivers the last 80 Docker
+      log messages directly to protected stderr, and only then removes the container.
+      Failed log delivery retains the stopped ID and original receipts. The authored
+      wheel-capture preview includes that receiving step. Twenty-eight host-owner
+      and 57 still-retained allocation tests passed, including failed delivery with
+      no remove. Fifteen image/wheel-helper tests also passed, retaining original
+      build failures across cleanup. The journal-only log command, post-removal qualification and Make
+      selectors were removed. Note 019 remains historical; current proofs make no
+      claim that logs survive removal or demonstrate new fatal-science delivery.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

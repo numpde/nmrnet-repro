@@ -36,7 +36,7 @@ provider_workers_retire "$FAKE_TOKEN"
 provider_workers_close
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_invalid_logging_choice_has_no_native_engine_or_allocation_effect(self):
         host = HostFixture()
@@ -514,7 +514,7 @@ provider_workers_service
 provider_workers_close
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_drain_deadline_closes_creation_between_two_queued_requests(self):
         host = self.host()
@@ -614,7 +614,7 @@ provider_workers_close
                 self.assertEqual(len(list((host.allocation_root / "requests").iterdir())), prior + 1)
                 if prior == 2:
                     self.assertEqual(
-                        [row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"]
+                        [row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"logs", b"rm"]
                     )
                 else:
                     self.assertFalse((host.root / "commands").exists())
@@ -848,7 +848,7 @@ provider_workers_service
 provider_workers_close
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"logs", b"rm"])
         self.assertFalse((host.allocation_root / "receipts" / HOST_TOKEN / "allocated").exists())
         self.assertTrue((host.allocation_root / "receipts" / HOST_TOKEN / "result").exists())
 

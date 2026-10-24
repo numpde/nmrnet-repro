@@ -64,6 +64,11 @@ inference_native() {
     inference_cancellation_status=0
     inference_diagnostic=
     if [[ $operation == 'wheelhouse capture' ]]; then return 0; fi
+    if [[ $operation == 'stopped container diagnostics' ]]; then
+        [[ $# == 5 && $1 == fixture && $2 == logs && $3 == --tail && $4 == 80 \
+            && $5 == dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd ]]
+        return $?
+    fi
     local receipts=$6 lifecycle=$7
     local identifier=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
     (

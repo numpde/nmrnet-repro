@@ -36,6 +36,7 @@ print_wheel_capture_plan() {
     printf '%q ' "${engine[@]}" stop --time 5 "$identifier"; printf '\n'
     printf '%q ' "${engine[@]}" inspect --type container --format \
         '{{.Id}} {{.State.Status}} {{.State.Running}} {{.State.Pid}} {{.State.Restarting}}' "$identifier"; printf '\n'
+    printf '%q ' "${engine[@]}" logs --tail 80 "$identifier"; printf '>&2\n'
     printf '%q ' "${engine[@]}" rm "$identifier"; printf '\n'
 }
 

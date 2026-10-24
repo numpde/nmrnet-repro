@@ -27,6 +27,10 @@ printf '%s\0' "$@" > "$FAKE_STATE/commands/$record"
 operation=$1
 shift
 case "$operation" in
+    logs)
+        printf '%s\n' 'fixture stopped-container diagnostic' >&2
+        exit "${FAKE_LOGS_STATUS-0}"
+        ;;
     create)
         cidfile= memory= network= log_driver= pids=
         while (( $# )); do
@@ -75,10 +79,10 @@ case "$operation" in
             IFS= read -r log_driver < "$FAKE_STATE/log-driver"
             IFS= read -r pids < "$FAKE_STATE/pids"
             log_config='{}'
-            if [[ $log_driver == journald ]]; then
-                log_config='{"max-buffer-size":"1m","mode":"non-blocking","tag":"nmrnet-{{.FullID}}"}'
+            if [[ $log_driver == json-file ]]; then
+                log_config='{"max-buffer-size":"1m","max-file":"3","max-size":"10m","mode":"non-blocking"}'
             fi
-            if [[ ${FAKE_LOGGING_MISMATCH-no} == yes ]]; then log_driver=json-file; fi
+            if [[ ${FAKE_LOGGING_MISMATCH-no} == yes ]]; then log_driver=journald; fi
             case $memory in 4g) bytes=4294967296 ;; 2g) bytes=2147483648 ;; *) bytes=536870912 ;; esac
             printf '%s|%s|%s|%s|true|%s|false|%s|%s|%s|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s|%s\n' \
                 "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$network" "$bytes" "$bytes" "$pids" "$(id -u)" "$(id -g)" "$log_driver" "$log_config"

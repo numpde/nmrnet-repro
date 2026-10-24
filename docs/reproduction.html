@@ -371,8 +371,9 @@ run outcomes and source/image identities.</p>
 prediction worker receives checkpoints; the controller owns API credentials and
 durable state. The host confirms exact-container retirement before publication.
 Successful runs retain source-hashed summaries under <code>.work/qualification/</code>;
-failed runs retain private receipts, diagnostics and journals at the reported
-paths. Preserve those records before attempting recovery.</p>
+failed runs retain private receipts and diagnostic evidence at the reported
+paths. Runtime output stays in bounded Docker logs; it is not exported beside
+those receipts. Preserve retained owners before attempting recovery.</p>
 <h2 id="checks-and-dependency-updates">Checks and dependency updates</h2>
 <pre><code class="language-sh">make test                 # offline unit, repository, core contract and integration suites
 make test/unit

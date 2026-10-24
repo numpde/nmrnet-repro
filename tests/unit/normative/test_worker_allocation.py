@@ -62,8 +62,8 @@ provider_workers_create reader "$FAKE_TOKEN"
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
         create = host.commands()[0]
-        self.assertEqual(create[create.index(b"--log-driver") + 1], b"journald")
-        for option in (b"mode=non-blocking", b"max-buffer-size=1m", b"tag=nmrnet-{{.FullID}}", b"NMRNET_LOG_LEVEL=DEBUG"):
+        self.assertEqual(create[create.index(b"--log-driver") + 1], b"json-file")
+        for option in (b"mode=non-blocking", b"max-buffer-size=1m", b"max-size=10m", b"max-file=3", b"NMRNET_LOG_LEVEL=DEBUG"):
             self.assertIn(option, create)
         command = create[create.index(b"-c") + 1].decode()
         self.assertNotIn("/diagnostics/stdout", command)
@@ -494,7 +494,7 @@ provider_workers_close
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(
-                    [row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"]
+                    [row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"logs", b"rm"]
                 )
                 root = host.allocation_root
                 directories = [root, *(root / name for name in ("requests", "receipts", "ipc", "owned"))]
@@ -583,7 +583,7 @@ provider_workers_close
         )
         self.assertFalse((host.allocation_root / "ipc" / HOST_TOKEN).exists())
         commands = host.commands()
-        self.assertEqual([row[0] for row in commands], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in commands], [b"create", b"start", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
         self.assertIn(CID.encode(), commands[-1])
         create = commands[0]
         self.assertEqual(create[create.index(b"--network") + 1], b"none")

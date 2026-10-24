@@ -14,6 +14,30 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_failed_log_delivery_retains_the_stopped_helper_and_original_receipts(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment.update(FAKE_POSTURE_STATE="created", FAKE_POSTURE_RUNNING="false", FAKE_LOGS_STATUS="7")
+        result = host.run('''
+source tools/provider.sh
+provider_host_root=$FAKE_ROOT
+provider_host_diagnostic=
+mkdir -p "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false
+provider_host_grants=()
+provider_host_argv=(/bin/true)
+provider_host_create helper none "$FAKE_IMAGE" provider_host_grants provider_host_argv false
+if provider_host_remove helper; then exit 99; fi
+[[ ${provider_host_ids[helper]} == "$FAKE_CID" ]]
+[[ -d $provider_host_root/components/helper/retirement ]]
+printf '%s\n' "$provider_host_diagnostic" >&2
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Docker log delivery failed", result.stderr)
+        self.assertIn("fixture stopped-container diagnostic", result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"start", b"stop", b"inspect", b"logs"])
+
     def test_logging_posture_mismatch_prevents_component_start_and_retains_exact_cleanup(self):
         host = HostFixture()
         self.addCleanup(host.close)
@@ -30,7 +54,7 @@ if provider_host_create controller none "$FAKE_IMAGE" launch_grants launch_comma
 provider_host_remove controller
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_recovery_handoff_requires_seven_private_complete_fields_and_exact_helper_retirement(self):
         valid = b"field\0" * 7
@@ -203,7 +227,7 @@ provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"rm"])
+                self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_helper_mount_capture_failure_prevents_start_and_keeps_its_exact_cleanup_handle(self):
         host = HostFixture()
@@ -223,7 +247,7 @@ provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"inspect", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_failed_create_adopts_an_exact_handle_for_retirement_without_starting_or_retrying(self):
         host = HostFixture()
@@ -243,7 +267,7 @@ provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_mismatched_create_receipts_hold_uncertain_ownership_without_guessed_cleanup(self):
         host = HostFixture()
@@ -332,7 +356,7 @@ provider_host_finish 0
         host, result = self.signal_shutdown(stays_running=False)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("controller exited unsuccessfully during shutdown", result.stderr)
-        self.assertEqual([row[0] for row in host.commands()], [b"kill", b"inspect", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"kill", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_expired_controller_drain_reports_failure_even_when_emergency_removal_succeeds(self):
         host, result = self.signal_shutdown(stays_running=True)
@@ -341,7 +365,7 @@ provider_host_finish 0
         self.assertIn("inspect durable Attempt state before restart", result.stderr)
         commands = [row[0] for row in host.commands()]
         self.assertEqual(commands.count(b"kill"), 1)
-        self.assertEqual(commands[-3:], [b"stop", b"inspect", b"rm"])
+        self.assertEqual(commands[-4:], [b"stop", b"inspect", b"logs", b"rm"])
 
     def test_failed_exact_retirement_is_retained_without_an_automatic_repeat(self):
         host = HostFixture()

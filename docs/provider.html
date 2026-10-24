@@ -41,7 +41,7 @@ and <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04e
 <p>The internal <code>nmrnet_provider.config.load_provider_config</code> loads one explicit
 UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
 configured credential, interpreter keys and TLS roots before any HTTP request,
-worker allocation or journal acquisition.
+native operation or network acquisition.
 Run its focused, offline container tests with
 <code>make test/integration/provider-core/config</code>.</p>
 <p>The file requires <code>schema_id = "nmrnet.provider.runtime_config.v1"</code> and these

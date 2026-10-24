@@ -37,36 +37,6 @@ provider_host_remove helper
         self.assertIn(b"--read-only", create)
         self.assertIn(b"ALL", create)
 
-    def test_log_reader_selects_only_the_complete_literal_container_id(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            reader = root / "journal-function.sh"
-            reader.write_text('journalctl() { printf "%s\\n" "$@"; }\n')
-            identifier = "a" * 64
-            environment = dict(os.environ, BASH_ENV=str(reader), NMRNET_CONTAINER_ID_INPUT=identifier)
-            result = subprocess.run(
-                ["bash", "tools/provider_logs.sh"], env=environment, capture_output=True, text=True, timeout=5, check=False
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(
-                result.stdout.splitlines(),
-                ["--no-pager", "--lines", "200", "--output", "short-iso", f"CONTAINER_ID_FULL={identifier}"],
-            )
-            for invalid in ("", "a" * 12, "A" * 64, "a" * 64 + " --all", "$(touch sentinel)"):
-                with self.subTest(invalid=invalid):
-                    environment["NMRNET_CONTAINER_ID_INPUT"] = invalid
-                    refused = subprocess.run(
-                        ["bash", "tools/provider_logs.sh"],
-                        env=environment,
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        check=False,
-                    )
-                    self.assertEqual(refused.returncode, 2)
-                    self.assertEqual(refused.stdout, "")
-                    self.assertIn("full 64-character container ID", refused.stderr)
-
     def test_recovery_handoff_admits_all_seven_fields_only_after_the_selected_helper_is_removed(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "handoff"
@@ -204,7 +174,7 @@ provider_host_finish 0
                     self.assertNotIn("Protected recovery result", result.stdout)
                 self.assertEqual(
                     [row[0] for row in host.commands()],
-                    [b"kill", b"inspect"] + [b"stop", b"inspect", b"rm"] * (2 if mode == "run" else 1),
+                    [b"kill", b"inspect"] + [b"stop", b"inspect", b"logs", b"rm"] * (2 if mode == "run" else 1),
                 )
 
     def test_signal_during_liveness_preserves_the_poll_and_drains_from_a_fresh_controller_observation(self):
@@ -249,7 +219,7 @@ provider_host_finish 0
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(
                     [row[0] for row in host.commands()],
-                    [b"inspect"] * (1 if role == "controller" else 4) + [b"kill", b"inspect"] + [b"stop", b"inspect", b"rm"] * 4,
+                    [b"inspect"] * (1 if role == "controller" else 4) + [b"kill", b"inspect"] + [b"stop", b"inspect", b"logs", b"rm"] * 4,
                 )
                 controller = host.root / "install/components/controller"
                 self.assertEqual(
@@ -369,7 +339,7 @@ provider_host_remove capture
         self.assertEqual(result.returncode, 0, result.stderr)
         create = host.commands()[0]
         self.assertEqual(create[create.index(b"--maximum-bytes") + 1], b"2097152")
-        self.assertEqual(create[create.index(b"--log-driver") + 1], b"journald")
+        self.assertEqual(create[create.index(b"--log-driver") + 1], b"json-file")
         self.assertNotIn(b"/diagnostics/stdout", create[create.index(b"-c") + 1])
         self.assertNotIn(b"/diagnostics/stderr", create[create.index(b"-c") + 1])
         self.assertEqual(
@@ -385,7 +355,7 @@ provider_host_remove capture
             ],
         )
         self.assertNotIn(b"PYTHONPATH=/fixture", create)
-        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"start", b"stop", b"inspect", b"rm"])
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"start", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_helper_images_commands_and_grants_use_the_same_private_launch_owner(self):
         for network, interpreter, script in (
@@ -449,6 +419,7 @@ provider_host_remove helper
                         b"start",
                         b"stop",
                         b"inspect",
+                        b"logs",
                         b"rm",
                     ],
                 )

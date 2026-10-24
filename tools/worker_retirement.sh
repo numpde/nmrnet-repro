@@ -65,6 +65,13 @@ worker_container_retire() {
         printf -v worker_retirement_diagnostic 'Cannot confirm worker stopped: inspection did not report the exact container in the exited or never-started state with no process or restart. Private receipts: %q.' "$receipts"
         return 2
     fi
+    # json-file logs disappear on removal. Deliver the stopped container's last
+    # messages directly to the operator first, including a fatal traceback or a
+    # failure during TERM. A broken sink retains this exact stopped owner.
+    if inference_native 'stopped container diagnostics' 30 stdio "$@" logs --tail 80 "$identifier" >&2; then :; else
+        worker_retirement_diagnostic="Cannot remove stopped container: bounded Docker log delivery failed; retain its original receipts. $inference_diagnostic"
+        return 2
+    fi
     worker_retirement_command remove "$receipts" "$@" rm "$identifier"
 }
 
