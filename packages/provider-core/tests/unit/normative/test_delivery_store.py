@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from provider_core.delivery_store import DeliveryFull, DeliveryQueue, QueueLimits
+from provider_core.delivery_store import DeliveryConflict, DeliveryFull, DeliveryQueue, DeliveryStorageFailed, QueueLimits
 from tests.fakes.delivery import outcome
 
 
@@ -69,3 +69,30 @@ class DeliveryQueueTests(unittest.TestCase):
         with self.assertRaises(DeliveryFull):
             queue.enqueue(outcome(provider="provider:third", suffix="2"))
         self.assertEqual(len(queue.inventory(first.api_origin, first.provider_ref)), 1)
+
+    def test_operator_discard_requires_exclusive_storage_and_exact_held_identity(self):
+        self.limits = QueueLimits(provider_items=2, provider_bytes=8192, total_items=4, total_bytes=16384)
+        queue = self.open()
+        held = outcome(message="DISCARDED_HELD_PAYLOAD_NEEDLE")
+        pending = outcome(suffix="1")
+        other = outcome(provider="provider:other", suffix="2")
+        for item in (held, pending, other):
+            queue.enqueue(item)
+        queue.hold(held, "The API refused this outcome; operator reconciliation is required.")
+        queue.hold(other, "Another binding owns this held request.")
+        with self.assertRaises(DeliveryStorageFailed):
+            DeliveryQueue(self.root, limits=self.limits)
+        for origin, provider, attempt, digest in (
+            ("https://other.example", held.provider_ref, held.execution_attempt_ref, held.body_sha256),
+            (held.api_origin, other.provider_ref, held.execution_attempt_ref, held.body_sha256),
+            (held.api_origin, held.provider_ref, held.execution_attempt_ref, "sha256:" + "f" * 64),
+            (pending.api_origin, pending.provider_ref, pending.execution_attempt_ref, pending.body_sha256),
+        ):
+            with self.assertRaises(DeliveryConflict):
+                queue.discard_held(origin, provider, attempt, digest)
+        queue.discard_held(held.api_origin, held.provider_ref, held.execution_attempt_ref, held.body_sha256)
+        self.assertEqual(queue.next_pending(pending.api_origin, pending.provider_ref), pending)
+        self.assertEqual(len(queue.inventory(other.api_origin, other.provider_ref)), 1)
+        self.assertEqual(queue.inventory(held.api_origin, held.provider_ref)[0]["execution_attempt_ref"], pending.execution_attempt_ref)
+        queue.close()
+        self.assertNotIn(b"DISCARDED_HELD_PAYLOAD_NEEDLE", (self.root / "delivery.sqlite3").read_bytes())

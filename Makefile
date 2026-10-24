@@ -298,6 +298,10 @@ override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin D
 override export NMRNET_DELIVERY_DEPLOYMENTS_INPUT := $(if $(filter command line,$(origin DEPLOYMENTS)),$(value DEPLOYMENTS))
 unexport UPLOAD_RECEIPT
 unexport JOB_RECEIPT
+unexport PROVIDER_REF EXECUTION_ATTEMPT_REF BODY_SHA256
+override export NMRNET_PROVIDER_REF_INPUT := $(if $(filter command line,$(origin PROVIDER_REF)),$(value PROVIDER_REF))
+override export NMRNET_EXECUTION_ATTEMPT_REF_INPUT := $(if $(filter command line,$(origin EXECUTION_ATTEMPT_REF)),$(value EXECUTION_ATTEMPT_REF))
+override export NMRNET_BODY_SHA256_INPUT := $(if $(filter command line,$(origin BODY_SHA256)),$(value BODY_SHA256))
 override export NMRNET_JOB_RECEIPT_INPUT := $(if $(filter command line,$(origin JOB_RECEIPT)),$(value JOB_RECEIPT))
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
@@ -342,6 +346,7 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 
 help:
 	@printf '%s\n' \
+		'make delivery/deployment/discard API_ORIGIN=... PROVIDER_REF=... EXECUTION_ATTEMPT_REF=... BODY_SHA256=...  Remove one exact held payload after explicitly stopping shared delivery; no API acceptance is inferred.' \
 		'make help                              List maintained commands; also the default goal.' \
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
@@ -531,8 +536,8 @@ test/integration/provider/deployment/smiles test/integration/provider/deployment
 provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
 	bash tools/provider_deployment.sh $(notdir $@)
 
-.PHONY: delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down
-delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down:
+.PHONY: delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard
+delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard:
 	bash tools/delivery_deployment.sh $(notdir $@)
 
 test/unit/provider/deployment:

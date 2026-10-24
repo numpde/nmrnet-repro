@@ -13,6 +13,7 @@ require_container()
 import fcntl
 import hashlib
 import os
+import re
 import sqlite3
 import stat
 import threading
@@ -271,6 +272,22 @@ class DeliveryQueue:
             cursor = self._db.execute("UPDATE outstanding SET state='held',held_reason=? WHERE api_origin=? AND provider_ref=? AND attempt_ref=? AND job_ref=? AND operation=? AND body=?", (reason, *self._match(item)))
             if cursor.rowcount != 1:
                 raise DeliveryConflict("The queued request changed before the hold; its current owner must reconcile it.")
+
+    def discard_held(self, api_origin, provider_ref, attempt_ref, body_sha256):
+        """Operator disposition only; removing held bytes proves no API receipt."""
+        if _https_origin(api_origin)[0] != api_origin:
+            raise ValueError("Discard requires the configured canonical API origin.")
+        require_provider_ref(provider_ref)
+        require_attempt_ref(attempt_ref)
+        if type(body_sha256) is not str or re.fullmatch(r"sha256:[0-9a-f]{64}", body_sha256) is None:
+            raise ValueError("Discard requires the held payload's exact SHA-256 from its metadata.")
+        with self._transaction("discard a held request from"):
+            cursor = self._db.execute(
+                "DELETE FROM outstanding WHERE api_origin=? AND provider_ref=? AND attempt_ref=? AND digest=? AND state='held'",
+                (api_origin, provider_ref, attempt_ref, body_sha256),
+            )
+            if cursor.rowcount != 1:
+                raise DeliveryConflict("No matching held payload was removed. Check its binding, Attempt and digest; pending requests cannot be discarded.")
 
     def close(self):
         with self._serial:

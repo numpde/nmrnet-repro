@@ -4,8 +4,9 @@ set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
-[[ $# == 2 && $role =~ ^(provider|delivery)$ && $action =~ ^(install|up|down|status|logs|client-inputs)$ ]] || exit 2
+[[ $# == 2 && $role =~ ^(provider|delivery)$ && $action =~ ^(install|up|down|status|logs|client-inputs|discard)$ ]] || exit 2
 [[ $role == provider || $action != client-inputs ]] || exit 2
+[[ $role == delivery || $action != discard ]] || exit 2
 caller_uid=$(id -u) caller_gid=$(id -g)
 [[ $caller_uid != 0 && $caller_gid != 0 ]] || { printf '%s\n' 'Run Compose deployment as its nonroot owner.' >&2; exit 2; }
 refuse() { printf 'Cannot %s %s deployment: %s\n' "$action" "$role" "$1" >&2; return 2; }
@@ -81,7 +82,7 @@ select_bundle() {
     [[ -d $bundle && -f $bundle/compose.json && ! -L $bundle/compose.json ]] || return 2
 }
 helper() {
-    local image=$1; shift
+    local image=$1 python=$2; shift 2
     IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
     helper_name=nmrnet-config-${helper_uuid//-/}
     run 120 run --rm --pull never --name "$helper_name" --init --network none --read-only \
@@ -90,7 +91,7 @@ helper() {
         --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=0700,uid=$caller_uid,gid=$caller_gid" \
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
         --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
-        "${helper_grants[@]}" --entrypoint /opt/provider/environment/bin/python "$image" -I -B "$@"
+        "${helper_grants[@]}" --entrypoint "$python" "$image" -I -B "$@"
     helper_name=
 }
 if [[ $action == install ]]; then
@@ -138,7 +139,7 @@ if [[ $action == install ]]; then
             path "$file"
             helper_grants+=(--mount "type=bind,src=$file,dst=$file,readonly")
         done
-        helper "$controller_image" /input/provider_deployment.py freeze \
+        helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py freeze \
             --source-root /source "${source_arguments[@]}" \
             --definition "$repository_root/config/deployments/$deployment_name/provider.toml" \
             --settings "$repository_root/config/deployments/$deployment_name/deployment.toml" \
@@ -166,7 +167,7 @@ if [[ $action == install ]]; then
             provider_arguments+=(--provider-bundle "$provider_bundle")
         done
         (( ${#profiles[@]} > 0 && ${#profiles[@]} <= 16 )) || exit 2
-        helper "$controller_image" -m nmrnet_provider.delivery_deployment prepare "${provider_arguments[@]}" \
+        helper "$controller_image" /opt/provider/environment/bin/python -m nmrnet_provider.delivery_deployment prepare "${provider_arguments[@]}" \
             --output "$bundle" --uid "$caller_uid" --gid "$caller_gid" \
             --delivery-image "$delivery_image" --controller-image "$controller_image"
     fi
@@ -196,6 +197,19 @@ fi
 select_bundle
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
 case $action in
+    discard)
+        for selector in API_ORIGIN PROVIDER_REF EXECUTION_ATTEMPT_REF BODY_SHA256; do
+            alias=NMRNET_${selector}_INPUT
+            [[ -n ${!alias-} ]] || { refuse "supply explicit $selector from held-item metadata; stop shared delivery first."; exit 2; }
+        done
+        image_record delivery
+        helper_grants=(--mount "type=bind,src=$bundle/daemon.toml,dst=/input/daemon.toml,readonly"
+            --mount 'type=volume,src=nmr-api-delivery-queue,dst=/state,volume-nocopy')
+        helper "$selected_image" /opt/provider-core/environment/bin/python -m provider_core.delivery_discard \
+            --config /input/daemon.toml --api-origin "$NMRNET_API_ORIGIN_INPUT" \
+            --provider-ref "$NMRNET_PROVIDER_REF_INPUT" --execution-attempt-ref "$NMRNET_EXECUTION_ATTEMPT_REF_INPUT" \
+            --body-sha256 "$NMRNET_BODY_SHA256_INPUT"
+        ;;
     up) run 180 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120 ;;
     down) run 120 "${compose[@]}" down --timeout 60 ;;
     status) run 30 "${compose[@]}" ps --all ;;
@@ -210,7 +224,7 @@ case $action in
         path "$NMRNET_OUTPUT_INPUT"
         helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle,readonly"
             --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
-        helper "$controller_image" /input/provider_deployment.py client-inputs --bundle "$bundle" \
+        helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py client-inputs --bundle "$bundle" \
             --prediction-image-id "$prediction_image" --client-root "$NMRNET_OUTPUT_INPUT"
         ;;
 esac
