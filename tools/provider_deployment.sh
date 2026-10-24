@@ -1011,4 +1011,9 @@ deployment_main() {
     deployment_dispatch
 }
 
-if [[ ${BASH_SOURCE[0]} == "$0" ]]; then deployment_main "$@"; fi
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    deployment_main "$@"
+    # Finish this invocation without asking Bash to read a subsequently edited
+    # checkout tail. Its original EXIT owner still publishes completion/cleanup.
+    exit "$?"
+fi

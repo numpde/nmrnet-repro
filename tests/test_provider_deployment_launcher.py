@@ -5,9 +5,11 @@ from tools.container_guard import require_container
 require_container()
 
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
+import time
 from pathlib import Path
 from itertools import product
 
@@ -15,6 +17,36 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_command_exits_without_reading_a_new_checkout_tail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script, ready, sentinel = root / "provider_deployment.sh", root / "ready", root / "sentinel"
+            for helper in ("deployment_helper_grants.sh", "deployment_runtime_recovery.sh"):
+                shutil.copyfile(ROOT / "tools" / helper, root / helper)
+            source = (ROOT / "tools/provider_deployment.sh").read_text()
+            entry = 'if [[ ${BASH_SOURCE[0]} == "$0" ]]; then'
+            self.assertIn(entry, source)
+            source = source.replace(entry, 'deployment_main() { touch "$TEST_READY"; read -r _finished; return 0; }\n' + entry)
+            script.write_text(source)
+            process = subprocess.Popen(
+                ["bash", str(script)], env=dict(os.environ, TEST_READY=str(ready), TEST_SENTINEL=str(sentinel)),
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            try:
+                deadline = time.monotonic() + 2
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(ready.exists())
+                with script.open("a") as changed:
+                    changed.write('\nprintf replayed > "$TEST_SENTINEL"\n')
+                _stdout, stderr = process.communicate("completed\n", timeout=2)
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertFalse(sentinel.exists())
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate()
+
     def test_crash_exec_budget_covers_the_probe_window_and_requires_local_retirement(self):
         for retired in ("true", "false"):
             with self.subTest(retired=retired), tempfile.TemporaryDirectory() as directory:

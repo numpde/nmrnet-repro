@@ -1559,6 +1559,13 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       moved it into history. The receiving check now compares the original stored
       bytes across that move rather than regenerating an expected record. Neither
       correction changed scientific outputs, tolerances or replay content.</p>
+    <p><strong>T6 shell entrypoint lifetime:</strong> the old host's live-file-tail
+      witness was ported to the actual finite deployment caller. It failed before
+      the fix: an appended checkout tail executed after the original command returned.
+      The entrypoint now explicitly exits with that command's status, preserving
+      its original EXIT cleanup owner without reading another tail. All 31 focused
+      deployment/client tests passed. This qualifies that invocation boundary,
+      not arbitrary changes to a running checkout.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,
