@@ -170,6 +170,14 @@ policy. Its seven containers are the provider, three serial native runners
 (prediction, structure reader and conformer generator), and three proxies
 (API, interpreter and Upload access). The up command finishes after checking
 their configuration and current readiness. Docker must itself start after a host reboot.
+On restart, saved completion or failure results can finish publication after the
+provider proves retirement through all three native runners. It reuses the saved
+request; interpretation, structure generation and prediction are not repeated.
+The complete retained inventory must contain only pending terminal results or
+confirmed receipts. Unknown entered work, conflicting identities and damaged
+records still block startup for explicit recovery. Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/fff41ae/nmrnet_provider/service.py">startup recovery and shutdown ownership</a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/4e7d897/nmrnet_provider/native_factory.py">native retirement barriers</a>.
 Keep the public provider definition in
 <code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
 <code>config/deployments/&lt;name&gt;/deployment.toml</code>. Copy the latter from

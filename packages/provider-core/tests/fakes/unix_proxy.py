@@ -12,8 +12,9 @@ from urllib.parse import urlsplit
 
 
 class UnixProxy:
-    def __init__(self, origin, mode):
+    def __init__(self, origin, mode, *, refusal_status=403):
         self.origin, self.mode = urlsplit(origin), mode
+        self.refusal_status = refusal_status
         self.headers = []
         self.received, self.closed = asyncio.Event(), asyncio.Event()
         self.handlers = set()
@@ -39,7 +40,7 @@ class UnixProxy:
                 await reader.read()
                 return
             if self.mode in ("refuse", "malformed"):
-                reply = b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
+                reply = f"HTTP/1.1 {self.refusal_status} PRIVATE_PROXY_REASON\r\nContent-Length: 0\r\n\r\n".encode()
                 if self.mode == "malformed":
                     reply = b"not HTTP\r\n\r\n"
                 writer.write(reply)

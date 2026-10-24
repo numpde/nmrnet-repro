@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 import unittest
+import httpcore
 from contextlib import redirect_stderr
 from dataclasses import replace
 from pathlib import Path
@@ -84,6 +85,16 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_rejection_reaches_operator_as_proxy_status_without_private_reason_or_api_status(self):
+        report = self.receive(ExchangeFailed(
+            "The CONNECT proxy refused the tunnel",
+            primary=httpcore.ProxyError("PRIVATE_PROXY_REASON"), proxy_connect_status=502,
+        ))
+        rendered = json.dumps(report)
+        self.assertIn('"proxy_connect_status": 502', rendered)
+        self.assertNotIn('"status": 502', rendered)
+        self.assertNotIn("PRIVATE_PROXY_REASON", rendered)
+
     async def test_model_rejection_reason_reaches_protected_renderer_after_all_key_redaction(self):
         key, other_key = "CURRENT_MODEL_KEY", "FALLBACK_CREDENTIAL_" + "z" * 80
         prompt = 'PRIVATE_INPUT "coordinates"\nC 0 0 0; api_key=' + key

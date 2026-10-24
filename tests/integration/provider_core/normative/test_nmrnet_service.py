@@ -11,6 +11,7 @@ from tests.fakes.api import response_headers, signature_window_problem
 from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.tls_peer import TlsPeer
+from tests.fakes.unix_proxy import UnixProxy
 from tests.integration.nmrnet.admission_ports import feed_response
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.service_ports import ServicePeers
@@ -22,10 +23,38 @@ from nmrnet_provider.service import Announcement, ServiceFailed
 from provider_core.attempt_files import history_directory_name, record_name
 from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
+from provider_core.api import ProviderAPI
 from provider_core.controller import StartRecovery, TerminalRecovery
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_gateway_outage_recovers_in_the_same_service_before_any_scientific_allocation(self):
+        async with ServicePeers() as fixture, UnixProxy(fixture.api_peer.origin, "refuse", refusal_status=502) as proxy:
+            settings = fixture.config.api
+            fixture.config = replace(fixture.config, api=replace(settings, http=replace(settings.http, proxy_socket=proxy.path)))
+            fixture.api = ProviderAPI(
+                settings.identity, fixture.config.api.http.new_transport(), expected_topology=settings.expected_topology
+            )
+            notices = []
+
+            def recovered_route(kind, failure, _seconds):
+                self.assertEqual(kind, "read")
+                self.assertIsNone(failure.status)
+                self.assertEqual(failure.cause.proxy_connect_status, 502)
+                notices.append(failure)
+                proxy.mode = "tunnel"
+
+            service = fixture.service(on_api_retry=recovered_route, on_started=fixture.stop.set)
+            await asyncio.wait_for(service.run(fixture.stop), 4)
+            await service.settle()
+            self.assertIsNone(service.last_failure)
+            self.assertEqual(len(notices), 1)
+            self.assertEqual(len(proxy.headers), 3)
+            self.assertEqual(len(fixture.api_peer.requests), 2)
+            self.assertEqual(len(fixture.hellos), 1)
+            self.assertEqual(fixture.allocations, [])
+            self.assertEqual(await fixture.store.records(), ())
+
     async def test_timing_refusals_preserve_the_existing_operation_owners(self):
         for code in ("authentication_window_closed", "signature_expired"):
             for route in ("execution-attempts", "hello", "execution-attempts/start", "execution-attempts/complete"):

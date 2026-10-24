@@ -2107,6 +2107,32 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       alongside caller interruption. These are composition/diagnostic proofs;
       the new recovery code has not yet been installed in production or used to
       repeat a scientific witness.</p>
+    <p><strong>CONNECT gateway repair:</strong> pinned httpcore 1.0.9 parses a
+      failed proxy tunnel's response, then raises <code>ProxyError</code> without
+      preserving structured status. The transport now retains only the first
+      parsed CONNECT status via its existing trace extension, separately from
+      the origin response head. It adds no parser, raw trace history, reason text,
+      headers or body capture. Inspected source:
+      <a href="https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/http_proxy.py#L278-L297">CONNECT extension forwarding and refusal</a>
+      and <a href="https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/http11.py#L98-L114">parsed header trace</a>;
+      the verified wheel SHA-256 is
+      <code>2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55</code>.</p>
+    <p>The existing API operation owner permits gateway recovery only for the
+      exact proxy exception with received CONNECT 502/503/504 after confirmed
+      I/O retirement. Missing status, CONNECT 403, cancellation or failed cleanup
+      grant no retry permission. CONNECT 200 cannot authorize a subsequent TLS
+      failure. Origin response handling and operation-specific mutation gates
+      remain with their existing owners. A proxy gateway response does not prove
+      its underlying DNS or connection failure is temporary: independent
+      production monitoring also observed DNS timeouts among forwarding failures.</p>
+    <p>Focused contained checks passed: real Unix proxy transport 9, API 66,
+      service 53, foreground/receiving process 66. Controls distinguish proxy
+      status from API status, exclude private reason text, retain cleanup and
+      cancellation gates, and preserve certificate refusal. A connected
+      proxy/TLS/API/service witness receives CONNECT 502, restores the route and
+      reaches Hello in the same service with no scientific allocation. Independent
+      ownership and disclosure reviews found no issue. Production installation
+      and sustained stability remain the next separate proof.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker

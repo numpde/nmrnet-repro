@@ -43,6 +43,28 @@ def unavailable_problem(**changes):
 
 
 class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_gateway_status_requires_the_owned_proxy_failure_and_settled_io(self):
+        for status, expected in ((None, False), (200, False), (403, False), (502, True), (503, True), (504, True)):
+            with self.subTest(status=status):
+                exchange = ExchangeFailed(
+                    "CONNECT failed", primary=httpcore.ProxyError("PRIVATE_PROXY_REASON"), proxy_connect_status=status
+                )
+                api, transport, failure = await self.failed_read(exchange)
+                self.assertIs(api.can_retry_read(failure), expected)
+                transport.retirement_confirmed = False
+                self.assertFalse(api.can_retry_read(failure))
+                await api.retire()
+                exchange.cleanup_failures = (OSError(errno.EIO, "PRIVATE_CLEANUP"),)
+                self.assertFalse(api.can_retry_read(failure))
+                exchange.cleanup_failures = ()
+                exchange.interruption = asyncio.CancelledError()
+                self.assertFalse(api.can_retry_read(failure))
+        exchange = ExchangeFailed(
+            "TLS failed after CONNECT", primary=httpcore.ConnectError("certificate invalid"), proxy_connect_status=200
+        )
+        api, _, failure = await self.failed_read(exchange)
+        self.assertFalse(api.can_retry_read(failure))
+
     async def test_signature_refresh_requires_a_complete_owned_retired_read_refusal(self):
         for changes, headers, expected in (
             ({}, response_headers(status=401, request_id=b"request:test"), True),

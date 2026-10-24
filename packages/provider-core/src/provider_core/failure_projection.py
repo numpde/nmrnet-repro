@@ -204,6 +204,8 @@ def owned_details(error):
             details.update(status=head.status, request_id=response_request_id(head.headers))
     if kind is ExchangeFailed and error.response_head is not None:
         details.update(status=error.response_head.status, request_id=response_request_id(error.response_head.headers))
+    if kind is ExchangeFailed and error.proxy_connect_status is not None:
+        details["proxy_connect_status"] = error.proxy_connect_status
     if kind is StartFailed:
         details["acknowledgement_received"] = error.acknowledgement is not None
         if error.acknowledgement is not None:

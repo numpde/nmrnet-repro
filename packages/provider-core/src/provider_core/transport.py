@@ -31,15 +31,18 @@ class ExchangeFailed(RuntimeError):
 
     primary, cleanup_failures and response_head may contain private data.
     Recipients must use a protected diagnostic sink, never render them directly.
+    response_head describes the origin reply; proxy_connect_status is the
+    separately received CONNECT status, never an API receipt.
     Transport failure does not establish whether a server mutation committed.
     """
 
-    def __init__(self, message, *, primary=None, cleanup_failures=(), interruption=None, response_head=None):
+    def __init__(self, message, *, primary=None, cleanup_failures=(), interruption=None, response_head=None, proxy_connect_status=None):
         super().__init__(message)
         self.primary = primary
         self.cleanup_failures = tuple(cleanup_failures)
         self.interruption = interruption
         self.response_head = response_head
+        self.proxy_connect_status = proxy_connect_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +179,7 @@ def response_request_id(headers):
 class _Outcome:
     response: HttpResponse | HttpFileResponse | None = None
     response_head: HttpResponseHead | None = None
+    proxy_connect_status: int | None = None
     primary: BaseException | None = None
     cleanup_failures: list[BaseException] = field(default_factory=list)
 
@@ -268,6 +272,18 @@ class HttpTransport:
                 # OwnedNetworkBackend connects only the admitted Unix socket;
                 # httpcore owns CONNECT, then TLS with the original target/SNI.
                 client = httpcore.AsyncHTTPProxy(proxy_url="http://unix-proxy.invalid", **options)
+            extensions = {"timeout": dict.fromkeys(("connect", "read", "write", "pool"), self._exchange_seconds)}
+            if self._proxy_socket is not None:
+                async def observe_connect(name, info):
+                    # httpcore 1.0.9 forwards extensions into CONNECT, whose
+                    # parsed head is the first HTTP/1.1 response. Retain only
+                    # its status before ProxyError discards that structure.
+                    # https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/http_proxy.py#L278-L297
+                    # https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/http11.py#L98-L114
+                    if name == "http11.receive_response_headers.complete" and outcome.proxy_connect_status is None:
+                        outcome.proxy_connect_status = info["return_value"][1]
+
+                extensions["trace"] = observe_connect
             wire_request = httpcore.Request(
                 method=request.method,
                 url=httpcore.URL(
@@ -275,7 +291,7 @@ class HttpTransport:
                 ),
                 headers=request.headers.raw,
                 content=request.content,
-                extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), self._exchange_seconds)},
+                extensions=extensions,
             )
             response = await client.handle_async_request(wire_request)
             outcome.response_head = HttpResponseHead(response.status, tuple(response.headers))
@@ -447,6 +463,7 @@ class HttpTransport:
             cleanup_failures=cleanup_failures,
             interruption=interruption,
             response_head=received.response_head,
+            proxy_connect_status=received.proxy_connect_status,
         )
         self.last_failure = failure
         if cancellation is not None or isinstance(primary, asyncio.CancelledError):
@@ -470,6 +487,7 @@ class HttpTransport:
         observed = outcome if outcome is not None else exchange.outcome
         if self.last_failure is not None:
             self.last_failure.response_head = observed.response_head
+            self.last_failure.proxy_connect_status = observed.proxy_connect_status
             # Late retirement augments the retained exchange evidence; a pending
             # task or its expected cancellation must not erase the original cause.
             if (
@@ -487,6 +505,7 @@ class HttpTransport:
                     primary=observed.primary,
                     cleanup_failures=observed.cleanup_failures,
                     response_head=observed.response_head,
+                    proxy_connect_status=observed.proxy_connect_status,
                 )
             if cancellation is None:
                 raise self.last_failure from None

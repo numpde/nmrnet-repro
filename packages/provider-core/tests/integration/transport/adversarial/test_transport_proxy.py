@@ -16,6 +16,23 @@ from tests.fakes.unix_proxy import UnixProxy
 
 
 class UnixTunnelFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rejected_connect_retains_only_its_parsed_status_not_an_origin_head(self):
+        async with TlsPeer("success") as peer:
+            for status in (403, 502, 503, 504):
+                with self.subTest(status=status):
+                    async with UnixProxy(peer.origin, "refuse", refusal_status=status) as proxy:
+                        transport = HttpTransport(
+                            trust=peer.trust, exchange_seconds=1, retirement_seconds=0.3, proxy_socket=proxy.path
+                        )
+                        with self.assertRaises(ExchangeFailed) as caught:
+                            await transport.exchange(httpx.Request("GET", peer.origin), maximum_bytes=4)
+                        await transport.retire()
+                        self.assertEqual(caught.exception.proxy_connect_status, status)
+                        self.assertIsNone(caught.exception.response_head)
+                        self.assertIs(type(caught.exception.primary), httpcore.ProxyError)
+                        self.assertEqual(len(proxy.headers), 1)
+                        self.assertEqual(peer.requests, [])
+
     async def test_missing_refused_or_malformed_proxy_never_attempts_direct_tcp(self):
         async with TlsPeer("success") as peer:
             for mode in ("refuse", "malformed"):
@@ -118,6 +135,7 @@ class UnixTunnelFailureTests(unittest.IsolatedAsyncioTestCase):
                     await transport.exchange(httpx.Request("POST", peer.origin, content=b"PRIVATE_BODY"), maximum_bytes=4)
                 await transport.retire()
                 self.assertIsInstance(caught.exception.primary, httpcore.ConnectError)
+                self.assertEqual(caught.exception.proxy_connect_status, 200)
                 causes, pending = [], [caught.exception.primary]
                 while pending:
                     cause = pending.pop()

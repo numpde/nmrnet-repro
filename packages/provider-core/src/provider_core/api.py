@@ -501,6 +501,12 @@ class ProviderAPI:
                 return False
             if exchange.response_head.status != 200:
                 return False
+        if type(exchange.primary) is httpcore.ProxyError:
+            # CONNECT gateway failures are availability evidence, not origin
+            # responses or proof their underlying DNS/dial cause is temporary.
+            # Missing status and policy refusal grant no retry permission;
+            # successful CONNECT cannot authorize retry of a later TLS failure.
+            return exchange.proxy_connect_status in (502, 503, 504)
         return _temporary_io_failure(exchange.primary, 8)
 
     def _retryable_gateway(self, response):
