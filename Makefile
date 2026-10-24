@@ -346,6 +346,7 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 
 help:
 	@printf '%s\n' \
+		'make delivery/deployment/held API_ORIGIN=... PROVIDER_REF=...  List held identity/reason without payloads after explicitly stopping shared delivery.' \
 		'make delivery/deployment/discard API_ORIGIN=... PROVIDER_REF=... EXECUTION_ATTEMPT_REF=... BODY_SHA256=...  Remove one exact held payload after explicitly stopping shared delivery; no API acceptance is inferred.' \
 		'make help                              List maintained commands; also the default goal.' \
 		'make test                              Run the offline unit and repository suites.' \
@@ -536,8 +537,8 @@ test/integration/provider/deployment/smiles test/integration/provider/deployment
 provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
 	bash tools/provider_deployment.sh $(notdir $@)
 
-.PHONY: delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard
-delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard:
+.PHONY: delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard delivery/deployment/held
+delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard delivery/deployment/held:
 	bash tools/delivery_deployment.sh $(notdir $@)
 
 test/unit/provider/deployment:

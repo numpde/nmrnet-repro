@@ -4,9 +4,9 @@ set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
-[[ $# == 2 && $role =~ ^(provider|delivery)$ && $action =~ ^(install|up|down|status|logs|client-inputs|discard)$ ]] || exit 2
+[[ $# == 2 && $role =~ ^(provider|delivery)$ && $action =~ ^(install|up|down|status|logs|client-inputs|discard|held)$ ]] || exit 2
 [[ $role == provider || $action != client-inputs ]] || exit 2
-[[ $role == delivery || $action != discard ]] || exit 2
+[[ $role == delivery || ( $action != discard && $action != held ) ]] || exit 2
 caller_uid=$(id -u) caller_gid=$(id -g)
 [[ $caller_uid != 0 && $caller_gid != 0 ]] || { printf '%s\n' 'Run Compose deployment as its nonroot owner.' >&2; exit 2; }
 refuse() { printf 'Cannot %s %s deployment: %s\n' "$action" "$role" "$1" >&2; return 2; }
@@ -197,18 +197,23 @@ fi
 select_bundle
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
 case $action in
-    discard)
-        for selector in API_ORIGIN PROVIDER_REF EXECUTION_ATTEMPT_REF BODY_SHA256; do
+    discard|held)
+        required_selectors=(API_ORIGIN PROVIDER_REF)
+        if [[ $action == discard ]]; then required_selectors+=(EXECUTION_ATTEMPT_REF BODY_SHA256); fi
+        for selector in "${required_selectors[@]}"; do
             alias=NMRNET_${selector}_INPUT
             [[ -n ${!alias-} ]] || { refuse "supply explicit $selector from held-item metadata; stop shared delivery first."; exit 2; }
         done
         image_record delivery
         helper_grants=(--mount "type=bind,src=$bundle/daemon.toml,dst=/input/daemon.toml,readonly"
             --mount 'type=volume,src=nmr-api-delivery-queue,dst=/state,volume-nocopy')
+        operator_arguments=(--list-held)
+        if [[ $action == discard ]]; then
+            operator_arguments=(--execution-attempt-ref "$NMRNET_EXECUTION_ATTEMPT_REF_INPUT" --body-sha256 "$NMRNET_BODY_SHA256_INPUT")
+        fi
         helper "$selected_image" /opt/provider-core/environment/bin/python -m provider_core.delivery_discard \
             --config /input/daemon.toml --api-origin "$NMRNET_API_ORIGIN_INPUT" \
-            --provider-ref "$NMRNET_PROVIDER_REF_INPUT" --execution-attempt-ref "$NMRNET_EXECUTION_ATTEMPT_REF_INPUT" \
-            --body-sha256 "$NMRNET_BODY_SHA256_INPUT"
+            --provider-ref "$NMRNET_PROVIDER_REF_INPUT" "${operator_arguments[@]}"
         ;;
     up) run 180 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120 ;;
     down) run 120 "${compose[@]}" down --timeout 60 ;;
@@ -246,4 +251,5 @@ case $action in
         fi
         ;;
     discard) printf 'Next: make delivery/deployment/up\n' ;;
+    held) printf 'Next: reconcile any held item before discard; otherwise make delivery/deployment/up\n' ;;
 esac
