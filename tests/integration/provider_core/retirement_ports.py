@@ -1,12 +1,8 @@
-"""Settle a scientific channel and its actual native retirement owner.
+"""Retire recording ports whose fake channel and native owner are independent.
 
-The serial supervisor owns child/scratch facts. Local closure is an independent
-obligation; neither observation can replace the other or hide a cleanup cause.
+Production NativeOperation observes its own transport. These recording fixtures
+have separate close/retirement observations so tests can inject either failure.
 """
-
-from tools.container_guard import require_container
-
-require_container()
 
 import asyncio
 

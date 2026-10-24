@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
-from nmrnet_provider.retirement import retire_worker_channel
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery

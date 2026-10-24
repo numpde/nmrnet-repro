@@ -29,7 +29,7 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 from nmrnet_provider.input_preparation import InputPreparation
-from nmrnet_provider.retirement import retire_worker_channel
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz

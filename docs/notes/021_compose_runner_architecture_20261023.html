@@ -1793,6 +1793,14 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       premature descriptor closure, then passed with the descriptor still open
       under its transport until that owner closed it. All 13 native-runner tests
       passed again; independent review found no further issue in this handoff.</p>
+    <p>The displaced <code>nmrnet_provider/retirement.py</code> helper subsequently
+      had no production callers and was removed. Recording ports keep their
+      separate channel/retirement observations in a test-only helper; there is no
+      runtime compatibility wrapper. Affected contained checks passed: output 27,
+      Uploads 39 and native factory 11. Independent review found no dangling
+      production dependency or weakened failure coverage. The installed module
+      observations above describe their earlier image checkpoint, not this later
+      source deletion.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

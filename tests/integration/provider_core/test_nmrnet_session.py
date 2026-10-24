@@ -25,7 +25,7 @@ from tests.fakes.publication import api
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
-from nmrnet_provider.retirement import retire_worker_channel
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import (
