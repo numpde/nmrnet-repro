@@ -10,24 +10,16 @@ from tools.container_guard import require_container
 
 require_container()
 
-import errno
 import hashlib
 import json
-import os
 import re
-import socket
-import ssl
-import traceback
-from builtins import BaseExceptionGroup
-from collections import deque
-from pathlib import Path
 
 from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
-from nmrnet_provider.interpreter import ModelReportedInputProblem, redact_credential_fields
+from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.native_factory import NativeSetupFailed
 from nmrnet_provider.result import ResultRejected
 from nmrnet_provider.service import ServiceFailed, ServiceRefused
@@ -47,14 +39,11 @@ from nmrnet_provider.worker_client import (
 )
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.attempt_record import ProtectedEvidence
+from provider_core.diagnostics import DiagnosticOutputRefused, failure_evidence as core_failure_evidence, operator_redactor
 from provider_core.failure_projection import owned_details as core_owned_details
 from provider_core.failure_projection import owned_relationships as core_owned_relationships
 
 _MAX_FAILURE_NODES = 64
-
-
-class DiagnosticOutputRefused(ValueError):
-    """Code-owned output limits or incomplete writes, without private payloads."""
 
 
 class ProviderProcessFailed(RuntimeError):
@@ -189,157 +178,85 @@ def _received_result_summary(error, text):
     return summary
 
 
-def operator_redactor(*, secrets):
-    """Share known-secret spellings and credential-field scrubbing across sinks."""
-    spellings = {
-        spelling for secret in secrets for spelling in (secret, repr(secret)[1:-1], json.dumps(secret)[1:-1]) if spelling
-    }
-    spellings = sorted(spellings, key=len, reverse=True)
+def _preparation_summary(document, text, diagnostic_window):
+    summary = {"complete_payload_in_report": False, "document_is_object": type(document) is dict}
+    if type(document) is not dict:
+        return summary
+    fingerprint = document.get("input_fingerprint")
+    if type(fingerprint) is str and re.fullmatch(r"(?:sha256:)?[0-9a-f]{64}", fingerprint):
+        summary["input_fingerprint"] = text(fingerprint, 71)
+    reservation = document.get("scientific_evidence_reservation")
+    source = reservation if type(reservation) is dict else document
+    if type(source.get("geometries")) is list:
+        summary["geometry_count"] = len(source["geometries"])
+    for field, container, key in (
+        ("diagnostic", document, "diagnostic"),
+        ("generation_diagnostic", document.get("generation_failure"), "diagnostic"),
+        ("model_report_explanation", document.get("model_report"), "explanation"),
+    ):
+        if type(container) is dict and type(container.get(key)) is str:
+            summary[field] = diagnostic_window(container[key])
+            if field == "model_report_explanation":
+                summary["independently_verified"] = False
+    for field in ("preparation_diagnostics", "interpreter_diagnostics"):
+        entries = source.get(field)
+        if type(entries) is not list:
+            continue
+        maximum = MAX_GEOMETRIES if field == "preparation_diagnostics" else _MAX_FAILURE_NODES
+        summary[field + "_count"] = len(entries)
+        summary[field + "_omitted_count"] = max(0, len(entries) - maximum)
+        projected = []
+        for entry in entries[:maximum]:
+            item = {"entry_is_object": type(entry) is dict}
+            if type(entry) is dict:
+                if field == "preparation_diagnostics":
+                    diagnostic = entry.get("diagnostic")
+                else:
+                    # The interpreter already owns this redacted exception
+                    # graph. Window it; never serialize raw model exchanges.
+                    try:
+                        diagnostic = (
+                            json.dumps(entry["failure"], ensure_ascii=True, allow_nan=False)
+                            if type(entry.get("failure")) is dict
+                            else None
+                        )
+                    except (TypeError, ValueError, RecursionError):
+                        diagnostic = None
+                        item["diagnostic_graph_is_json"] = False
+                    for name in ("endpoint_index", "turn_index"):
+                        if type(entry.get(name)) is int and 0 <= entry[name] <= 2**53 - 1:
+                            item[name] = entry[name]
+                if type(diagnostic) is str:
+                    item["diagnostic"] = diagnostic_window(diagnostic)
+            projected.append(item)
+        summary[field] = projected
+    return summary
 
-    def redact(text):
-        for secret in spellings:
-            text = text.replace(secret, "[redacted]")
-        return redact_credential_fields(text)
 
-    return redact
+def _describe_scientific_owner(current, text, diagnostic_window):
+    evidence = _safe_owner_details(current)
+    if type(current) in (WorkerReportedFailure, PredictionExecutionFailed):
+        evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
+    if type(current) is InputRejected and current.diagnostic is not None:
+        evidence["input_rejection_diagnostic"] = diagnostic_window(current.diagnostic)
+    if type(current) is ConformerShortfall:
+        evidence["conformer_generation_diagnostic"] = diagnostic_window(current.partial.diagnostic)
+    if type(current) is ConformerOutputLimit:
+        # This field contains the serialized native reply. Project only
+        # diagnostic text, keeping coordinates and provenance with their
+        # existing scientific evidence owner.
+        evidence["conformer_generation_diagnostic"] = diagnostic_window(json.loads(current.diagnostic)["diagnostic"])
+    if type(current) is ModelReportedInputProblem:
+        evidence["model_reported_explanation"] = diagnostic_window(current.explanation)
+    if type(current) is ResultAssemblyFailed:
+        evidence["received_scientific_evidence"] = _received_result_summary(current, text)
+    if type(current) is PreparationEvidenceFailed:
+        evidence["unretained_preparation_evidence"] = _preparation_summary(current.document, text, diagnostic_window)
+    return evidence
 
 
 def failure_evidence(error, *, secrets):
-    """Retain a bounded causal graph and safe current facts for the private operator."""
-    redact = operator_redactor(secrets=secrets)
-    seen, remaining = {}, _MAX_FAILURE_NODES
-
-    def text(value, maximum):
-        redacted = redact(value)
-        return redacted if len(redacted) <= maximum else redacted[:maximum] + "[truncated]"
-
-    def diagnostic_window(value):
-        diagnostic = redact(value)
-        return {
-            "head": diagnostic[:4096],
-            "tail": diagnostic[-4096:] if len(diagnostic) > 8192 else diagnostic[4096:],
-            "omitted_characters": max(0, len(diagnostic) - 8192),
-        }
-
-    def preparation_summary(document):
-        summary = {"complete_payload_in_report": False, "document_is_object": type(document) is dict}
-        if type(document) is not dict:
-            return summary
-        fingerprint = document.get("input_fingerprint")
-        if type(fingerprint) is str and re.fullmatch(r"(?:sha256:)?[0-9a-f]{64}", fingerprint):
-            summary["input_fingerprint"] = text(fingerprint, 71)
-        reservation = document.get("scientific_evidence_reservation")
-        source = reservation if type(reservation) is dict else document
-        if type(source.get("geometries")) is list:
-            summary["geometry_count"] = len(source["geometries"])
-        for field, container, key in (
-            ("diagnostic", document, "diagnostic"),
-            ("generation_diagnostic", document.get("generation_failure"), "diagnostic"),
-            ("model_report_explanation", document.get("model_report"), "explanation"),
-        ):
-            if type(container) is dict and type(container.get(key)) is str:
-                summary[field] = diagnostic_window(container[key])
-                if field == "model_report_explanation":
-                    summary["independently_verified"] = False
-        for field in ("preparation_diagnostics", "interpreter_diagnostics"):
-            entries = source.get(field)
-            if type(entries) is not list:
-                continue
-            maximum = MAX_GEOMETRIES if field == "preparation_diagnostics" else _MAX_FAILURE_NODES
-            summary[field + "_count"] = len(entries)
-            summary[field + "_omitted_count"] = max(0, len(entries) - maximum)
-            projected = []
-            for entry in entries[:maximum]:
-                item = {"entry_is_object": type(entry) is dict}
-                if type(entry) is dict:
-                    if field == "preparation_diagnostics":
-                        diagnostic = entry.get("diagnostic")
-                    else:
-                        # The interpreter already owns this redacted exception
-                        # graph. Window it; never serialize raw model exchanges.
-                        try:
-                            diagnostic = (
-                                json.dumps(entry["failure"], ensure_ascii=True, allow_nan=False)
-                                if type(entry.get("failure")) is dict
-                                else None
-                            )
-                        except (TypeError, ValueError, RecursionError):
-                            diagnostic = None
-                            item["diagnostic_graph_is_json"] = False
-                        for name in ("endpoint_index", "turn_index"):
-                            if type(entry.get(name)) is int and 0 <= entry[name] <= 2**53 - 1:
-                                item[name] = entry[name]
-                    if type(diagnostic) is str:
-                        item["diagnostic"] = diagnostic_window(diagnostic)
-                projected.append(item)
-            summary[field] = projected
-        return summary
-
-    def relationships(current):
-        yield "cause", current.__cause__
-        yield "context", current.__context__
-        yield from _owned_relationships(current)
-        if isinstance(current, BaseExceptionGroup):
-            for member in current.exceptions:
-                yield "group member", member
-
-    def describe(current):
-        nonlocal remaining
-        remaining -= 1
-        if id(current) in seen:
-            return {"exception_reference": seen[id(current)]}
-        identity = seen[id(current)] = len(seen)
-        frames, count = deque(maxlen=32), 0
-        for frame, line in traceback.walk_tb(current.__traceback__):
-            frames.append(
-                {
-                    "file": text(Path(frame.f_code.co_filename).name, 128),
-                    "line": line,
-                    "function": text(frame.f_code.co_name, 128),
-                }
-            )
-            count += 1
-        evidence = {"exception_id": identity, "exception_type": text(type(current).__name__, 128), "frames": list(frames)}
-        if count > len(frames):
-            evidence["omitted_frame_count"] = count - len(frames)
-        evidence.update(
-            {name: text(value, 1024) if type(value) is str else value for name, value in _safe_owner_details(current).items()}
-        )
-        if isinstance(current, OSError) and type(current.errno) is int:
-            evidence["errno"] = current.errno
-            if current.errno in errno.errorcode and not isinstance(current, (ssl.SSLError, socket.gaierror, socket.herror)):
-                evidence["reason"] = os.strerror(current.errno)
-        if isinstance(current, ssl.SSLCertVerificationError):
-            verification_code = getattr(current, "verify_code", None)
-            if type(verification_code) is int:
-                evidence["certificate_verification_code"] = verification_code
-        if type(current) in (WorkerReportedFailure, PredictionExecutionFailed):
-            evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
-        if type(current) is InputRejected and current.diagnostic is not None:
-            evidence["input_rejection_diagnostic"] = diagnostic_window(current.diagnostic)
-        if type(current) is ConformerShortfall:
-            evidence["conformer_generation_diagnostic"] = diagnostic_window(current.partial.diagnostic)
-        if type(current) is ConformerOutputLimit:
-            # This field contains the serialized native reply. Project only
-            # diagnostic text, keeping coordinates and provenance with their
-            # existing scientific evidence owner.
-            evidence["conformer_generation_diagnostic"] = diagnostic_window(json.loads(current.diagnostic)["diagnostic"])
-        if type(current) is ModelReportedInputProblem:
-            evidence["model_reported_explanation"] = diagnostic_window(current.explanation)
-        if type(current) is ResultAssemblyFailed:
-            evidence["received_scientific_evidence"] = _received_result_summary(current, text)
-        if type(current) is PreparationEvidenceFailed:
-            evidence["unretained_preparation_evidence"] = preparation_summary(current.document)
-        children = []
-        for relationship, child in relationships(current):
-            if child is None:
-                continue
-            if remaining <= 0:
-                evidence["additional_relationships_omitted"] = True
-                break
-            children.append({"relationship": text(relationship, 128), "failure": describe(child)})
-        if children:
-            evidence["relationships"] = children
-        return evidence
-
-    return describe(error)
+    """Render the shared protected graph with NMRNet's scientific projections."""
+    return core_failure_evidence(
+        error, secrets=secrets, describe_owner=_describe_scientific_owner, owner_relationships=_owned_relationships
+    )

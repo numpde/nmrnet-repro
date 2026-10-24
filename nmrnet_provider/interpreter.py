@@ -42,11 +42,11 @@ require_container()
 
 import hashlib
 import json
-import re
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.prepared_input import DEFAULT_OUTPUT
+from provider_core.diagnostics import redact_credential_fields
 from provider_core.conversation import (
     ToolConversation,
     ToolFinished,
@@ -229,22 +229,6 @@ _TOOLS = json.dumps(
     sort_keys=True,
     separators=(",", ":"),
 ).encode("ascii")
-
-_CREDENTIAL = re.compile(r"(?i)\b(?:Bearer|Basic)\s+[^\s\"'<>;,]+|\bsk-[A-Za-z0-9_.-]+")
-# Match an entire quoted secret, including escaped quotes, so redaction cannot
-# leave its suffix visible. Pattern adapted from NMRPeak revision
-# 1697dc84dd1d76ae25b04efc8183fd80614000e5,
-# nmrpeak_provider/diagnostic_text.py::_CREDENTIAL.
-_SECRET_FIELD = re.compile(
-    r"(?i)(\b(?:api[_-]?key|password|token|secret|authorization)\b[\"']?\s*[:=]\s*)"
-    r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;&<>]+)"""
-)
-
-
-def redact_credential_fields(text):
-    """Redact recognizable credentials; other private request data may remain."""
-    return _SECRET_FIELD.sub(r"\1[redacted]", _CREDENTIAL.sub("[redacted]", text))
-
 
 @dataclass(frozen=True, slots=True)
 class _InputProblemReport:

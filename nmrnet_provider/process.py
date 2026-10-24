@@ -30,6 +30,7 @@ from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence, operator_redactor
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
+from provider_core.diagnostics import write_stderr as _write_stderr, write_notice as _write_api_notice
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
@@ -271,36 +272,6 @@ async def _settle_borrowers(service, factory, failures):
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("service settlement after factory", cause))
     return service_settled and factory_settled
-
-
-def _write_stderr(content):
-    """Attempt one nonblocking stderr write without changing later writer policy.
-
-    The process owns this descriptor on its event-loop thread; no await occurs
-    while flags differ. Full pipes cannot block retirement. Callers retain failed
-    output in memory and never start a logging task or write a fallback file.
-    """
-    descriptor = sys.stderr.fileno()
-    blocking = os.get_blocking(descriptor)
-    try:
-        os.set_blocking(descriptor, False)
-        written = os.write(descriptor, content)
-        if written != len(content):
-            raise DiagnosticOutputRefused(f"Cannot finish stderr diagnostic output: wrote {written} of {len(content)} bytes.")
-    finally:
-        os.set_blocking(descriptor, blocking)
-
-
-def _write_api_notice(content):
-    """Keep pipe notices atomic so a rejected record cannot corrupt the next one."""
-    descriptor = sys.stderr.fileno()
-    if stat.S_ISFIFO(os.fstat(descriptor).st_mode):
-        maximum = os.fpathconf(descriptor, "PC_PIPE_BUF")
-        if len(content) > maximum:
-            raise DiagnosticOutputRefused(
-                f"Cannot emit complete API availability notice: {len(content)} bytes exceed the pipe's {maximum}-byte atomic-write limit."
-            )
-    _write_stderr(content)
 
 
 def _retired_prediction_observation(owner):
