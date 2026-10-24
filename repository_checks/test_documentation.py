@@ -69,8 +69,10 @@ class DocumentationTests(unittest.TestCase):
             .stdout.decode()
             .split("\0")
         )
-        # The README is the repository entry point; the two .txt files are data.
-        exceptions = {"README.md", "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt"}
+        # README is the entry point; two .txt files are data. The user explicitly
+        # requested note022 as a plain-text running record (quoted in that note).
+        exceptions = {"README.md", "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
+                      "docs/notes/022_shared_delivery_deferred_20261024.txt"}
         leftovers = [
             name
             for name in paths

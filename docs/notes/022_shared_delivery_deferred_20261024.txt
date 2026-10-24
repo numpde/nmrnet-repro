@@ -158,3 +158,20 @@ not in this deferred list.
     selected by tools/compose_qualification.sh (reader-crash admission capture).
     Do not treat these deferred checker consumers as qualification of the new
     direct Compose workflow. No replacement checker or gate is introduced.
+
+14. Current delivery-unit aggregate still includes superseded fixtures.
+    At fe71ac7, the held-discard witness passes (exclusive writer, wrong binding/
+    digest and pending refusal, exact held deletion and payload removal). The
+    maintained delivery unit aggregate runs 22 tests with four errors: the two
+    delivery_execution modules import tests/fakes/execution.py's removed
+    AttemptStore, and two delivery_config tests use a binding fixture without
+    the now-required socket_group_id. Port those fixtures separately; do not
+    relax live configuration or reintroduce the deleted file store. Evidence:
+    /tmp/nmrnet-held-discard-focused.log. This aggregate is not claimed green.
+
+15. Qualification-client authentication-window diagnosis.
+    The one local smoke Job at cb31917 was delivered successfully, but its first
+    public readback stopped on GET29 with authentication_window_closed (HTTP401).
+    The original Job then passed GET-only readback using JOB_RECEIPT at54fc49f;
+    no Job/model/scientific operation was repeated. Retain both receiving logs;
+    the cause of the authentication-window refusal was not established here.

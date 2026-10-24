@@ -1,6 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider-core package — NMRNet++</title><meta name="original-source-path" content="packages/provider-core/README.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="6a4845638fae50bf1886d330ac24738d493fcb5de2ee76d19a9cc0a1ba1594d4"><link rel="stylesheet" href="../site.css"></head>
 <body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="provider-core">Provider-core package</h1>
+<p><strong>Lifecycle reference update pending:</strong> the detailed storage and
+publication sections below describe the earlier file-backed implementation.
+For current checkpoint and shared-delivery ownership, use the
+<a href="../provider.html#result-delivery-and-storage">operator guide</a> and
+<a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery">note 021</a>.
+The detailed reference port is explicitly tracked in
+<a href="../notes/022_shared_delivery_deferred_20261024.txt">note 022</a>.</p>
 <p><code>provider-core</code> is the locally maintained, independently installed NMR
 API provider package. It owns signing, transport, Upload access, durable Attempt
 lifecycle and shared diagnostic facts. Scientific interpretation and execution
@@ -640,7 +647,7 @@ before expiry; no record-selection exemption exists within the window. Independe
 copies and qualification capsules outside the store are unaffected.</p>
 <p>Consumers must explicitly request archival after settling lifecycle/native
 owners. A full active store refuses fresh admission. See the
-<a href="../provider.html#retained-history-and-a-full-store">full-store procedure</a>.</p>
+<a href="../provider.html#result-delivery-and-storage">current delivery and storage procedure</a>.</p>
 <p>The async store owns one filesystem operation at a time. Cancellation or timeout
 ends the wait, not the write: <code>settle()</code> observes the original operation, while new
 work and closure remain blocked. Failed publication preserves staging and any

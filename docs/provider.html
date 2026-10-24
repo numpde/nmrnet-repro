@@ -287,6 +287,24 @@ The design and existing evidence are in
 deferred refinements and further testing are tracked in
 <a href="notes/022_shared_delivery_deferred_20261024.txt">note 022</a>.</p>
 <h2 id="checking-api-delivery">Checking API delivery</h2>
+<h3 id="held-delivery">Reconciling held delivery data</h3>
+<p>A held item has no verified matching API receipt. Resolve the reported cause
+and remote Attempt before deciding to discard its local payload. First explicitly
+stop shared delivery; this affects all bindings on this Docker host. Listing and
+discard run offline under the queue's existing exclusive lock and refuse while
+the daemon owns it. They never stop or restart the service automatically.</p>
+<pre><code class="language-sh">make delivery/deployment/down
+make delivery/deployment/held API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
+make delivery/deployment/discard API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
+make delivery/deployment/up</code></pre>
+<p>The list shows only the selected binding's held metadata and reason, without
+payload bodies or a dump file. Discard requires that exact binding, Attempt and
+digest and removes only a held row; pending rows remain unchanged. It proves
+neither API acceptance nor resolution of the remote Attempt. Producer sockets
+have no deletion route. Source:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_discard.py">offline operator command</a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_store.py">queue disposition owner</a>.</p>
+<h3>One scientific Job</h3>
 <p>Each opt-in target creates one <strong>persistent Job</strong> on the selected API. Pasted
 targets use fixed supplied chloromethane and compare against an existing pinned
 scientific receipt; generated-SMILES targets check received generation
@@ -311,6 +329,11 @@ image pin. Configured correction/fallback is accepted within its existing turn
 budget; actual turns, corrections and routes stay in the retained result. Use a
 fresh private <code>OUTPUT</code>, including an ignored qualification leaf if desired.
 Failed or uncertain submissions are retained and never resubmitted automatically.</p>
+<p>If the Job was created but client readback stopped, supply
+<code>JOB_RECEIPT=/absolute/path/to/original/client/created.json</code> to the same
+<code>existing-pasted</code> target, keeping the original selectors and choosing
+a fresh <code>OUTPUT</code>. This mode performs GET requests for that original
+Job only: it does not create, select or open another Job, or repeat prediction.</p>
 <ul>
 <li><code>make provider/qualify/api/pasted</code> uses the isolated scripted model peer.</li>
 <li><code>make provider/qualify/api/real-pasted</code> uses one explicitly selected real endpoint.</li>

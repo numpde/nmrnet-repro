@@ -17,9 +17,9 @@
   <main id="main">
     <h1>021 — Portable deployment and persistent scientific runners</h1>
     <p>Started 23 October 2026; updated as implementation progresses.
-      <strong>Compose runners are implemented, with real API predictions qualified
-      locally and in production using live interpretation. Remaining unattended
-      recovery and cleanup obligations are not yet closed.</strong>
+      <strong>Compose runners and shared delivery are deployed locally and in production.
+      One local API prediction qualifies the new provider-to-relay-to-API path;
+      broader failure and multi-provider exercises are deferred in note 022.</strong>
       The <a href="#local-api-delivery">local delivery checkpoint</a> records exact
       identities and numerical comparisons; the implementation record below
       distinguishes source checks, installed witnesses and outstanding work.</p>
@@ -48,13 +48,98 @@
     </ul></nav>
 
     <h2 id="shared-delivery">Shared result delivery — design, 24 October 2026</h2>
-    <p><strong>Implementation in progress; not deployed.</strong> Run one delivery service per
+    <p><strong>Deployed 24 October 2026; current evidence follows.</strong> Run one delivery service per
       Docker host, shared by its providers and runners. It owns durable acceptance
       and API publication of final immutable completion or failure requests.
       Providers own scientific decisions, execution and cleanup. This replaces
       provider result-file dumps and completed-payload history; it does not change
       molecular inputs, prediction, result formatting or the API contract.
       Earlier implementation and retention descriptions below record the preceding design.</p>
+    <h3 id="shared-delivery-deployed">Observed shared-delivery cutover, 24 October 2026</h3>
+    <p>Runtime/configuration checkpoint
+      <a href="https://github.com/numpde/nmrnet-repro/commit/cb31917">cb31917</a>
+      is deployed at <code>https://nmr.localhost:10443</code> with
+      <code>provider:nmrnet-fw-a</code>, and at <code>https://nmr.dapp32.com</code>
+      with <code>provider:nmrnet-pa-a</code>. Each Docker host has its own
+      <code>nmr-api-delivery</code> project, private queue volume and provider-scoped
+      socket; only NMRNet is connected so far. All seven NMRNet roles and both
+      long-running shared roles started successfully. The finite volume initializer
+      exited zero. Production logs also observe transient CONNECT 502 refusals
+      followed by read recovery; healthy containers alone do not prove uninterrupted
+      API availability.</p>
+    <p>The new local path executed exactly one fixed chloromethane Job:
+      <code>job:600cf7f2d7dcbf201a5069e92d963a588a021aa719a4b8ab84ab5615920f284f</code>,
+      Attempt <code>execution_attempt:sha256:5b2439a867cada5831c0849af12d4e469f7128007f3b429aa99144a06c0269d6</code>.
+      The delivery worker reported a verified, non-replayed COMPLETE receipt for body
+      <code>sha256:6491f7b2e300e832b81a6031deb3ad72e46359a8e7fcfb333c786a0bff890c52</code>.
+      The first public client stopped on a GET with HTTP 401
+      <code>authentication_window_closed</code>. No mutation was retried. The maintained
+      <code>JOB_RECEIPT</code> readback-only mode at
+      <a href="https://github.com/numpde/nmrnet-repro/commit/54fc49f2e57520b4e3b4b2c66e63336c7d6af3b9">54fc49f</a>
+      then used four GETs to confirm exactly one succeeded Attempt and one result,
+      with live interpretation and the unchanged scientific oracle. Received result
+      SHA-256 is <code>d9794208571eb728be539136a3527c6d7890c6d97d5c57c68582022f590d55d3</code>.
+      Private receiving evidence remains in
+      <code>.work/qualification/shared-delivery-api-cb31917</code> and
+      <code>.work/qualification/shared-delivery-readback</code>. The independent oracle
+      is <a href="https://github.com/numpde/nmrnet-repro/blob/54fc49f2e57520b4e3b4b2c66e63336c7d6af3b9/artifacts/pasted-scientific-oracle.json">artifacts/pasted-scientific-oracle.json</a>;
+      expected values and tolerances were unchanged. No new production Job or
+      scientific matrix was run for this cutover.</p>
+    <p>Read-only queries against the live databases observed zero outstanding delivery
+      rows and zero producer checkpoints after completion. A maintained local
+      <code>delivery/deployment/down</code> then <code>up</code> preserved the queue
+      volume, reopened it with zero rows, and left NMRNet running with restart count
+      zero. The actual queue directory is mode 0700 and its database mode 0600.
+      This proves ordinary restart and accepted-payload removal for this case;
+      it does not prove every pending-send interruption timing.</p>
+    <p>The clean cut follows the user's later instruction and supersedes the earlier
+      migration plan: no importer, archive or compatibility path was introduced.
+      At cutover the displaced file stores contained completed history only,
+      with no pending local files. Their result history and operational deployment
+      dumps were removed; intentional scientific qualification evidence and private
+      input credentials remain. Unused prototype Engine-handoff files were removed.
+      The deployed path uses direct maintained Compose calls, actual frozen
+      configuration and required persistent volumes, with bounded Docker logs.</p>
+    <p>Source review of <code>15f06db..54fc49f</code> found no rollout-blocking
+      issue in the direct grants, bounded source reads or GET-only receipt branch.
+      Earlier focused core tests below are checkpoint-specific evidence, not a
+      claim that obsolete full-file-store suites pass. Remaining test ports,
+      wider failure/resource scenarios and detailed SDK-reference updates are
+      explicitly deferred in <a href="022_shared_delivery_deferred_20261024.txt">note 022</a>.
+      The following paragraphs retain the dated implementation history.</p>
+    <p>Completion-tail source
+      <a href="https://github.com/numpde/nmrnet-repro/commit/3126062">3126062</a>
+      adds an offline operator listing/discard lane. The queue's original exclusive
+      lock requires an explicit daemon stop. Listing projects only configured-binding
+      held metadata; deletion matches that binding, Attempt, SHA-256 and held state.
+      Pending rows and other bindings remain unchanged. No producer deletion endpoint,
+      second registry, API request or automatic stop/restart is added. Five installed
+      storage witnesses pass, including the new scoped deletion/refusal case and
+      deleted-payload exclusion. The actual maintained discard target was also refused
+      with EAGAIN while the live daemon held the lock. The broader unit aggregate's
+      four stale-fixture errors are recorded in note 022.</p>
+    <p>Final image refresh at
+      <a href="https://github.com/numpde/nmrnet-repro/commit/3126062">3126062</a>,
+      22:15 UTC: both deployments again started all roles successfully, with
+      initializer exit zero and restart count zero. Offline authoritative listing
+      showed no held rows on either host; a stopped-daemon discard of the already
+      completed local Attempt correctly refused because no matching held row existed.
+      An authenticated production inventory GET reported zero unfinished Attempts
+      and no continuation cursor. After the final refresh, both live queues again
+      contained zero outstanding rows. No further scientific run was performed.</p>
+    <p>Observed local images: controller
+      <code>sha256:e9d3ae933be317d0de96be09ec3aaabd0b7802b723405009a82e77cabbe22628</code>,
+      RDKit <code>sha256:a555ff8f0a3750a4b6cbc2d3b58388cfaa245b047e55906c91be0c1290d5037a</code>,
+      prediction <code>sha256:3cb21ad27b269f403ead6514b105e369453dddfb2e03ec72aab611bfea43ecee</code>,
+      delivery <code>sha256:e28174442d2388e79ccc65fff9b8e7840b026662ad4350348c2109296cd47a34</code>.
+      Observed production images: controller
+      <code>sha256:930badd2530eb8e886ab533bdbbb0c670f37d7a3158327d57c9a16d5562b91b7</code>,
+      RDKit <code>sha256:c234d42eca9268f103051ae9309d3a88341dc4abb7c3d2aacc3a32a5e3563759</code>,
+      prediction <code>sha256:c3be40636fe29ea56c2b14f8c039ef9547613bcfe07856d2d6a27a3c6540b1bb</code>,
+      delivery <code>sha256:876c15a076ff96739e758fcb5384cf826c7d64b2abe174d38aa809cdca0f322b</code>.
+      These are independently built image identities, not a claim of byte-identical
+      cross-host builds. The frozen execution declarations retain caller provenance;
+      the receiving scientific result above belongs to its original smoke checkpoint.</p>
     <p>Foundation checkpoints: <a href="https://github.com/numpde/nmrnet-repro/commit/d4238ce">d4238ce</a>
       implements pending-only transactional SQLite storage (nine focused checks);
       <a href="https://github.com/numpde/nmrnet-repro/commit/48beaf0">48beaf0</a>
