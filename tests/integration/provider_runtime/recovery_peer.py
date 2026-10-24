@@ -27,6 +27,7 @@ from tests.integration.nmrnet.recovery_ports import RecoveryPeers
 from nmrnet_provider.config import load_recovery_config
 from nmrnet_provider.process import _publish
 from provider_core.attempt_record import TerminalConfirmed
+from provider_core.attempt_files import history_directory_name, record_name
 from stage_api_config import stage_deployment
 
 
@@ -51,6 +52,8 @@ async def serve(root, seconds):
     retained = RecoveryPeers()
     idle = None
     completions = 0
+    confirmed = None
+    confirmed_bytes = None
     idle_request = asyncio.Event()
 
     async def reply(request, body):
@@ -124,6 +127,8 @@ async def serve(root, seconds):
                         or records[0].receipt.replayed is not True
                     ):
                         raise AssertionError("Recovery changed the original terminal command or protected evidence.")
+                    confirmed = records[0]
+                    confirmed_bytes = (state / record_name(confirmed)).read_bytes()
                     idle = SimpleNamespace(
                         peer=peer,
                         config=retained.config,
@@ -159,13 +164,13 @@ async def serve(root, seconds):
                 raise AssertionError("Ordinary restart did not send Hello, provider inventory and empty discovery.")
         # TlsPeer.__aexit__ joins every handler and propagates callback failures.
         records = await retained.records()
-        if (
-            len(records) != 1
-            or type(records[0]) is not TerminalConfirmed
-            or records[0].pending != original
-            or records[0].receipt.replayed is not True
-        ):
-            raise AssertionError("Ordinary idle restart changed the original completed record or private evidence.")
+        # service.py::_archive_release_trim releases confirmed active slots into
+        # attempt_files.py::archive_confirmed. Compare the original stored bytes;
+        # its disappearance from active inventory alone is not evidence loss.
+        history = state / history_directory_name(retained.config.lifecycle.scope)
+        archived = history / record_name(confirmed)
+        if records or list(history.iterdir()) != [archived] or archived.read_bytes() != confirmed_bytes:
+            raise AssertionError("Ordinary idle restart did not preserve the exact confirmed record in private history.")
         publish(
             root,
             "summary.json",
@@ -173,6 +178,7 @@ async def serve(root, seconds):
                 "complete_requests": completions,
                 "terminal_body_sha256": hashlib.sha256(original.body).hexdigest(),
                 "protected_evidence_sha256": hashlib.sha256(original.evidence.content).hexdigest(),
+                "confirmed_history_record_sha256": hashlib.sha256(confirmed_bytes).hexdigest(),
                 "idle_routes": idle.events,
                 "jobs_supplied": 0,
                 "scientific_work_performed": False,
