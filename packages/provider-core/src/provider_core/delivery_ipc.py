@@ -42,7 +42,10 @@ def _socket_grant(path):
     parent = path.parent.lstat()
     if (path.parent.resolve() != path.parent or not stat.S_ISDIR(parent.st_mode)
             or parent.st_uid != os.geteuid() or stat.S_IMODE(parent.st_mode) != 0o700):
-        raise DeliveryUnavailable("Cannot open delivery IPC: its parent must be canonical, caller-owned and mode 0700.")
+        raise DeliveryUnavailable(
+            "Cannot open delivery IPC: its parent must be canonical, caller-owned and mode 0700; "
+            f"observed uid {parent.st_uid}, mode {stat.S_IMODE(parent.st_mode):04o}, caller uid {os.geteuid()}."
+        )
     descriptor = os.open(path.parent / ".socket.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     listener = None
     try:
@@ -93,14 +96,26 @@ class DeliveryInbox:
     async def start(self):
         try:
             for endpoint in self.endpoints:
-                listener = self._grants.enter_context(_socket_grant(endpoint.socket_path))
-                server = await asyncio.start_unix_server(
-                    lambda reader, writer, selected=endpoint: self._client(selected, reader, writer),
-                    sock=listener, limit=MAX_HEADER_BYTES,
-                )
+                try:
+                    listener = self._grants.enter_context(_socket_grant(endpoint.socket_path))
+                    server = await asyncio.start_unix_server(
+                        lambda reader, writer, selected=endpoint: self._client(selected, reader, writer),
+                        sock=listener, limit=MAX_HEADER_BYTES,
+                    )
+                except BaseException as cause:
+                    self.on_failure(cause, {
+                        "event": "delivery_binding_start_failed", "api_origin": endpoint.api_origin,
+                        "provider_ref": endpoint.provider_ref, "socket_path": str(endpoint.socket_path),
+                    })
+                    raise
                 self._servers.append(server)
-        except BaseException:
-            await self.close()
+        except BaseException as operation:
+            try:
+                await self.close()
+            except BaseException as cleanup:
+                if isinstance(operation, asyncio.CancelledError):
+                    raise operation from cleanup
+                raise BaseExceptionGroup("Delivery listener startup and independent cleanup failed.", [operation, cleanup]) from None
             raise
 
     def _storage_done(self, task):

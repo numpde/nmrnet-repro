@@ -129,11 +129,22 @@ class DeliveryQueue:
 
     def _private_file(self, path):
         descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-        facts = os.fstat(descriptor)
-        if (not stat.S_ISREG(facts.st_mode) or facts.st_uid != os.geteuid()
-                or stat.S_IMODE(facts.st_mode) != 0o600):
+        try:
+            try:
+                facts = os.fstat(descriptor)
+            except OSError as cause:
+                raise DeliveryStorageFailed(f"Cannot inspect private delivery file {path.name} before acquiring it.", cause=cause) from None
+            if (not stat.S_ISREG(facts.st_mode) or facts.st_uid != os.geteuid()
+                    or stat.S_IMODE(facts.st_mode) != 0o600):
+                raise DeliveryStorageFailed(
+                    f"Cannot open private delivery file {path.name}: require a caller-owned mode 0600 regular file; "
+                    f"observed uid {facts.st_uid}, mode {stat.S_IMODE(facts.st_mode):04o}, caller uid {os.geteuid()}."
+                )
+        except BaseException:
+            # Until return, this descriptor belongs here rather than self._lock
+            # or SQLite. A close failure retains the admission failure as context.
             os.close(descriptor)
-            raise DeliveryStorageFailed("Cannot open delivery storage: database and lock must be caller-owned mode 0600 regular files.")
+            raise
         return descriptor
 
     def _initialize(self):

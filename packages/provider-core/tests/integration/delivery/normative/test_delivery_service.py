@@ -2,6 +2,7 @@
 
 import asyncio
 import errno
+import io
 import json
 import tempfile
 import threading
@@ -244,4 +245,33 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
                 service.request_stop()
                 await asyncio.wait_for(original, 2)
                 await client.retire()
+            self.assertTrue(service.retirement_confirmed)
+
+    async def test_failed_second_binding_identifies_its_grant_and_retires_first_listener(self):
+        async with api_tls_peer("success") as peer:
+            template, first = self.service(peer)
+            bad_parent = self.root / "bad-grant"
+            bad_parent.mkdir(mode=0o755)
+            bad_parent.chmod(0o755)
+            second = DeliveryEndpoint(peer.origin, "provider:other", bad_parent / "http.sock")
+            other_api = api(HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.2), peer.origin)
+            output = io.StringIO()
+            notices = DeliveryNotices(output, secrets=())
+            self.addCleanup(notices.close)
+            service = DeliveryService(
+                self.root / "state", limits=self.limits, bindings=(*template.bindings, DeliveryBinding(second, other_api)),
+                request_seconds=1, retry_initial_seconds=0.01, retry_max_seconds=0.02,
+                on_notice=notices, diagnostic_status=notices.status,
+            )
+            with self.assertRaises(DeliveryUnavailable):
+                await service.run()
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["event"], "delivery_binding_start_failed")
+            self.assertEqual(report["provider_ref"], second.provider_ref)
+            self.assertEqual(report["api_origin"], peer.origin)
+            self.assertEqual(report["socket_path"], str(second.socket_path))
+            self.assertIn("mode 0755", report["failure"]["message"])
+            self.assertFalse(first.socket_path.exists())
+            self.assertFalse(second.socket_path.exists())
+            self.assertEqual(peer.requests, [])
             self.assertTrue(service.retirement_confirmed)

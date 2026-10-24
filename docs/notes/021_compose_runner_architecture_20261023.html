@@ -162,6 +162,22 @@
       run under the installed core interpreter. Build qualification constructs and
       closes a private proxy listener as well as checking command help; no DNS,
       API request or server loop runs during that check.</p>
+    <p>The maintained offline build now succeeds from source
+      <a href="https://github.com/numpde/nmrnet-repro/commit/4dcfba905c7ba94b92d04df0f8bc98db85122112">4dcfba9</a>,
+      producing delivery image
+      <code>sha256:3abea5961f7be6fda5e6d00814a557ac6dee59b8ef9b26530d0e6afc73223fe3</code>.
+      Both entrypoint checks, the scientific-namespace refusal check and proxy
+      constructor check passed. Build progress and failures use the existing native
+      stdio mode because the build receives only public committed source and locked
+      wheels; immutable image admission still reads its private ID file. This is
+      image qualification, not deployment or NMRNet producer integration.</p>
+    <p>Acquisition review then added configured binding/socket context to listener
+      startup failures, including observed parent ownership/mode, while preserving
+      already-open listener cleanup. A failed private-file inspection now closes
+      its original descriptor before handoff; the real-FD witness observes EBADF.
+      The affected connected lane passes 28 checks and the unit lane passes 19.
+      These follow-up source changes require the normal matching image rebuild
+      when the producer integration is ready; no live service changed.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.

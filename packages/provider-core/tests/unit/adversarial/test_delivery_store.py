@@ -1,8 +1,11 @@
 """Queue refusal preserves the original outstanding request and its owner."""
 
 import tempfile
+import errno
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from provider_core.delivery_store import DeliveryConflict, DeliveryOutcome, DeliveryQueue, DeliveryStorageFailed, QueueLimits
 from tests.fakes.delivery import outcome
@@ -60,3 +63,25 @@ class DeliveryQueueRefusalTests(unittest.TestCase):
         self.assertIn("open delivery storage", str(caught.exception))
         self.assertIsInstance(caught.exception.cause, FileNotFoundError)
         self.assertFalse((self.root / "missing").exists())
+
+    def test_failed_descriptor_inspection_closes_the_original_file_before_handoff(self):
+        opened = []
+        real_open, real_fstat = os.open, os.fstat
+        primary = OSError(errno.EIO, "PRIVATE_NATIVE")
+
+        def open_original(*arguments):
+            descriptor = real_open(*arguments)
+            opened.append(descriptor)
+            return descriptor
+
+        with patch("provider_core.delivery_store.os.open", side_effect=open_original), \
+                patch("provider_core.delivery_store.os.fstat", side_effect=primary):
+            with self.assertRaises(DeliveryStorageFailed) as refused:
+                self.open()
+        self.assertEqual(len(opened), 1)
+        with self.assertRaises(OSError) as closed:
+            real_fstat(opened[0])
+        self.assertEqual(closed.exception.errno, errno.EBADF)
+        self.assertIs(refused.exception.cause, primary)
+        self.assertIn(".owner.lock", str(refused.exception))
+        self.assertNotIn("PRIVATE", str(refused.exception))
