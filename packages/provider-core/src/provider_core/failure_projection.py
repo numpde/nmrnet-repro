@@ -29,6 +29,7 @@ from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.delivery_client import DeliveryRejected, DeliveryUnavailable
+from provider_core.delivery_config import DeliveryConfigurationRejected
 from provider_core.delivery_ipc import DeliveryRequestRejected
 from provider_core.delivery_store import DeliveryConflict, DeliveryFull, DeliveryStorageFailed
 from provider_core.delivery_worker import DeliveryWorkerFailed
@@ -86,6 +87,7 @@ def owned_relationships(error):
         DeliveryWorkerFailed,
         StartupFileRejected,
         ApiConfigurationRejected,
+        DeliveryConfigurationRejected,
     ):
         yield "owned cause", error.cause
     if kind in (
@@ -168,6 +170,7 @@ def owned_details(error):
         DeliveryWorkerFailed,
         StartupFileRejected,
         ApiConfigurationRejected,
+        DeliveryConfigurationRejected,
     ):
         return {}
     details = {"message": str(error)}

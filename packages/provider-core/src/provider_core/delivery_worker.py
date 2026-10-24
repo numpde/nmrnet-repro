@@ -28,15 +28,20 @@ class DeliveryWorkerFailed(RuntimeError):
         self.api_receipt_received = api_receipt_received
 
 
+def require_delivery_retry_settings(initial_seconds, maximum_seconds):
+    """Share admission before service startup and standalone worker construction."""
+    if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
+           for value in (initial_seconds, maximum_seconds)) or initial_seconds > maximum_seconds:
+        raise ValueError("Delivery retry delays must be finite positive seconds, with initial delay no greater than maximum.")
+
+
 class DeliveryWorker:
     """One serial API owner per binding; other providers have their own worker."""
 
     def __init__(self, inbox, endpoint, api, *, retry_initial_seconds, retry_max_seconds, on_notice):
         if api.origin != endpoint.api_origin:
             raise ValueError("Delivery signing origin differs from its configured binding.")
-        if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
-               for value in (retry_initial_seconds, retry_max_seconds)) or retry_initial_seconds > retry_max_seconds:
-            raise ValueError("Delivery retry delays must be finite positive seconds, with initial delay no greater than maximum.")
+        require_delivery_retry_settings(retry_initial_seconds, retry_max_seconds)
         self.inbox, self.endpoint, self.api = inbox, endpoint, api
         self.retry_initial_seconds, self.retry_max_seconds = retry_initial_seconds, retry_max_seconds
         self.on_notice = on_notice

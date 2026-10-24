@@ -16,7 +16,7 @@ from provider_core.api import ProviderAPI
 from provider_core.delivery_client import DeliveryEndpoint, DeliveryUnavailable
 from provider_core.delivery_ipc import DeliveryInbox
 from provider_core.delivery_store import DeliveryQueue
-from provider_core.delivery_worker import DeliveryWorker
+from provider_core.delivery_worker import DeliveryWorker, require_delivery_retry_settings
 
 MAX_BINDINGS = 16
 
@@ -44,6 +44,7 @@ class DeliveryService:
             raise ValueError("The host delivery budget must cover the configured provider shares; reduce their allowances or increase the host budget.")
         if type(request_seconds) not in (int, float) or not math.isfinite(request_seconds) or request_seconds <= 0:
             raise ValueError("Delivery IPC request deadline must be finite positive seconds.")
+        require_delivery_retry_settings(retry_initial_seconds, retry_max_seconds)
         self.directory, self.limits, self.bindings = directory, limits, bindings
         self.request_seconds = request_seconds
         self.retry_initial_seconds, self.retry_max_seconds = retry_initial_seconds, retry_max_seconds
