@@ -66,11 +66,11 @@ compose_witness_native_events() {
     done
 }
 
-compose_witness_lost_create() {
+compose_witness_recovery() {
     local lock status=0
     exec {lock}< "$private" || return $?
     if flock --nonblock "$lock"; then
-        if compose_witness_lost_create_effects; then :; else status=$?; fi
+        if compose_witness_recovery_effects; then :; else status=$?; fi
     else status=$?; fi
     # Releasing the finite caller's lock does not settle Engine effects. The
     # original operation receipts remain the next command's recovery barrier.
@@ -78,7 +78,7 @@ compose_witness_lost_create() {
     return "$status"
 }
 
-compose_witness_lost_create_effects() {
+compose_witness_recovery_effects() {
     source "$repository_root/tools/provider_deployment.sh"
     local caller_uid=$(id -u) caller_gid=$(id -g) digest identifier
     local deployment_name=$deployment deployment_action=up deployment_root=$private
@@ -152,6 +152,30 @@ compose_witness_late_requests() {
     deployment_process_status api replacement-survived 5 || return $?
     [[ ( $deployment_process_phase == ready || $deployment_process_phase == working ) && $deployment_process_age -le 30000 ]] || return 2
     printf 'Late start/stop of old API ID %s were rejected; replacement %s remains ready. No Job or model call was issued.\n' "$old_identifier" "$replacement_identifier"
+    compose_witness_resume_startup "$replacement_identifier"
+}
+
+compose_witness_resume_startup() {
+    local identifier=$1 role phase=resume-$operation_generation-start-api
+    for role in interpreter store prediction reader smiles provider; do
+        deployment_create_arguments "$selected_bundle" "$role"
+        deployment_command "create-$role" 60 "$operation_root/create-$role" true "${deployment_role_create_arguments[@]}" || return $?
+    done
+    engine=(bash "$capture/tools/compose_reply_loss.sh" "${original_engine[@]}")
+    if deployment_command "$phase" 30 "$operation_root/$phase" true start "$identifier"; then
+        engine=("${original_engine[@]}")
+        printf 'Interrupted startup reply loss was not exercised.\n' >&2
+        return 2
+    fi
+    engine=("${original_engine[@]}")
+    [[ $deployment_command_status == 7 && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
+    cp -- "$operation_root/intent" "$scratch/resumed-original.intent" || return $?
+    deployment_begin_operation || return $?
+    [[ $deployment_recovery_observed == true && ${#deployment_ids[@]} == 7 && ${deployment_ids[api]} == "$identifier" \
+        && ! -e $operation_root/complete && ! -e $operation_root/$phase/reconciled ]] || return 2
+    cmp -s "$operation_root/intent" "$scratch/resumed-original.intent" || return $?
+    cp -a -- "$operation_root" "$scratch/resumed-startup-receipts" || return $?
+    printf 'Startup recovery confirmed all seven roles ready; the original late-start restriction remains retained.\n'
 }
 
 compose_witness_old_id_rejected() {
@@ -275,7 +299,10 @@ compose_witness_main() {
     make --no-print-directory -C "$repository_root" provider/deployment/install DEPLOYMENT="$deployment" || return $?
     deployment_installed=true
     if [[ $scientific_case == recovery ]]; then
-        compose_witness_lost_create || return $?
+        compose_witness_recovery || return $?
+        make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
+        cmp -s "$private/operation/mutation/intent" "$scratch/resumed-original.intent" \
+            && [[ ! -e $private/operation/mutation/complete ]] || return 2
         make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
         deployment_installed=false
         : > "$peer_data/done"

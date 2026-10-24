@@ -213,8 +213,8 @@ cmp -s "$parent/intent" "$2/original-intent"
             result = self.shell('''
 source "$1/tools/compose_qualification.sh"
 private=$2
-compose_witness_lost_create_effects() { return 7; }
-if compose_witness_lost_create; then exit 91; else [[ $? == 7 ]]; fi
+compose_witness_recovery_effects() { return 7; }
+if compose_witness_recovery; then exit 91; else [[ $? == 7 ]]; fi
 flock --nonblock "$private" true
 ''', directory)
             self.assertEqual(result.returncode, 0, result.stderr)

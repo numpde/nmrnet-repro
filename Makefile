@@ -440,7 +440,7 @@ help:
 		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \
 		'make test/integration/provider/deployment/capacity Qualify H128/C128 input/output capacity through the connected Compose path (opt-in).' \
 		'make test/integration/provider/deployment/successive Run two distinct Jobs through one service, then check restart without replay (opt-in).' \
-		'make test/integration/provider/deployment/recovery Recover lost Engine replies and reject late old-ID requests after replacement, without science (opt-in).' \
+		'make test/integration/provider/deployment/recovery Check lost Engine replies, startup recovery and fenced replacement without scientific work (opt-in).' \
 		'make test/unit/provider/deployment     Check private deployment bundles and successive refreshes offline.' \
 		'make provider/run                      Run the provider service with explicit host and route configuration.' \
 		'make provider/logs CONTAINER_ID=<id>   Read the last 200 journal messages for one full container ID, including removed workers.' \
