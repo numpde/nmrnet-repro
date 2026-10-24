@@ -213,6 +213,11 @@ class DeliveryQueue:
                 raise DeliveryStorageFailed("Cannot publish corrupted delivery storage; preserve the row for operator reconciliation.", cause=cause) from None
             return item
 
+    def outstanding_bindings(self):
+        """Derive current obligations from rows; keep no separate binding registry."""
+        with self._access("inspect binding obligations in"):
+            return tuple(self._db.execute("SELECT DISTINCT api_origin,provider_ref FROM outstanding ORDER BY api_origin,provider_ref"))
+
     def inventory(self, api_origin, provider_ref):
         with self._access("inspect"):
             rows = self._db.execute(

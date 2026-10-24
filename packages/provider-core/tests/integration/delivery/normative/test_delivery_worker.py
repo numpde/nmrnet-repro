@@ -28,7 +28,7 @@ class DeliveryWorkerTests(unittest.IsolatedAsyncioTestCase):
         (self.root / "state").mkdir(mode=0o700)
         self.queue = DeliveryQueue(self.root / "state", limits=QueueLimits(4, 16384, 8, 32768))
         self.addCleanup(self.queue.close)
-        self.inbox = DeliveryInbox(self.queue, (), request_seconds=1, on_accepted=Mock(), on_failure=Mock())
+        self.inbox = DeliveryInbox(self.queue, (), request_seconds=1, on_accepted=Mock(), on_failure=Mock(), binding_status=Mock())
         self.addAsyncCleanup(self.inbox.close)
         self.notices = []
 

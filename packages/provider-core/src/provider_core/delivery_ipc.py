@@ -81,10 +81,11 @@ def _socket_grant(path):
 class DeliveryInbox:
     """Own listeners, client handlers and original offloaded SQLite operations."""
 
-    def __init__(self, queue, endpoints, *, request_seconds, on_accepted, on_failure):
+    def __init__(self, queue, endpoints, *, request_seconds, on_accepted, on_failure, binding_status):
         self.queue, self.endpoints = queue, endpoints
         self.request_seconds = request_seconds
         self.on_accepted, self.on_failure = on_accepted, on_failure
+        self.binding_status = binding_status
         self._grants, self._servers = ExitStack(), []
         self._clients, self._storage_tasks = set(), set()
         self.failed, self.failure = asyncio.Event(), None
@@ -176,6 +177,7 @@ class DeliveryInbox:
             return {
                 "api_origin": endpoint.api_origin, "provider_ref": endpoint.provider_ref, "items": rows,
                 "capacity": {"provider_items": self.queue.limits.provider_items, "provider_bytes": self.queue.limits.provider_bytes},
+                "publisher": self.binding_status(endpoint),
             }
         if len(parts) == 3 and parts[1] == "status":
             try:
@@ -239,12 +241,16 @@ class DeliveryInbox:
                 self.on_failure(cause, {"event": "delivery_ipc_close_failed", "provider_ref": endpoint.provider_ref})
             self._clients.discard(task)
 
-    async def close(self):
+    async def stop_accepting(self):
+        """Stop new clients without interrupting accepted requests or storage."""
         for server in self._servers:
             server.close()
         for server in self._servers:
             await server.wait_closed()
         self._servers.clear()
+
+    async def close(self):
+        await self.stop_accepting()
         failures = []
         for tasks in (self._clients, self._storage_tasks):
             if tasks:

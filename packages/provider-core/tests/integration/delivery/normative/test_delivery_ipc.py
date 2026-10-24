@@ -29,7 +29,8 @@ class DeliveryIPCTests(unittest.IsolatedAsyncioTestCase):
         self.endpoint = DeliveryEndpoint("https://api.example", "provider:test", root / "ipc/http.sock")
         self.accepted, self.failures = Mock(), Mock()
         self.inbox = DeliveryInbox(
-            self.queue, (self.endpoint,), request_seconds=1, on_accepted=self.accepted, on_failure=self.failures
+            self.queue, (self.endpoint,), request_seconds=1, on_accepted=self.accepted, on_failure=self.failures,
+            binding_status=Mock(return_value={"state": "inbox_only", "message": "No API publisher is attached to this test inbox."}),
         )
         await self.inbox.start()
         self.addAsyncCleanup(self.inbox.close)

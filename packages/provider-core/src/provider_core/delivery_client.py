@@ -144,10 +144,19 @@ class DeliveryClient:
 
     async def pending(self):
         reply = await self._request("GET", "/pending")
-        if (type(reply) is not dict or set(reply) != {"api_origin", "provider_ref", "items", "capacity"}
+        if (type(reply) is not dict or set(reply) != {"api_origin", "provider_ref", "items", "capacity", "publisher"}
                 or (reply["api_origin"], reply["provider_ref"]) != (self.endpoint.api_origin, self.endpoint.provider_ref)
                 or type(reply["items"]) is not list):
             raise DeliveryRejected("The pending inventory does not belong to the configured delivery binding.")
+        publisher = reply["publisher"]
+        if (type(publisher) is not dict or set(publisher) != {"state", "message"}
+                or publisher["state"] not in ("inbox_only", "starting", "running", "paused", "stopping", "stopped")
+                or type(publisher["message"]) is not str or not 1 <= len(publisher["message"]) <= 1024):
+            raise DeliveryRejected("Delivery inventory has an unsupported publisher state or explanation.")
+        capacity = reply["capacity"]
+        if (type(capacity) is not dict or set(capacity) != {"provider_items", "provider_bytes"}
+                or any(type(value) is not int or value <= 0 for value in capacity.values())):
+            raise DeliveryRejected("Delivery inventory requires positive item and byte allowances.")
         for item in reply["items"]:
             self._metadata(item)
         return reply

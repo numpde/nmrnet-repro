@@ -51,6 +51,18 @@ class DeliveryWorker:
         self.stopping.set()
         self.changed.set()
 
+    def status(self):
+        """Local publisher state, independent of inbox or remote API readiness."""
+        if self.failure is not None:
+            return {"state": "stopped", "message": str(self.failure)}
+        if self.paused:
+            return {"state": "paused", "message": "This binding could not obtain a verified receipt or permission to retry. Inspect its operator diagnostics, resolve the reported cause, then restart delivery."}
+        if self.stopping.is_set():
+            return {"state": "stopping", "message": "Delivery is settling its original work; pending bytes remain retained."}
+        if self._running:
+            return {"state": "running", "message": "The local publisher is running; this is not a remote API availability check."}
+        return {"state": "starting", "message": "The local publisher has not started yet."}
+
     def _facts(self, event, item):
         return {"event": event, **item.acceptance()}
 

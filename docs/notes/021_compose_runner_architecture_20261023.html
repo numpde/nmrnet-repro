@@ -76,6 +76,13 @@
       across independent storage failures, including cancellation during final
       retirement. All 17 delivery checks pass through
       <code>make test/integration/provider-core/delivery WHEELHOUSE=&lt;path&gt;</code>.
+      The shared service lifecycle now connects those components under one
+      database owner. Six additional checks exercise real producer socket to
+      signed API publication, original commit settlement after interrupted shutdown,
+      stop during listener startup without launching delivery, scoped paused-publisher
+      status, provider shares fitting the host budget, and changed-binding startup
+      refusal that preserves original pending bytes. The connected delivery lane
+      now passes 23 checks; the affected storage lane passes nine.
       These prove local delivery components; daemon packaging, producer handoff,
       migration and deployed recovery remain outstanding.</p>
     <h3>Small deployment and explicit ownership</h3>
