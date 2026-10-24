@@ -1457,6 +1457,32 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       after scientific replies and owner-session closure; this is neither a failed
       prediction nor a normal child exit. All seven containers are stopped with
       bounded Docker logs retained. No application log dump is preserved.</p>
+    <p><strong>T3 installed recovery and runner crash, 24 October 2026:</strong>
+      the <a href="https://github.com/numpde/nmrnet-repro/blob/8257fd90ad3d33d99753cd676fb9c7ed00932b38/artifacts/compose-runtime-recovery-qualification.json">runtime
+      recovery packet</a> records lost create/start/stop replies, same-intent startup of
+      all seven actual containers, and absent old-ID fencing before an opposing command.
+      Public up/down preserve the original pending restriction until settlement.
+      Install refuses live prior work; after acknowledged down it may fence stopped
+      pending IDs without starting or stopping another owner.</p>
+    <p>The <a href="https://github.com/numpde/nmrnet-repro/blob/206aa1898d700684fc9034629d8b470abcc7f405/artifacts/compose-runner-crash-qualification.json">installed
+      crash packet</a> records the unchanged reader image, private tmpfs admission,
+      a child still alive after STOP/TERM, and independent exit observation through
+      its original pidfd after supervisor death. Engine restarted the same container;
+      scratch was empty before successor admission, and the lease inode was unchanged.
+      The successor used a new generation and operation. No scientific input was sent.
+      The old child's exit code is unknown; exec status 137 and socket EOF are not
+      retirement proof. A mutated inspection with bind scratch was refused, which
+      is admission evidence rather than an actual bad-container launch.</p>
+    <p><strong>T4 prediction replacement connection:</strong> the focused installed-core
+      runner lane now connects the real factory, NativeOperation, supervisor,
+      PredictionClient, framed scientific server and NMRNetSession. One authored
+      execution failure triggers one replacement only after original physical
+      retirement and local I/O settlement. Both children receive the original frozen
+      request bytes, and the first diagnostic survives. Authored outcomes qualify
+      this connection and ordering, not OOM behavior or released-model accuracy.
+      Existing exact terminal replay and service recovery tests retain their separate
+      API/store claims. Named deployment cutover and removal of displaced launch
+      paths remain outstanding.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,
