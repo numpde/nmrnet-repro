@@ -729,6 +729,7 @@ deployment_up() {
     # present. --no-recreate prevents its dependency traversal creating a second
     # generation. A lost reply therefore leaves only one named create to settle.
     for role in api interpreter store prediction reader smiles provider; do
+        if [[ -v deployment_ids[$role] && ${deployment_bundles[$role]} == "$name" ]]; then continue; fi
         deployment_command "create-$role" 60 "$operation_root/create-$role" true compose --env-file /dev/null \
             --project-name "$deployment_project" --project-directory "$repository_root" --file "$selected_bundle/compose.json" \
             create --no-build --pull never --no-recreate "$role" || return $?

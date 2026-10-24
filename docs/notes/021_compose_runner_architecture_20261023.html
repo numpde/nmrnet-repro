@@ -1347,6 +1347,15 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       Lost create replies still require original-name discovery/admission; persistent
       runtime requests with missing replies still require their own settlement/fence.
       This checkpoint does not close the complete interruption contract.</p>
+    <p><strong>Stopped-stack reuse, 24 October 2026:</strong> up now skips Compose
+      create for roles already admitted from the selected immutable bundle. It still
+      starts exact IDs, observes ordered current readiness, and performs final
+      inventory admission. This removes seven no-op creates and their repeated helper
+      inventories on a complete stopped-stack restart. The new regression failed on
+      the old create dispatch and passed after the guard; all eleven focused
+      launcher/client tests pass. Independent lifetime and scientific reviews found
+      no additional material issue. The earlier connected packet remains evidence for
+      its recorded revision; this optimization adds no scientific or deployment claim.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

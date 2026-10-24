@@ -14,6 +14,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_stopped_matching_stack_reuses_admitted_containers_without_noop_creates(self):
+        result = self.shell('''
+deployment_name=fixture deployment_project=nmrnet-fixture repository_root=/fixture operation_root=/fixture/operation deployment_runtime_effects=false
+declare -A deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
+for role in api interpreter store prediction reader smiles provider; do
+    deployment_ids[$role]=${role}-id deployment_bundles[$role]=generation-existing
+    deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
+done
+deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-existing; }
+deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == true ]]; }
+deployment_runtime_directories() { :; }
+deployment_ready() { :; }
+deployment_command() { [[ $1 == start-* ]] || return 92; printf '%s\\n' "$1"; }
+deployment_inventory() {
+    [[ $1 == started ]] || return 92
+    for role in api interpreter store prediction reader smiles provider; do deployment_running[$role]=true; done
+}
+deployment_up
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count("start-"), 7)
+        self.assertNotIn("create-", result.stdout)
+
     def test_interrupted_helper_is_retired_by_original_id_without_reexecution(self):
         for failure in ("none", "stop", "remove", "absence", "logs"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
@@ -68,7 +91,7 @@ declare -A deployment_ids=([api]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 declare -A deployment_readiness_seconds=([api]=1 [provider]=100)
 deployment_start_deadline=$((SECONDS + 100))
 deployment_command() {
-    [[ $2 -le 1 && $4 == false ]]
+    [[ $2 -le 1 && $4 == false ]] || return 92
     mkdir -m 700 -- "$3"
     printf '%s|true|false|healthy\\n' "${deployment_ids[api]}" > "$3/response.stdout"
 }
