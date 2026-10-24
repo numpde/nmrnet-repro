@@ -89,11 +89,12 @@ compose_witness_lost_create_effects() {
     deployment_begin_operation || return $?
     deployment_selected_bundle || return $?
     deployment_load_bootstrap "$selected_bundle" || return $?
-    deployment_runtime_directories || return $?
     digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
     deployment_project=nmrnet-${digest:0:20}
+    deployment_plan_inputs true || return $?
+    deployment_runtime_directories || return $?
     deployment_create_arguments "$selected_bundle" api
-    engine=(bash "$capture/tools/compose_create_reply_loss.sh" "${original_engine[@]}")
+    engine=(bash "$capture/tools/compose_reply_loss.sh" "${original_engine[@]}")
     if deployment_command create-api 60 "$operation_root/create-api" true "${deployment_role_create_arguments[@]}"; then
         engine=("${original_engine[@]}")
         printf 'Create-reply loss was not exercised.\n' >&2
@@ -114,11 +115,68 @@ compose_witness_lost_create_effects() {
     [[ ${#deployment_ids[@]} == 1 && ${deployment_ids[api]} == "$identifier" \
         && ${deployment_states[api]} == created && ${deployment_running[api]} == false ]] || return 2
     printf 'Lost create reply recovered original API container %s without starting it.\n' "$identifier"
+    compose_witness_late_requests "$identifier"
+}
+
+compose_witness_late_requests() {
+    local old_identifier=$1 replacement_identifier kind budget grace=${deployment_stop_seconds[api]}
+    local -a arguments=()
+    for kind in start stop; do
+        if [[ $kind == start ]]; then budget=30; arguments=(start "$old_identifier")
+        else budget=$((grace + 5)); arguments=(stop --time "$grace" "$old_identifier"); fi
+        engine=(bash "$capture/tools/compose_reply_loss.sh" "${original_engine[@]}")
+        if deployment_command "$kind-api" "$budget" "$operation_root/$kind-api" true "${arguments[@]}"; then
+            engine=("${original_engine[@]}")
+            printf 'Engine %s reply loss was not exercised.\n' "$kind" >&2
+            return 2
+        fi
+        engine=("${original_engine[@]}")
+        [[ $deployment_command_status == 7 && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
+    done
+    deployment_action=down
+    deployment_recover_runtime "$operation_root" || return $?
+    [[ ! -v deployment_ids[api] ]] || return 2
+    cp -a -- "$operation_root" "$scratch/late-request-receipts" || return $?
+    deployment_action=up
+    deployment_begin_operation || return $?
+    deployment_create_arguments "$selected_bundle" api
+    deployment_command create-api 60 "$operation_root/create-api" true "${deployment_role_create_arguments[@]}" || return $?
+    deployment_inventory replacement || return $?
+    [[ ${#deployment_ids[@]} == 1 && ${deployment_ids[api]} != "$old_identifier" ]] || return 2
+    replacement_identifier=${deployment_ids[api]}
+    deployment_plan_inputs false || return $?
+    deployment_start_role api || return $?
+    deployment_start_deadline=$((SECONDS + deployment_startup_seconds))
+    deployment_ready api || return $?
+    compose_witness_old_id_rejected "$old_identifier" "$grace" || return $?
+    deployment_process_status api replacement-survived 5 || return $?
+    [[ ( $deployment_process_phase == ready || $deployment_process_phase == working ) && $deployment_process_age -le 30000 ]] || return 2
+    printf 'Late start/stop of old API ID %s were rejected; replacement %s remains ready. No Job or model call was issued.\n' "$old_identifier" "$replacement_identifier"
+}
+
+compose_witness_old_id_rejected() {
+    local identifier=$1 grace=$2 kind budget
+    local operation_root=$scratch/late-old-id
+    local -a arguments=()
+    mkdir -m 700 -- "$operation_root" "$operation_root/effects" || return $?
+    for kind in start stop; do
+        if [[ $kind == start ]]; then budget=30; arguments=(start "$identifier")
+        else budget=$((grace + 5)); arguments=(stop --time "$grace" "$identifier"); fi
+        if deployment_command "$kind-api" "$budget" "$operation_root/$kind-api" true "${arguments[@]}"; then
+            printf 'Late %s unexpectedly accepted an old ID after its confirmed removal.\n' "$kind" >&2
+            return 2
+        fi
+        [[ $deployment_command_status == 1 && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
+    done
 }
 
 compose_witness_finish() {
     local status=$? cleanup=0
     trap - EXIT
+    if [[ $inference_retirement_confirmed != true ]]; then
+        printf 'Qualification retains its original receipts and containers because the local Engine client has not retired: %s\n' "$scratch" >&2
+        exit 2
+    fi
     if [[ $deployment_installed == true ]]; then
         if make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment"; then :
         else
@@ -182,7 +240,7 @@ compose_witness_main() {
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
         tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests \
-        tools/compose_runner_events.sh tools/compose_create_reply_loss.sh \
+        tools/compose_runner_events.sh tools/compose_reply_loss.sh \
         tests/fixtures/preparation/expected.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0

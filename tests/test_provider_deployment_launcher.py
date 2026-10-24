@@ -15,6 +15,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_reply_loss_occurs_only_after_the_actual_engine_command_finishes(self):
+        for native_status in (0, 9):
+            with self.subTest(native_status=native_status):
+                command = f"printf 'withheld response\\n'; printf 'actual Engine cause\\n' >&2; exit {native_status}"
+                result = subprocess.run(["bash", str(ROOT / "tools/compose_reply_loss.sh"), "bash", "-c", command],
+                    capture_output=True, text=True, timeout=3)
+                self.assertEqual(result.returncode, 7 if native_status == 0 else native_status)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("actual Engine cause", result.stderr)
+                self.assertEqual("deliberately withheld" in result.stderr, native_status == 0)
+
     def test_absent_old_target_settles_both_requests_without_controlling_its_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.shell('''
