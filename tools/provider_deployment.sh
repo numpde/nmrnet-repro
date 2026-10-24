@@ -3,6 +3,8 @@
 # actual Engine IDs/grants are admitted before control. No per-Job host loop.
 # Contract: docs/notes/021_compose_runner_architecture_20261023.html.
 
+source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_helper_grants.sh"
+
 deployment_refuse() {
     printf 'Cannot %s deployment %s: %s\n' "$deployment_action" "$deployment_name" "$1" >&2
     return 2
@@ -27,10 +29,10 @@ deployment_command() {
         (
             umask 077
             set -o noclobber
-            printf '%s\0' "$phase" "$budget" "$receipts" "$@" > "$receipts/intent"
-            [[ ! -e $operation_root/effects/$phase.intent && ! -L $operation_root/effects/$phase.intent ]]
-            mv -- "$receipts/intent" "$operation_root/effects/$phase.intent"
-            sync -f -- "$operation_root/effects/$phase.intent" "$operation_root/effects"
+            printf '%s\0' "$phase" "$budget" "$receipts" "$@" > "$receipts/intent" || exit $?
+            [[ ! -e $operation_root/effects/$phase.intent && ! -L $operation_root/effects/$phase.intent ]] || exit 2
+            mv -- "$receipts/intent" "$operation_root/effects/$phase.intent" || exit $?
+            sync -f -- "$operation_root/effects/$phase.intent" "$operation_root/effects" || exit $?
         ) || return $?
     fi
     if inference_native "deployment $phase" "$budget" stdio bash -eu -c '
@@ -51,6 +53,10 @@ deployment_command() {
         [[ $size =~ ^[0-9]+$ ]] && (( size < 2097152 )) || return 2
     done
     sync -f -- "$receipts/response.stdout" "$receipts/response.stderr" "$receipts" || return $?
+    if [[ $status != 0 ]]; then
+        deployment_diagnostic+=" Engine request $phase failed (client status $status)."
+        deployment_failed_receipt=$receipts/response.stderr
+    fi
     [[ $status == 0 ]]
 }
 
@@ -64,28 +70,27 @@ deployment_helper() {
     mkdir -m 700 -- "$directory" || return $?
     [[ -f $deployment_tool_source && ! -L $deployment_tool_source ]] || { deployment_refuse 'the captured offline helper is missing or linked.'; return 2; }
     remaining=$((deadline - SECONDS - 25))
+    (( remaining > 0 )) || return 2
+    deployment_helper_declare "$directory" "$phase" "$name" helper_grants helper_arguments "$remaining" || return $?
+    remaining=$((deadline - SECONDS - 25))
+    (( remaining > 0 )) || return 2
     deployment_helper_retired=false
     deployment_command "$phase-create" "$remaining" "$directory/create" true create \
         --name "$name" --cidfile "$directory/helper.cid" \
         --label "io.nmrnet-repro.operation=$operation_generation" --label "io.nmrnet-repro.helper=$phase" \
         --label "io.nmrnet-repro.deployment=$deployment_name" --label "io.nmrnet-repro.checkout=$repository_root" \
         --label "io.nmrnet-repro.operation-owner=$operation_owner" \
-        --init --pull never --network none --read-only --restart no --ipc private --cgroupns private \
-        --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true \
-        --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
-        --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
-        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=64m,mode=0700,uid=$caller_uid,gid=$caller_gid" \
-        --mount "type=bind,src=$deployment_tool_source,dst=/source/tools/provider_deployment.py,readonly" \
+        "${deployment_helper_profile_args[@]}" "${deployment_helper_mount_args[@]}" \
         --entrypoint /opt/provider/environment/bin/python \
-        "${helper_grants[@]}" "$controller_image_id" -I -B /source/tools/provider_deployment.py "${helper_arguments[@]}" || return $?
+        "$controller_image_id" -I -B /source/tools/provider_deployment.py "${helper_arguments[@]}" || return $?
     deployment_created_helper "$directory" || return $?
     identifier=$deployment_created_helper_id
     remaining=$((deadline - SECONDS - 25))
     (( remaining > 0 )) || return 2
-    deployment_command "$phase-posture" "$remaining" "$directory/posture" false inspect --type container --format \
-        '{{.Id}}|{{.Image}}|{{.Name}}|{{.State.Status}}|{{.State.Running}}|{{.State.Restarting}}|{{.State.Pid}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.ReadonlyRootfs}}|{{.Config.User}}|{{index .Config.Labels "io.nmrnet-repro.operation"}}|{{index .Config.Labels "io.nmrnet-repro.helper"}}|{{.HostConfig.Privileged}}|{{.HostConfig.Init}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.NanoCpus}}|{{.HostConfig.PidsLimit}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.HostConfig.IpcMode}}|{{.HostConfig.CgroupnsMode}}|{{.HostConfig.PidMode}}|{{.HostConfig.UTSMode}}|{{.HostConfig.LogConfig.Type}}|{{json .HostConfig.LogConfig.Config}}' "$identifier" || return $?
-    cmp -s "$directory/posture/response.stdout" <(printf '%s|%s|/%s|created|false|false|0|no|none|true|%s:%s|%s|%s|false|true|536870912|536870912|2000000000|64|["ALL"]|["no-new-privileges:true"]|private|private|||json-file|{"max-buffer-size":"1m","max-file":"3","max-size":"10m","mode":"non-blocking"}\n' \
-        "$identifier" "$controller_image_id" "$name" "$caller_uid" "$caller_gid" "$operation_generation" "$phase") || return 2
+    deployment_helper_admit "$directory" "$phase-posture" "$identifier" "$directory/posture" "$remaining" || return $?
+    [[ $deployment_admitted_helper_id == "$identifier" && $deployment_admitted_helper_state == created \
+        && $deployment_admitted_helper_running == false && $deployment_admitted_helper_restarting == false \
+        && $deployment_admitted_helper_pid == 0 ]] || return 2
     remaining=$((deadline - SECONDS - 25))
     if (( remaining > 0 )) && deployment_command "$phase-start" "$remaining" "$directory/start" true start "$identifier"; then
         remaining=$((deadline - SECONDS - 25))
@@ -123,16 +128,19 @@ deployment_created_helper() {
     # this cleanup handle; it never authorizes starting or replaying the helper.
     local directory=$1 candidate path
     deployment_created_helper_id=
+    if [[ ! -e $directory/create && ! -L $directory/create ]]; then return 1; fi
     [[ -d $directory/create && ! -L $directory/create \
         && $(realpath -m -- "$directory/create") == "$directory/create" \
         && $(stat -c '%u:%a' -- "$directory/create") == "$caller_uid:700" ]] || return 2
     for path in "$directory/helper.cid" "$directory/create/response.stdout"; do
+        if [[ ! -e $path && ! -L $path ]]; then return 1; fi
         [[ -f $path && ! -L $path && $(stat -c '%u:%a' -- "$path") == "$caller_uid:600" ]] || return 2
     done
-    IFS= read -r -N 64 candidate < "$directory/helper.cid" || return 2
+    IFS= read -r -N 64 candidate < "$directory/helper.cid" || return 1
     [[ $candidate =~ ^[0-9a-f]{64}$ ]] \
-        && { cmp -s "$directory/helper.cid" <(printf '%s' "$candidate") || cmp -s "$directory/helper.cid" <(printf '%s\n' "$candidate"); } \
-        && cmp -s "$directory/create/response.stdout" <(printf '%s\n' "$candidate") || return 2
+        && { cmp -s "$directory/helper.cid" <(printf '%s' "$candidate") || cmp -s "$directory/helper.cid" <(printf '%s\n' "$candidate"); } || return 1
+    deployment_helper_identity_agrees "$directory" "$candidate" || return $?
+    cmp -s "$directory/create/response.stdout" <(printf '%s\n' "$candidate") || return 1
     deployment_created_helper_id=$candidate
 }
 
@@ -321,9 +329,58 @@ deployment_effects_settled() {
     done
 }
 
-deployment_recover_known_helpers() {
-    local root=$1 intent helper directory identifier recovery phase present path
-    local deadline=$((SECONDS + 60)) remaining budget
+deployment_recover_helper_attempt() {
+    local helper=$1 directory=$2 recovery=$3 path=$4 deadline=$5 identifier=$6 remaining budget present
+    if [[ -n $identifier ]]; then
+        mkdir -m 700 -- "$path" || return $?
+    else
+        deployment_helper_discover "$directory" "$helper" "$recovery" "$path" "$deadline" || return $?
+        identifier=$deployment_created_helper_id
+    fi
+    remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+    budget=10; if (( remaining < budget )); then budget=$remaining; fi
+    deployment_command "$helper-recovery-$recovery-query" "$budget" "$path/query" false \
+        ps --all --no-trunc --quiet --filter "id=$identifier" || return $?
+    present=false
+    if [[ -s $path/query/response.stdout ]]; then
+        cmp -s "$path/query/response.stdout" <(printf '%s\n' "$identifier") || return 2
+        present=true
+    fi
+    if [[ $present == true ]]; then
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+        budget=10; if (( remaining < budget )); then budget=$remaining; fi
+        deployment_command "$helper-recovery-$recovery-stop" "$budget" "$path/stop" true \
+            stop --time 5 "$identifier" || return $?
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+        budget=10; if (( remaining < budget )); then budget=$remaining; fi
+        deployment_command "$helper-recovery-$recovery-stopped" "$budget" "$path/stopped" false inspect --type container --format \
+            '{{.Id}} {{.State.Status}} {{.State.Running}} {{.State.Pid}} {{.State.Restarting}}' "$identifier" || return $?
+        if ! cmp -s "$path/stopped/response.stdout" <(printf '%s exited false 0 false\n' "$identifier") \
+            && ! cmp -s "$path/stopped/response.stdout" <(printf '%s created false 0 false\n' "$identifier"); then return 2; fi
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+        # Keep the existing protected receiving route before discarding the
+        # helper's only logs. A broken sink retains the stopped helper.
+        if ! inference_native 'interrupted deployment helper diagnostics' "$remaining" stdio \
+            "${engine[@]}" logs --tail 80 "$identifier"; then
+            deployment_diagnostic+=$inference_diagnostic
+            return 2
+        fi
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+        budget=10; if (( remaining < budget )); then budget=$remaining; fi
+        deployment_command "$helper-recovery-$recovery-remove" "$budget" "$path/remove" true rm "$identifier" || return $?
+    fi
+    remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
+    budget=10; if (( remaining < budget )); then budget=$remaining; fi
+    deployment_command "$helper-recovery-$recovery-absent" "$budget" "$path/absent" false \
+        ps --all --no-trunc --quiet --filter "id=$identifier" || return $?
+    [[ ! -s $path/absent/response.stdout ]] || return 2
+    (set -o noclobber; printf 'retired %s\n' "$identifier" > "$directory/retired") || return $?
+    sync -f -- "$directory/retired" "$directory" || return $?
+}
+
+deployment_recover_helpers() {
+    local root=$1 intent helper directory identifier recovery phase path status retained
+    local deadline=$((SECONDS + 60))
     local -a fields=()
     [[ $root == "$operation_root" && -d $root/effects && ! -L $root/effects ]] || return 2
     for intent in "$root/effects/"*-create.intent; do
@@ -340,53 +397,26 @@ deployment_recover_known_helpers() {
         [[ -d $directory && ! -L $directory && $(realpath -m -- "$directory") == "$directory" \
             && $(stat -c '%u:%a' -- "$directory") == "$caller_uid:700" ]] || return 2
         if [[ -f $directory/retired && ! -L $directory/retired ]]; then continue; fi
-        deployment_created_helper "$directory" \
-            || { deployment_refuse "$helper has no matching private CID and complete original create reply; its creation remains held."; return 2; }
-        identifier=$deployment_created_helper_id
+        if deployment_created_helper "$directory"; then identifier=$deployment_created_helper_id
+        else
+            status=$?; [[ $status == 1 ]] || return "$status"
+            if deployment_realized_helper "$directory"; then identifier=$deployment_created_helper_id
+            else status=$?; [[ $status == 1 ]] || return "$status"; identifier=; fi
+        fi
+        deployment_helper_compact_observations "$directory" "$root" "$helper" || return $?
         IFS= read -r recovery < /proc/sys/kernel/random/uuid
         recovery=${recovery//-/}
         [[ $recovery =~ ^[0-9a-f]{32}$ ]] || return 2
         path=$directory/recovery-$recovery
-        mkdir -m 700 -- "$path" || return $?
-        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
-        budget=10; if (( remaining < budget )); then budget=$remaining; fi
-        deployment_command "$helper-recovery-$recovery-query" "$budget" "$path/query" false \
-            ps --all --no-trunc --quiet --filter "id=$identifier" || return $?
-        present=false
-        if [[ -s $path/query/response.stdout ]]; then
-            cmp -s "$path/query/response.stdout" <(printf '%s\n' "$identifier") || return 2
-            present=true
-        fi
-        if [[ $present == true ]]; then
-            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
-            budget=10; if (( remaining < budget )); then budget=$remaining; fi
-            deployment_command "$helper-recovery-$recovery-stop" "$budget" "$path/stop" true \
-                stop --time 5 "$identifier" || return $?
-            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
-            budget=10; if (( remaining < budget )); then budget=$remaining; fi
-            deployment_command "$helper-recovery-$recovery-stopped" "$budget" "$path/stopped" false inspect --type container --format \
-                '{{.Id}} {{.State.Status}} {{.State.Running}} {{.State.Pid}} {{.State.Restarting}}' "$identifier" || return $?
-            if ! cmp -s "$path/stopped/response.stdout" <(printf '%s exited false 0 false\n' "$identifier") \
-                && ! cmp -s "$path/stopped/response.stdout" <(printf '%s created false 0 false\n' "$identifier"); then return 2; fi
-            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
-            # Keep the existing protected receiving route before discarding the
-            # helper's only logs. A broken sink retains the stopped helper.
-            if ! inference_native 'interrupted deployment helper diagnostics' "$remaining" stdio \
-                "${engine[@]}" logs --tail 80 "$identifier"; then
-                deployment_diagnostic+=$inference_diagnostic
-                return 2
+        if deployment_recover_helper_attempt "$helper" "$directory" "$recovery" "$path" "$deadline" "$identifier"; then :
+        else
+            status=$?
+            if [[ -d $path && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]]; then
+                if deployment_helper_retain_observation "$directory" "$root" "$helper" "$recovery" "$path"; then :
+                else retained=$?; [[ $retained == 1 ]] || return "$retained"; fi
             fi
-            remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
-            budget=10; if (( remaining < budget )); then budget=$remaining; fi
-            deployment_command "$helper-recovery-$recovery-remove" "$budget" "$path/remove" true rm "$identifier" || return $?
+            return "$status"
         fi
-        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || return 2
-        budget=10; if (( remaining < budget )); then budget=$remaining; fi
-        deployment_command "$helper-recovery-$recovery-absent" "$budget" "$path/absent" false \
-            ps --all --no-trunc --quiet --filter "id=$identifier" || return $?
-        [[ ! -s $path/absent/response.stdout ]] || return 2
-        (set -o noclobber; printf 'retired %s\n' "$identifier" > "$directory/retired") || return $?
-        sync -f -- "$directory/retired" "$directory" || return $?
     done
     deployment_effects_settled "$root"
 }
@@ -400,24 +430,21 @@ deployment_begin_operation() {
     if [[ $deployment_action == status || $deployment_action == logs ]]; then
         operation_owner=query
         operation_root=$deployment_root/operation/query
-        deployment_private_directory "$operation_root" true || return $?
-        exec {deployment_query_lock}< "$operation_root"
+        # The receipt leaf is replaced after settlement; its inode cannot own
+        # serialization. This retained parent is separate from mutation's lock.
+        exec {deployment_query_lock}< "$deployment_root/operation"
         flock --nonblock "$deployment_query_lock" || { deployment_refuse 'another query owns its finite inspection; no request was queued.'; return 2; }
+        [[ $(stat -Lc '%d:%i' -- "/proc/$BASHPID/fd/$deployment_query_lock") == $(stat -c '%d:%i' -- "$deployment_root/operation") ]] || return 2
+        deployment_private_directory "$operation_root" true || return $?
         if [[ -f $operation_root/retired && ! -L $operation_root/retired \
             && $(stat -c '%u:%a' -- "$operation_root/retired") == "$caller_uid:600" ]] \
             && cmp -s "$operation_root/retired" <(printf 'retired\n'); then
             deployment_remove_operation "$operation_root" || return $?
             mkdir -m 700 -- "$operation_root"
-            exec {deployment_query_lock}<&-
-            exec {deployment_query_lock}< "$operation_root"
-            flock --nonblock "$deployment_query_lock" || return 2
         elif [[ -e $operation_root/intent || -L $operation_root/intent ]]; then
-            if deployment_effects_settled "$operation_root" || deployment_recover_known_helpers "$operation_root"; then
+            if deployment_effects_settled "$operation_root" || deployment_recover_helpers "$operation_root"; then
                 deployment_remove_operation "$operation_root" || return $?
                 mkdir -m 700 -- "$operation_root"
-                exec {deployment_query_lock}<&-
-                exec {deployment_query_lock}< "$operation_root"
-                flock --nonblock "$deployment_query_lock" || return 2
             else
                 deployment_refuse 'the previous query has unresolved helper effects in operation/query; preserve the original receipts for recovery.'
                 return 2
@@ -431,7 +458,7 @@ deployment_begin_operation() {
                 && $(stat -c '%u:%a' -- "$operation_root/complete") == "$caller_uid:600" ]] \
                 && cmp -s "$operation_root/complete" <(printf 'complete\n') \
                 || deployment_effects_settled "$operation_root" \
-                || deployment_recover_known_helpers "$operation_root" \
+                || deployment_recover_helpers "$operation_root" \
                 || { deployment_refuse 'the previous command has unresolved effects; preserve its current operation receipts before another mutation.'; return 2; }
             deployment_remove_operation "$operation_root" || return $?
         fi
@@ -460,6 +487,7 @@ deployment_finish() {
     fi
     if [[ -n ${pending_diagnostic-} ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
     if [[ -n ${deployment_diagnostic-} ]]; then printf '%s\n' "$deployment_diagnostic" >&2; fi
+    if [[ -n ${deployment_failed_receipt-} ]]; then printf 'Protected Engine cause: %s\n' "$deployment_failed_receipt" >&2; fi
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Original operation receipts: %s\n' "${operation_root-not-established}" >&2
     elif [[ $operation_owner == query ]]; then
@@ -511,7 +539,7 @@ deployment_capture_sources() {
     deployment_inference_inputs=sha256:${digest%% *}
     mapfile -t inference_selectors < "$capture_directory/declared-inputs"
     selectors=("${inference_selectors[@]}" "${geometry_image_inputs[@]}" "${provider_image_inputs[@]}"
-        artifacts/prediction-models.json tools/provider_deployment.sh tools/provider_deployment.py)
+        artifacts/prediction-models.json tools/provider_deployment.sh tools/provider_deployment.py tools/deployment_helper_grants.sh)
     changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${selectors[@]}") || return $?
     [[ -z $changes ]] || { deployment_refuse 'commit deployment/image inputs before freezing their execution provenance.'; return 2; }
     copy_git_blobs 'deployment execution sources' "$repository_root" "$repository_revision" \
@@ -867,7 +895,7 @@ deployment_main() {
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     source "$repository_root/tools/git_metadata.sh"
-    docker_client_directory= deployment_diagnostic= pending_diagnostic= inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true
+    docker_client_directory= deployment_diagnostic= deployment_failed_receipt= pending_diagnostic= inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true
     deployment_runtime_effects=false
     deployment_helper_retired=true
     operation_root= operation_owner=unestablished operation_established=false

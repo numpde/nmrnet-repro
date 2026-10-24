@@ -14,6 +14,189 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_failed_original_request_write_cannot_dispatch_an_engine_effect(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+operation_root=$2 caller_uid=$(id -u)
+inference_retirement_confirmed=true deployment_diagnostic= inference_diagnostic=
+mkdir -m 700 -- "$2/effects"
+inference_native() { : > "$operation_root/engine-called"; return 0; }
+printf() { return 28; }
+if deployment_command create-helper 30 "$2/create" true create; then exit 91; else observed=$?; fi
+[[ $observed == 28 && ! -e $2/engine-called && ! -e $2/effects/create-helper.intent ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_failed_helper_declaration_is_not_published_or_executed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) caller_gid=$(id -g)
+repository_root=$1 operation_root=$2 operation_owner=query
+deployment_name=fixture deployment_action=status deployment_helper_retired=true
+operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+controller_image_id=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+deployment_tool_source=$1/tools/provider_deployment.py
+grants=() arguments=(inventory --help)
+deployment_command() {
+    [[ $1 == fixture-image-defaults ]] || { : > "$operation_root/engine-create-called"; return 92; }
+    mkdir -m 700 -- "$3"
+    builtin printf '%s\\0' "$controller_image_id" '[]' SIGTERM null '\"/work\"' > "$3/response.stdout"
+    builtin printf '\\n' >> "$3/response.stdout"
+}
+printf() { return 28; }
+if deployment_helper fixture grants arguments; then exit 91; else observed=$?; fi
+[[ $observed == 28 && ! -e $2/fixture/request && ! -e $2/engine-create-called && $deployment_helper_retired == true ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_query_lock_cannot_be_acquired_through_a_displaced_receipt_directory_inode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            query = root / "operation/query"
+            query.mkdir(parents=True, mode=0o700)
+            query.parent.chmod(0o700)
+            (query / "retired").write_text("retired\n")
+            (query / "retired").chmod(0o600)
+            base = '''
+umask 077
+source "$1/tools/provider_deployment.sh"
+caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=status
+inference_retirement_confirmed=true deployment_helper_retired=true
+'''
+            owner_program = base + '''
+deployment_remove_operation() { printf 'remove-pending\\n'; read -r gate; rm -rf -- "$1"; }
+deployment_begin_operation
+printf 'owned\\n'
+read -r gate
+'''
+            delayed_program = base + '''
+flock() { printf 'opened\\n'; read -r gate; command flock "$@"; }
+deployment_begin_operation
+'''
+            def start(program):
+                return subprocess.Popen(["bash", "-euo", "pipefail", "-c", program, "bash", str(ROOT), str(root)],
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            owner = start(owner_program)
+            delayed = None
+            try:
+                self.assertEqual(owner.stdout.readline(), "remove-pending\n")
+                delayed = start(delayed_program)
+                self.assertEqual(delayed.stdout.readline(), "opened\n")
+                owner.stdin.write("continue\n")
+                owner.stdin.flush()
+                self.assertEqual(owner.stdout.readline(), "owned\n")
+                _, error = delayed.communicate("continue\n", timeout=3)
+                self.assertNotEqual(delayed.returncode, 0, error)
+                self.assertTrue((query / "intent").is_file())
+            finally:
+                if delayed is not None and delayed.poll() is None:
+                    delayed.kill()
+                    delayed.communicate(timeout=3)
+                owner.communicate("done\n", timeout=3)
+            self.assertEqual(owner.returncode, 0)
+
+    def test_realized_helper_must_match_original_environment_command_and_complete_bind_set(self):
+        for change in ("none", "environment", "command", "bind", "extra-bind", "name"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                result = self.shell('''
+source "$1/tools/deployment_helper_grants.sh"
+caller_uid=$(id -u) caller_gid=$(id -g)
+deployment_name=fixture deployment_action=up repository_root=$1 operation_owner=mutation
+operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+controller_image_id=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+deployment_tool_source=$1/tools/provider_deployment.py
+mkdir -m 700 -- "$2/helper"
+grants=(--mount "type=bind,src=$2/input.json,dst=/input.json,readonly")
+arguments=(inventory --help)
+deployment_command() {
+    mkdir -m 700 -- "$3"
+    printf '%s\\0' "$controller_image_id" '["PATH=/image/bin"]' '\"\"' null '\"/work\"' > "$3/response.stdout"
+    printf '\\n' >> "$3/response.stdout"
+}
+deployment_helper_declare "$2/helper" fixture nmrnet-helper-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fixture grants arguments 10
+mapfile -d '' -t original < "$2/helper/request"
+observed=(cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc created false false 0 "${original[@]}")
+case $3 in
+    environment) observed[14]='["API_KEY=PRIVATE_ENV_CANARY"]' ;;
+    command) observed[24]=PRIVATE_COMMAND_CANARY ;;
+    bind) observed[33]=/PRIVATE_BIND_CANARY ;;
+    extra-bind) observed[26]=3; observed+=(bind /extra /extra true rprivate) ;;
+    name) observed[5]=/foreign-helper ;;
+    none)
+        # Engine mount enumeration order is not grant authority.
+        observed=("${observed[@]:0:27}" "${observed[@]:32:5}" "${observed[@]:27:5}") ;;
+esac
+printf '%s\\0' "${observed[@]}" > "$2/observed"
+printf '\\n' >> "$2/observed"
+if deployment_helper_compare "$2/helper/request" "$2/observed"; then
+    [[ $3 == none && $deployment_admitted_helper_id == cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc ]]
+else [[ $3 != none && -z $deployment_admitted_helper_id ]]; fi
+# A lost create reply can be recovered only through the original name and the
+# same complete grant comparison, without starting the helper again.
+fixture_root=$2
+deployment_command() {
+    [[ $4 == false ]] || return 93
+    mkdir -m 700 -- "$3"
+    case $5 in
+        ps) printf '%s\\n' cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc > "$3/response.stdout" ;;
+        inspect) cp -- "$fixture_root/observed" "$3/response.stdout" ;;
+        *) return 94 ;;
+    esac
+}
+if deployment_helper_discover "$2/helper" fixture bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$((SECONDS + 10))"; then
+    [[ $3 == none && -f $2/helper/realization && $deployment_created_helper_id == cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc ]]
+else [[ $3 != none && ! -e $2/helper/realization ]]; fi
+''', directory, change)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("PRIVATE_", result.stderr)
+
+    def test_received_identity_survives_a_later_partial_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u)
+mkdir -m 700 -- "$2/helper" "$2/helper/recovery-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+mkdir -m 700 -- "$2/helper/recovery-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/admit" "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/admit"
+printf 'complete\\n' > "$2/helper/recovery-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/admit/response.stdout"
+printf 'partial\\n' > "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/admit/response.stdout"
+deployment_helper_compare() {
+    deployment_admitted_helper_id=
+    if cmp -s "$2" <(printf 'complete\\n'); then
+        deployment_admitted_helper_id=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    else return 2; fi
+}
+deployment_realized_helper "$2/helper"
+[[ $deployment_created_helper_id == cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc && -f $2/helper/realization ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_only_joined_read_only_retries_replace_the_latest_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) operation_root=$2
+inference_retirement_confirmed=true inference_cancellation_status=0
+mkdir -m 700 -- "$2/effects" "$2/helper"
+for generation in aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; do
+    mkdir -m 700 -- "$2/helper/recovery-$generation"
+    printf '%s\\n' "$generation" > "$2/helper/recovery-$generation/observed"
+    mkdir -m 700 -- "$2/helper/recovery-$generation/name"
+    printf 'bounded Engine cause\\n' > "$2/helper/recovery-$generation/name/response.stderr"
+    deployment_failed_receipt=$2/helper/recovery-$generation/name/response.stderr
+    deployment_helper_retain_observation "$2/helper" "$2" fixture "$generation" "$2/helper/recovery-$generation"
+    [[ $deployment_failed_receipt == "$2/helper/recovery-observation/name/response.stderr" && -f $deployment_failed_receipt ]]
+done
+[[ $(cat "$2/helper/recovery-observation/observed") == bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]]
+held=cccccccccccccccccccccccccccccccc
+mkdir -m 700 -- "$2/helper/recovery-$held"
+: > "$2/effects/fixture-recovery-$held-stop.intent"
+if deployment_helper_retain_observation "$2/helper" "$2" fixture "$held" "$2/helper/recovery-$held"; then exit 91; else [[ $? == 1 ]]; fi
+deployment_helper_compact_observations "$2/helper" "$2" fixture
+[[ -d $2/helper/recovery-$held && ! -e $2/helper/recovery-$held/readonly-settled ]]
+shopt -s nullglob
+retained=("$2/helper"/recovery-*)
+[[ ${#retained[@]} == 2 ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_one_engine_restart_is_observed_under_original_budget_without_another_start(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.shell('''
