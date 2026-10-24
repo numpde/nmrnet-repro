@@ -1,0 +1,41 @@
+{
+  "schema_id": "nmrnet.compose_runtime_recovery_qualification.v1",
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "87195c8d924ce6643825e21eaa9f6d9b9be58e72",
+  "command": "make test/integration/provider/deployment/recovery",
+  "deployment": "qualification-lNFcYd5w",
+  "bundle": "generation-jnSWK4ey",
+  "scope": "Actual local Engine/Compose and signed API, including idle provider registration. No Job, interpretation, model call or scientific operation.",
+  "old_target": {
+    "role": "api",
+    "container_id": "75c7e90bb90be97dada5207483cd8b6fd1c1fb99182c7478734731f062799249",
+    "create_reply_status": 7,
+    "start_reply_status": 7,
+    "stop_reply_status": 7,
+    "fault_owner": "tools/compose_reply_loss.sh at source_revision; actual commands complete before stdout is withheld and status 7 returned",
+    "fencing": "Original full-ID/grant admission, acknowledged stop and stopped readback, warning delivered, exact-ID removal, then confirmed absence.",
+    "absence": {"client_status": 0, "stdout_bytes": 0},
+    "late_start_client_status": 1,
+    "late_stop_client_status": 1
+  },
+  "replacement": {
+    "container_id": "8b8807acb67016b04ead07c755db4784d15354ffed532f303e37bb8c47f0100a",
+    "status_after_both_late_requests": {"phase": "ready", "age_ms": 498, "pid": 7, "start_ticks": 93087117},
+    "receiving_owner": "tools/provider_deployment.sh::deployment_process_status; replacement-survived/response.stdout, retained before command-root replacement"
+  },
+  "startup_recovery": {
+    "admitted_roles": 7,
+    "initial_state": "API replacement already running; the other six roles created and unstarted. A completed same-ID API start reply is deliberately withheld.",
+    "provider_id": "d61b7fd6d64467c5e4d5aea1fa540752b936129783f56a8cd5ee828b36ab6ae7",
+    "provider_ready_record": {"phase": "ready", "age_ms": 960, "pid": 7, "start_ticks": 93088078},
+    "result": "The original command owner starts only nonrunning admitted IDs and confirms all seven ready. The original operation header and late-start restriction remain retained, without a complete marker.",
+    "public_up": "Returned success, observed all seven ready without restarting a component, preserved the original header and did not publish complete.",
+    "public_down": "Stopped provider and native dependencies before proxies; fenced the pending API replacement ID by removal and absence; stopped the remaining stack. Six unaffected stopped containers retain bounded Docker logs."
+  },
+  "final_peer_receipt": {
+    "sha256": "413bf22a63a994f150593482e1951f646863a1e9fd04a628b5daf98b7dea0a73",
+    "calls": {"model": 0, "start": 0, "complete": 0, "download": 0, "hello": 8},
+    "hello_scope": "Observed Hello requests; accepted initial registration is established by current provider readiness, not by counting every request as an acknowledgement."
+  },
+  "limits": "Controlled reply loss and old-ID requests issued after confirmed removal; not a claim about a real network partition or daemon crash. Provider-before-dependency failure controls and bounded same-direction retry retention have separate focused contained tests. No scientific accuracy, live external model or external API/GUI claim."
+}
