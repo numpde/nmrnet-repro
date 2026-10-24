@@ -176,7 +176,7 @@ api_witness_ambiguity() {
     provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/model,dst=/route"
         --mount "type=bind,src=$provider_host_root/resolv.conf,dst=/etc/resolv.conf,readonly")
     provider_host_argv=(/opt/provider/environment/bin/python -I -B -m tools.provider_proxy --mode external --authority "$authority" \
-        --interface "$NMRNET_EXTERNAL_INTERFACE_INPUT" --socket /route/proxy.sock --ready-file /route/ready)
+        --interface "$NMRNET_EXTERNAL_INTERFACE_INPUT" --socket /route/proxy.sock --ready-file /route/ready --status-directory /diagnostics)
     provider_host_create proxy host "$controller_image" provider_host_grants provider_host_argv true || return $?
     deadline=$((SECONDS + 10))
     until [[ -S $provider_host_root/routes/model/proxy.sock && -f $provider_host_root/routes/model/ready ]] \

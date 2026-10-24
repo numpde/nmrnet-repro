@@ -196,7 +196,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 self.assertNotIn(forbidden, selection + proxy + probe)
             argv = (records / "proxy.argv").read_text().split("\0")[:-1]
             self.assertEqual(
-                argv[-10:],
+                argv[-12:],
                 [
                     "--mode",
                     "external",
@@ -208,6 +208,8 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "/route/proxy.sock",
                     "--ready-file",
                     "/route/ready",
+                    "--status-directory",
+                    "/diagnostics",
                 ],
             )
             self.assertEqual((output / "resolv.conf").read_text(), "nameserver 192.0.2.53\nnameserver 198.51.100.53\n")

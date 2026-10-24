@@ -428,7 +428,10 @@ provider_host_proxy_arguments() {
     local role=$1 index=$2 value name key
     local -a authorities
     declare -A included=()
-    provider_host_proxy_args=(--mode "${provider_host_modes[$index]}" --socket /route/proxy.sock --ready-file /route/ready)
+    # Finite proxies use their existing private diagnostics leaf for expiring
+    # status. Production Compose roles have their own per-start /run tmpfs.
+    provider_host_proxy_args=(--mode "${provider_host_modes[$index]}" --socket /route/proxy.sock --ready-file /route/ready
+        --status-directory /diagnostics)
     provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/$role,dst=/route")
     if [[ ${provider_host_recovery_mode-service} == run ]]; then
         mapfile -t authorities <<< "${provider_host_fields[4]}"
