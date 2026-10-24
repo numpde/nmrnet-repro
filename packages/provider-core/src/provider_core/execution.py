@@ -876,12 +876,14 @@ class AttemptExecutor:
     async def _retire_session(self):
         if self._retirement is not _Retirement.CONFIRMED:
             self._begin_retirement()
-            await asyncio.wait({self._retirement_task}, timeout=self._task_settle_seconds)
-            if not self._retirement_task.done():
-                raise TimeoutError("Original session retirement has not finished; retain it before worker reuse.")
-            task = self._retirement_task
-            self._retirement_task = None
             try:
+                # This owner records cancellation of either the observing caller
+                # or the retirement child while retaining the original task.
+                await asyncio.wait({self._retirement_task}, timeout=self._task_settle_seconds)
+                if not self._retirement_task.done():
+                    raise TimeoutError("Original session retirement has not finished; retain it before worker reuse.")
+                task = self._retirement_task
+                self._retirement_task = None
                 task.result()
             except asyncio.CancelledError as cause:
                 self._remember(cause, cleanup=True)
@@ -902,7 +904,10 @@ class AttemptExecutor:
             try:
                 await operation()
             except asyncio.CancelledError as cause:
-                self._remember(cause, cleanup=True)
+                # Retirement records cancellation from its own wait and child.
+                # Other cleanup ports transfer their evidence here.
+                if operation != self._retire_session:
+                    self._remember(cause, cleanup=True)
                 cancellation = cause
             except Exception as cause:
                 self._remember(cause, cleanup=True)
@@ -965,7 +970,8 @@ class AttemptExecutor:
                 except asyncio.CancelledError as cause:
                     cancellation = cause
                     failed = True
-                    self._remember(cause, cleanup=True)
+                    if operation != self._retire_session:
+                        self._remember(cause, cleanup=True)
                 except Exception as cause:
                     failed = True
                     self._remember(cause, cleanup=True)

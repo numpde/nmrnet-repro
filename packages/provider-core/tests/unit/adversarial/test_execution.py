@@ -1,5 +1,8 @@
 """Interrupted entry never invokes science; outcomes and cleanup remain owned."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import os
 import tempfile
@@ -9,7 +12,7 @@ from dataclasses import replace
 from unittest.mock import patch
 
 from provider_core.attempt_record import LocalExecutionPhase, TerminalPending
-from provider_core.attempt_store import StoreRefused
+from provider_core.checkpoint_store import CheckpointRefused
 from provider_core.controller import AttemptController
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped
 from provider_core.ownership import AttemptClaims, OwnershipRefused
@@ -20,7 +23,7 @@ from tests.fakes.attempts import observation, progress_response, start_response
 from tests.fakes.controller import empty_store
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 def normal_transport(*, last_observation=None):
@@ -50,7 +53,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 AttemptClaims(),
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
@@ -92,7 +95,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.01,
             )
@@ -121,6 +124,50 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 release.set()
                 await store.close()
 
+    async def test_parent_cancellation_during_retirement_wait_is_recorded_once_with_original_child(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, claim = await acknowledged_store(directory)
+            session = Session(store)
+            entered, release = asyncio.Event(), asyncio.Event()
+            async def retire():
+                session.events.append(("retire",))
+                entered.set()
+                await release.wait()
+            session.retire = retire
+            transport = Transport(reply(observation()), ExchangeFailed("Authored input-response failure"))
+            client = api(transport, store.scope.api_origin)
+            executor = AttemptExecutor(client, store, claim, session,
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=1)
+            task = asyncio.create_task(executor.run(acknowledged))
+            try:
+                await asyncio.wait_for(entered.wait(), 1)
+                original_retirement = executor._retirement_task
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError) as caught:
+                    await task
+                retained = executor.last_failure
+                self.assertIs(retained.cause, client.last_failure)
+                self.assertEqual(retained.cleanup_failures, (caught.exception,))
+                self.assertIs(executor._retirement_task, original_retirement)
+                self.assertFalse(original_retirement.done())
+                self.assertEqual([event[0] for event in session.events], ["retire"])
+                with self.assertRaises(OwnershipRefused):
+                    claim.release()
+                release.set()
+                await executor.settle()
+                self.assertIs(executor.last_failure, retained)
+                self.assertEqual(retained.cleanup_failures, (caught.exception,))
+                self.assertEqual([event[0] for event in session.events], ["retire"])
+                self.assertEqual(len(transport.calls), 2)
+                claim.release()
+            finally:
+                release.set()
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                await store.close()
+
     async def test_api_primary_and_cleanup_cancellation_keep_both_exact_causes(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
@@ -132,7 +179,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             transport = Transport(reply(observation()), ExchangeFailed("Authored input-response failure"))
             client = api(transport, store.scope.api_origin)
             executor = AttemptExecutor(
-                client, store, claim, session, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                client, store, claim, session, delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
             )
             try:
                 with self.assertRaises(asyncio.CancelledError) as caught:
@@ -169,14 +216,14 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
             try:
                 with self.assertRaises(ExecutionFailed):
                     await executor.run(acknowledged)
-                self.assertEqual(await store.records(), (acknowledged,))
+                self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                 self.assertEqual([event[0] for event in session.events], ["prepare", "retire"])
                 self.assertTrue(executor.last_failure.api_failure.attempt_mutation_may_have_committed)
                 claim.release()
@@ -193,7 +240,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
@@ -207,8 +254,8 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                     claim.release()
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
-                (retained,) = await store.records()
-                self.assertIs(retained.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                (retained,) = await store.inventory()
+                self.assertIs(type(retained), EnteredCheckpoint)
             finally:
                 await store.close()
 
@@ -221,19 +268,19 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
             try:
                 with (
-                    patch.object(store, "replace", side_effect=StoreRefused("storage admission refused")),
+                    patch.object(store, "mark_entered", side_effect=CheckpointRefused("storage admission refused")),
                     self.assertRaises(ExecutionFailed) as failed,
                 ):
                     await executor.run(acknowledged)
-                self.assertIsInstance(failed.exception.cause, StoreRefused)
+                self.assertIsInstance(failed.exception.cause, CheckpointRefused)
                 self.assertIsNone(failed.exception.unconfirmed_record)
-                self.assertEqual(await store.records(), (acknowledged,))
+                self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                 self.assertEqual([event[0] for event in session.events], ["prepare", "retire"])
                 claim.release()
             finally:
@@ -250,12 +297,12 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
             reached, release = threading.Event(), threading.Event()
-            original = os.replace
+            original = store._database.mark_entered
 
             def delayed_replace(*args, **kwargs):
                 reached.set()
@@ -264,7 +311,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 return original(*args, **kwargs)
 
             try:
-                with patch("provider_core.attempt_files.os.replace", side_effect=delayed_replace):
+                with patch.object(store._database, "mark_entered", side_effect=delayed_replace):
                     task = asyncio.create_task(executor.run(acknowledged))
                     self.assertTrue(await asyncio.to_thread(reached.wait, 1))
                     task.cancel()
@@ -276,8 +323,8 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                     release.set()
                     with self.assertRaises(ExecutionFailed):
                         await executor.settle()
-                (retained,) = await store.records()
-                self.assertIs(retained.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                (retained,) = await store.inventory()
+                self.assertIs(type(retained), EnteredCheckpoint)
                 self.assertIsInstance(executor.last_failure.cause, asyncio.CancelledError)
                 self.assertEqual(len(executor.last_failure.cleanup_failures), 2)
                 with self.assertRaises(OwnershipRefused):
@@ -301,7 +348,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
@@ -309,114 +356,86 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ExecutionFailed) as failed:
                     await executor.run(acknowledged)
                 self.assertIsInstance(failed.exception.cause, ExecutionStopped)
-                (retained,) = await store.records()
-                self.assertIs(retained.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                (retained,) = await store.inventory()
+                self.assertIs(type(retained), EnteredCheckpoint)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "retire"])
                 claim.release()
             finally:
                 await store.close()
 
-    async def test_terminal_write_failure_retires_session_but_retains_outcome_and_claim(self):
+    async def test_selection_write_failure_retires_session_but_retains_outcome_and_claim(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
-            session = Session(store)
-            executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin),
-                store,
-                claim,
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-            )
-            original = os.replace
-            writes = 0
-
-            def fail_terminal(*args, **kwargs):
-                nonlocal writes
-                writes += 1
-                if writes == 2:
-                    raise OSError("private terminal persistence cause")
-                return original(*args, **kwargs)
-
+            session, delivery = Session(store), RecordingDelivery()
+            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session,
+                delivery=delivery, on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
-                with (
-                    patch("provider_core.attempt_files.os.replace", side_effect=fail_terminal),
-                    self.assertRaises(ExecutionFailed) as failed,
-                ):
-                    await executor.run(acknowledged)
+                with patch.object(store._database, "select_terminal", side_effect=OSError("private selection persistence cause")):
+                    with self.assertRaises(ExecutionFailed) as failed:
+                        await executor.run(acknowledged)
                 self.assertIs(failed.exception.outcome, session.outcome)
-                self.assertIsInstance(failed.exception.unconfirmed_record, TerminalPending)
+                self.assertIs(type(failed.exception.unconfirmed_record), TerminalSelectedCheckpoint)
+                self.assertEqual(delivery.items, [])
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
                 with self.assertRaises(OwnershipRefused):
                     claim.release()
-                with self.assertRaises(ExecutionFailed) as settlement:
+                with self.assertRaises(ExecutionFailed) as settled:
                     await executor.settle()
-                self.assertIs(settlement.exception.cause, failed.exception.cause)
-                self.assertIs(settlement.exception.outcome, session.outcome)
+                self.assertIs(settled.exception.cause, failed.exception.cause)
+                self.assertIs(settled.exception.outcome, session.outcome)
+                self.assertEqual(delivery.items, [])
             finally:
                 await store.close()
 
-    async def test_failed_retirement_preserves_durable_terminal_and_requires_explicit_settlement(self):
+    async def test_failed_retirement_preserves_approved_delivery_and_requires_cleanup_before_reuse(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
-            session = Session(store)
+            session, delivery = Session(store), RecordingDelivery()
             cleanup = RuntimeError("private retirement cause")
             session.retirement_failure = cleanup
-            executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin),
-                store,
-                claim,
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-            )
+            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session,
+                delivery=delivery, on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
                     await executor.run(acknowledged)
                 self.assertIs(failed.exception.cause, cleanup)
-                self.assertIs(failed.exception.outcome, session.outcome)
+                self.assertIsNone(failed.exception.outcome)
+                self.assertIsNotNone(failed.exception.delivery_acceptance)
+                self.assertIsNone(executor._delivery_outcome)
                 self.assertNotIn("private retirement cause", str(failed.exception))
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                (retained,) = await store.records()
-                self.assertIsInstance(retained, TerminalPending)
+                (retained,) = await store.inventory()
+                self.assertIs(type(retained), DeliveryAcceptedCheckpoint)
+                self.assertEqual(len(delivery.items), 1)
+                self.assertEqual(retained.selection.body_sha256, delivery.items[0].body_sha256)
                 with self.assertRaises(OwnershipRefused):
                     claim.release()
                 session.retirement_failure = None
                 self.assertEqual(await executor.settle(), retained)
+                self.assertEqual(len(delivery.items), 1)
                 claim.release()
             finally:
                 await store.close()
 
-    async def test_cancelled_terminal_write_preserves_result_and_settles_without_execution(self):
+    async def test_cancelled_selection_write_preserves_result_and_never_submits_during_settlement(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
-            session = Session(store)
-            executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin),
-                store,
-                claim,
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-            )
+            session, delivery = Session(store), RecordingDelivery()
+            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session,
+                delivery=delivery, on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             reached, release = threading.Event(), threading.Event()
-            original = os.replace
-            writes = 0
-
-            def delay_terminal(*args, **kwargs):
-                nonlocal writes
-                writes += 1
-                if writes == 2:
-                    reached.set()
-                    if not release.wait(2):
-                        raise TimeoutError("test terminal write was not released")
-                return original(*args, **kwargs)
-
+            original = store._database.select_terminal
+            def delay_selection(*arguments):
+                reached.set()
+                if not release.wait(2):
+                    raise TimeoutError("test selection write was not released")
+                return original(*arguments)
+            task = None
             try:
-                with patch("provider_core.attempt_files.os.replace", side_effect=delay_terminal):
+                with patch.object(store._database, "select_terminal", side_effect=delay_selection) as writes:
                     task = asyncio.create_task(executor.run(acknowledged))
                     self.assertTrue(await asyncio.to_thread(reached.wait, 1))
                     task.cancel()
@@ -426,11 +445,20 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                     with self.assertRaises(OwnershipRefused):
                         claim.release()
                     release.set()
-                    terminal = await executor.settle()
-                self.assertEqual(await store.records(), (terminal,))
+                    with self.assertRaises(ExecutionFailed):
+                        await executor.settle()
+                    self.assertEqual(writes.call_count, 1)
+                self.assertIs(type((await store.inventory())[0]), TerminalSelectedCheckpoint)
+                self.assertEqual(delivery.items, [])
+                self.assertIs(executor.last_failure.outcome, session.outcome)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertEqual(writes, 2)
-                claim.release()
+                with self.assertRaises(OwnershipRefused):
+                    claim.release()
             finally:
                 release.set()
+                if task is not None and not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                if store.pending_owner is executor:
+                    await store.settle(owner=executor)
                 await store.close()
