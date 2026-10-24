@@ -278,11 +278,11 @@ See the <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provide
 <h2 id="retained-history-and-a-full-store">Retained history and a full store</h2>
 <p><code>lifecycle.maximum_records</code> bounds <strong>active storage records</strong>. Before fresh
 admission, the service archives confirmed completions and failures after their
-controller has returned and released its claim. Clean startup does the same for
-an entirely confirmed inventory. If any active record is unresolved, the service
-archives none of its neighbors and holds fresh work. Stop before the complete
+controller has returned and released its claim. Startup first recovers eligible
+pending terminal results, then archives an entirely confirmed inventory. An
+unresolved neighbor prevents the entire archive batch and fresh work. Stop before the complete
 inventory gate admits no maintenance. Once admitted, the original maintenance
-batch finishes <strong>archive → host native-release acknowledgement → history expiry</strong>,
+batch finishes <strong>archive → history expiry</strong>,
 including during shutdown. Shutdown observes the same task within its drain and
 settlement budgets; unfinished work holds its native and storage dependencies.
 It never starts a replacement batch or repeats science.</p>
@@ -295,7 +295,7 @@ lists active obligations; archived confirmations remain available as portable
 files. An archived key cannot become a fresh Attempt while its record remains.</p>
 <p><code>lifecycle.confirmed_history_records</code> is a <strong>required positive integer</strong>, for
 example <code>confirmed_history_records = 64</code>; there is no implicit or unlimited
-setting. After the matching native-release acknowledgement, the store keeps
+setting. After archiving the admitted batch, the store keeps
 the newest complete records by API receipt <code>committed_at</code>, with canonical
 filename breaking ties. It expires older whole records and syncs the history
 directory before fresh admission. Copy evidence needing longer retention outside
@@ -307,16 +307,17 @@ Rounded public values cannot reconstruct those original scientific bytes.</p>
 <p>Existing history above the configured window blocks ordinary startup and fresh
 work; startup does not purge it as a migration. Stopped storage inspection can
 open the bounded archival transition of history plus active slots. A hard crash
-or failed maintenance may need explicit operator reconciliation; no automatic
-native-root adoption or uncertain-deletion retry is provided. An ordinary stop
+or failed maintenance may need explicit operator reconciliation; retain the
+records rather than deleting unknown files to bypass that check. An ordinary stop
 lets its original batch finish, so it does not create that excess-history state.</p>
 <p>For history limit H, active slots A and record budget R, the logical peak record
 budget is <code>(H + A + 1) × R</code>, including one complete staging/archive copy. With
 H=64, A=2 and production R=3,725,916 bytes, that is 249,636,372 bytes (about
 238 MiB), before filesystem metadata and the configured reserve. This is a
-healthy-operation record bound, not a filesystem quota. Native sequence/history
-release separately removes completed engine/request trees only after its clean
-host barrier; partial failures preserve remaining evidence and block admission.</p>
+healthy-operation record bound, not a filesystem quota. Each native session owns
+its local channels and confirms supervisor-owned child retirement and scratch release. The three
+runner containers remain available between Jobs. Archiving or expiring a record
+does not grant native cleanup authority or settle uncertain execution.</p>
 <p>History still consumes disk. The provider rechecks space for full outstanding
 records, a temporary full-record write and <code>filesystem_reserve_bytes</code>, then the
 complete provider-wide API admission view. These checks reserve no physical
@@ -324,10 +325,12 @@ blocks. If active obligations or actual disk headroom prevent admission, stop
 and settle the provider and inspect the retained evidence. Keep the existing
 <code>store_root</code>, API/provider identity, <code>consumer_id</code> and <code>generation_id</code>; do not
 discard records or change their scope to make room. Raising a record limit does
-not settle an obligation, retire a worker or bypass API admission. Separate host
-native-request limits also apply.
-The owning <a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/attempt_files.py">capacity check</a>
-and <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/admission.py">service admission</a> enforce this behavior.</p>
+not settle an obligation, retire a worker or bypass API admission.
+The owning <a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/packages/provider-core/src/provider_core/attempt_files.py">capacity check</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/nmrnet_provider/admission.py">service admission</a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/nmrnet_provider/service.py">archive-and-trim owner</a>
+enforce this behavior; native retirement remains with
+<a href="https://github.com/numpde/nmrnet-repro/blob/8e14575/nmrnet_provider/native_session.py">the session owner</a>.</p>
 <h2 id="checking-api-delivery">Checking API delivery</h2>
 <p>Each opt-in target creates one <strong>persistent Job</strong> on the selected API. Pasted
 targets use fixed supplied chloromethane and compare against an existing pinned

@@ -2133,6 +2133,30 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       reaches Hello in the same service with no scientific allocation. Independent
       ownership and disclosure reviews found no issue. Production installation
       and sustained stability remain the next separate proof.</p>
+    <p><strong>Production idle-read recovery delivered:</strong> the maintained
+      down/install/up/status workflow installed source <code>8e14575</code> as
+      <code>generation-Mx7vsMhh</code>. Its controller image is
+      <code>sha256:2ef651375082a816c27e28c0b8c31f0790b57cb5d68d0985c6f3cf414ec59d4a</code>,
+      RDKit image
+      <code>sha256:c9abeca51e12ea7c7bf56e96e1fc7308fc40044887351757be5f711f9effcb81</code>,
+      prediction image
+      <code>sha256:1cad4c1ee5462702b8c8efacf36d42364e93dc86ae7933c63c4bc2fc3fbd2b13</code>.
+      The provider's start time remained
+      <code>2026-10-24T13:27:56.909182163Z</code>, with restart count zero at
+      independent 13:28:54, 13:30:49 and 13:32:57 UTC checks. All seven roles were
+      healthy at 13:30:49. This five-minute window spans repeated actual CONNECT
+      502 failures and paired <code>api_read_retry</code>/<code>api_read_recovered</code>
+      notices in the same process, with origin status absent. It proves scoped
+      idle-read recovery, not every active-Attempt or model-outage path.</p>
+    <p>The original Attempt store stayed mounted and its saved Job record SHA-256
+      remained
+      <code>dbce9c97930a14cf076cccf42e729cc734cfb99041a5378b1741fab4dadeacc7</code>
+      before and after installation. Docker logging remains bounded
+      <code>json-file</code>, 10 MiB × 3, nonblocking with a 1 MiB buffer.
+      No additional Job, model request or scientific witness was submitted.
+      Current operator history guidance now describes archive followed by trim
+      and persistent-runner session ownership; removed host allocation/release
+      mechanisms remain only in their dated historical records.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
