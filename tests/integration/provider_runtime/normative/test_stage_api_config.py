@@ -18,6 +18,29 @@ from nmrnet_provider.config import load_provider_config
 
 
 class StageApiConfigTests(unittest.TestCase):
+    def test_recovery_fixture_uses_its_original_ca_and_explicit_mapped_interpreter(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            staged_real_config(root)
+            source = root / "source"
+            original_ca = (source / "api-ca.crt").read_bytes()
+            (source / "api-ca.crt").rename(source / "api-ca.pem")
+            path = source / "provider.toml"
+            path.write_text(path.read_text().replace("api-ca.crt", "api-ca.pem"))
+            (root / "deployment").mkdir(mode=0o700)
+            stage_deployment(
+                root, api_interface="lo", api_address="127.0.0.1", interpreter_route="mapped",
+                interpreter_interface="lo", interpreter_address="127.0.0.1", interpreter_network=None, resolvers=[],
+            )
+            public = tomllib.loads((root / "deployment/provider.toml").read_text())
+            private = tomllib.loads((root / "deployment/deployment.toml").read_text())
+            self.assertEqual(public["api"]["ca_file"], "/srv/nmrnet/input/api-ca.pem")
+            self.assertEqual((root / "deployment/secrets/api-ca.pem").read_bytes(), original_ca)
+            self.assertEqual(private["routes"]["interpreter"], {
+                "mode": "mapped", "interface": "lo", "addresses": ["model.example=127.0.0.1"],
+            })
+            self.assertNotIn("resolvers", private)
+
     def test_named_deployment_keeps_credential_bytes_store_and_selected_model(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

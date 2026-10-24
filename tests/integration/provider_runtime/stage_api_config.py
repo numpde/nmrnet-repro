@@ -76,7 +76,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
     secrets = destination / "secrets"
     secrets.mkdir(mode=0o700)
     raw = (source / "provider.toml").read_text()
-    for name in ("signing.private.json", "interpreter.key", "api-ca.crt", "model-ca.pem"):
+    for name in ("signing.private.json", "interpreter.key", "api-ca.crt", "api-ca.pem", "model-ca.pem"):
         path = source / name
         # A public-CA interpreter has no model-ca file; staging already admitted
         # that endpoint. Never substitute a CA when one was actually configured.
@@ -86,13 +86,17 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
             raw = raw.replace(json.dumps(str(path)), json.dumps("/srv/nmrnet/input/" + name))
     raw = raw.replace(json.dumps(str(root / "state")), json.dumps("/srv/nmrnet/attempts"))
     (destination / "provider.toml").write_text(raw)
-    host = urlsplit(tomllib.loads(raw)["api"]["origin"]).hostname
+    document = tomllib.loads(raw)
+    host = urlsplit(document["api"]["origin"]).hostname
     mapped = {"mode": "mapped", "interface": api_interface, "addresses": [host + "=" + api_address]}
     interpreter = {"mode": interpreter_route, "interface": interpreter_interface}
     if interpreter_route == "local":
         interpreter.update(network=interpreter_network, addresses=["localhost=" + interpreter_address])
+    elif interpreter_route == "mapped":
+        model_host = urlsplit(document["interpreter"]["endpoints"][0]["url"]).hostname
+        interpreter["addresses"] = [model_host + "=" + interpreter_address]
     elif interpreter_route != "external":
-        raise ValueError("API qualification interpretation requires an explicit local or external route")
+        raise ValueError("Qualification interpretation requires an explicit local, mapped or external route")
     lines = ["store_root = " + json.dumps(str(root / "state")), "maximum_startup_bytes = 2097152"]
     if interpreter_route == "external":
         lines.append("resolvers = " + json.dumps(resolvers))

@@ -40,6 +40,12 @@ recovery_witness_finish() {
         printf 'The original foreground host remains owned at %q; keep this process and its local TLS peer.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
     fi
+    if [[ $inference_retirement_confirmed == true ]]; then api_witness_stop_deployment || status=2; fi
+    if [[ ${api_deployment_active-false} == true ]]; then
+        printf 'Recovery qualification retains its deployment and TLS peer. Original receipts: %q.\n' "$provider_host_root" >&2 || :
+        if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || :; exit 2; fi
+        while :; do sleep 1 || :; done
+    fi
     provider_host_finish "$status"
 }
 
@@ -57,7 +63,7 @@ recovery_witness_main() {
     provider_host_root=$scratch/fixture-owner
     provider_host_diagnostic= provider_host_drain_seconds=10 provider_host_recovery_mode=service
     provider_host_initialize || return $?
-    foreground_pid= foreground_signalled=false
+    foreground_pid= foreground_signalled=false api_deployment_active=false
     trap recovery_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -68,7 +74,9 @@ recovery_witness_main() {
         tools/provider_api_qualification.sh tools/provider_image.sh tools/provider_workers.sh tools/provider_logging.sh
         tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh
         requirements/provider-core.lock requirements/provider-core-build.lock .work/provider/image-id
-        tests/integration/provider_runtime/recovery_peer.py)
+        tools/provider_deployment.sh tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh
+        tools/provider_deployment.py tools/compose_runner_events.sh
+        tests/integration/provider_runtime/recovery_peer.py tests/integration/provider_runtime/stage_api_config.py)
     find "$repository_root/packages/provider-core/tests" "$repository_root/tests/integration/provider_core" \
         "$repository_root/nmrnet_provider" -type f -name '*.py' -print0 > "$scratch/source-paths" || return $?
     sort -z -o "$scratch/source-paths" "$scratch/source-paths" || return $?
@@ -86,10 +94,13 @@ recovery_witness_main() {
     cp -- "$repository_root/packages/provider-core/tests/__init__.py" "$namespace/tests/" || return $?
     cp -- "$repository_root/packages/provider-core/tests/integration/__init__.py" "$namespace/tests/integration/" || return $?
     cp -- "$repository_root/tests/integration/provider_runtime/recovery_peer.py" "$namespace/recovery_peer.py" || return $?
+    cp -- "$repository_root/tests/integration/provider_runtime/stage_api_config.py" "$namespace/stage_api_config.py" || return $?
+    cp -- "$repository_root/tests/integration/provider_core/config_ports.py" "$namespace/config_ports.py" || return $?
     if ! cmp -s -- "$repository_root/tests/integration/provider_runtime/recovery_peer.py" "$namespace/recovery_peer.py"; then
         provider_host_refuse 'The private recovery fixture copy differs from its frozen source.'; return 2
     fi
     sha256sum -- "$namespace/tests/__init__.py" "$namespace/tests/integration/__init__.py" "$namespace/recovery_peer.py" \
+        "$namespace/stage_api_config.py" "$namespace/config_ports.py" \
         > "$scratch/fixture-code.sha256"
     printf 'Private local recovery evidence: %s\n' "$scratch"
     provider_host_grants=(
@@ -121,23 +132,40 @@ recovery_witness_main() {
     recovery_witness_wait_foreground || return $?
     : > "$fixture/idle-phase"
     recovery_witness_wait_file "$fixture/recovered" || return $?
-    # Own the actual Bash foreground host, as the normal API qualification does;
-    # GNU Make's literal selector transport is checked separately offline.
-    NMRNET_CONFIG_INPUT=$config NMRNET_SOURCE_ROOT_INPUT=$source_root NMRNET_INSTALLATION_ROOT_INPUT=$scratch/restart \
-        NMRNET_MAXIMUM_STARTUP_BYTES_INPUT=131072 NMRNET_HOST_DRAIN_SECONDS_INPUT=10 NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT=4 \
-        NMRNET_API_ROUTE_INPUT=mapped NMRNET_INTERPRETER_ROUTE_INPUT=mapped NMRNET_STORE_ROUTE_INPUT=mapped \
-        NMRNET_MAPPED_INTERFACE_INPUT=lo NMRNET_MAPPED_ADDRESSES_INPUT=127.0.0.1=127.0.0.1 \
-        bash "$repository_root/tools/provider.sh" &
-    foreground_pid=$! foreground_signalled=false
+    local public private input
+    public=$(mktemp -d "$repository_root/config/deployments/qualification-recovery-XXXXXXXX") || return $?
+    api_deployment_name=${public##*/}
+    printf '%s\n' "$api_deployment_name" > "$scratch/deployment-name" || return $?
+    private=$repository_root/secrets/deployments/$api_deployment_name
+    mkdir -p -m 700 -- "$repository_root/secrets/deployments" || return $?
+    mkdir -m 700 -- "$private" || return $?
+    cp -- "$fixture/deployment/"{provider,deployment}.toml "$public/" || return $?
+    for input in signing.private.json interpreter.key api-ca.pem; do
+        cp -- "$fixture/deployment/secrets/$input" "$private/$input" || return $?
+        chmod 600 -- "$private/$input" || return $?
+    done
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" install || return $?
+    api_deployment_active=true
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" up || return $?
     recovery_witness_wait_file "$fixture/idled" || return $?
-    api_witness_stop_foreground || return $?
-    if [[ ! -d $scratch/restart/native/requests || ! -d $scratch/restart/native/owned ]]; then
-        provider_host_refuse 'The idle host did not retain its native request and ownership directories.'; return 2
-    fi
-    path=$(find "$scratch/restart/native/requests" "$scratch/restart/native/owned" -mindepth 1 -print -quit) || return $?
-    if [[ -n $path ]]; then
-        provider_host_refuse 'An idle restart allocated native work despite empty discovery.'; return 2
-    fi
+    api_witness_stop_deployment || return $?
+    # These are read-only observations of the stack already admitted by up/down.
+    # Socket files now persist at idle; absence of old request directories is no
+    # longer an allocation witness. The existing event projection checks children.
+    local project role identifier
+    local -a identifiers=()
+    project=$(printf '%s\0%s' "$repository_root" "$api_deployment_name" | sha256sum) || return $?
+    project=nmrnet-${project:0:20}
+    for role in prediction reader smiles; do
+        provider_host_command "$role-id" "$provider_host_root" ps --all --no-trunc --quiet \
+            --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$role" || return $?
+        mapfile -t identifiers < "$provider_host_root/$role-id.stdout"
+        [[ ${#identifiers[@]} == 1 && ${identifiers[0]} =~ ^[0-9a-f]{64}$ ]] || return 2
+        identifier=${identifiers[0]}
+        inference_native 'idle native-child observation' 30 stdio bash "$repository_root/tools/compose_runner_events.sh" \
+            "$identifier" "${engine[@]}" > "$scratch/$role.events" || return $?
+        [[ ! -s $scratch/$role.events ]] || { provider_host_refuse 'Recovered-store idle restart started native work despite empty discovery.'; return 2; }
+    done
     : > "$fixture/done"
     api_witness_wait api 15 || return $?
     recovery_witness_wait_file "$fixture/summary.json" || return $?

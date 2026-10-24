@@ -27,6 +27,7 @@ from tests.integration.nmrnet.recovery_ports import RecoveryPeers
 from nmrnet_provider.config import load_recovery_config
 from nmrnet_provider.process import _publish
 from provider_core.attempt_record import TerminalConfirmed
+from stage_api_config import stage_deployment
 
 
 def publish(root, name, document):
@@ -133,6 +134,12 @@ async def serve(root, seconds):
                         discovered=asyncio.Event(),
                     )
                     recovered = True
+                    (root / "deployment").mkdir(mode=0o700)
+                    stage_deployment(
+                        root, api_interface="lo", api_address="127.0.0.1", interpreter_route="mapped",
+                        interpreter_interface="lo", interpreter_address="127.0.0.1",
+                        interpreter_network=None, resolvers=[],
+                    )
                     publish(
                         root,
                         "recovered",
