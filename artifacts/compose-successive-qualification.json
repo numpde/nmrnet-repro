@@ -1,0 +1,48 @@
+{
+  "schema_id": "nmrnet.compose_successive_qualification.v1",
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "f1b4f2b1b65bea04abe881c53c35748ed1adfc40",
+  "command": "make test/integration/provider/deployment/successive",
+  "scope": "Local signed API and scripted interpretation; actual production Compose service, native table readers and released fold-0 inference. No live external model, external API or GUI claim.",
+  "deployment": "qualification-fFwYkZk3",
+  "bundle": "generation-wAU3Rwos",
+  "provider_before_intentional_restart": {
+    "container_id": "af2045cbc8df8cfa13122b6f8f0becf56361a798298cfb0a4e3acf67957fc931",
+    "restart_count": 0,
+    "running": true,
+    "restarting": false
+  },
+  "final_peer_calls": {"model": 2, "start": 2, "complete": 2, "download": 0, "hello": 18},
+  "native_lifecycle": {
+    "projection_source": "tools/compose_runner_events.sh at source_revision; fixed child_started/child_retired fields from bounded Docker logs, not a lifecycle authority",
+    "prediction": {
+      "container_id": "e7ef7bd0835ea69355b70d11aadb7dc9786b00d65ca5d5850fc8b0ad7ebce980",
+      "operations": [
+        {"operation": "6db38e09d074426da7539c3a923f5d60", "pid": 14, "returncode": -15, "retirement_reason": "owner_lost"},
+        {"operation": "14943afe29164ce1a3d4d00ea253733c", "pid": 24, "returncode": -15, "retirement_reason": "owner_lost"}
+      ]
+    },
+    "reader": {
+      "container_id": "0b5f327526b58514086c91e4d57e2de4ab2d5ae03c6b94fab555d4d6ab473b65",
+      "operations": [
+        {"operation": "4930e2a10c164ebd9f2ab8e87f99ea29", "pid": 14, "returncode": -15, "retirement_reason": "owner_lost"},
+        {"operation": "7c0e273b64be4a779fcefc54b1cdaa78", "pid": 21, "returncode": -15, "retirement_reason": "owner_lost"}
+      ]
+    },
+    "smiles": {"container_id": "c3b712d32b847f69244ca3b0f4a294a6adcbd31cc1fb36467a5d4e6b229061eb", "operations": []},
+    "retirement_scope": "Both scientific replies preceded owner-session closure and child retirement. Return code -15 is not a failed prediction or a normal child exit.",
+    "after_down_up_repeated_up_down": "Same three native container IDs and byte-identical projected child events; no third native operation. All seven containers stopped; their bounded Docker logs retained."
+  },
+  "science": {
+    "input": "Existing fixed chloromethane nm table, supplied independently to two distinct Jobs/Attempts; no new expected predictions",
+    "coordinate_oracle_sha256": "1686803ac341e8502fbc9eaba71dccc1a6ebc04f121af4b0ba513e11e312d5b7",
+    "checks": "Existing independent binary64 nm-to-angstrom error bound, supplied atom order, exact H/C output population and finite shifts. This successive-service witness does not add an accuracy claim."
+  },
+  "retained_outputs": [
+    {"path": "artifacts/compose-runner/successive/result-1.json", "sha256": "6ad610662e97e672af6df93666ee0a3a572875113cb6768ada4f6922dd1e5793"},
+    {"path": "artifacts/compose-runner/successive/result-2.json", "sha256": "815b17a9e95a850abf747004cd6e1d5fe8d6443c81198a95b42fc0a69027b313"},
+    {"path": "artifacts/compose-runner/successive/completed-1.json", "sha256": "450d77fc68822163f5b5d364ef67ca6dbf47b4f36963ff17e6895d8400bdf5dc"},
+    {"path": "artifacts/compose-runner/successive/completed-2.json", "sha256": "9584a3423ad9e5beca2930a8c5bc9e15f4afe393c71875d0ad49c6fadf004e4a"},
+    {"path": "artifacts/compose-runner/successive/peer-receipt.json", "sha256": "73bbe0d87a7c5ce35267c80fca0d8de0d4158d6029e73d1a8cfdff6f01bf9f4b"}
+  ]
+}
