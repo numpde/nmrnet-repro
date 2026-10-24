@@ -4,7 +4,7 @@ ARG PROVIDER_INPUTS
 LABEL io.nmrnet-repro.provider-inputs="${PROVIDER_INPUTS}"
 ENV NMRNET_IN_CONTAINER=1 PROVIDER_CORE_IN_CONTAINER=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /opt/build
-COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/provider_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
+COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/provider_environment.py tools/core_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
 COPY requirements/provider-core.lock requirements/provider-core-build.lock ./requirements/
 COPY packages/provider-core/ ./packages/provider-core/
 COPY nmrnet_provider/ ./nmrnet_provider/

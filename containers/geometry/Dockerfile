@@ -8,7 +8,7 @@ COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/rdkit
 COPY requirements/preparation.lock /opt/rdkit/preparation.lock
 # Hash verification and installation consume the same frozen, read-only wheels.
 # Build networking is disabled by the launcher; no source distributions execute.
-COPY tools/provider_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
+COPY tools/provider_environment.py tools/core_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
 COPY requirements/provider-core.lock requirements/provider-core-build.lock ./requirements/
 COPY packages/provider-core/ ./packages/provider-core/
 COPY nmrnet_provider/ ./nmrnet_provider/

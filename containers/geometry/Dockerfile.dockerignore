@@ -11,6 +11,7 @@
 !tools/wheelhouse.py
 !tools/rdkit_environment.py
 !tools/provider_environment.py
+!tools/core_environment.py
 !tools/provider_proxy.py
 !tools/bound_http_proxy.py
 !tools/baseline_prepare.py

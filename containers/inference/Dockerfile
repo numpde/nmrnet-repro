@@ -22,7 +22,7 @@ RUN --mount=type=bind,from=wheelhouse,target=/wheelhouse \
         /wheelhouse/unicore-source.tar.gz /opt/inference/unicore-source.json \
     && python3 -m pip check
 
-COPY tools/provider_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
+COPY tools/provider_environment.py tools/core_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
 COPY requirements/provider-core.lock requirements/provider-core-build.lock ./requirements/
 COPY packages/provider-core/ ./packages/provider-core/
 COPY nmrnet_provider/ ./nmrnet_provider/

@@ -7,7 +7,7 @@ geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Docker
     tools/rdkit_environment.py tools/wheelhouse.py
     requirements/provider-core.lock requirements/provider-core-build.lock
     packages/provider-core/pyproject.toml packages/provider-core/src/provider_core
-    nmrnet_provider nmrnet_inference tools/provider_environment.py tools/provider_proxy.py
+    nmrnet_provider nmrnet_inference tools/provider_environment.py tools/core_environment.py tools/provider_proxy.py
     tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py)
 
 capture_geometry_inputs() {

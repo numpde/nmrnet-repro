@@ -45,6 +45,7 @@ class ImageSource:
             "requirements/unicore-source.json",
             "artifacts/prediction-models.json",
             "tools/provider_environment.py",
+            "tools/core_environment.py",
             "tools/wheelhouse.py",
             "tools/provider_image.sh",
             "tools/git_inputs.sh",
