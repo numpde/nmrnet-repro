@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 
 def require_exported_result(result, case, manifest):
     from tests.integration.nmrnet.reference_fixtures import PRODUCTION_SHA256, REFERENCE_SHA256, pinned_packet
-    from tests.integration.nmrnet.reference_service import require_reference_predictions
+    from tests.integration.nmrnet.reference_fixtures import require_reference_predictions
 
     geometries = result["geometries"]
     for geometry, record in zip(geometries, manifest["records"], strict=True):
@@ -68,7 +68,7 @@ async def serve(root, store_root, seconds, case):
     from tests.fakes.acquisition import store_headers
     from tests.fakes.uploads import UPLOAD_REF
     from tests.integration.nmrnet.config_ports import ConfigFiles
-    from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import NM_TABLE, nm_conversion_oracle
+    from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
     from tests.integration.nmrnet.process_ports import ProcessPeers
     from tests.integration.nmrnet.runtime_ports import RuntimePeers, require_download_credentials, require_model_credentials
     from tests.integration.nmrnet.interpreter_ports import tool_reply
@@ -139,14 +139,14 @@ async def serve(root, store_root, seconds, case):
                 raise AssertionError("The connected witness must not create another Attempt")
         if path == "/provider/v1/jobs" and peer.result is not None:
             # Keep discovery signed even after withdrawing the completed fixture.
-            from tests.integration.nmrnet.test_live_worker import verify_signed_request
+            from tests.fakes.api_tls import verify_signed_request
 
             verify_signed_request(request, body, origin=peer.peer.origin, key=peer.config.api.identity.private_key)
             empty = page()
             empty.update(analysis_kind_ref=ANALYSIS_KIND_REF, jobs=[], next_cursor=None)
             return json.dumps(empty).encode()
         if path.endswith("/read-capability"):
-            from tests.integration.nmrnet.test_live_worker import verify_signed_request
+            from tests.fakes.api_tls import verify_signed_request
 
             verify_signed_request(request, None, origin=peer.peer.origin, key=peer.config.api.identity.private_key)
             result = await RuntimePeers.api_reply(peer, request, body)

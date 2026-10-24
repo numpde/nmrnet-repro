@@ -8,12 +8,12 @@ these inputs against the independent 001/002 packets and fixed capacity recipe.
 import hashlib
 from pathlib import Path
 
-from tests.integration.nmrnet.capacity_service import require_capacity_inputs
 from tests.integration.nmrnet.reference_fixtures import (
     PRODUCTION_SHA256,
     REFERENCE_SHA256,
     pinned_packet,
     require_reference_inputs,
+    require_capacity_inputs,
     verify_fixture,
 )
 

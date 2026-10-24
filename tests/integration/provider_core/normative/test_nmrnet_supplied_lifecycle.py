@@ -17,35 +17,10 @@ from tests.fakes.conversation import call
 from tests.fakes.job_input import facts
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 from tests.integration.nmrnet.native_lifecycle import NativeLifecycle
+from tests.integration.nmrnet.reference_fixtures import NM_TABLE, PREFIX, nm_conversion_oracle
 
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.smiles import GenerationSettings
-
-# Original authored chloromethane, H/Cl/C/H/H, expressed in nm. Expected angstrom
-# numbers are the independent literals in expected.json, not reader output.
-NM_TABLE = b"H 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\n"
-PREFIX = "é: supplied coordinates in nm\n".encode()
-
-
-def nm_conversion_oracle(source_nm, intended_angstrom):
-    """Bound two binary64 roundings using fixed, independent decimal literals.
-
-    Source parsing contributes 10 times its exact representational error.
-    Multiplication by the exactly representable 10 contributes at most half
-    an ULP of the rounded exact binary product. Fraction arithmetic keeps this
-    budget and the intended angstrom value exact; no worker output sets it.
-    The unit's exact factor is documented in input_geometry.coordinate_conversion.
-    """
-    source, intended = Fraction(source_nm), Fraction(intended_angstrom)
-    if source * 10 != intended:
-        raise AssertionError("Fixed nm and angstrom fixture literals disagree about the exact times-ten conversion")
-    if source == 0:
-        return intended, Fraction(0)
-    parsed = Fraction.from_float(float(source))
-    parse_error = abs(parsed - source) * 10
-    product_rounding = Fraction.from_float(math.ulp(float(parsed * 10))) / 2
-    return intended, parse_error + product_rounding
-
 
 class ObservedReader(GeometryClient):
     async def read(self, source, **options):

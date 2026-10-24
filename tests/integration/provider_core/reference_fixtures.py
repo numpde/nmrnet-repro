@@ -9,6 +9,8 @@ byte hashes or derive expected predictions from the newly executed worker.
 import hashlib
 import json
 import math
+from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 
 from nmrnet_provider.xyz import prepare_xyz
@@ -112,3 +114,89 @@ def require_reference_inputs(manifest, reference, production):
             raise AssertionError("Exported source record differs from the original producer bytes")
         if record["original_request_identity"] != fixture["request"]:
             raise AssertionError("Exported coordinates differ from the previously qualified request bytes")
+
+
+def _require_exact_population(observed, expected, subject):
+    """Name a bounded first mismatch rather than dump the molecular result."""
+    missing, unexpected = expected.keys() - observed.keys(), observed.keys() - expected.keys()
+    if missing or unexpected:
+        raise AssertionError(
+            f"{subject} keys differ: {len(missing)} missing, {len(unexpected)} unexpected; "
+            f"first five missing {sorted(missing)[:5]}, unexpected {sorted(unexpected)[:5]}"
+        )
+    for key, value in expected.items():
+        if observed[key] != value:
+            raise AssertionError(f"{subject} differs at {key}: observed {observed[key]!r}, original {value!r}")
+
+
+def require_reference_predictions(records, predictions, reference, production):
+    """Compare complete producer/nucleus/atom populations, then the original mask."""
+    qualified = production["qualification"]["real_model_callable"]
+    fixtures = qualified["fixture_observations"]
+    expected = indexed_predictions(
+        [(item["source_element"], item["source_key_hex"]) for item in fixtures],
+        [item["result"]["predictions"] for item in fixtures],
+    )
+    if len(expected) != 137 or Counter(key[2] for key in expected) != {"H": 82, "C": 55}:
+        raise AssertionError("Original production oracle does not contain the qualified 137-output population")
+    observed = indexed_predictions([(item["source_element"], item["source_key_hex"]) for item in records], predictions)
+    _require_exact_population(observed, expected, "Complete connected population")
+    historical = {}
+    for element in ("H", "C"):
+        for item in reference["elements"][element]["predictions"]:
+            key = (element, item["key_hex"], element, item["atom_index"])
+            if key in historical:
+                raise AssertionError("Original historical population repeats a producer/nucleus/atom identity")
+            historical[key] = item["prediction_ppm"]
+    original_mask = {
+        (item["element"], item["key_hex"], item["element"], item["atom_index"])
+        for item in qualified["exact_reference_population"]
+    }
+    if set(historical) != original_mask or Counter(key[2] for key in historical) != {"H": 42, "C": 22}:
+        raise AssertionError("Historical 64-position mask differs from the independently recorded original population")
+    _require_exact_population({key: observed[key] for key in historical}, historical, "Historical 64-position population")
+    return {
+        "complete_predictions": len(observed),
+        "by_nucleus": dict(Counter(key[2] for key in observed)),
+        "historical_positions": len(historical),
+    }
+
+
+def require_capacity_inputs(manifest):
+    records = manifest["records"]
+    if [(item["source_element"], item["source_key_hex"]) for item in records] != [("H", "313238"), ("C", "313238")]:
+        raise AssertionError("Capacity input must contain exactly the ordered H128 and C128 producers")
+    for element, record in zip(("H", "C"), records, strict=True):
+        expected = {
+            "coordinate_unit": "angstrom",
+            "atoms": [element] * 128,
+            "coordinates": [[index * 0.1, 0.0, 0.0] for index in range(128)],
+        }
+        if record["original_request"] != expected:
+            raise AssertionError("Capacity input differs from the fixed independent 128-atom coordinate recipe")
+
+
+# Original authored chloromethane, H/Cl/C/H/H, expressed in nm. Expected angstrom
+# numbers are the independent literals in expected.json, not reader output.
+NM_TABLE = b"H 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\n"
+PREFIX = "é: supplied coordinates in nm\n".encode()
+
+
+def nm_conversion_oracle(source_nm, intended_angstrom):
+    """Bound two binary64 roundings using fixed, independent decimal literals.
+
+    Source parsing contributes 10 times its exact representational error.
+    Multiplication by the exactly representable 10 contributes at most half
+    an ULP of the rounded exact binary product. Fraction arithmetic keeps this
+    budget and the intended angstrom value exact; no worker output sets it.
+    The unit's exact factor is documented in input_geometry.coordinate_conversion.
+    """
+    source, intended = Fraction(source_nm), Fraction(intended_angstrom)
+    if source * 10 != intended:
+        raise AssertionError("Fixed nm and angstrom fixture literals disagree about the exact times-ten conversion")
+    if source == 0:
+        return intended, Fraction(0)
+    parsed = Fraction.from_float(float(source))
+    parse_error = abs(parsed - source) * 10
+    product_rounding = Fraction.from_float(math.ulp(float(parsed * 10))) / 2
+    return intended, parse_error + product_rounding

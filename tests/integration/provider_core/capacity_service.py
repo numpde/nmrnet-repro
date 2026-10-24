@@ -8,20 +8,7 @@ exact source/atom/coordinate correspondence and every atom-index/nucleus output.
 from pathlib import Path
 
 from tests.integration.nmrnet.reference_service import ExportedServiceLifecycle
-
-
-def require_capacity_inputs(manifest):
-    records = manifest["records"]
-    if [(item["source_element"], item["source_key_hex"]) for item in records] != [("H", "313238"), ("C", "313238")]:
-        raise AssertionError("Capacity input must contain exactly the ordered H128 and C128 producers")
-    for element, record in zip(("H", "C"), records, strict=True):
-        expected = {
-            "coordinate_unit": "angstrom",
-            "atoms": [element] * 128,
-            "coordinates": [[index * 0.1, 0.0, 0.0] for index in range(128)],
-        }
-        if record["original_request"] != expected:
-            raise AssertionError("Capacity input differs from the fixed independent 128-atom coordinate recipe")
+from tests.integration.nmrnet.reference_fixtures import require_capacity_inputs
 
 
 class CapacityServiceLifecycle(ExportedServiceLifecycle):

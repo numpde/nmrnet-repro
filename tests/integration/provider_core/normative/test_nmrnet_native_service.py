@@ -26,7 +26,8 @@ from tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle import Obse
 from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import ObservedReader, SuppliedLifecycle
 from tests.integration.nmrnet.reference_service import ReferenceServiceLifecycle
 from tests.integration.nmrnet.resource_evidence import require_cgroup_resources, retired_worker_resources
-from tests.integration.nmrnet.test_live_worker import qualification_execution_identity, verify_signed_request
+from tests.integration.nmrnet.test_live_worker import qualification_execution_identity
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy
 from nmrnet_provider.allocation import WorkerAllocation

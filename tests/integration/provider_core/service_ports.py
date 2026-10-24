@@ -21,7 +21,7 @@ from tests.fakes.job_input import facts, response
 from tests.integration.nmrnet.admission_ports import AdmissionPeers
 from tests.integration.nmrnet.runtime_ports import require_api_credentials
 from tests.integration.nmrnet.smiles_ports import InputPorts, SessionPorts
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionPolicy
 from nmrnet_provider.config import ANALYSIS_KIND_REF

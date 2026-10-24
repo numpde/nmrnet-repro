@@ -22,7 +22,7 @@ from tests.fakes.job_input import facts
 from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import InputPorts
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.config import load_provider_config
 from provider_core.attempt_record import StartPending

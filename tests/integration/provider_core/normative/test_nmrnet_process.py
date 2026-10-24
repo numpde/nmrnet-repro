@@ -17,7 +17,7 @@ from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed

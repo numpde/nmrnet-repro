@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 from tests.fakes.api import response_headers
 from tests.integration.nmrnet.budget_service import InputCallLimitPeers, InputTimeLimitPeers
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.config import load_recovery_config, load_recovery_inspection

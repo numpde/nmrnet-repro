@@ -14,7 +14,7 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.admission_ports import feed_response
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.service_ports import ServicePeers
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.process_reports import failure_evidence

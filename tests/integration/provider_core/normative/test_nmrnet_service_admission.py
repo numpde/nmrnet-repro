@@ -8,7 +8,7 @@ from unittest.mock import patch
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.integration.nmrnet.admission_ports import AdmissionPeers, feed_response
 from tests.integration.nmrnet.smiles_ports import SessionPorts
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
 from nmrnet_provider.runtime import assemble_attempt

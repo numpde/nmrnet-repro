@@ -4,6 +4,8 @@ import unittest
 import copy
 import math
 import runpy
+import subprocess
+import sys
 from pathlib import Path
 
 from tests.integration.nmrnet.scientific_inputs import load_scientific_inputs
@@ -13,6 +15,26 @@ from tests.fakes.uploads import UPLOAD_REF, grant
 
 
 class ScientificInputTests(unittest.TestCase):
+    def test_connected_fixture_ports_load_without_the_displaced_native_launch_harness(self):
+        program = '''
+import sys
+sys.path[:0] = [sys.argv[1], "/consumer"]
+from tests.integration.nmrnet import scientific_inputs, process_ports
+from tests.fakes.api_tls import verify_signed_request
+forbidden = {
+    "tests.integration.nmrnet.native_lifecycle",
+    "tests.integration.nmrnet.test_live_worker",
+    "tests.integration.nmrnet.reference_service",
+    "tests.integration.nmrnet.capacity_service",
+    "tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle",
+    "nmrnet_provider.allocation",
+}
+assert not forbidden.intersection(sys.modules), forbidden.intersection(sys.modules)
+'''
+        result = subprocess.run([sys.executable, "-I", "-B", "-c", program, str(Path(__file__).resolve().parents[4])],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_store_receiving_oracle_requires_its_bearer_and_refuses_other_credentials(self):
         target = f"GET /upload/v1/uploads/{UPLOAD_REF}/bytes HTTP/1.1\r\n".encode()
         authorized = b"Authorization: Bearer " + grant()["capability"].encode() + b"\r\n"

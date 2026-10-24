@@ -23,8 +23,7 @@ from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from http_sf import parse
-from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.api_tls import api_tls_peer, verify_signed_request
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_input import facts, response
@@ -316,32 +315,3 @@ def qualification_execution_identity(extra_sources):
         repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
         tool_sources=sources,
     )
-
-
-def verify_signed_request(request, body, *, origin, key):
-    """Verify the local peer's exact request, digest and signing-key binding."""
-    method, target, _ = request.split(b"\r\n", 1)[0].decode().split(" ")
-    headers = {
-        name.lower(): value.strip()
-        for line in request.split(b"\r\n")[1:]
-        if b":" in line
-        for name, value in [line.split(b":", 1)]
-    }
-    parsed = urlsplit(target)
-    lines = [
-        b'"@method": ' + method.encode(),
-        b'"@authority": ' + origin.removeprefix("https://").encode(),
-        b'"@path": ' + parsed.path.encode(),
-        b'"@query": ?' + parsed.query.encode(),
-    ]
-    # None identifies the API's bodyless read-capability POST. Other mutation
-    # routes carry JSON, including an empty body if explicitly supplied.
-    if method in {"POST", "PUT"} and body is not None:
-        if parse(headers[b"content-digest"], tltype="dictionary")["sha-256"][0] != hashlib.sha256(body).digest():
-            raise AssertionError("Signed request digest differs from its exact body")
-        lines += [b'"content-type": application/json', b'"content-digest": ' + headers[b"content-digest"]]
-    elif body not in (None, b"") or b"content-type" in headers or b"content-digest" in headers:
-        raise AssertionError("Bodyless signed request unexpectedly carries body content or its headers")
-    lines.append(b'"@signature-params": ' + headers[b"signature-input"].split(b"=", 1)[1])
-    signature = parse(headers[b"signature"], tltype="dictionary")["sig1"][0]
-    key.public_key().verify(signature, b"\n".join(lines))

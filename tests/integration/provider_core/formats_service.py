@@ -10,11 +10,8 @@ import struct
 from decimal import Decimal
 from pathlib import Path
 
-from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import (
-    NM_TABLE,
-    SuppliedLifecycle,
-    nm_conversion_oracle,
-)
+from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import SuppliedLifecycle
+from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
 
 FORMAT_CASES = (
     "json",

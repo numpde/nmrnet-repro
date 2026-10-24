@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from tests.fakes.acquisition import store_headers
-from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.api_tls import api_tls_peer, verify_signed_request
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_feed import page as feed_page
 from tests.fakes.job_input import facts, response
@@ -31,7 +31,6 @@ from tests.integration.nmrnet.test_live_worker import (
     CheckedClient,
     CheckedRetirement,
     qualification_execution_identity,
-    verify_signed_request,
 )
 
 from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config

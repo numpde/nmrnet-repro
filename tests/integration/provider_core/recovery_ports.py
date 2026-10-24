@@ -19,7 +19,7 @@ from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response, 
 from tests.fakes.publication import retained_failure
 from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.process_ports import JoinedServiceProxy
-from tests.integration.nmrnet.test_live_worker import verify_signed_request
+from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.config import load_recovery_config
 from nmrnet_provider.recovery import main

@@ -240,6 +240,28 @@
         <a href="https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf#page=45">CODATA recommended values 2022, Table XXXIII, p. 033105-45, PDF page 45</a>,
         Bohr radius. Conversion references are reused, not fitted to fixture points.</li>
     </ol>
+    <h2 id="scientific-inputs">Retained scientific input fixtures</h2>
+    <p><code>tests/fixtures/scientific_inputs</code> preserves the original four-reference
+      and synthetic H128/C128 XYZ and manifest exports verbatim. No predictions or
+      expected outputs were regenerated. The pinned loader checks original request
+      bytes, atom order, coordinates and source positions against the independent
+      reference packets and capacity recipe.</p>
+    <p>The reference producer is
+      <a href="https://github.com/numpde/nmrnet-repro/blob/c294dca413cc8f4a9309533c1e4a5764d5baa763/tests/integration/provider_worker/reference_fixture.py">reference_fixture.py at c294dca413cc8f4a9309533c1e4a5764d5baa763</a>;
+      the capacity producer is
+      <a href="https://github.com/numpde/nmrnet-repro/blob/7e5d3dad6b14d76bd3b265d39f3e6863bfbae007/tests/integration/provider_worker/reference_fixture.py">the same exporter at 7e5d3dad6b14d76bd3b265d39f3e6863bfbae007</a>.
+      Both used image
+      <code>sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08</code>
+      and upstream <code>3ba8b9c2f3d0a390d00685d238618345c6ab24d7</code>.
+      Those identities describe the historical export, never the current worker.</p>
+    <p><a href="https://github.com/numpde/nmrnet-repro/blob/1cb1efddd29b41febf38a80869ed24ea90ca1e8b/tests/integration/provider_core/scientific_inputs.py">The input loader and SHA-256 pins</a>
+      reuse the original reference/production packets; current predictions are compared
+      with those original authorities. Capacity is synthetic input/output capacity,
+      not plausible chemistry or an accuracy oracle. Retaining the small exports makes
+      qualification portable without depending on an untracked local cache or a
+      historical producer image. See the
+      <a href="https://github.com/numpde/nmrnet-repro/blob/30a63c11d1af759ed065218e98edbb2e8b339e02/artifacts/compose-scientific-qualification.json">connected qualification packet</a>
+      for the later execution evidence and its limits.</p>
   </main>
   <footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
 </body>
