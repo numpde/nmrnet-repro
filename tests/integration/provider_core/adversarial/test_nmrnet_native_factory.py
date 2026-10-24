@@ -30,7 +30,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=None,
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
-                terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
                 on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
@@ -53,7 +53,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
-                terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
                 on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=None,
@@ -79,7 +79,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 on_prediction_retry=Mock(),
                 on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
-                terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
             )
         allocation.assert_not_called()
 
@@ -157,7 +157,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             on_prediction_retry=Mock(),
             on_native_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
-            terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+            terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
         )
 
     def allocation(self):
@@ -227,7 +227,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             on_prediction_retry=Mock(),
             on_native_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
-            terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+            terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
         )
 
         async def opened(_role, *, job_ref):

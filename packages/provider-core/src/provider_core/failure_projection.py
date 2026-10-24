@@ -24,7 +24,7 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.chat import ChatFailed
-from provider_core.controller import ControllerFailed, ControllerRefused, StartRecoveryExpired, TerminalRecoveryExpired
+from provider_core.controller import ControllerFailed, ControllerRefused, StartRecoveryExpired
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import (
@@ -64,7 +64,6 @@ def owned_relationships(error):
         StoreFailed,
         ControllerFailed,
         StartRecoveryExpired,
-        TerminalRecoveryExpired,
         ExecutionFailed,
         ObservationGapExpired,
         ConditionRecoveryExpired,
@@ -127,7 +126,6 @@ def owned_details(error):
         ControllerFailed,
         ControllerRefused,
         StartRecoveryExpired,
-        TerminalRecoveryExpired,
         ExecutionFailed,
         ExecutionRefused,
         ExecutionStopped,
@@ -176,11 +174,10 @@ def owned_details(error):
                 history_directory_synced=error.history_directory_synced,
                 history_trim_phase=error.history_trim_phase,
             )
-    if kind in (StartRecoveryExpired, TerminalRecoveryExpired):
-        details["window_seconds"] = error.window_seconds
     if kind is StartRecoveryExpired:
+        details["window_seconds"] = error.window_seconds
         details["job_ref"] = error.pending.input.job_ref
-    if kind in (ExecutionFailed, TerminalRecoveryExpired) and type(error.attempt) is AcknowledgedAttempt:
+    if kind is ExecutionFailed and type(error.attempt) is AcknowledgedAttempt:
         details.update(
             job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref
         )

@@ -1,7 +1,7 @@
 """Own one selected session and its claim across the existing lifecycle owners.
 
-The sequence already exercised by NMRNet's tests/integration/provider_core/
-test_live_worker.py::LiveWorkerTests.run_lifecycle becomes runtime composition
+The sequence exercised at NMRNet 5629cb031b54afefbfff2a34d81602c6bc2b19ae,
+tests/integration/provider_core/test_live_worker.py::LiveWorkerTests.run_lifecycle, becomes runtime composition
 here. Scientific preparation, durable effects and retirement retain
 their existing owners. Optional START/terminal recovery repeats only the exact
 durable command, before science or after its retirement; this owner never reruns
@@ -48,11 +48,6 @@ class ControllerFailed(RuntimeError):
         self.cleanup_failures = cleanup_failures
 
 
-def require_terminal_window(seconds):
-    if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
-        raise ValueError("Terminal recovery window_seconds must be finite and positive")
-
-
 def require_start_window(seconds):
     if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("START recovery window_seconds must be finite and positive")
@@ -95,37 +90,23 @@ class StartRecoveryExpired(TimeoutError):
 
 @dataclass(frozen=True, slots=True)
 class TerminalRecovery:
-    """Bound admission of exact publication retries, with protected observers.
+    """Pace reviewed exact publication retries until resolution or cancellation.
 
-    The window begins at the first send failure, including retirement/backoff.
-    No publisher invocation begins after expiry; an admitted invocation and its
-    original bounded I/O/retirement may finish later. Callbacks are bounded,
-    synchronous and receive the actual acknowledgement and failed send.
+    Science has already retired. Individual exchanges and settlement remain
+    bounded; availability waits do not expire the durable terminal command.
+    Synchronous observers receive the actual acknowledgement and failed send.
     """
 
-    window_seconds: float
     backoff_max_seconds: float
     on_retry: Callable[[AcknowledgedAttempt, ApiFailure, float], None] = field(repr=False)
     on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
 
     def __post_init__(self):
-        require_terminal_window(self.window_seconds)
         value = self.backoff_max_seconds
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
             raise ValueError("Terminal recovery backoff maximum must be finite positive seconds")
         if not callable(self.on_retry) or not callable(self.on_recovered):
             raise ValueError("Terminal recovery requires explicit protected retry and recovery observers")
-
-
-class TerminalRecoveryExpired(TimeoutError):
-    """Retry admission ended; the last send and its durable obligation remain owned."""
-
-    def __init__(self, window_seconds, *, cause, attempt):
-        super().__init__(
-            f"Terminal publication retry window of {window_seconds:g} seconds expired; "
-            "retain the exact command and settle original I/O before recovery"
-        )
-        self.window_seconds, self.cause, self.attempt = window_seconds, cause, attempt
 
 
 class _Lifetime(Enum):
@@ -304,7 +285,7 @@ class AttemptController:
 
     async def _publish_terminal(self, terminal):
         policy = self._terminal_recovery
-        deadline, first_failure = None, None
+        first_failure = None
         delay = min(self._poll_seconds, policy.backoff_max_seconds) if policy is not None else None
         while True:
             try:
@@ -319,28 +300,18 @@ class AttemptController:
                     or failure.settlement_failures
                 ):
                     raise
-                if deadline is None:
-                    deadline = asyncio.get_running_loop().time() + policy.window_seconds
                 # Only the original publisher may settle its borrowed I/O.
                 # A cleanup failure propagates that owner's updated evidence,
-                # even when the retry window also expires during retirement.
+                # before retry eligibility is evaluated again.
                 if self._claim.operation_owner is self._operation:
                     await self._operation.settle()
                 if not self.api.can_replay_terminal(failure.api_failure):
                     raise
                 if first_failure is None:
                     first_failure = failure.api_failure
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise TerminalRecoveryExpired(policy.window_seconds, cause=failure, attempt=terminal.attempt) from None
-                seconds = min(remaining, random.uniform(delay / 2, delay))
+                seconds = random.uniform(delay / 2, delay)
                 policy.on_retry(terminal.attempt, failure.api_failure, seconds)
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise TerminalRecoveryExpired(policy.window_seconds, cause=failure, attempt=terminal.attempt) from None
-                await asyncio.sleep(min(seconds, remaining))
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise TerminalRecoveryExpired(policy.window_seconds, cause=failure, attempt=terminal.attempt) from None
+                await asyncio.sleep(seconds)
                 delay = min(policy.backoff_max_seconds, delay * 2)
             else:
                 if first_failure is not None and type(result) is TerminalConfirmed:

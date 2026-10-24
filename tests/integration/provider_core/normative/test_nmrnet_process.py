@@ -167,10 +167,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         self.policy = arguments["open_attempt"].on_prediction_retry
                     else:
                         self.policy = getattr(arguments["open_attempt"], f"{recovery_kind}_recovery")
-                    if recovery_kind in ("start", "terminal") and self.policy.window_seconds != getattr(
+                    if recovery_kind == "start" and self.policy.window_seconds != getattr(
                         arguments["config"].lifecycle, f"{recovery_kind}_retry_window_seconds"
                     ):
                         raise AssertionError("Foreground retry window did not reach its configured policy")
+                    if recovery_kind == "terminal" and self.policy.backoff_max_seconds != arguments["config"].service.policy.api_backoff_max_seconds:
+                        raise AssertionError("Terminal retry pacing did not reach its configured policy")
 
                 async def run(self, _stop):
                     if recovery_kind == "native":
@@ -662,7 +664,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 on_prediction_retry=lambda _attempt, _failure, _retired: self.fail("No prediction retry expected before admission"),
                 on_native_notice=Mock(),
                 terminal_recovery=TerminalRecovery(
-                    config.lifecycle.terminal_retry_window_seconds,
                     config.service.policy.api_backoff_max_seconds,
                     lambda _attempt, _failure, _seconds: self.fail("No terminal retry expected before admission"),
                     lambda _attempt, _failure: self.fail("No terminal recovery expected before admission"),

@@ -47,7 +47,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 return result
 
             def arguments(pending):
-                return original_arguments(pending) | {"terminal_recovery": TerminalRecovery(2, 0.01, Mock(), Mock())}
+                return original_arguments(pending) | {"terminal_recovery": TerminalRecovery(0.01, Mock(), Mock())}
 
             fixture.api_peer.response_factory = response
             service = fixture.service()
@@ -78,7 +78,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async with InputTimeLimitPeers() as fixture:
             original_arguments = fixture.arguments
             retry, recovered = Mock(), Mock()
-            policy = TerminalRecovery(2, 0.01, retry, recovered)
+            policy = TerminalRecovery(0.01, retry, recovered)
 
             def recovery_arguments(pending):
                 return original_arguments(pending) | {"terminal_recovery": policy}
@@ -169,7 +169,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async with InputCallLimitPeers() as fixture:
             original_arguments = fixture.arguments
             retry, recovered = Mock(), Mock()
-            policy = TerminalRecovery(2, 0.01, retry, recovered)
+            policy = TerminalRecovery(0.01, retry, recovered)
 
             def recovery_arguments(pending):
                 return original_arguments(pending) | {"terminal_recovery": policy}
@@ -205,7 +205,6 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async with SuccessiveServicePeers(maximum_records=1) as fixture:
             notices = []
             policy = TerminalRecovery(
-                2,
                 0.01,
                 lambda attempt, failure, seconds: notices.append(("retry", attempt, failure, seconds)),
                 lambda attempt, failure: notices.append(("recovered", attempt, failure)),

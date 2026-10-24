@@ -206,7 +206,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 on_prediction_retry=Mock(),
                 on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
-                terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
             )
             allocation = Mock(

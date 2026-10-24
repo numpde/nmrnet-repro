@@ -1,9 +1,8 @@
-"""Recovery stops on refusal, cleanup, storage failure, expiry and interruption."""
+"""Recovery stops on refusal, cleanup, storage failure and interruption."""
 
 import asyncio
 import ssl
 import tempfile
-import time
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -11,8 +10,7 @@ import httpcore
 
 from provider_core.attempt_record import TerminalConfirmed, TerminalPending
 from provider_core.attempt_store import StoreFailed
-from provider_core.controller import AttemptController, ControllerFailed, TerminalRecovery, TerminalRecoveryExpired
-from provider_core.failure_projection import owned_details, owned_relationships
+from provider_core.controller import AttemptController, ControllerFailed, TerminalRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.publication import PublicationFailed
 from provider_core.transport import ExchangeFailed
@@ -59,30 +57,19 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(response=response):
                 retry = Mock()
-                failure, _ = await self.run_failure(response, recovery=TerminalRecovery(1, 0.01, retry, Mock()))
+                failure, _ = await self.run_failure(response, recovery=TerminalRecovery(0.01, retry, Mock()))
                 self.assertIsInstance(failure.cause, PublicationFailed)
                 retry.assert_not_called()
 
-    async def test_expiry_keeps_original_send_evidence_and_does_not_begin_another_publication(self):
-        retry = Mock()
-
-        # The observer deliberately uses the entire retry window; no new send is permitted afterwards.
-        def consume_window(*_):
-            time.sleep(0.02)
-
-        retry.side_effect = consume_window
+    async def test_failed_retry_recipient_keeps_original_send_evidence_without_another_publication(self):
+        output_failure = OSError("Authored protected-recipient failure")
+        retry = Mock(side_effect=output_failure)
         failure, _ = await self.run_failure(
-            reply(b"maintenance", status=503), recovery=TerminalRecovery(0.01, 0.01, retry, Mock())
+            reply(b"maintenance", status=503), recovery=TerminalRecovery(0.01, retry, Mock())
         )
-        self.assertIsInstance(failure.cause, TerminalRecoveryExpired)
-        self.assertIsInstance(failure.cause.cause, PublicationFailed)
-        self.assertEqual(failure.cause.cause.api_failure.status, 503)
-        self.assertEqual(dict(owned_relationships(failure.cause))["owned cause"], failure.cause.cause)
-        self.assertEqual(owned_details(failure.cause)["window_seconds"], 0.01)
-        self.assertEqual(owned_details(failure.cause)["job_ref"], failure.cause.attempt.admission.job_ref)
-        self.assertEqual(
-            owned_details(failure.cause)["execution_attempt_ref"], failure.cause.attempt.admission.execution_attempt_ref
-        )
+        self.assertIs(failure.cause, output_failure)
+        self.assertIsInstance(output_failure.__context__, PublicationFailed)
+        self.assertEqual(output_failure.__context__.api_failure.status, 503)
 
     async def test_receipt_storage_failure_never_replays_a_successful_send(self):
         storage_failure = StoreFailed("Cannot retain receipt")
@@ -100,7 +87,7 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
         retry = Mock()
         failure, controller = await self.run_failure(
             reply(complete_response(result_schema_id="result.v1")),
-            recovery=TerminalRecovery(1, 0.01, retry, Mock()),
+            recovery=TerminalRecovery(0.01, retry, Mock()),
             change_store=fail_confirmation,
         )
         self.assertIs(failure.cause.cause, storage_failure)
@@ -115,7 +102,7 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
         ):
             failure, _ = await self.run_failure(
                 reply(b"maintenance", status=503),
-                recovery=TerminalRecovery(1, 0.01, Mock(), Mock()),
+                recovery=TerminalRecovery(0.01, Mock(), Mock()),
                 expected_exception=asyncio.CancelledError,
             )
         self.assertIs(failure, cancellation)
@@ -131,7 +118,8 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
             store = await empty_store(directory, maximum_records=1)
             session = SingleRetirementSession(store)
             lost = ExchangeFailed("Read timed out", primary=httpcore.ReadTimeout())
-            transport = Transport(*lifecycle_replies()[:-1], lost)
+            transport = Transport(*lifecycle_replies()[:-1], lost,
+                                  reply(complete_response(result_schema_id="result.v1", replayed=True)))
             original_exchange, original_retire = transport.exchange, transport.retire
             retirement_started, release_retirement = asyncio.Event(), asyncio.Event()
             cleanup = ExchangeFailed("Retirement failed", primary=OSError())
@@ -162,7 +150,7 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
-                terminal_recovery=TerminalRecovery(0.01, 0.001, retry, Mock()),
+                terminal_recovery=TerminalRecovery(0.001, retry, Mock()),
             )
             task = asyncio.create_task(controller.run(record()))
             try:
@@ -170,23 +158,27 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(transport.calls), 9)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
                 self.assertFalse(task.done())
-                # Even an expired retry window cannot replace an independent cleanup failure.
+                # Replay eligibility is checked after this original retirement,
+                # including any late independent certificate/cleanup evidence.
                 await asyncio.sleep(0.02)
                 release_retirement.set()
-                with self.assertRaises(ControllerFailed) as caught:
-                    await task
-                failure = caught.exception.cause
                 if late_evidence == "availability":
-                    self.assertIsInstance(failure, TerminalRecoveryExpired)
-                    self.assertEqual(owned_details(failure)["job_ref"], record().input.job_ref)
-                    failure = failure.cause
-                self.assertIsInstance(failure, PublicationFailed)
-                self.assertIs(failure.api_failure.cause, lost)
-                if late_evidence == "cleanup":
-                    self.assertIn(cleanup, failure.settlement_failures)
-                retry.assert_not_called()
-                self.assertEqual(len(transport.calls), 9)
-                self.assertIsInstance((await store.records())[0], TerminalPending)
+                    confirmed = await task
+                    self.assertIsInstance(confirmed, TerminalConfirmed)
+                    retry.assert_called_once()
+                    self.assertEqual(len(transport.calls), 10)
+                    self.assertEqual([request.content for request, _ in transport.calls[-2:]], [confirmed.pending.body] * 2)
+                else:
+                    with self.assertRaises(ControllerFailed) as caught:
+                        await task
+                    failure = caught.exception.cause
+                    self.assertIsInstance(failure, PublicationFailed)
+                    self.assertIs(failure.api_failure.cause, lost)
+                    if late_evidence == "cleanup":
+                        self.assertIn(cleanup, failure.settlement_failures)
+                    retry.assert_not_called()
+                    self.assertEqual(len(transport.calls), 9)
+                    self.assertIsInstance((await store.records())[0], TerminalPending)
             finally:
                 release_retirement.set()
                 await cancel_task(task)
@@ -196,8 +188,6 @@ class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
         for value in (True, 0, -1, float("nan"), float("inf"), "1"):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
-                    TerminalRecovery(value, 1, Mock(), Mock())
-                with self.assertRaises(ValueError):
-                    TerminalRecovery(1, value, Mock(), Mock())
+                    TerminalRecovery(value, Mock(), Mock())
         with self.assertRaises(ValueError):
-            TerminalRecovery(1, 1, None, Mock())
+            TerminalRecovery(1, None, Mock())

@@ -465,7 +465,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_start_recovered"}),
             ),
             terminal_recovery=TerminalRecovery(
-                config.lifecycle.terminal_retry_window_seconds,
                 config.service.policy.api_backoff_max_seconds,
                 lambda attempt, failure, seconds: report_attempt_notice(
                     attempt, failure, {"event": "api_terminal_retry", "retry_seconds": seconds}

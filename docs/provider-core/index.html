@@ -1021,7 +1021,7 @@ process takes the explicit <code>lifecycle.start_retry_window_seconds</code>, co
 backoff cap and protected Job/Attempt notices; direct assembly fixtures can still
 select explicit stopped recovery.</p>
 <p>For exact terminal recovery, explicitly supply
-<code>controller.TerminalRecovery(window_seconds, backoff_max_seconds, on_retry,
+<code>controller.TerminalRecovery(backoff_max_seconds, on_retry,
 on_recovered)</code> as <code>terminal_recovery</code>; <code>None</code> retains fail-stop publication.
 The same publisher rereads the unchanged durable terminal command before every
 send, after scientific retirement. It settles the original exchange before
@@ -1030,17 +1030,13 @@ HTTP500 and an unverified pre-head protocol response can qualify under the pinne
 terminal replay contract. Authentication/topology faults, malformed received
 receipts, explicit conflicts, cancellation, cleanup failures and receipt-storage
 failures do not qualify. No START, progress or scientific execution is repeated.</p>
-<p>The finite window starts at the first send failure and includes retirement and
-capped jittered backoff. No new publisher invocation begins after expiry; an
-already admitted invocation retains its existing bounded storage/HTTPS/retirement
-budgets and may finish later. Expiry preserves the pending command and the last
-send's protected cause in <code>TerminalRecoveryExpired</code>, rather than selecting a new
-outcome. Observers receive the actual acknowledgement and protected API failure;
-retry also receives the planned maximum wait. They must finish synchronously in
-bounded time. NMRNet's foreground process requires an explicit
-<code>lifecycle.terminal_retry_window_seconds</code> and supplies this policy before native
-allocation, using the configured API backoff cap and protected Attempt notices.
-Its native factory refuses disabled recovery; direct core callers may still select
+<p>After scientific retirement, reviewed terminal retries remain paced until resolution
+or cancellation. Availability waits do not expire the exact durable command; every
+storage/HTTPS/settlement operation retains its finite bound. First and latest failures
+stay at their existing owners without accumulating retry history. Protected synchronous
+observers receive the actual acknowledgement and API failure; retry also reports its
+planned wait. NMRNet supplies this policy using the configured API backoff cap and
+Attempt notices. Its native factory refuses disabled recovery; direct core callers may still select
 <code>None</code> for explicit stopped recovery. A signed local TLS witness loses Job 2's
 receipt, confirms its unchanged replay, and completes Job 3 with one scientific
 invocation per Job. This uses recording scientific ports, not released NMRNet or

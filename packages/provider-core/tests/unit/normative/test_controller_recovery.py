@@ -3,7 +3,7 @@
 import asyncio
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import httpcore
 
@@ -19,7 +19,7 @@ from tests.fakes.publication import api
 
 
 class ControllerRecoveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_admitted_retry_may_finish_its_bounded_io_after_retry_window(self):
+    async def test_outage_beyond_thirty_seconds_replays_exact_terminal_bytes_without_new_science(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)
             session = SingleRetirementSession(store)
@@ -28,15 +28,16 @@ class ControllerRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 reply(b"maintenance", status=503),
                 reply(complete_response(result_schema_id="result.v1", replayed=True)),
             )
-            original_exchange = transport.exchange
+            loop = asyncio.get_running_loop()
+            real_time = loop.time
+            outage_seconds = 0
 
-            async def delayed_receipt(request, *, maximum_bytes, owner=None):
-                response = await original_exchange(request, maximum_bytes=maximum_bytes, owner=owner)
-                if len(transport.calls) == 10:
-                    await asyncio.sleep(0.15)
-                return response
+            def clock():
+                return real_time() + outage_seconds
 
-            transport.exchange = delayed_receipt
+            def observe_retry(*_facts):
+                nonlocal outage_seconds
+                outage_seconds += 31
             controller = AttemptController(
                 api(transport, scope().api_origin),
                 store,
@@ -45,13 +46,16 @@ class ControllerRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
-                terminal_recovery=TerminalRecovery(0.1, 0.001, Mock(), Mock()),
+                terminal_recovery=TerminalRecovery(0.001, observe_retry, Mock()),
             )
             try:
-                confirmed = await controller.run(record())
+                with patch.object(loop, "time", side_effect=clock):
+                    confirmed = await controller.run(record())
                 self.assertIsInstance(confirmed, TerminalConfirmed)
                 self.assertEqual(len(transport.calls), 10)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
+                self.assertEqual(outage_seconds, 31)
+                self.assertEqual([request.content for request, _ in transport.calls[-2:]], [confirmed.pending.body] * 2)
             finally:
                 await store.close()
 
@@ -75,7 +79,7 @@ class ControllerRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
-                terminal_recovery=TerminalRecovery(1, 0.002, retry, recovered),
+                terminal_recovery=TerminalRecovery(0.002, retry, recovered),
             )
             try:
                 confirmed = await controller.run(record())

@@ -82,7 +82,7 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>lifecycle</code></td>
-<td><code>consumer_id</code>, <code>generation_id</code>, <code>store_root</code>, <code>maximum_records</code>, <code>confirmed_history_records</code>, <code>filesystem_reserve_bytes</code>, <code>store_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code>, <code>start_retry_window_seconds</code>, <code>terminal_retry_window_seconds</code></td>
+<td><code>consumer_id</code>, <code>generation_id</code>, <code>store_root</code>, <code>maximum_records</code>, <code>confirmed_history_records</code>, <code>filesystem_reserve_bytes</code>, <code>store_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code>, <code>start_retry_window_seconds</code></td>
 <td>none</td>
 </tr>
 <tr>
@@ -591,21 +591,17 @@ and output causes in the owned exception; unresolved work stays held.</p>
 with the acknowledged Job and Attempt references. Recovery confirms a fresh API
 observation, not completion or publication; observed server stop still wins.
 If reporting fails, these notices use the same bounded in-memory diagnostic owner.
-This observation recovery does not retry mutations. Terminal publication has its
-own required finite <code>lifecycle.terminal_retry_window_seconds</code>: after science has
-retired, the controller may replay the same durably retained COMPLETE/FAIL bytes
+This observation recovery does not retry mutations. After science has retired, terminal publication remains with its original controller: the controller may replay the same durably retained COMPLETE/FAIL bytes
 for reviewed availability failures, HTTP 500, a protocol failure before any
 verified response head, or the verified no-effect timing refusals
 <code>authentication_window_closed</code> and <code>signature_expired</code>.
-Each send is freshly signed within the existing terminal recovery window.
+Each send is freshly signed; temporary availability does not expire this durable command.
 Other explicit refusals, wrong environment, malformed received receipts, cancellation, failed cleanup and
 receipt-storage failures do not trigger replay. The same publisher confirms
 original I/O retirement and rechecks durable command identity before another send.</p>
-<p>The terminal retry window starts at the first send failure and includes retirement,
-diagnostic callbacks and capped jittered waits. No new publisher invocation begins
-after expiry; one already admitted may finish its existing bounded I/O later.
-Expiry retains the pending command and protected Job/Attempt/send evidence for
-stopped recovery. <code>api_terminal_retry</code> and <code>api_terminal_recovered</code> use the same
+<p>Reviewed terminal retries continue with capped jittered waits until resolution or
+cancellation. Each exchange and its settlement retain their existing finite bounds.
+Permanent refusals and unresolved cleanup still stop replay. <code>api_terminal_retry</code> and <code>api_terminal_recovered</code> use the same
 protected notices and failed-output fallback; recovery means the matching terminal
 receipt was durably retained. These retries never repeat interpretation, geometry
 generation or prediction. Unreviewed or exhausted condition-report recovery,

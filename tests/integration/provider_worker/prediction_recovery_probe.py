@@ -119,7 +119,7 @@ async def controller():
         observation_recovery=ObservationRecovery(1, 1, unexpected, unexpected),
         condition_recovery=ConditionRecovery(1, 1, unexpected, unexpected),
         start_recovery=StartRecovery(1, 1, unexpected, unexpected),
-        terminal_recovery=TerminalRecovery(1, 1, unexpected, unexpected),
+        terminal_recovery=TerminalRecovery(1, unexpected, unexpected),
         on_unconfirmed_phase_progress=unexpected,
         on_prediction_retry=unexpected,
         on_native_notice=unexpected,

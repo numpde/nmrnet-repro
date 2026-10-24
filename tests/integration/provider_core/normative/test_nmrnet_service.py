@@ -63,7 +63,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 # these existing bounded policies; exercise their actual owners.
                 return original_arguments(pending) | {
                     "start_recovery": StartRecovery(2, 0.01, Mock(), Mock()),
-                    "terminal_recovery": TerminalRecovery(2, 0.01, Mock(), Mock()),
+                    "terminal_recovery": TerminalRecovery(0.01, Mock(), Mock()),
                 }
 
             with patch.object(fixture, "arguments", arguments):
