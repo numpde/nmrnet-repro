@@ -55,7 +55,9 @@ deployment_command() {
     sync -f -- "$receipts/response.stdout" "$receipts/response.stderr" "$receipts" || return $?
     if [[ $status != 0 ]]; then
         deployment_diagnostic+=" Engine request $phase failed (client status $status)."
-        deployment_failed_receipt=$receipts/response.stderr
+        if [[ -z ${deployment_primary_failure_receipt-} ]]; then
+            deployment_primary_failure_receipt=$receipts/response.stderr
+        else deployment_additional_failure_receipt=$receipts/response.stderr; fi
     fi
     [[ $status == 0 ]]
 }
@@ -487,7 +489,8 @@ deployment_finish() {
     fi
     if [[ -n ${pending_diagnostic-} ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
     if [[ -n ${deployment_diagnostic-} ]]; then printf '%s\n' "$deployment_diagnostic" >&2; fi
-    if [[ -n ${deployment_failed_receipt-} ]]; then printf 'Protected Engine cause: %s\n' "$deployment_failed_receipt" >&2; fi
+    if [[ -n ${deployment_primary_failure_receipt-} ]]; then printf 'Protected primary Engine cause: %s\n' "$deployment_primary_failure_receipt" >&2; fi
+    if [[ -n ${deployment_additional_failure_receipt-} ]]; then printf 'Protected additional Engine cause: %s\n' "$deployment_additional_failure_receipt" >&2; fi
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Original operation receipts: %s\n' "${operation_root-not-established}" >&2
     elif [[ $operation_owner == query ]]; then
@@ -895,7 +898,7 @@ deployment_main() {
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     source "$repository_root/tools/git_metadata.sh"
-    docker_client_directory= deployment_diagnostic= deployment_failed_receipt= pending_diagnostic= inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true
+    docker_client_directory= deployment_diagnostic= deployment_primary_failure_receipt= deployment_additional_failure_receipt= pending_diagnostic= inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true
     deployment_runtime_effects=false
     deployment_helper_retired=true
     operation_root= operation_owner=unestablished operation_established=false

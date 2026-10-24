@@ -14,6 +14,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_primary_and_cleanup_engine_failures_keep_both_protected_causes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) operation_root=$2 deployment_diagnostic= inference_diagnostic=
+inference_retirement_confirmed=true inference_cancellation_status=0
+deployment_primary_failure_receipt= deployment_additional_failure_receipt=
+engine=(bash -c 'printf "owned Engine cause\\n" >&2; exit 7' bash)
+inference_native() { shift 3; "$@"; }
+if deployment_command helper-start 10 "$2/start" false start; then exit 91; fi
+if deployment_command helper-stop 10 "$2/stop" false stop; then exit 92; fi
+[[ $deployment_primary_failure_receipt == "$2/start/response.stderr" && $deployment_additional_failure_receipt == "$2/stop/response.stderr" ]]
+deployment_name=fixture deployment_action=up operation_established=false operation_owner=mutation
+docker_client_cleanup() { :; }
+if false; then :; else deployment_finish; fi
+''', directory)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn(f"Protected primary Engine cause: {directory}/start/response.stderr", result.stderr)
+            self.assertIn(f"Protected additional Engine cause: {directory}/stop/response.stderr", result.stderr)
+
     def test_failed_original_request_write_cannot_dispatch_an_engine_effect(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.shell('''
@@ -180,9 +199,9 @@ for generation in aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     printf '%s\\n' "$generation" > "$2/helper/recovery-$generation/observed"
     mkdir -m 700 -- "$2/helper/recovery-$generation/name"
     printf 'bounded Engine cause\\n' > "$2/helper/recovery-$generation/name/response.stderr"
-    deployment_failed_receipt=$2/helper/recovery-$generation/name/response.stderr
+    deployment_primary_failure_receipt=$2/helper/recovery-$generation/name/response.stderr
     deployment_helper_retain_observation "$2/helper" "$2" fixture "$generation" "$2/helper/recovery-$generation"
-    [[ $deployment_failed_receipt == "$2/helper/recovery-observation/name/response.stderr" && -f $deployment_failed_receipt ]]
+    [[ $deployment_primary_failure_receipt == "$2/helper/recovery-observation/name/response.stderr" && -f $deployment_primary_failure_receipt ]]
 done
 [[ $(cat "$2/helper/recovery-observation/observed") == bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]]
 held=cccccccccccccccccccccccccccccccc

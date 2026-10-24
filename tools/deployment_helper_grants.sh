@@ -275,8 +275,11 @@ deployment_helper_rotate_observation() {
         rm -rf -- "$previous" || return $?
     fi
     mv -- "$current" "$previous" || return $?
-    if [[ ${deployment_failed_receipt-} == "$current/"* ]]; then
-        deployment_failed_receipt=$previous/${deployment_failed_receipt#"$current/"}
+    if [[ ${deployment_primary_failure_receipt-} == "$current/"* ]]; then
+        deployment_primary_failure_receipt=$previous/${deployment_primary_failure_receipt#"$current/"}
+    fi
+    if [[ ${deployment_additional_failure_receipt-} == "$current/"* ]]; then
+        deployment_additional_failure_receipt=$previous/${deployment_additional_failure_receipt#"$current/"}
     fi
     sync -f -- "$previous" "$directory" || return $?
 }
