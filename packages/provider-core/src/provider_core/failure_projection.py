@@ -27,6 +27,9 @@ from provider_core.chat import ChatFailed
 from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
+from provider_core.delivery_client import DeliveryRejected, DeliveryUnavailable
+from provider_core.delivery_ipc import DeliveryRequestRejected
+from provider_core.delivery_store import DeliveryConflict, DeliveryFull, DeliveryStorageFailed
 from provider_core.execution import (
     ConditionRecoveryExpired,
     ExecutionFailed,
@@ -75,6 +78,8 @@ def owned_relationships(error):
         UploadFileReadFailed,
         ConversationFailed,
         ConversationRetirementFailed,
+        DeliveryUnavailable,
+        DeliveryStorageFailed,
     ):
         yield "owned cause", error.cause
     if kind in (
@@ -146,9 +151,17 @@ def owned_details(error):
         ExchangeFailed,
         LifecycleRejected,
         RetirementUnconfirmed,
+        DeliveryRejected,
+        DeliveryRequestRejected,
+        DeliveryUnavailable,
+        DeliveryConflict,
+        DeliveryFull,
+        DeliveryStorageFailed,
     ):
         return {}
     details = {"message": str(error)}
+    if kind is DeliveryUnavailable:
+        details["status"] = error.status
     if kind is LifecycleRejected:
         if error.returncode is not None:
             details["returncode"] = error.returncode
