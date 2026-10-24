@@ -592,6 +592,12 @@ case "$1" in
                 if [[ "$1" == test/integration/provider-core/hello ]]; then core_suite=integration/hello; fi
                 if [[ "$1" == test/integration/provider-core/transport ]]; then core_suite=integration/transport; fi
                 if [[ "$1" == test/integration/provider-core/api ]]; then core_suite=integration/api; fi
+                if [[ "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core ]]; then
+                    require_source_directory tests/fixtures/scientific_inputs
+                    command+=(--mount "type=bind,src=$repository_root/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly"
+                        --mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly"
+                        --mount "type=bind,src=$repository_root/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly")
+                fi
                 command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
                     --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
@@ -623,7 +629,7 @@ case "$1" in
                     command+=(--pattern test_nmrnet_config.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/compose ]]; then
-                    command+=(--pattern test_provider_compose.py test_provider_deployment.py)
+                    command+=(--pattern test_provider_compose.py test_provider_deployment.py test_compose_scientific_inputs.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/runtime ]]; then
                     command+=(--pattern test_nmrnet_runtime.py)

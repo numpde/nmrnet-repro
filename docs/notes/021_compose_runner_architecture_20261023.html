@@ -1363,6 +1363,17 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       and failed inspection still refuse. A controlled restart-to-ready witness
       failed before the correction; all twelve focused launcher/client tests now
       pass. Independent lifetime review found no further material issue.</p>
+    <p><strong>Portable scientific inputs, 24 October 2026:</strong> promoted the
+      original four-reference and synthetic H128/C128 XYZ/manifest exports into
+      <code>tests/fixtures/scientific_inputs</code>, preserving all four files verbatim.
+      Their SHA-256 pins and historical producer identities are explicit; current
+      execution provenance remains separate. The pure loader reuses existing input,
+      population and capacity-recipe owners, never the legacy lifecycle loader that
+      equates historical producer and current worker images. Eighteen focused
+      Compose/input tests pass, including byte-change refusal and the unchanged
+      independent 001/002 packet checks. Independent scientific review confirmed
+      exact promotion and no regenerated expectations. This qualifies input integrity
+      only; actual connected numerical/capacity execution remains the next step.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,
