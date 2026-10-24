@@ -1524,8 +1524,19 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       settlement gate one successor in the same runner generation. Its requests
       and synthetic 1.25 ppm outcome are unchanged. The provider image lacks the
       scientific wire server, so the fixture retains its original narrow frozen
-      worker.py source mount. No released model or API is granted. Physical
-      qualification of this port is pending at this source checkpoint.</p>
+      worker.py source mount. No released model or API is granted.</p>
+    <p><strong>Physical OOM qualification passed:</strong>
+      <code>make test/integration/provider/prediction-recovery</code> at
+      <code>5ddd393ffd720c7646f4a116d83843e0a82084bd</code> observed kernel counter
+      0 → 1, child return codes -9 and -15, two distinct operations in one runner
+      generation, and Engine restart count zero while that runner remained running.
+      The successor's -15 followed its successful synthetic reply and owner closure.
+      The <a href="https://github.com/numpde/nmrnet-repro/blob/5ddd393ffd720c7646f4a116d83843e0a82084bd/tests/integration/provider_worker/prediction_recovery_probe.py">pinned
+      receiving source</a> owns the exact request, reap, scratch and channel checks.
+      <code>artifacts/runner-oom-qualification.json</code> identifies unchanged
+      result/diagnostic/request evidence and hashes; independent reviews matched
+      all five public files to their private originals. Both finite containers
+      retired after direct bounded log delivery; no application log dump remains.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

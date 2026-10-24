@@ -1,0 +1,55 @@
+{
+  "schema_id": "nmrnet.serial_runner_oom_qualification.v1",
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "5ddd393ffd720c7646f4a116d83843e0a82084bd",
+  "command": "make test/integration/provider/prediction-recovery",
+  "image_id": "sha256:aec83c6f527d48c7f87968795305ca524ba22dc62622687faa13563050c3279e",
+  "scope": "Synthetic kernel OOM through the installed serial supervisor, NativeAttemptFactory, NativeOperation, PredictionClient and NMRNetSession; no released model, API, interpreter or network grant.",
+  "profile": {
+    "memory_bytes": 536870912,
+    "additional_swap_bytes": 0,
+    "memory_oom_group": 0,
+    "maximum_touched_allocation_bytes": 1073741824,
+    "reason": "Reuse the existing finite component launch/admission policy instead of a second bespoke resource launcher."
+  },
+  "runner": {
+    "container_id": "356829be63cf43db78b3d0743b22957d720fd0b4d32617869c60dd51aa427986",
+    "restart_count": 0,
+    "running_before_retirement": true,
+    "restarting": false,
+    "generation": "3bf128c6fb864419bb5897d1778399c4"
+  },
+  "observations": {
+    "oom_kill_delta": 1,
+    "old_child_returncode": -9,
+    "successor_returncode": -15,
+    "original_scratch_released_before_replacement": true,
+    "original_channel_settled_before_replacement": true,
+    "requests": "Both exactly equal the original pinned RAW bytes; no regeneration or widened tolerance.",
+    "successor": "New operation, same persistent runner generation; synthetic 1.25 ppm outcome unchanged."
+  },
+  "final_state": "Both finite containers retired after direct bounded Docker-log delivery. No application log dump retained.",
+  "retained_outputs": [
+    {
+      "path": "artifacts/runner-oom/summary.json",
+      "sha256": "78a197aa87222d70f6c72d17642979ba77fc5ea6bd515ab60233e9b76ba72567"
+    },
+    {
+      "path": "artifacts/runner-oom/result.json",
+      "sha256": "81a476cbdf9b25ff03398e299884c2bf6adf93ba0b1b6e488af65d356399c7b3"
+    },
+    {
+      "path": "artifacts/runner-oom/retry.json",
+      "sha256": "035eb9d8a812b5a69d9370f0c1a64a2529f34cb1e8bb036bc5a52beded339ed1"
+    },
+    {
+      "path": "artifacts/runner-oom/first-request.json",
+      "sha256": "96c60eba70fc5faf7813d091b8d621062dad4072a74bd8dbfcb8ea9863aae439"
+    },
+    {
+      "path": "artifacts/runner-oom/second-request.json",
+      "sha256": "b3b44ed384e970c2919fcdbbc8aca9db34bc21412d47436d16010595004bc949"
+    }
+  ],
+  "limits": "Does not qualify released-model OOM, numerical accuracy, daemon restart, live-model interpretation or external API/GUI delivery."
+}
