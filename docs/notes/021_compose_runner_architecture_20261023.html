@@ -1770,6 +1770,21 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       unreferenced failed-cutover input copy <code>generation-GYcTeKGk</code>, and
       left no settled mutation scratch. No new Job or scientific operation was
       requested for this cleanup.</p>
+    <p><strong>Completed transport-close errors, 24 October 2026:</strong> a real
+      asyncio transport reset reproduced the reported false hold: its completed
+      <code>wait_closed</code> error stopped independent control cleanup and was
+      then counted again through the client. The native operation now owns the
+      sole observation of its exact StreamWriter. A completed exceptional task
+      remains protected diagnostic evidence; a pending task, cancellation or
+      deadline expiry still prevents settlement. The original and proof-session
+      controls are closed independently after confirmed child retirement.</p>
+    <p>The regression forces a real local transport reset and lost original control,
+      confirms proof-session retirement/scratch release, receives the reset cause,
+      and verifies one close observation across repeated retire/settle calls. A
+      separate held-close deadline control confirms that unfinished closure is not
+      released. Focused contained checks passed: native runner 13 and native factory
+      11. Independent resource/error reviews found no regression. No scientific
+      accuracy matrix was repeated for this lifecycle-only change.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

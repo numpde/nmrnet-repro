@@ -2,6 +2,7 @@
 
 import asyncio
 import unittest
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -9,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, NativeSetupFailed
+from nmrnet_provider.retirement import retire_worker_channel
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
@@ -163,6 +165,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
     def allocation(self):
         allocation = Mock(allocation="a" * 32, ipc=Path("/unused"), start=AsyncMock(return_value=(object(), Mock(close=Mock(), wait_closed=AsyncMock()))), retire=AsyncMock(), settle=AsyncMock())
         allocation.retirement = allocation
+        allocation.retire_channel = partial(retire_worker_channel, native_retirement=allocation)
         return allocation
 
     async def test_cancellation_keeps_its_original_cause_and_failed_native_retirement_through_both_layers(self):
@@ -211,6 +214,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         store = SimpleNamespace(pending_operation=None, pending_owner=None, settle=AsyncMock())
         allocation = Mock(metadata=b'{"runtime":{}}', retire=AsyncMock(), settle=AsyncMock())
         allocation.retirement = allocation
+        allocation.retire_channel = partial(retire_worker_channel, native_retirement=allocation)
         worker = Mock(close=Mock(), wait_closed=AsyncMock())
         primary = RuntimeError("PRIVATE_ASSEMBLY_CAUSE")
         factory = NativeAttemptFactory(

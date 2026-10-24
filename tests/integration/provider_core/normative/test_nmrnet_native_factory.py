@@ -1,12 +1,14 @@
 """Successful controller and source handoffs leave no factory-owned history."""
 
 import unittest
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
+from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
@@ -40,6 +42,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             worker = Mock(close=Mock(), wait_closed=AsyncMock())
             allocation = Mock(role=role, runtime={}, retire=AsyncMock(), settle=AsyncMock())
             allocation.retirement = allocation
+            allocation.retire_channel = partial(retire_worker_channel, native_retirement=allocation)
             factory.allocations.append(allocation)
             factory.clients[allocation] = worker
             ports.append((worker, allocation))

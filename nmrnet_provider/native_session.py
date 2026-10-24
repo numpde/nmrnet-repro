@@ -16,7 +16,6 @@ import os
 import stat
 import time
 
-from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.worker_protocol import document, frame_size, require_seconds
 from provider_core.runner_protocol import LifecycleRejected
 from provider_core.runner_session import RunnerSession
@@ -188,14 +187,26 @@ class NativeOperation:
                 self._proof_task = asyncio.create_task(asyncio.to_thread(self._prove_retirement, deadline))
                 self._proof_task.add_done_callback(self._observe)
             await self._wait(self._proof_task, deadline)
-        if self.writer is not None:
-            if self._science_closure is None:
-                self._science_closure = asyncio.create_task(self.writer.wait_closed())
-                self._science_closure.add_done_callback(self._observe)
-            await self._wait(self._science_closure, deadline)
-        self.session.close()
-        if self.proof is not None:
-            self.proof.close()
+        try:
+            if self.writer is not None:
+                if self._science_closure is None:
+                    self._science_closure = asyncio.create_task(self.writer.wait_closed())
+                    self._science_closure.add_done_callback(self._observe)
+                try:
+                    await self._wait(self._science_closure, deadline)
+                except Exception as cause:
+                    if (not self._science_closure.done() or self._science_closure.cancelled()
+                            or self._science_closure.exception() is not cause):
+                        raise
+                    # asyncio's closed waiter can carry connection_lost's
+                    # error after the transport has closed. Retain that cause
+                    # for protected reporting; it is not unfinished closure.
+        finally:
+            try:
+                self.session.close()
+            finally:
+                if self.proof is not None:
+                    self.proof.close()
         self._report_settled_failures()
 
     def _report_settled_failures(self):
@@ -225,4 +236,16 @@ class NativeOperation:
         await self._wait(self._retirement, time.monotonic() + self._seconds)
 
     async def retire_channel(self, worker):
-        return await retire_worker_channel(worker, self)
+        failures = []
+        try:
+            worker.close()
+        except Exception as cause:
+            failures.append(("channel_close", cause))
+        try:
+            await self.retire()
+        except (Exception, asyncio.CancelledError) as cause:
+            failures.append(("native_retirement", cause))
+        # This operation already observes the client's exact StreamWriter.
+        # Rejoining it through worker.wait_closed would count the same settled
+        # transport error again and incorrectly retain a retired operation.
+        return failures

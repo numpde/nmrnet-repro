@@ -18,7 +18,6 @@ from pathlib import Path
 
 from nmrnet_provider.native_session import NativeOperation
 from nmrnet_provider.geometry_client import GeometryClient
-from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
@@ -273,7 +272,7 @@ class NativeAttemptFactory:
         failures = []
         if allocation in self.clients:
             client = self.clients[allocation]
-            failures.extend(await retire_worker_channel(client, allocation.retirement))
+            failures.extend(await allocation.retire_channel(client))
         else:
             try:
                 await allocation.retirement.retire()

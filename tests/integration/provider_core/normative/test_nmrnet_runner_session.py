@@ -12,6 +12,51 @@ from tests.fakes.runner import RunningSupervisor
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pending_close_deadline_keeps_original_observation_held(self):
+        operation = self.operation()
+        await operation.start()
+        operation._seconds = 0.1
+        release = asyncio.Event()
+        original = operation.writer.wait_closed
+
+        async def gated():
+            await release.wait()
+            await original()
+
+        with patch.object(operation.writer, "wait_closed", side_effect=gated):
+            with self.assertRaises(TimeoutError):
+                await operation.retire()
+            self.assertFalse(operation._science_closure.done())
+            self.assertEqual(operation.session.control.fileno(), -1)
+            self.notices.assert_not_called()
+            release.set()
+            await operation._science_closure
+            await operation.retire()
+            await operation.settle()
+
+    async def test_completed_transport_reset_is_reported_without_holding_retired_resources(self):
+        operation = self.operation()
+        await operation.start()
+        reset = ConnectionResetError(104, "fixture transport reset")
+        operation.writer.transport._force_close(reset)
+        await asyncio.sleep(0)
+        operation.session.control.close()  # Force the independent proof-session path.
+        worker = Mock(close=operation.writer.close)
+        original = operation.writer.wait_closed
+        with patch.object(operation.writer, "wait_closed", wraps=original) as closed:
+            self.assertEqual(await operation.retire_channel(worker), [])
+            await operation.retire()
+            await operation.settle()
+            closed.assert_awaited_once()
+        worker.wait_closed.assert_not_called()
+        self.assertEqual(operation.session.control.fileno(), -1)
+        self.assertIsNotNone(operation.proof)
+        self.assertEqual(operation.proof.control.fileno(), -1)
+        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.notices.assert_called_once()
+        evidence = self.notices.call_args.args[0]
+        self.assertTrue(evidence is reset or reset in evidence.exceptions)
+
     async def test_retirement_during_transport_adoption_closes_the_returned_writer(self):
         operation = self.operation()
         entered, release = asyncio.Event(), asyncio.Event()
