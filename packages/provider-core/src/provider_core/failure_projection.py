@@ -191,6 +191,12 @@ def owned_details(error):
         details["grant_issued"] = error.grant_issued
     if kind is ChatFailed:
         details["reason"] = error.reason
+        if error.endpoint_error is not None:
+            details["endpoint_error_unverified"] = True
+            for name in ("message", "type", "code", "param", "detail_unavailable"):
+                value = error.endpoint_error.get(name)
+                if type(value) is str:
+                    details["endpoint_error_" + name] = value
         head = error.response
         if head is None and type(error.cause) is ExchangeFailed:
             head = error.cause.response_head

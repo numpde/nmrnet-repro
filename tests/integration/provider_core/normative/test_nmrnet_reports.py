@@ -62,7 +62,7 @@ from provider_core.attempt_record import (
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.attempt_store import StoreFailed
-from provider_core.chat import ChatFailed
+from provider_core.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
@@ -84,6 +84,29 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_model_rejection_reason_reaches_protected_renderer_after_all_key_redaction(self):
+        key, other_key = "CURRENT_MODEL_KEY", "FALLBACK_CREDENTIAL_" + "z" * 80
+        prompt = 'PRIVATE_INPUT "coordinates"\nC 0 0 0; api_key=' + key
+        reason = "Unsupported tool_choice; password=PRIVATE_FIELD; " + "x" * 940 + other_key
+        response = HttpResponse(400, ((b"x-request-id", b"request:model-rejection"),), json.dumps({"error": {
+            "message": reason, "code": "unsupported_parameter", "param": "tool_choice",
+            "request": "PRIVATE_RESPONSE_DUMP",
+        }}).encode())
+        transport = SimpleNamespace(exchange=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True)
+        endpoint = ChatEndpoint(
+            ChatEndpointSpec(configuration_id="fixture", model="fixture", url="https://example.invalid/chat",
+                             api_key=key, reasoning_effort=None),
+            transport=transport, request_bytes=4096, response_bytes=16384,
+        )
+        with self.assertRaises(ChatFailed) as caught:
+            await endpoint.complete([{"role": "user", "content": prompt}], [])
+        rendered = json.dumps(self.receive(caught.exception, secrets=(key, other_key)))
+        for useful in ("Unsupported tool_choice", "unsupported_parameter", "request:model-rejection",
+                       '"endpoint_error_unverified": true', '"status": 400'):
+            self.assertIn(useful, rendered)
+        for private in (key, "FALLBACK_CREDENTIAL_", "PRIVATE_FIELD", "PRIVATE_RESPONSE_DUMP", "PRIVATE_INPUT", "C 0 0 0"):
+            self.assertNotIn(private, rendered)
+
     def test_history_expiry_preserves_observed_unlinks_native_cause_and_unsynced_directory_for_operator(self):
         failure = StoreFailed(
             "Confirmed-history expiry is unconfirmed",

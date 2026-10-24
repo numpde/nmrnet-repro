@@ -73,12 +73,68 @@ class ChatEndpointSpec:
 class ChatFailed(RuntimeError):
     """Safe operation text; original HTTP response and causes stay private."""
 
-    def __init__(self, reason, message, *, cause=None, response=None):
+    def __init__(self, reason, message, *, cause=None, response=None, endpoint_error=None):
         super().__init__(message)
         self.reason = reason
         self.cause = cause
         self.response = response
+        self.endpoint_error = endpoint_error
         self.interruption_cause = None
+
+
+def _request_echoes(messages, key):
+    texts = [key]
+    for message in messages:
+        if type(message) is not dict:
+            continue
+        texts.append(message.get("content"))
+        calls = message.get("tool_calls")
+        if type(calls) is list:
+            for call in calls:
+                if type(call) is dict and type(call.get("function")) is dict:
+                    texts.append(call["function"].get("arguments"))
+    return tuple(spelling for text in texts if type(text) is str and text
+                 for spelling in (text, json.dumps(text, ensure_ascii=True)[1:-1]))
+
+
+def _without_echoes(value, echoes):
+    # SECS7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+    # src/secs_inference/provider/chat.py::_diagnostic_text: merge original
+    # matches so replacing a key cannot expose a larger overlapping prompt echo.
+    spans = []
+    for echo in echoes:
+        start = value.find(echo)
+        while start >= 0:
+            spans.append((start, start + len(echo)))
+            start = value.find(echo, start + 1)
+    parts, end = [], 0
+    for start, stop in sorted(spans):
+        if start >= end:
+            parts.extend((value[end:start], "[redacted]"))
+        end = max(end, stop)
+    parts.append(value[end:])
+    return " ".join("".join(char if char.isprintable() else " " for char in "".join(parts)).split())
+
+
+def _endpoint_error(response, messages, key):
+    """Project optional error fields, never raw bodies or complete prompt echoes.
+
+    This ports SECS7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+    src/secs_inference/provider/chat.py:211-288. Text remains unverified/protected;
+    paraphrased input is not detected. Consumers redact all configured secrets
+    before display limits; truncating here could expose another key's prefix.
+    """
+    try:
+        document = read_document(response.body, 8192)
+    except ResponseRejected:
+        return {"detail_unavailable": "The model service error detail was not complete readable JSON within 8192 bytes."}
+    fields = document.get("error") if type(document) is dict else None
+    if type(fields) is not dict:
+        return {"detail_unavailable": "The model service response contained no readable error object."}
+    echoes = _request_echoes(messages, key)
+    result = {name: _without_echoes(fields[name], echoes)
+              for name in ("message", "type", "code", "param") if type(fields.get(name)) is str}
+    return result or {"detail_unavailable": "The model service response contained no readable error fields."}
 
 
 def require_chat_limits(*, request_bytes, response_bytes):
@@ -182,6 +238,7 @@ class ChatEndpoint:
                 "http_status",
                 f"Cannot complete interpreter request: the model service returned HTTP {response.status}; no tool was accepted.",
                 response=response,
+                endpoint_error=_endpoint_error(response, messages, self.spec.api_key),
             )
         try:
             document = read_document(response.body, self._response_bytes)

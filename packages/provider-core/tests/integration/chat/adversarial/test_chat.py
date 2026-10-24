@@ -13,6 +13,42 @@ from tests.fakes.tls_peer import TlsPeer
 
 
 class ChatCarrierRejectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_http_rejection_keeps_error_fields_without_complete_prompt_or_key_echoes(self):
+        prompt = 'PRIVATE_INPUT quoted "source"\nC 0 0 0; api_key=PRIVATE_KEY'
+        body = json.dumps({"error": {
+            "message": "Unsupported tool_choice. Echo: " + prompt + "; escaped: " + json.dumps(prompt)[1:-1],
+            "type": "invalid_request_error", "code": "unsupported_parameter", "param": "tool_choice",
+            "request": "PRIVATE_UNRELATED_BODY",
+        }}).encode()
+        response = HttpResponse(400, ((b"content-type", b"application/json"),), body)
+        transport = SimpleNamespace(exchange=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True)
+        endpoint = ChatEndpoint(self.spec("https://example.invalid/chat"), transport=transport,
+                                request_bytes=4096, response_bytes=16384)
+        with self.assertRaises(ChatFailed) as caught:
+            await endpoint.complete([{"role": "user", "content": prompt}], [])
+        evidence = caught.exception.endpoint_error
+        self.assertIn("Unsupported tool_choice", evidence["message"])
+        self.assertEqual(evidence["code"], "unsupported_parameter")
+        self.assertEqual(evidence["param"], "tool_choice")
+        self.assertNotIn("PRIVATE", json.dumps(evidence))
+        self.assertNotIn("C 0 0 0", json.dumps(evidence))
+        self.assertIs(caught.exception.response, response)
+        transport.exchange.assert_awaited_once()
+
+    async def test_unreadable_error_detail_preserves_status_without_partial_body(self):
+        for body in (b"<html>PRIVATE</html>", b'{"error":{"message":"PRIVATE',
+                     json.dumps({"error": {"message": "PRIVATE" * 2000}}).encode()):
+            with self.subTest(length=len(body)):
+                response = HttpResponse(400, (), body)
+                transport = SimpleNamespace(exchange=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True)
+                endpoint = ChatEndpoint(self.spec("https://example.invalid/chat"), transport=transport,
+                                        request_bytes=4096, response_bytes=32768)
+                with self.assertRaises(ChatFailed) as caught:
+                    await endpoint.complete([], [])
+                self.assertEqual(caught.exception.response.status, 400)
+                self.assertIn("detail_unavailable", caught.exception.endpoint_error)
+                self.assertNotIn("PRIVATE", json.dumps(caught.exception.endpoint_error))
+
     async def test_interruption_keeps_exact_transport_primary_and_its_previous_explicit_cause(self):
         previous = OSError("PRIVATE earlier interruption cause")
         interruption = asyncio.CancelledError()

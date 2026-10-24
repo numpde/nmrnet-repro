@@ -1926,7 +1926,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       returned HTTP 400; <code>gpt-5.6-luna</code> then selected
       <code>prepare_pasted</code>. There were two model exchanges and zero input
       corrections. OpenAI fallback succeeded; the primary endpoint's rejection
-      remains a separate diagnostic/configuration issue.</p>
+      requires separate diagnosis; its cause is not inferred from HTTP 400.</p>
     <p>The delivered scientific result was 21,448 bytes, SHA-256
       <code>338f1b692c5de39b83a88055abc3148be0140a962c8f86e4315f28de99648b9c</code>.
       The unchanged historical oracle matched selected model artifacts, runtime,
@@ -1978,6 +1978,30 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       selected <code>WLAN_INTERFACE</code> or leaves the existing acquisition prompt
       available. No new selector, automatic interface discovery, API Job or model
       request was introduced for these corrections.</p>
+    <p><strong>Protected model-rejection detail, 24 October 2026:</strong> the
+      successful fallback exposed a reporting gap: the carrier retained the HTTP
+      body in memory, but its durable/operator projection retained only status and
+      correlation. The shared carrier now extracts only string
+      <code>error.message/type/code/param</code> from complete JSON within 8 KiB.
+      Unreadable detail preserves the received status with an explicit explanation;
+      HTML, partial JSON and arbitrary body fields are not projected.</p>
+    <p>This narrowly ports
+      <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/chat.py#L211">SECS
+      rejection/diagnostic handling at 7356c354, lines 211–288</a>. Original overlapping
+      matches are merged before removing complete prompt/tool-argument echoes and
+      the endpoint key, including JSON-escaped spellings. The consumer redacts all
+      configured keys and recognizable credential fields before its display bound.
+      Endpoint text remains explicitly unverified and protected; this is not a
+      detector for paraphrased input. Public interpretation/exception text and
+      one-send carrier behavior remain unchanged.</p>
+    <p>The tests-first missing-detail witness failed, then focused checks passed:
+      chat/conversation 33 and process/receiving reports 65. Receiving controls cover
+      useful server reason/code/parameter/request ID, credential-field canaries,
+      another configured key crossing the display bound, and excluded body/prompt
+      echoes. Independent disclosure/ownership review found no issue. This cannot
+      reconstruct the earlier production server reason. The subsequent operator
+      instruction disables Qwen rather than authorizing further availability
+      probes; no new API Job or model request was made for this repair.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
