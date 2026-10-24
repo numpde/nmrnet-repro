@@ -18,18 +18,26 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         operation._seconds = 0.1
         release = asyncio.Event()
         original = operation.writer.wait_closed
+        close = operation.writer.close
+        transport_socket = operation.writer.transport.get_extra_info("socket")
 
         async def gated():
             await release.wait()
+            close()
             await original()
 
-        with patch.object(operation.writer, "wait_closed", side_effect=gated):
-            with self.assertRaises(TimeoutError):
-                await operation.retire()
-            self.assertFalse(operation._science_closure.done())
-            self.assertEqual(operation.session.control.fileno(), -1)
-            self.notices.assert_not_called()
-            release.set()
+        with (patch.object(operation.writer, "wait_closed", side_effect=gated),
+              patch.object(operation.writer, "close")):
+            try:
+                with self.assertRaises(TimeoutError):
+                    await operation.retire()
+                self.assertFalse(operation._science_closure.done())
+                self.assertEqual(operation.session.control.fileno(), -1)
+                self.assertGreaterEqual(transport_socket.fileno(), 0)
+                self.assertIsNone(operation.session.science)
+                self.notices.assert_not_called()
+            finally:
+                release.set()
             await operation._science_closure
             await operation.retire()
             await operation.settle()

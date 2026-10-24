@@ -1785,6 +1785,14 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       released. Focused contained checks passed: native runner 13 and native factory
       11. Independent resource/error reviews found no regression. No scientific
       accuracy matrix was repeated for this lifecycle-only change.</p>
+    <p>A follow-up ownership review found that the control session still retained
+      the raw scientific socket after asyncio adopted it. Closing control during
+      a pending transport wait could therefore close asyncio's descriptor behind
+      its owner. Successful adoption now immediately clears the control session's
+      socket reference. The strengthened gated-close witness first reproduced the
+      premature descriptor closure, then passed with the descriptor still open
+      under its transport until that owner closed it. All 13 native-runner tests
+      passed again; independent review found no further issue in this handoff.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

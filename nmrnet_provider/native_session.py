@@ -98,6 +98,9 @@ class NativeOperation:
             return
         self.session.science.setblocking(False)
         self.reader, self.writer = await asyncio.open_connection(sock=self.session.science)
+        # Successful asyncio adoption transfers the descriptor to its transport.
+        # The control owner must not close that socket behind a pending waiter.
+        self.session.science = None
         if self._stop_requested:
             # Retirement may begin while asyncio adopts the descriptor. Close
             # the newly returned transport before joining its original closure.
