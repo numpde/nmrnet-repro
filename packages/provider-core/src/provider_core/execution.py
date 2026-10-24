@@ -1,4 +1,4 @@
-"""Order one prepared execution and retain its outcome before publication.
+"""Order one prepared execution and transfer its approved outcome to delivery.
 
 NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
 nmrpeak_provider/attempt_lifecycle.py::execute_prepared confirms running progress,
@@ -30,16 +30,21 @@ from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
     AcknowledgedAttempt,
     LocalExecutionPhase,
-    SuppressedOutcome,
     SuppressionReason,
     TerminalOperation,
-    TerminalPending,
     acknowledged_attempt,
     mark_execution_entered,
 )
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.attempt_response import JOB_STATES
-from provider_core.attempt_store import StoreFailed, StoreRefused
+from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
+from provider_core.delivery_client import DeliveryUnavailable
+from provider_core.delivery_store import DeliveryFull, DeliveryOutcome
+from provider_core.delivery_worker import require_delivery_retry_settings
+from provider_core.producer_checkpoint import (
+    AcknowledgedCheckpoint, DeliveryAcceptedCheckpoint, EnteredCheckpoint,
+    EvidenceDigest, SuppressedCheckpoint, TerminalSelectedCheckpoint,
+)
 
 
 class _Retirement(Enum):
@@ -213,7 +218,7 @@ class ExecutionFailed(RuntimeError):
 
     def __init__(self, *, cause, outcome, unconfirmed_record, api_failure, cleanup_failures, attempt):
         super().__init__(
-            "Analysis did not complete its owned lifecycle; preserve the observed outcome and settle original work before reuse"
+            "Analysis lifecycle did not settle; retain this owner and inspect delivery, storage and cleanup evidence before reuse"
         )
         self.cause = cause
         self.outcome = outcome
@@ -224,6 +229,8 @@ class ExecutionFailed(RuntimeError):
         self.operation_interruption = None
         self.interruption_cause = None
         self.condition_failure = self.latest_condition_failure = self.condition_receipt = None
+        self.delivery_acceptance = self.delivery_failure = None
+        self.handoff_interruption = None
 
 
 def _suppression_reason(cause):
@@ -283,6 +290,10 @@ class AttemptExecutor:
         claim,
         session,
         *,
+        delivery,
+        on_delivery_retry,
+        delivery_retry_initial_seconds,
+        delivery_retry_max_seconds,
         allowed_job_states,
         poll_seconds,
         task_settle_seconds,
@@ -292,13 +303,22 @@ class AttemptExecutor:
     ):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
+        if ((delivery.endpoint.api_origin, delivery.endpoint.provider_ref)
+                != (store.scope.api_origin, store.scope.provider_ref) or not callable(on_delivery_retry)):
+            raise ValueError("Execution requires the scoped delivery binding and its protected retry observer.")
         require_execution_settings(
             allowed_job_states=allowed_job_states, poll_seconds=poll_seconds, task_settle_seconds=task_settle_seconds
         )
+        require_delivery_retry_settings(delivery_retry_initial_seconds, delivery_retry_max_seconds)
         require_observation_recovery(observation_recovery)
         require_phase_progress_observer(on_unconfirmed_phase_progress)
         require_condition_recovery(condition_recovery)
         self.api, self.store, self.claim, self.session = api, store, claim, session
+        self.delivery, self._on_delivery_retry = delivery, on_delivery_retry
+        self._delivery_retry_initial = delivery_retry_initial_seconds
+        self._delivery_retry_max = delivery_retry_max_seconds
+        self._handoff_stopping = asyncio.Event()
+        self._handoff_interruption = None
         self._allowed_job_states = allowed_job_states
         self._poll_seconds = poll_seconds
         self._task_settle_seconds = task_settle_seconds
@@ -316,8 +336,11 @@ class AttemptExecutor:
         self._active = False
         self._observing = False
         self._record = None
+        self._checkpoint = None
         self._unconfirmed = None
         self._outcome = None
+        self._delivery_outcome = self._delivery_acceptance = None
+        self._handoff_wait = self._retirement_task = None
         self._api_failure = None
         self._operation_interruption = None
         self._api_lock = asyncio.Lock()
@@ -344,8 +367,9 @@ class AttemptExecutor:
         self.claim.begin(self)
         self._started = self._active = self._observing = True
         self._record = acknowledged
+        self._checkpoint = AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission)
         try:
-            if acknowledged not in await self.store.records(owner=self):
+            if self._checkpoint not in await self.store.inventory(owner=self):
                 raise ExecutionRefused("Exact acknowledgement is not current in storage; reread it before preparing work")
             await self._observe_active()
             instructions = await self._api(
@@ -365,10 +389,26 @@ class AttemptExecutor:
                 await self._write_entry(entered)
                 await self._observe_active()
                 await self._monitor("running", self._execute_session, prepared)
-            await self._write(self._terminal())
+            # Both original tasks start before either is observed. Neither a
+            # blocked checkpoint write nor relay backpressure can defer cleanup.
+            self._begin_retirement()
+            self._handoff_wait = asyncio.create_task(self._handoff())
+            self._handoff_wait.add_done_callback(_observe_task_failure)
+            await asyncio.wait({self._handoff_wait, self._retirement_task}, timeout=self._task_settle_seconds,
+                               return_when=asyncio.FIRST_EXCEPTION)
+            if self._handoff_wait.done():
+                await self._settle_handoff()
             await self._retire_session()
-            return self._record
+            if self._handoff_wait is not None:
+                await asyncio.shield(self._handoff_wait)
+                await self._settle_handoff()
+            return self._checkpoint
         except asyncio.CancelledError as cause:
+            # A native cleanup coroutine can itself finish cancelled. Only a
+            # cancellation directed at this caller withdraws handoff authority;
+            # failed cleanup cannot veto an already-approved terminal outcome.
+            if asyncio.current_task().cancelling():
+                self._cancel_handoff()
             self._remember(cause)
             try:
                 await self._retire_after_failure()
@@ -383,6 +423,8 @@ class AttemptExecutor:
         except Exception as cause:
             # This is the execution boundary: retain even unexpected binding or
             # codec failures, stop owned work, and never classify them as bad input.
+            # An approved handoff remains independently owned if cleanup fails;
+            # settlement observes that original delivery rather than vetoing it.
             self._remember(cause)
             try:
                 await self._retire_after_failure()
@@ -699,22 +741,24 @@ class AttemptExecutor:
             if self._api_failure is failure:
                 self._api_failure = None
 
-    async def _write(self, record):
-        self._unconfirmed = record
+    async def _write_entry_metadata(self, record):
+        intent = EnteredCheckpoint(self._checkpoint, EvidenceDigest.from_evidence(record.prepared_identity))
+        self._unconfirmed = intent
         try:
-            self._record = await self.store.replace(self._record, record, owner=self)
-        except StoreRefused:
+            self._checkpoint = await self.store.mark_entered(self._checkpoint, intent.prepared, owner=self)
+        except CheckpointRefused:
             # Refusal establishes no replacement effect; an observed scientific
             # outcome remains a separate retention obligation.
             self._unconfirmed = None
             raise
         self._unconfirmed = None
+        self._record = record
 
     async def _write_entry(self, record):
         # The prepared session is already live. Keep observing stop while its
         # entry record persists; cancelling this waiter cannot undo the store's
         # separately owned filesystem operation.
-        self._entry_wait = asyncio.create_task(self._write(record))
+        self._entry_wait = asyncio.create_task(self._write_entry_metadata(record))
         self._entry_wait.add_done_callback(_observe_task_failure)
         while not self._entry_wait.done():
             await asyncio.wait((self._entry_wait,), timeout=self._poll_seconds)
@@ -751,20 +795,106 @@ class AttemptExecutor:
             operation = TerminalOperation.FAIL
         else:
             raise TypeError("Analysis session returned an unsupported outcome; preserve it for binding diagnosis")
-        return TerminalPending(self._record, operation, body, self._outcome.evidence)
+        return DeliveryOutcome(self.store.scope.api_origin, self.store.scope.provider_ref,
+                               self._record.start.input.job_ref, reference, operation, body)
+
+    async def _handoff(self):
+        self._delivery_outcome = self._terminal()
+        self._unconfirmed = TerminalSelectedCheckpoint(
+            self._checkpoint, self._delivery_outcome.operation,
+            self._delivery_outcome.body_sha256, len(self._delivery_outcome.body),
+        )
+        try:
+            self._checkpoint = await self.store.select_terminal(self._checkpoint, self._delivery_outcome, owner=self)
+        except CheckpointRefused:
+            self._unconfirmed = None
+            raise
+        self._unconfirmed = None
+        delay = self._delivery_retry_initial
+        while True:
+            if self._handoff_stopping.is_set():
+                raise ExecutionRefused("Delivery handoff stopped before a new submission; retain the selected outcome for reconciliation.")
+            try:
+                self._delivery_acceptance = await self.delivery.submit(self._delivery_outcome)
+            except (DeliveryUnavailable, DeliveryFull) as failure:
+                await self.delivery.retire()
+                if (self._handoff_stopping.is_set()
+                        or (type(failure) is not DeliveryFull and not self.delivery.can_retry(failure))):
+                    raise
+                seconds = random.uniform(delay / 2, delay)
+                self._on_delivery_retry(self._record, failure, seconds)
+                try:
+                    await asyncio.wait_for(self._handoff_stopping.wait(), timeout=seconds)
+                except TimeoutError:
+                    delay = min(self._delivery_retry_max, delay * 2)
+                    continue
+                raise
+            else:
+                # The verified relay ACK already transferred the body. A later
+                # local metadata failure cannot undo ownership or justify resend.
+                self._delivery_outcome = self._outcome = None
+                self._refresh_failure()
+                self._unconfirmed = DeliveryAcceptedCheckpoint(self._checkpoint)
+                self._checkpoint = await self.store.accept_delivery(
+                    self._checkpoint, self._delivery_acceptance, owner=self,
+                )
+                self._unconfirmed = None
+                return
+
+    def _cancel_handoff(self):
+        self._handoff_stopping.set()
+        if self._handoff_wait is not None and not self._handoff_wait.done() and not self._handoff_wait.cancelling():
+            self._handoff_wait.cancel()
+
+    async def _settle_handoff(self):
+        if self._handoff_wait is None:
+            return
+        await asyncio.wait({self._handoff_wait}, timeout=self._task_settle_seconds)
+        if not self._handoff_wait.done():
+            raise TimeoutError("Original delivery handoff has not settled; retain its bytes and owner without another submission.")
+        task = self._handoff_wait
+        self._handoff_wait = None
+        try:
+            task.result()
+        except asyncio.CancelledError as interruption:
+            self._handoff_interruption = interruption
+            self._refresh_failure()
+            if self.last_failure is None:
+                raise
+
+    async def _retire_delivery(self):
+        if self._handoff_wait is not None:
+            raise ExecutionRefused("Settle the original handoff task before retiring its delivery transport.")
+        await self.delivery.retire()
+
+    def _begin_retirement(self):
+        if self._retirement is not _Retirement.CONFIRMED and self._retirement_task is None:
+            self._retirement = _Retirement.UNCONFIRMED
+            self._retirement_task = asyncio.create_task(retire_session(self.session))
+            self._retirement_task.add_done_callback(_observe_task_failure)
 
     async def _retire_session(self):
         if self._retirement is not _Retirement.CONFIRMED:
-            self._retirement = _Retirement.UNCONFIRMED
-            await retire_session(self.session)
+            self._begin_retirement()
+            await asyncio.wait({self._retirement_task}, timeout=self._task_settle_seconds)
+            if not self._retirement_task.done():
+                raise TimeoutError("Original session retirement has not finished; retain it before worker reuse.")
+            task = self._retirement_task
+            self._retirement_task = None
+            try:
+                task.result()
+            except asyncio.CancelledError as cause:
+                self._remember(cause, cleanup=True)
+                raise
             self._retirement = _Retirement.CONFIRMED
 
     async def _retire_after_failure(self):
         self._cancel_task()
         self._cancel_entry_wait()
         self._cancel_observation_wait()
-        operations = [self._settle_task, self._settle_entry_wait, self._settle_observation_wait]
-        if self._retirement is _Retirement.NOT_ATTEMPTED:
+        operations = [self._settle_task, self._settle_entry_wait, self._settle_observation_wait,
+                      self._settle_handoff, self._retire_delivery]
+        if self._retirement is _Retirement.NOT_ATTEMPTED or self._retirement_task is not None:
             # Do not retry failed normal retirement while handling its own error.
             operations.insert(0, self._retire_session)
         cancellation = None
@@ -789,21 +919,23 @@ class AttemptExecutor:
 
     async def _settle_storage(self):
         if self._entry_wait is not None:
-            raise StoreRefused(
+            raise CheckpointRefused(
                 "Cannot settle storage while the original entry observer is unresolved; settle that observer first"
             )
         if self.store.pending_owner is self:
             try:
                 settled = await self.store.settle(owner=self)
-            except StoreRefused:
+            except CheckpointRefused:
                 if self.store.pending_owner is not self:
                     self._unconfirmed = None
                 raise
             if self._unconfirmed is not None:
                 if settled.value != self._unconfirmed:
-                    raise StoreFailed("Settled write differs from the executor's retained intent; reconcile storage")
-                self._record = settled.value
+                    raise CheckpointFailed("Settled write differs from the executor's retained intent; reconcile storage")
+                self._checkpoint = settled.value
                 self._unconfirmed = None
+                if type(self._checkpoint) is SuppressedCheckpoint:
+                    self._outcome = self._delivery_outcome = None
 
     async def settle(self):
         """Retire work and observe original I/O; never invoke a prepared handle."""
@@ -823,6 +955,8 @@ class AttemptExecutor:
                 self._settle_task,
                 self._settle_entry_wait,
                 self._settle_observation_wait,
+                self._settle_handoff,
+                self._retire_delivery,
                 self._retire_api,
                 self._settle_storage,
             ):
@@ -846,21 +980,21 @@ class AttemptExecutor:
                     and type(self._outcome) in (AnalysisSuccess, AnalysisFailure)
                     and _suppression_reason(self.last_failure.cause) is not None
                 ):
-                    message = "Returned analysis evidence is not durable; settle remaining tasks and I/O before calling retain_suppressed_outcome() to preserve it without publication; the claim remains held"
+                    message = "Returned analysis was not selected for delivery; settle original work before recording its suppression disposition; scientific bytes will not survive restart"
                 self._remember(
-                    StoreFailed(message),
+                    CheckpointFailed(message),
                     cleanup=True,
                 )
             if failed:
                 raise self.last_failure from None
-            return self._record if type(self._record) is TerminalPending else None
+            return self._checkpoint if type(self._checkpoint) is DeliveryAcceptedCheckpoint else None
         finally:
             self._observing = False
             self._refresh_failure()
             self._finish_if_settled()
 
-    async def retain_suppressed_outcome(self):
-        """Explicitly persist returned evidence without selecting it for publication.
+    async def retain_suppressed_disposition(self):
+        """Persist why returned evidence was suppressed, without its scientific bytes.
 
         Settle original tasks and I/O first. This method starts one owned CAS write;
         cancellation retains that write for settle(), never a replacement attempt.
@@ -871,20 +1005,21 @@ class AttemptExecutor:
             or self._observing
             or self.last_failure is None
             or type(self._outcome) not in (AnalysisSuccess, AnalysisFailure)
-            or type(self._record) is not AcknowledgedAttempt
+            or type(self._checkpoint) not in (AcknowledgedCheckpoint, EnteredCheckpoint)
         ):
             raise ExecutionRefused(
-                "Cannot retain a suppressed outcome: this interrupted executor has no unretained admitted result"
+                "Cannot record suppression: this interrupted executor has no unselected returned analysis"
             )
         if (
             self._task is not None
             or self._entry_wait is not None
             or self._observation_wait is not None
             or self._unconfirmed is not None
+            or self._handoff_wait is not None
             or self.api.pending_owner is self
             or self.store.pending_owner is self
         ):
-            raise ExecutionRefused("Cannot retain a suppressed outcome while original work or I/O is unresolved; settle it first")
+            raise ExecutionRefused("Cannot record suppression while original work or I/O is unresolved; settle it first")
         reason = _suppression_reason(self.last_failure.cause)
         if reason is None:
             raise ExecutionRefused(
@@ -892,8 +1027,15 @@ class AttemptExecutor:
             )
         self._observing = True
         try:
-            await self._write(SuppressedOutcome(self._terminal(), reason))
-            return self._record
+            self._unconfirmed = SuppressedCheckpoint(self._checkpoint, reason)
+            try:
+                self._checkpoint = await self.store.suppress(self._checkpoint, reason, owner=self)
+            except CheckpointRefused:
+                self._unconfirmed = None
+                raise
+            self._unconfirmed = None
+            self._outcome = self._delivery_outcome = None
+            return self._checkpoint
         except asyncio.CancelledError as cause:
             self._remember(cause, cleanup=True)
             raise
@@ -906,7 +1048,7 @@ class AttemptExecutor:
             self._finish_if_settled()
 
     def _outcome_unretained(self):
-        return self._outcome is not None and type(self._record) not in (TerminalPending, SuppressedOutcome)
+        return self._outcome is not None
 
     def _finish_if_settled(self):
         if (
@@ -914,6 +1056,9 @@ class AttemptExecutor:
             and self._task is None
             and self._entry_wait is None
             and self._observation_wait is None
+            and self._handoff_wait is None
+            and self._retirement_task is None
+            and self.delivery.retirement_confirmed
             and self.api.pending_owner is not self
             and self.store.pending_owner is not self
             and self._unconfirmed is None
@@ -931,6 +1076,9 @@ class AttemptExecutor:
             self.last_failure.condition_failure = self._condition_failure
             self.last_failure.latest_condition_failure = self._latest_condition_failure
             self.last_failure.condition_receipt = self._condition_receipt
+            self.last_failure.delivery_acceptance = self._delivery_acceptance
+            self.last_failure.delivery_failure = self.delivery.last_failure
+            self.last_failure.handoff_interruption = self._handoff_interruption
 
     def _interruption_has_evidence(self):
         return (
@@ -938,6 +1086,7 @@ class AttemptExecutor:
             or self._condition_failure is not None
             or self._latest_condition_failure is not None
             or self._condition_receipt is not None
+            or self.delivery.last_failure is not None
             or bool(self.last_failure.cleanup_failures)
             or (self._operation_interruption is not None and self._operation_interruption.__cause__ is not None)
         )

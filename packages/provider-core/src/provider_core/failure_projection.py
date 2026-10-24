@@ -109,6 +109,8 @@ def owned_relationships(error):
     if kind in (ConversationRetirementFailed, ChatFailed, ExecutionFailed):
         yield "interruption cause", error.interruption_cause
     if kind is ExecutionFailed:
+        yield "local delivery failure", error.delivery_failure
+        yield "handoff interruption", error.handoff_interruption
         yield "analysis operation interruption", error.operation_interruption
         yield "first condition failure", error.condition_failure
         yield "latest condition failure", error.latest_condition_failure
@@ -207,7 +209,8 @@ def owned_details(error):
             )
     if kind is ExecutionFailed and type(error.attempt) is AcknowledgedAttempt:
         details.update(
-            job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref
+            job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref,
+            delivery_acceptance_received=error.delivery_acceptance is not None,
         )
     if kind is ObservationGapExpired:
         details.update(

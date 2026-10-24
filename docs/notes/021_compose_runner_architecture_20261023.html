@@ -84,7 +84,7 @@
       refusal that preserves original pending bytes. The connected delivery lane
       now passes 23 checks; the affected storage lane passes nine.
       These prove local delivery components; daemon packaging, producer handoff,
-      migration and deployed recovery remain outstanding.</p>
+      cutover and deployed recovery remain outstanding.</p>
     <p>The descriptor-based startup reader and existing API/TLS settings now live
       in <code>provider_core.startup_file</code> and <code>provider_core.api_config</code>.
       NMRNet delegates to them while preserving its own configuration error context.
@@ -139,7 +139,7 @@
       output failures appear in scoped status without reversing API acceptance or
       deletion; a connected broken-stderr witness proves that separation. Diagnostic
       display fields do not gate ownership/capacity reads. The daemon image,
-      producer integration, migration and deployed recovery remain outstanding.</p>
+      producer integration, cutover and deployed recovery remain outstanding.</p>
     <p><code>make delivery/image/build WHEELHOUSE=&lt;path&gt;</code> now uses the
       same committed-input capture, locked wheel contexts, bounded native build,
       immutable-ID and role-label admission as the controller. The shared owner is
@@ -225,6 +225,30 @@
       executor, controller, recovery and service consumers still need their direct
       checkpoint/relay cutover. Do not publish or deploy this intermediate branch
       as a complete replacement of the file-backed producer.</p>
+    <p>The executor now persists the prepared identity digest and selected
+      operation/hash/size, then hands the approved body to the scoped relay client.
+      Native retirement starts independently before selection storage or IPC can
+      block. Full capacity paces the same body with capped delivery backoff. Failed
+      cleanup blocks reuse and claim release while the original approved handoff
+      can still proceed; it is not a publication veto. Explicit caller cancellation
+      separately stops further submissions. A verified relay acknowledgement
+      immediately releases producer outcome/body references, before acceptance
+      metadata persistence. Protected diagnostics distinguish that acknowledgement
+      from API publication and native retirement. Suppression retains only its
+      disposition; late writes settle the same operation and release RAM evidence
+      after confirmed suppression. The focused delivery unit lane passes 31 checks,
+      including entry-write refusal, independently blocked selection/cleanup,
+      capacity returning, cleanup failure before/after handoff, explicit versus
+      native cleanup cancellation, failed acceptance metadata and interrupted
+      suppression. These recording scientific sessions do not qualify deployment
+      or repeat inference. Controller/recovery/service cutover remains active.</p>
+    <p><strong>Urgent implementation direction, 24 October 2026:</strong> finish the
+      working end state and use minimal essential checks now. Record non-blocking
+      refinements and additional testing in
+      <a href="022_shared_delivery_deferred_20261024.txt">running note 022</a>.
+      Preserve scientific admission and actual ownership; defer broad legacy test
+      ports, extra failure timings and polish rather than delaying the connected
+      service. The clean-cut decision below removes legacy data conversion.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.
@@ -339,14 +363,16 @@ make delivery/down</code></pre>
       next action. A proposed <code>make delivery/discard PROVIDER=&lt;binding&gt;
       ATTEMPT=&lt;reference&gt;</code> removes only the explicitly selected held item
       when the operator chooses to abandon delivery; it does not claim API acceptance.</p>
-    <p>Cutover has one delivery owner: stop the old publisher, preserve its current
-      records, and import already-selected pending terminal bodies unchanged.
-      Verify durable service acceptance before deleting displaced result files.
-      Move only necessary producer control metadata to its managed store; remove
-      completed scientific payload archives and the displaced file-writing paths.
-      Preserve unresolved non-delivery obligations for their producer's recovery
-      owner. Do not retain a permanent dual-write or fallback implementation.
-      Existing intentional qualification evidence remains a separate repository record.</p>
+    <p><strong>Clean cutover — user decision, 24 October 2026:</strong> replace the
+      old delivery path directly. This supersedes the earlier plan to import
+      pending terminal bodies or convert producer control records. Stop the old
+      publisher; remove its displaced result/control storage and completed-payload
+      history along with the old writing paths. Build no legacy importer,
+      conversion, compatibility or dual-write machinery. An ordinary API inventory
+      at cutover must report any actual unfinished Attempts honestly; it cannot
+      invent outcomes or authorize another scientific execution. Preserve unrelated
+      services and intentional qualification evidence, which are separate from
+      operational delivery storage.</p>
     <p>Use a few connected checks at the changed boundary: lose the enqueue reply;
       lose the API reply and restart delivery; keep a second provider progressing
       while the first backs off; exercise queue-full refusal; and confirm accepted

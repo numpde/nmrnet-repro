@@ -1,0 +1,87 @@
+022 - Shared result delivery: deferred refinements and testing
+Started 24 October 2026. Running implementation note.
+
+Purpose
+
+Deliver the working shared service and NMRNet clean cut first. Audit against
+U01-U27 and A01-A11 as implementation proceeds, recording non-blocking
+imperfections and most additional testing here for later. These entries are
+not release gates. Result ownership, scientific correctness and basic operation
+remain part of the implementation.
+
+User direction, 24 October 2026
+
+"No need, just a clean cut."
+"Laser-focus on the end-state now and speed-run there. Audit vs U/A as go you
+but record imperfections in a new running note, deferred for later."
+"Not html. .txt note"
+"Minimal testing; defer most testing (via note)"
+
+The clean cut supersedes note021's earlier legacy-state transfer plan. Remove
+displaced delivery code and obsolete storage without an importer, compatibility
+path or archive. Report any actual unfinished API Attempts at cutover; do not
+invent results or rerun predictions. Preserve unrelated services, private inputs
+and intentional qualification evidence.
+
+References
+
+Design: docs/notes/021_compose_runner_architecture_20261023.html#shared-delivery
+Criteria: docs/notes/013_sibling_practices_20261016.html
+Source baseline: fb997a5 (START checkpoint integration); executor changes are
+still uncommitted at the start of this note. Record later revisions per entry.
+
+Deferred refinements
+
+1. More specific SQLite diagnostics (U23).
+   At fb997a5, provider_core/diagnostics.py::failure_evidence exposes native
+   OSError errno but not SQLite sqlite_errorcode/sqlite_errorname. Add bounded
+   native SQLite code/name to the existing protected renderer when useful.
+   Keep arbitrary SQLite exception text, queries and scientific bodies out of
+   logs. This is diagnostic enrichment, not a new error framework.
+
+2. Generic build-error wording (U17/U23).
+   Review the inherited "inference" prefix in generic delivery-image build
+   errors. The actual build output already reaches the operator; wording can
+   be improved later without changing native command ownership.
+
+Deferred testing
+
+Reuse the existing evidence recorded in note021. Do not rerun it merely because
+the end-to-end integration is newer. Run only essential implementation checks
+and a minimal API smoke for the installed/deployed target now. Record exactly
+what those checks establish and what remains untested.
+
+3. Extended installed/deployed recovery exercises (U07/U08/U27, A01/A11).
+   Defer additional process-kill/lost-reply timings, repeated restart/reconnect
+   sequences, and combinations of storage failure, API outage and cleanup
+   failure. Existing local focused evidence does not prove every deployed
+   failure scenario; state that limit at handoff.
+
+4. Wider multi-provider and resource testing (U13/U14/U27).
+   Defer load/stress/soak runs, many-provider capacity/fairness combinations and
+   an expanded UID/GID/engine matrix. Implement the actual scoped grants and
+   bounded capacity now; a broad matrix is not needed to finish this cut.
+
+5. Broad regression and repeated scientific runs (U26, A01/A04).
+   Defer broad unrelated suites, exhaustive branch combinations and repeat
+   model/oracle/capacity runs. Preserve existing numerical evidence and report
+   the narrow scope of any new API smoke. Do not weaken scientific acceptance
+   rules or tolerances to avoid a failure.
+
+Updates
+
+Append concrete findings with their source revision, U/A criterion, practical
+consequence and deferred follow-up. Remove or mark resolved entries when the
+work is actually done. Missing core implementation belongs on the active path,
+not in this deferred list.
+
+6. Port remaining historical executor/store/publication test expectations
+   (U07/U08/U26/U27, A01/A04/A11).
+   Current new executor qualification uses the compact store and recording relay
+   ports; 31 focused delivery unit checks pass. Older tests still assert full
+   durable prepared/result/suppressed records, file rename counts and producer
+   terminal publication. Port their useful stop/observation/entry/condition race
+   controls to the new boundaries later. Do not call those broad lanes qualified
+   by the focused checks, and do not add a legacy store adapter to make them pass.
+   Controller/recovery/service and operational cutover are required current work,
+   not deferred implementation. No scientific benchmark was repeated.

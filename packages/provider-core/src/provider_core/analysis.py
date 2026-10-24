@@ -38,7 +38,7 @@ class AnalysisFailure:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PreparedAnalysis:
-    """Session-owned handle whose input identity must be retained before dispatch.
+    """Session-owned handle whose input identity digest must precede dispatch.
 
     Identity describes the admitted candidate without source bytes or secrets.
     This instance grants no replay authority: the session accepts it by identity
@@ -57,7 +57,7 @@ class AnalysisSession(Protocol):
 
     Preparation binds the Attempt, current generation and exact admitted inputs to
     a live handle. Execute verifies that handle belongs to this session and consumes
-    it before work. Core retains its candidate identity, never the live authority.
+    it before work. Core retains its candidate identity digest, never the live authority.
     Calls must yield while workers run and impose their own aggregate deadlines.
     Session I/O must not share the executor's single-exchange API transport:
     server observation continues concurrently while preparation or execution runs.
