@@ -437,6 +437,8 @@ help:
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
 		'make provider/deployment/down DEPLOYMENT=<name> Stop provider, native runners, then proxies; retain containers and logs.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
+		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \
+		'make test/integration/provider/deployment/capacity Qualify H128/C128 input/output capacity through the connected Compose path (opt-in).' \
 		'make test/unit/provider/deployment     Check private deployment bundles and successive refreshes offline.' \
 		'make provider/run                      Run the provider service with explicit host and route configuration.' \
 		'make provider/logs CONTAINER_ID=<id>   Read the last 200 journal messages for one full container ID, including removed workers.' \
@@ -608,6 +610,10 @@ provider/run:
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
 	bash tools/compose_qualification.sh
+
+.PHONY: test/integration/provider/deployment/references test/integration/provider/deployment/capacity
+test/integration/provider/deployment/references test/integration/provider/deployment/capacity:
+	bash tools/compose_qualification.sh $(notdir $@)
 
 provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
 	bash tools/provider_deployment.sh $(notdir $@)

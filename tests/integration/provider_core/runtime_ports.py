@@ -40,6 +40,24 @@ def require_api_credentials(request):
         raise AssertionError("API received a source or model bearer")
 
 
+def require_model_credentials(request):
+    if b"authorization: bearer private_model_key\r\n" not in request.lower():
+        raise AssertionError("Model did not receive only its configured key")
+    if b"signature:" in request.lower():
+        raise AssertionError("Model received API signing headers")
+
+
+def require_download_credentials(request, body):
+    if request.split(b"\r\n", 1)[0] != f"GET /upload/v1/uploads/{UPLOAD_REF}/bytes HTTP/1.1".encode() or body:
+        raise AssertionError("Store received an unexpected Upload bytes operation")
+    headers = [(name.lower(), value.strip()) for line in request.split(b"\r\n")[1:] if b":" in line
+               for name, value in [line.split(b":", 1)]]
+    if [value for name, value in headers if name == b"authorization"] != [b"Bearer " + grant()["capability"].encode()]:
+        raise AssertionError("Store did not receive exactly its granted download bearer")
+    if any(name in (b"signature", b"signature-input") for name, _ in headers) or b"private_model_key" in request.lower():
+        raise AssertionError("Store received API signing headers or the model credential")
+
+
 class RuntimePeers:
     def __init__(self, ports, route, *, maximum_records=1):
         self.ports, self.route = ports, route
@@ -208,10 +226,7 @@ class RuntimePeers:
         raise AssertionError(f"Unexpected fixture route {method} {path}")
 
     async def model_reply(self, request, raw):
-        if b"authorization: bearer private_model_key\r\n" not in request.lower():
-            raise AssertionError("Model did not receive only its configured key")
-        if b"signature:" in request.lower():
-            raise AssertionError("Model received API signing headers")
+        require_model_credentials(request)
         last = json.loads(raw)["messages"][-1]
         if self.route == "smiles":
             return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "output": self.output})

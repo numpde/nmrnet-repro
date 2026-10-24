@@ -25,6 +25,13 @@ compose_witness_finish() {
         fi
     fi
     if [[ -n $peer_id && $inference_retirement_confirmed == true ]]; then
+        if (( status != 0 )); then
+            if ! inference_native 'failed Compose qualification peer diagnostics' 10 stdio \
+                "${engine[@]}" logs --tail 80 "$peer_id"; then
+                printf 'Peer diagnostics were not delivered; its container and original receipts remain retained: %s\n' "$peer_id" >&2
+                exit 2
+            fi
+        fi
         worker_container_retire "$peer_id" "$scratch/peer" "${engine[@]}" || cleanup=$?
         pending_diagnostic+=$worker_retirement_diagnostic
     elif [[ $peer_creation_attempted == true ]]; then
@@ -41,7 +48,9 @@ compose_witness_finish() {
 compose_witness_main() {
     set -euo pipefail
     umask 077
-    [[ $# == 0 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
+    [[ $# -le 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
+    local scientific_case=${1-pasted}
+    case $scientific_case in pasted|references|capacity) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
@@ -69,7 +78,8 @@ compose_witness_main() {
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
         tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests \
-        tests/fixtures/preparation/expected.json || return $?
+        tests/fixtures/preparation/expected.json tests/fixtures/scientific_inputs \
+        artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0
     peer_creation_attempted=true
     worker_retirement_command create "$scratch/peer" "${engine[@]}" create \
@@ -83,8 +93,11 @@ compose_witness_main() {
         --mount "type=bind,src=$capture/tests/integration/provider_core,dst=/fixture/binding-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer.py,dst=/fixture/compose_peer.py,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly" \
+        --mount "type=bind,src=$capture/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly" \
+        --mount "type=bind,src=$capture/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly" \
+        --mount "type=bind,src=$capture/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly" \
         --entrypoint /opt/provider/environment/bin/python "$provider_image_id" -I -B /fixture/compose_peer.py \
-        --root "$peer_data" --store-root "$scratch/attempts" --seconds 420 || create_status=$?
+        --root "$peer_data" --store-root "$scratch/attempts" --seconds 420 --case "$scientific_case" || create_status=$?
     pending_diagnostic+=$worker_retirement_diagnostic
     worker_container_created "$scratch/peer" || { pending_diagnostic+=$worker_retirement_diagnostic; return 2; }
     peer_id=$worker_created_id
@@ -92,7 +105,7 @@ compose_witness_main() {
     worker_retirement_command start "$scratch/peer" "${engine[@]}" start "$peer_id" || return $?
     compose_witness_wait "$peer_data/ready.json" 15 || return $?
     cp -- "$peer_data/provider.toml" "$peer_data/deployment.toml" "$public/" || return $?
-    for input in signing.private.json interpreter.key api-ca.pem model-ca.pem; do
+    for input in signing.private.json interpreter.key api-ca.pem model-ca.pem store-ca.pem; do
         cp -- "$peer_data/configuration/$input" "$private/$input" || return $?
         chmod 600 -- "$private/$input" || return $?
     done

@@ -595,6 +595,7 @@ case "$1" in
                 if [[ "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core ]]; then
                     require_source_directory tests/fixtures/scientific_inputs
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly"
+                        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/compose_peer.py,dst=/consumer/compose_peer.py,readonly"
                         --mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly"
                         --mount "type=bind,src=$repository_root/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly")
                 fi
