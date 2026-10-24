@@ -138,3 +138,23 @@ not in this deferred list.
    test_nmrnet_recovery.py, test_nmrnet_recovery_capture.py, plus execution,
    controller and recovery fixtures/assertions tied to full stored records.
    Their old tests are not evidence that the checkpoint/relay cutover is qualified.
+
+12. Detailed SDK lifecycle reference (U17/U22).
+    At 15f06db, docs/provider-core/index.html still has sections describing the
+    removed AttemptStore/TerminalPublisher interfaces and full retained records.
+    Port that detailed reference to checkpoint/relay ownership later. The
+    operator guide, docs/provider.html, has been updated for the clean cut.
+    Use the actual provider_core checkpoint/delivery/recovery modules and note021
+    for the new lifecycle contract; the old reference is not qualification of it.
+
+13. Obsolete Engine inspection and file-handoff qualification consumers.
+    Direct Compose deployment no longer uses finalize/manifest/inventory/admit/
+    network helper commands or inventory_containers/admit_container. Port or
+    remove the old assertions in these exact files later:
+    tests/integration/provider_core/normative/test_provider_deployment.py,
+    tests/integration/provider_core/normative/test_provider_compose.py,
+    tests/integration/provider_core/adversarial/test_provider_compose.py, and
+    tests/integration/provider_runtime/runner_crash_admission.py. The last remains
+    selected by tools/compose_qualification.sh (reader-crash admission capture).
+    Do not treat these deferred checker consumers as qualification of the new
+    direct Compose workflow. No replacement checker or gate is introduced.
