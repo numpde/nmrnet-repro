@@ -80,6 +80,7 @@ compose_witness_lost_create() {
     deployment_begin_operation || return $?
     deployment_selected_bundle || return $?
     deployment_load_bootstrap "$selected_bundle" || return $?
+    deployment_runtime_directories || return $?
     digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
     deployment_project=nmrnet-${digest:0:20}
     deployment_create_arguments "$selected_bundle" api
