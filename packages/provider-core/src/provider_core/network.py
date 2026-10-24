@@ -22,15 +22,21 @@ class OwnedNetworkBackend(httpcore.AsyncNetworkBackend):
         self._proxy_socket = proxy_socket
 
     async def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
-        if self._proxy_socket is None:
-            raw = await self._backend.connect_tcp(
-                host=host, port=port, timeout=timeout, local_address=local_address, socket_options=socket_options
-            )
-        else:
+        if self._proxy_socket is not None:
             # httpcore 1.0.9 passes this backend into its HTTPS tunnel but drops
             # the proxy's uds argument (_async/http_proxy.py:146-166). Its fixed
             # metadata host must never cause DNS, TCP or direct fallback here.
-            raw = await self._backend.connect_unix_socket(path=self._proxy_socket, timeout=timeout, socket_options=socket_options)
+            return await self.connect_unix_socket(self._proxy_socket, timeout=timeout, socket_options=socket_options)
+        raw = await self._backend.connect_tcp(
+            host=host, port=port, timeout=timeout, local_address=local_address, socket_options=socket_options
+        )
+        return self._own(raw)
+
+    async def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        raw = await self._backend.connect_unix_socket(path=path, timeout=timeout, socket_options=socket_options)
+        return self._own(raw)
+
+    def _own(self, raw):
         stream = _OwnedStream(raw, self._streams)
         self._streams.add(stream)
         return stream

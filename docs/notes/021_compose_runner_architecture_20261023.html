@@ -223,6 +223,17 @@ make delivery/down</code></pre>
       enqueue acknowledgements or API receipts. No service, producer cutover or
       deployment is claimed by this storage slice.</p>
 
+    <p><strong>Local delivery transport implemented:</strong> an explicit
+      <code>UnixHttpTransport</code> now reuses the existing bounded exchange and
+      retained cleanup owner. Its fixed local HTTP origin cannot select TCP,
+      another socket or a CONNECT proxy. External HTTPS construction and TLS
+      admission remain unchanged. Common transport diagnostics say HTTP rather
+      than incorrectly claiming TLS for local IPC. Thirteen connected transport
+      and 31 unit transport/network checks passed, including exact raw request
+      bytes, response limits and cancellation with late original closure.
+      Independent review found no authority or lifecycle regression. This is
+      the local carrier; the delivery protocol and daemon follow next.</p>
+
     <h2 id="decision">Decision, purpose and completion contract</h2>
     <p>The product remains a provider of atom-indexed H/C chemical shifts from
       admitted molecular geometries. Operating it should require a named deployment,

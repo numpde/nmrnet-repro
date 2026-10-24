@@ -1,4 +1,4 @@
-"""Own one bounded HTTPS exchange and its retirement before admitting another.
+"""Own one bounded HTTP exchange and its retirement before admitting another.
 
 Each exchange uses a fresh client. Source precedent: Magnet provider_http._send
 at the revision pinned in README. Unlike its best-effort response cleanup, failed
@@ -90,13 +90,13 @@ def _require_output_file(descriptor):
         flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
     except OSError as cause:
         raise ExchangeFailed(
-            "Cannot receive HTTPS response in a file: output descriptor inspection failed before sending the request",
+            "Cannot receive HTTP response in a file: output descriptor inspection failed before sending the request",
             primary=cause,
         ) from None
     access_mode = flags & os.O_ACCMODE
     if not stat.S_ISREG(facts.st_mode) or access_mode not in (os.O_WRONLY, os.O_RDWR) or flags & os.O_APPEND:
         raise ExchangeFailed(
-            "Cannot receive HTTPS response in a file: output must be a writable regular file without append mode; request was not sent"
+            "Cannot receive HTTP response in a file: output must be a writable regular file without append mode; request was not sent"
         )
 
 
@@ -105,7 +105,7 @@ def _write_file_chunk(descriptor, chunk):
     while remaining:
         written = os.write(descriptor, remaining)
         if written <= 0:
-            raise OSError(errno.EIO, "Cannot write HTTPS response: file write made no progress")
+            raise OSError(errno.EIO, "Cannot write HTTP response: file write made no progress")
         remaining = remaining[written:]
 
 
@@ -195,8 +195,21 @@ class _Exchange:
 
 def _positive_seconds(value):
     if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-        raise ValueError("Cannot configure HTTPS exchange: time limits must be finite positive seconds")
+        raise ValueError("Cannot configure HTTP exchange: time limits must be finite positive seconds")
     return value
+
+
+def require_unix_socket_path(path):
+    """Admit the pathname limit shared by the two explicit Unix transports."""
+    if type(path) is not str or not path.startswith("/") or "\0" in path:
+        raise ValueError("Cannot configure Unix socket: supply an absolute UTF-8 pathname without NUL.")
+    try:
+        size = len(path.encode("utf-8"))
+    except UnicodeError:
+        raise ValueError("Cannot configure Unix socket: its pathname must be valid UTF-8.") from None
+    # Linux sun_path[108] includes its terminating NUL.
+    if not 1 <= size <= 107:
+        raise ValueError("Cannot configure Unix socket: its pathname must fit Linux's 107-byte limit.")
 
 
 def require_transport_settings(*, trust, exchange_seconds, retirement_seconds, proxy_socket=None):
@@ -206,16 +219,7 @@ def require_transport_settings(*, trust, exchange_seconds, retirement_seconds, p
     _positive_seconds(exchange_seconds)
     _positive_seconds(retirement_seconds)
     if proxy_socket is not None:
-        if type(proxy_socket) is not str or not proxy_socket.startswith("/") or "\0" in proxy_socket:
-            raise ValueError("Cannot configure HTTPS proxy: its Unix socket requires an absolute UTF-8 path without NUL.")
-        try:
-            size = len(proxy_socket.encode("utf-8"))
-        except UnicodeError:
-            raise ValueError("Cannot configure HTTPS proxy: its Unix socket path must be valid UTF-8.") from None
-        # Linux UAPI include/uapi/linux/un.h defines sun_path[108]; pathname
-        # sockets need the final NUL. Host grants use this Linux container ABI.
-        if not 1 <= size <= 107:
-            raise ValueError("Cannot configure HTTPS proxy: its Unix socket path must fit Linux's 107-byte pathname limit.")
+        require_unix_socket_path(proxy_socket)
 
 
 class HttpTransport:
@@ -249,6 +253,22 @@ class HttpTransport:
         """Caller whose admitted exchange still owns I/O or unresolved cleanup."""
         return None if self._active is None else self._active.owner
 
+    def _connection_pool(self, options):
+        if self._proxy_socket is None:
+            return httpcore.AsyncConnectionPool(**options)
+        # Fixed httpcore metadata; OwnedNetworkBackend admits only the Unix
+        # proxy. CONNECT and TLS retain the destination's original authority.
+        return httpcore.AsyncHTTPProxy(proxy_url="http://unix-proxy.invalid", **options)
+
+    def _require_destination(self, request):
+        if request.url.scheme != "https":
+            raise ValueError("Cannot start HTTPS exchange: destination must use HTTPS")
+        # httpcore 1.0.9 emits an unbracketed IPv6 CONNECT authority.
+        if self._proxy_socket is not None and b":" in request.url.raw_host:
+            raise ValueError(
+                "Cannot start proxied HTTPS exchange: IPv6 literal destinations are not supported; use a DNS name or IPv4 address."
+            )
+
     async def _perform(self, request, maximum_bytes, account_bytes, outcome, output_fd):
         client = None
         response = None
@@ -265,13 +285,7 @@ class HttpTransport:
                 "max_keepalive_connections": 0,
                 "retries": 0,
             }
-            if self._proxy_socket is None:
-                client = httpcore.AsyncConnectionPool(**options)
-            else:
-                # This URL is required httpcore metadata, never a destination.
-                # OwnedNetworkBackend connects only the admitted Unix socket;
-                # httpcore owns CONNECT, then TLS with the original target/SNI.
-                client = httpcore.AsyncHTTPProxy(proxy_url="http://unix-proxy.invalid", **options)
+            client = self._connection_pool(options)
             extensions = {"timeout": dict.fromkeys(("connect", "read", "write", "pool"), self._exchange_seconds)}
             if self._proxy_socket is not None:
                 async def observe_connect(name, info):
@@ -304,7 +318,7 @@ class HttpTransport:
                     account_bytes(len(chunk))
                 received_bytes += len(chunk)
                 if received_bytes > maximum_bytes:
-                    raise ExchangeFailed(f"Cannot receive HTTPS response: raw body exceeds the {maximum_bytes}-byte limit")
+                    raise ExchangeFailed(f"Cannot receive HTTP response: raw body exceeds the {maximum_bytes}-byte limit")
                 if file_body is None:
                     body.extend(chunk)
                 else:
@@ -396,30 +410,21 @@ class HttpTransport:
         and finalization.
         """
         if type(output_fd) is not int or output_fd < 0:
-            raise ValueError("Cannot receive HTTPS response in a file: output_fd must be a non-negative descriptor")
+            raise ValueError("Cannot receive HTTP response in a file: output_fd must be a non-negative descriptor")
         return await self._exchange(
             request, maximum_bytes=maximum_bytes, account_bytes=account_bytes, owner=owner, output_fd=output_fd
         )
 
     async def _exchange(self, request, *, maximum_bytes, account_bytes, owner, output_fd):
         if self._active is not None:
-            raise ExchangeFailed("Cannot start HTTPS exchange: an earlier exchange is active or its retirement is unconfirmed")
+            raise ExchangeFailed("Cannot start HTTP exchange: an earlier exchange is active or its retirement is unconfirmed")
         if type(maximum_bytes) is not int or maximum_bytes < 0:
-            raise ValueError("Cannot receive HTTPS response: byte limit must be a non-negative integer")
-        if request.url.scheme != "https":
-            raise ValueError("Cannot start HTTPS exchange: destination must use HTTPS")
-        # httpcore 1.0.9 _async/http_proxy.py builds CONNECT from the raw host
-        # plus ':' and the port. HTTPX's raw IPv6 host lacks brackets, producing
-        # an invalid authority. Refuse before proxy I/O instead of changing the
-        # destination identity or implementing a second CONNECT protocol.
-        if self._proxy_socket is not None and b":" in request.url.raw_host:
-            raise ValueError(
-                "Cannot start proxied HTTPS exchange: IPv6 literal destinations are not supported; use a DNS name or IPv4 address."
-            )
+            raise ValueError("Cannot receive HTTP response: byte limit must be a non-negative integer")
+        self._require_destination(request)
         self.last_failure = None
         received = _Outcome()
         task = asyncio.create_task(
-            self._perform(request, maximum_bytes, account_bytes, received, output_fd), name="provider-core-https-exchange"
+            self._perform(request, maximum_bytes, account_bytes, received, output_fd), name="provider-core-http-exchange"
         )
         exchange = _Exchange(task, received, owner)
         self._active = exchange
@@ -428,7 +433,7 @@ class HttpTransport:
         try:
             done, _ = await asyncio.wait({task}, timeout=self._exchange_seconds)
             if not done:
-                primary = TimeoutError("HTTPS exchange exceeded its aggregate deadline")
+                primary = TimeoutError("HTTP exchange exceeded its aggregate deadline")
         except asyncio.CancelledError as failure:
             primary = cancellation = failure
         if not task.done():
@@ -448,13 +453,13 @@ class HttpTransport:
         if primary is None and outcome is not None and not cleanup_failures:
             return outcome.response
         if outcome is None or cleanup_failures:
-            message = "Cannot complete HTTPS exchange: resource retirement is unconfirmed; this transport cannot accept more work"
+            message = "Cannot complete HTTP exchange: resource retirement is unconfirmed; this transport cannot accept more work"
         elif isinstance(primary, TimeoutError):
-            message = "Cannot complete HTTPS exchange: the aggregate deadline expired; resources were retired"
+            message = "Cannot complete HTTP exchange: the aggregate deadline expired; resources were retired"
         elif isinstance(primary, ExchangeFailed):
             message = str(primary)
         else:
-            message = "Cannot complete HTTPS exchange: request or response I/O failed; resources were retired"
+            message = "Cannot complete HTTP exchange: request or response I/O failed; resources were retired"
         if isinstance(interruption, TimeoutError):
             message += "; the aggregate deadline also expired"
         failure = ExchangeFailed(
@@ -478,7 +483,7 @@ class HttpTransport:
         if exchange is None:
             return
         if exchange.owner is not owner:
-            raise ExchangeFailed("Cannot retire HTTPS exchange: the outstanding operation belongs to another caller")
+            raise ExchangeFailed("Cannot retire HTTP exchange: the outstanding operation belongs to another caller")
         task = exchange.task
         if not task.done() and not task.cancelling():
             task.cancel()
@@ -501,7 +506,7 @@ class HttpTransport:
         if outcome is None or outcome.cleanup_failures:
             if self.last_failure is None:
                 self.last_failure = ExchangeFailed(
-                    "Cannot retire HTTPS transport: resource closure remains unconfirmed; retire the enclosing process before replacement",
+                    "Cannot retire HTTP transport: resource closure remains unconfirmed; retire the enclosing process before replacement",
                     primary=observed.primary,
                     cleanup_failures=observed.cleanup_failures,
                     response_head=observed.response_head,
