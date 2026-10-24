@@ -228,3 +228,22 @@ case $action in
             --prediction-image-id "$prediction_image" --client-root "$NMRNET_OUTPUT_INPUT"
         ;;
 esac
+case $action in
+    up)
+        if [[ $role == provider ]]; then
+            printf 'Next: make provider/deployment/status DEPLOYMENT=%q\n' "$deployment_name"
+            printf 'Logs: make provider/deployment/logs DEPLOYMENT=%q\n' "$deployment_name"
+        else
+            printf 'Next: make delivery/deployment/status\nLogs: make delivery/deployment/logs\n'
+        fi
+        ;;
+    down)
+        if [[ $role == provider ]]; then
+            printf 'Restart: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
+            printf 'Reconfigure: make provider/deployment/install DEPLOYMENT=%q\n' "$deployment_name"
+        else
+            printf 'Restart: make delivery/deployment/up\nReconfigure: make delivery/deployment/install DEPLOYMENTS="<profile names>"\n'
+        fi
+        ;;
+    discard) printf 'Next: make delivery/deployment/up\n' ;;
+esac
