@@ -15,6 +15,7 @@ import json
 import os
 import re
 import socket
+import sqlite3
 import ssl
 import stat
 import sys
@@ -122,6 +123,15 @@ def failure_evidence(error, *, secrets, describe_owner=_core_details, owner_rela
             evidence["errno"] = current.errno
             if current.errno in errno.errorcode and not isinstance(current, (ssl.SSLError, socket.gaierror, socket.herror)):
                 evidence["reason"] = os.strerror(current.errno)
+        if isinstance(current, sqlite3.Error):
+            # Native result identity excludes SQL, paths and exception text.
+            # https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Error
+            code = getattr(current, "sqlite_errorcode", None)
+            name = getattr(current, "sqlite_errorname", None)
+            if type(code) is int:
+                evidence["sqlite_errorcode"] = code
+            if type(name) is str:
+                evidence["sqlite_errorname"] = text(name, 128)
         if isinstance(current, ssl.SSLCertVerificationError):
             verification_code = getattr(current, "verify_code", None)
             if type(verification_code) is int:

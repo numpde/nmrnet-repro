@@ -3,16 +3,46 @@
 import errno
 import json
 import os
+import sqlite3
 import unittest
 from contextlib import redirect_stderr
 
 from provider_core.api import ApiFailure
 from provider_core.delivery_worker import DeliveryWorkerFailed
+from provider_core.delivery_store import DeliveryStorageFailed
 from provider_core.diagnostics import failure_evidence, write_stderr
 from provider_core.transport import HttpResponse
 
 
 class DeliveryDiagnosticsTests(unittest.TestCase):
+    def test_sqlite_native_code_and_name_survive_without_sql_or_exception_text(self):
+        with sqlite3.connect(":memory:") as database:
+            try:
+                database.execute('SELECT * FROM "PRIVATE_SQL_TABLE"')
+            except sqlite3.Error as cause:
+                failure = DeliveryStorageFailed("Cannot inspect delivery storage.", cause=cause)
+        report = failure_evidence(failure, secrets=())
+        rendered = json.dumps(report)
+        self.assertIn('"sqlite_errorcode": 1', rendered)
+        self.assertIn('"sqlite_errorname": "SQLITE_ERROR"', rendered)
+        self.assertNotIn("PRIVATE_SQL_TABLE", rendered)
+        self.assertNotIn("SELECT", rendered)
+
+    def test_sqlite_extended_result_codes_remain_exact_and_absent_codes_are_not_invented(self):
+        with sqlite3.connect(":memory:") as database:
+            database.execute("CREATE TABLE private_values(value UNIQUE)")
+            database.execute("INSERT INTO private_values VALUES (1)")
+            try:
+                database.execute("INSERT INTO private_values VALUES (1)")
+            except sqlite3.IntegrityError as failure:
+                report = failure_evidence(failure, secrets=())
+        self.assertEqual(report["sqlite_errorcode"], sqlite3.SQLITE_CONSTRAINT_UNIQUE)
+        self.assertEqual(report["sqlite_errorname"], "SQLITE_CONSTRAINT_UNIQUE")
+        unreported = failure_evidence(sqlite3.OperationalError("PRIVATE_SQL_TEXT"), secrets=())
+        self.assertNotIn("sqlite_errorcode", unreported)
+        self.assertNotIn("sqlite_errorname", unreported)
+        self.assertNotIn("PRIVATE_SQL_TEXT", json.dumps(unreported))
+
     def test_api_effect_and_independent_cleanup_reach_the_core_renderer_without_payloads(self):
         api = ApiFailure("publish Attempt failure", "received API refusal", response=HttpResponse(
             429, ((b"x-request-id", b"request:delivery"), (b"authorization", b"Bearer PRIVATE_HEADER")), b"PRIVATE_BODY"
