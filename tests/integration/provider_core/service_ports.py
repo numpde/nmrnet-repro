@@ -10,7 +10,7 @@ import hashlib
 import json
 from builtins import BaseExceptionGroup
 from dataclasses import asdict, replace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.attempt_inventory import response as inventory_response
@@ -121,7 +121,13 @@ class ServicePeers(AdmissionPeers):
                 except (Exception, asyncio.CancelledError) as cleanup:
                     failures.append(cleanup)
             try:
-                await ports.session.retire()
+                if self.factory_cleanup_failure is not None:
+                    # Assembly failed before prediction acquisition. Inject the
+                    # independent failure into the input owner that exists.
+                    with patch.object(ports.preparation, "retire", side_effect=self.factory_cleanup_failure):
+                        await ports.session.retire()
+                else:
+                    await ports.session.retire()
             except (Exception, asyncio.CancelledError) as cleanup:
                 failures.append(cleanup)
             if len(failures) > 1:

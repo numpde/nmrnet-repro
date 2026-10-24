@@ -456,7 +456,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                  **_retired_prediction_observation(retired)},
             ),
             start_recovery=StartRecovery(
-                config.lifecycle.start_retry_window_seconds,
                 config.service.policy.api_backoff_max_seconds,
                 lambda pending, failure, seconds: report_operator_notice(
                     failure,

@@ -116,7 +116,6 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             accepted = None
             original_arguments = fixture.arguments
             policy = StartRecovery(
-                2,
                 0.01,
                 lambda pending, failure, seconds: notices.append(("retry", pending, failure, seconds)),
                 lambda attempt, failure: notices.append(("recovered", attempt, failure)),

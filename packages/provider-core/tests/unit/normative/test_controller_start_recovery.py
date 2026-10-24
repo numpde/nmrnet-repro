@@ -3,7 +3,7 @@
 import asyncio
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import httpcore
 
@@ -31,6 +31,15 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 *lifecycle_replies()[1:],
             )
             retry, recovered = Mock(), Mock()
+            loop = asyncio.get_running_loop()
+            clock, elapsed = loop.time, 0
+
+            def outage_wait(*_):
+                nonlocal elapsed
+                self.assertEqual(session.events, [])
+                elapsed += 31
+
+            retry.side_effect = outage_wait
             claims = AttemptClaims()
             controller = AttemptController(
                 api(transport, scope().api_origin),
@@ -40,10 +49,11 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
-                start_recovery=StartRecovery(1, 0.002, retry, recovered),
+                start_recovery=StartRecovery(0.002, retry, recovered),
             )
             try:
-                confirmed = await controller.run(pending)
+                with patch.object(loop, "time", side_effect=lambda: clock() + elapsed):
+                    confirmed = await controller.run(pending)
                 self.assertIsInstance(confirmed, TerminalConfirmed)
                 self.assertEqual(await store.records(), (confirmed,))
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
@@ -80,7 +90,7 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
-                    start_recovery=StartRecovery(1, 0.001, Mock(), recovered),
+                    start_recovery=StartRecovery(0.001, Mock(), recovered),
                 )
                 try:
                     acknowledged = await controller.run(pending)
@@ -115,7 +125,7 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
-                start_recovery=StartRecovery(0.1, 0.001, Mock(), Mock()),
+                start_recovery=StartRecovery(0.001, Mock(), Mock()),
             )
             try:
                 self.assertEqual((await controller.run(record())).admission.state, "expired")

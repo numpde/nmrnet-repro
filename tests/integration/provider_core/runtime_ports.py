@@ -62,7 +62,7 @@ def require_download_credentials(request, body):
 class RuntimePeers:
     def __init__(self, ports, route, *, maximum_records=1):
         self.ports, self.route = ports, route
-        self.allocate_prediction = AsyncMock(side_effect=ports.allocate_prediction)
+        self.allocate_prediction = AsyncMock(side_effect=self._allocate_prediction)
         self.maximum_records = maximum_records
         self.claims = AttemptClaims()
         self.progress_notices = []
@@ -129,6 +129,9 @@ class RuntimePeers:
             selected.input,
             start_body(selected.input.job_ref, "runtime:one"),
         )
+
+    async def _allocate_prediction(self):
+        return await self.ports.allocate_prediction()
 
     def arguments(self, pending):
         return {

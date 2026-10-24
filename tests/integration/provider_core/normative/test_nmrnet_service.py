@@ -62,7 +62,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 # The bare recording fixture disables replay. Production supplies
                 # these existing bounded policies; exercise their actual owners.
                 return original_arguments(pending) | {
-                    "start_recovery": StartRecovery(2, 0.01, Mock(), Mock()),
+                    "start_recovery": StartRecovery(0.01, Mock(), Mock()),
                     "terminal_recovery": TerminalRecovery(0.01, Mock(), Mock()),
                 }
 
@@ -487,8 +487,8 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             async def recipient(request, body):
                 if request.split(b"\r\n", 1)[0].endswith(b"/fail HTTP/1.1"):
                     self.assertTrue(request.startswith(b"POST "))
-                    self.assertTrue(fixture.allocations[0].host.confirmed)
-                    self.assertEqual(fixture.allocations[0].worker.events, ["close", "closed"])
+                    self.assertFalse(fixture.allocations[0].host.confirmed)
+                    self.assertEqual(fixture.allocations[0].worker.events, [])
                     (pending,) = await fixture.store.records()
                     self.assertIs(type(pending), TerminalPending)
                     self.assertEqual(pending.body, body)

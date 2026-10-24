@@ -55,26 +55,22 @@ def _authority(url):
 def prediction_lifetime_seconds(config):
     """Cover allocation-to-result while preserving the finer client deadlines.
 
-    Counts follow runtime.assemble_attempt, controller._run_effects/_start_attempt
-    and AttemptExecutor.run/_prepare_session/_monitor/_write_entry (021 T2 review).
-    Selection and chooser retirement have separate preparation budgets. Terminal
-    publication follows child exit; this binding emits no awaited condition.
+    Acquisition follows START and completed input selection/chooser retirement.
+    Counts cover the remaining AttemptExecutor preparation-monitor observation,
+    running progress, durable entry, active observations and prediction exchanges.
+    Terminal publication follows child exit; this binding emits no awaited condition.
     """
     lifecycle, native = config.lifecycle, config.service.native
     exchange = config.api.http.exchange_seconds + config.api.http.retirement_seconds
     gap = lifecycle.observation_gap_seconds
-    inventories = 3 * lifecycle.store_seconds
-    start = 3 * lifecycle.store_seconds + 2 * exchange + lifecycle.start_retry_window_seconds + config.api.http.retirement_seconds
-    input_read = exchange
+    # Include the original and a late admitted running-progress exchange.
     phase_progress = 2 * (exchange + config.api.http.retirement_seconds + gap)
-    selection_and_chooser_cleanup = 2 * config.preparation.seconds
-    # Initial eligibility, two preparation-monitor overhangs, durable-entry
-    # observation and explicit eligibility before prediction each have a gap cap.
+    # Preparation-monitor overhangs, durable-entry observation and eligibility
+    # reads around prediction each have the existing active-freshness gap cap.
     observations = 5 * gap
     durable_entry = lifecycle.store_seconds
     science = 2 * native.prediction_seconds
-    return sum((native.allocation_seconds, inventories, start, input_read, phase_progress,
-                selection_and_chooser_cleanup, observations, durable_entry, science))
+    return sum((native.allocation_seconds, phase_progress, observations, durable_entry, science))
 
 
 def startup_authorities(config):

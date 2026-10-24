@@ -93,7 +93,6 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(configured.native, NativePolicy(allocation_seconds=30, prediction_seconds=90, source_seconds=10))
             self.assertEqual(config.lifecycle.observation_gap_seconds, 30)
-            self.assertEqual(config.lifecycle.start_retry_window_seconds, 30)
             snapshot = configured.announcement
             body = json.loads(
                 hello_body(

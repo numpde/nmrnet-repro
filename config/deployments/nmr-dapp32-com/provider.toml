@@ -69,7 +69,6 @@ allowed_job_states = ["open"]
 poll_seconds = 2
 task_settle_seconds = 10
 observation_gap_seconds = 60
-start_retry_window_seconds = 30
 
 [service]
 display_name = "NMRNet++"

@@ -330,7 +330,8 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     release.set()
                     await service.settle()
                     self.assertIsNone(fixture.store.pending_operation)
-                    self.assertTrue(fixture.allocations[0].host.confirmed)
+                    self.assertFalse(fixture.allocations[0].host.confirmed)
+                    self.assertEqual(fixture.allocations[0].worker.events, [])
                     self.assertEqual(await fixture.store.records(), ())
                 finally:
                     release.set()
@@ -475,7 +476,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(caught.exception.cause, BaseExceptionGroup)
                 retirement = fixture.allocations[0].session.last_retirement_failure
                 self.assertIs(caught.exception.cause.exceptions[1], retirement)
-                self.assertIn(("native_retirement", fixture.factory_cleanup_failure), retirement.failures)
+                self.assertIn(("input_retirement", fixture.factory_cleanup_failure), retirement.failures)
                 self.assertTrue(service.hello_api.retirement_confirmed)
                 self.assertFalse(fixture.allocations[0].host.confirmed)
                 await service.settle()
@@ -543,8 +544,8 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 fixture.factory_release.set()
                 await service.settle()
                 self.assertEqual(len(fixture.allocations), 1)
-                self.assertEqual(fixture.allocations[0].worker.events, ["close", "closed"])
-                self.assertTrue(fixture.allocations[0].host.confirmed)
+                self.assertEqual(fixture.allocations[0].worker.events, [])
+                self.assertFalse(fixture.allocations[0].host.confirmed)
                 self.assertNotIn("start", fixture.events)
                 self.assertEqual(await fixture.store.records(), ())
             finally:

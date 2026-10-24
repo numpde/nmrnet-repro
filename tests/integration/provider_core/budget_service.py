@@ -51,8 +51,8 @@ class InputCallLimitPeers(SuccessiveServicePeers):
         if ports.instructions.identity != self.jobs[0].identity:
             super().require_retired_job(ports)
             return
-        if ports.worker.events != ["close", "closed"] or not ports.host.confirmed:
-            raise AssertionError("Call-limited Job entered prediction or left its prediction allocation alive")
+        if ports.worker.events or ports.host.confirmed:
+            raise AssertionError("Call-limited Job acquired prediction before input succeeded")
         ports.allocate_reader.assert_awaited_once()
         ports.reader.read.assert_awaited_once()
         ports.reader_host.retire.assert_awaited_once()
@@ -104,7 +104,7 @@ class InputTimeLimitPeers(SuccessiveServicePeers):
         if ports.instructions.identity != self.jobs[0].identity:
             super().require_retired_job(ports)
             return
-        if ports.worker.events != ["close", "closed"] or not ports.host.confirmed:
+        if ports.worker.events or ports.host.confirmed:
             raise AssertionError("Time-limited input entered prediction or left its prediction allocation alive")
         ports.allocate_reader.assert_not_awaited()
         ports.allocate_generator.assert_not_awaited()

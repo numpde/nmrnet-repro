@@ -40,8 +40,9 @@ class NativePolicy:
 class NativeSetupFailed(RuntimeError):
     """Keep setup causes with the selected Job, when this owner knows it.
 
-    Prediction setup precedes START. Source-only allocation may have no Job
-    context here; its caller retains the acknowledged Attempt instead.
+    Prediction setup follows START and input preparation. This factory knows
+    the Job; its session caller retains the acknowledged Attempt. Source-only
+    allocation may have no Job context here; its caller retains the Attempt.
     """
 
     def __init__(self, cause, cleanup_failures, *, interruption_cause, job_ref):

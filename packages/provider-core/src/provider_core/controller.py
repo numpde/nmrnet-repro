@@ -48,44 +48,26 @@ class ControllerFailed(RuntimeError):
         self.cleanup_failures = cleanup_failures
 
 
-def require_start_window(seconds):
-    if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
-        raise ValueError("START recovery window_seconds must be finite and positive")
-
-
 @dataclass(frozen=True, slots=True)
 class StartRecovery:
-    """Bound exact START retry admission before scientific preparation.
+    """Pace reviewed exact START retries before scientific preparation.
 
-    The window begins at the first failed send and includes retirement/backoff.
-    Already admitted bounded I/O may finish later. Protected synchronous observers
+    Individual exchanges and settlement remain bounded; an availability outage
+    does not expire the durable command. Protected synchronous observers
     receive the original pending Job before retry and its durable admission after
     recovery; no Attempt reference is assumed before a verified acknowledgement.
     """
 
-    window_seconds: float
     backoff_max_seconds: float
     on_retry: Callable[[StartPending, ApiFailure, float], None] = field(repr=False)
     on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
 
     def __post_init__(self):
-        require_start_window(self.window_seconds)
         value = self.backoff_max_seconds
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
             raise ValueError("START recovery backoff maximum must be finite positive seconds")
         if not callable(self.on_retry) or not callable(self.on_recovered):
             raise ValueError("START recovery requires explicit protected retry and recovery observers")
-
-
-class StartRecoveryExpired(TimeoutError):
-    """Retry admission ended; retain the same pending START and original send."""
-
-    def __init__(self, window_seconds, *, cause, pending):
-        super().__init__(
-            f"START retry window of {window_seconds:g} seconds expired; "
-            "retain the exact request and settle original I/O before recovery"
-        )
-        self.window_seconds, self.cause, self.pending = window_seconds, cause, pending
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,7 +221,7 @@ class AttemptController:
 
     async def _start_attempt(self, pending):
         policy = self._start_recovery
-        deadline, first_failure = None, None
+        first_failure = None
         delay = min(self._poll_seconds, policy.backoff_max_seconds) if policy is not None else None
         send = self._operation.start
         while True:
@@ -255,8 +237,6 @@ class AttemptController:
                     or failure.settlement_failures
                 ):
                     raise
-                if deadline is None:
-                    deadline = asyncio.get_running_loop().time() + policy.window_seconds
                 # Settlement belongs to this same starter. Late transport or
                 # independent cleanup evidence must be admitted before replay.
                 if self._claim.operation_owner is self._operation:
@@ -265,17 +245,9 @@ class AttemptController:
                     raise
                 if first_failure is None:
                     first_failure = failure.api_failure
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise StartRecoveryExpired(policy.window_seconds, cause=failure, pending=pending) from None
-                seconds = min(remaining, random.uniform(delay / 2, delay))
+                seconds = random.uniform(delay / 2, delay)
                 policy.on_retry(pending, failure.api_failure, seconds)
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise StartRecoveryExpired(policy.window_seconds, cause=failure, pending=pending) from None
-                await asyncio.sleep(min(seconds, remaining))
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise StartRecoveryExpired(policy.window_seconds, cause=failure, pending=pending) from None
+                await asyncio.sleep(seconds)
                 delay = min(policy.backoff_max_seconds, delay * 2)
                 send = self._operation.resume
             else:

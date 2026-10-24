@@ -1002,7 +1002,7 @@ Recovery and scheduling stay explicit. The controller releases its private claim
 only after obligations settle and the session's cleanup is confirmed, and accepts
 no second run. API/store lifetime remains with the caller.</p>
 <p>For automatic START recovery, explicitly supply
-<code>controller.StartRecovery(window_seconds, backoff_max_seconds, on_retry,
+<code>controller.StartRecovery(backoff_max_seconds, on_retry,
 on_recovered)</code> as <code>start_recovery</code>; <code>None</code> retains fail-stop admission. After
 original I/O settles, <code>ProviderAPI.can_replay_start</code> permits the same starter's
 <code>resume</code> with the exact durable Job/key/body. The pinned START contract permits
@@ -1010,15 +1010,15 @@ reviewed availability, HTTP500 and an unverified pre-head protocol response.
 It does not permit a new key, a scientific rerun, or another send after a received
 acknowledgement could not be saved. Authentication/topology faults, malformed
 success, cancellation and cleanup/storage failures stop automatic recovery.</p>
-<p>The finite retry-admission window includes retirement, observers and capped
-jittered backoff; already admitted bounded I/O may finish later. Retry observers
+<p>Reviewed availability retries continue with capped jittered backoff until
+resolution or cancellation. Exchanges and original-I/O settlement remain bounded.
+Retry observers
 receive the original <code>StartPending</code> and protected failure; recovery observers
 receive the durable <code>AcknowledgedAttempt</code> and first failure. A terminal START
-replay retires the session without entering science. Expiry retains the original
-pending Job and cause in <code>StartRecoveryExpired</code>, without inventing an Attempt ID.
-NMRNet's production factory requires this policy before allocation. Its foreground
-process takes the explicit <code>lifecycle.start_retry_window_seconds</code>, configured API
-backoff cap and protected Job/Attempt notices; direct assembly fixtures can still
+replay retires the session without entering science. NMRNet acquires its initial
+prediction child only after acknowledged START and successful input preparation.
+Its foreground process supplies the configured API backoff cap and protected
+Job/Attempt notices; direct assembly fixtures can still
 select explicit stopped recovery.</p>
 <p>For exact terminal recovery, explicitly supply
 <code>controller.TerminalRecovery(backoff_max_seconds, on_retry,

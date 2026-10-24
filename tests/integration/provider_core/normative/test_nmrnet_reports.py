@@ -63,7 +63,7 @@ from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.attempt_store import StoreFailed
 from provider_core.chat import ChatFailed
-from provider_core.controller import StartRecovery, StartRecoveryExpired, TerminalRecovery
+from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import (
@@ -159,7 +159,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await store.close()
 
-    def test_start_recovery_expiry_keeps_uncertain_send_and_redacted_job_without_inventing_attempt(self):
+    def test_start_failure_keeps_uncertain_send_without_inventing_attempt(self):
         pending = record()
         outage = ApiFailure(
             "start Execution Attempt",
@@ -174,17 +174,15 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             api_failure=outage,
             settlement_failures=(),
         )
-        expired = StartRecoveryExpired(30, cause=start_failure, pending=pending)
-        report = self.receive(expired, secrets=(pending.input.job_ref,))
+        report = self.receive(start_failure, secrets=(pending.input.job_ref,))
         rendered = json.dumps(report)
         for fact in (
-            "START retry window",
+            "Attempt start lacks a durable owned acknowledgement",
             "request:start-outage",
             '"status": 503',
             '"attempt_mutation_may_have_committed": true',
         ):
             self.assertIn(fact, rendered)
-        self.assertIn('"job_ref": "[redacted]"', rendered)
         self.assertNotIn("execution_attempt_ref", rendered)
         self.assertNotIn("PRIVATE_SERVER_BODY", rendered)
         self.assertNotIn(pending.input.job_ref, rendered)
@@ -207,7 +205,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
-                start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+                start_recovery=StartRecovery(1, Mock(), Mock()),
             )
             allocation = Mock(
                 start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()
