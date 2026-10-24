@@ -30,7 +30,7 @@ class DeliveryBinding:
 class DeliveryService:
     """Keep original shutdown work reachable when a caller stops waiting."""
 
-    def __init__(self, directory, *, limits, bindings, request_seconds, retry_initial_seconds, retry_max_seconds, on_notice):
+    def __init__(self, directory, *, limits, bindings, request_seconds, retry_initial_seconds, retry_max_seconds, on_notice, diagnostic_status):
         bindings = tuple(bindings)
         if not 1 <= len(bindings) <= MAX_BINDINGS:
             raise ValueError("Delivery requires between one and sixteen explicit provider bindings.")
@@ -49,6 +49,7 @@ class DeliveryService:
         self.request_seconds = request_seconds
         self.retry_initial_seconds, self.retry_max_seconds = retry_initial_seconds, retry_max_seconds
         self.on_notice = on_notice
+        self.diagnostic_status = diagnostic_status
         self.ready, self.stopping = asyncio.Event(), asyncio.Event()
         self.queue, self.inbox = None, None
         self.workers, self._worker_tasks = {}, ()
@@ -66,7 +67,7 @@ class DeliveryService:
         self.workers[(endpoint.api_origin, endpoint.provider_ref)].wake()
 
     def _binding_status(self, endpoint):
-        return self.workers[(endpoint.api_origin, endpoint.provider_ref)].status()
+        return {**self.workers[(endpoint.api_origin, endpoint.provider_ref)].status(), "diagnostics": self.diagnostic_status()}
 
     @staticmethod
     def _observed(task):
@@ -101,6 +102,7 @@ class DeliveryService:
         self._worker_tasks = tuple(asyncio.create_task(worker.run()) for worker in self.workers.values())
         for task in self._worker_tasks:
             task.add_done_callback(self._observed)
+        self.on_notice(None, {"event": "delivery_ready", "binding_count": len(self.bindings)})
         self.ready.set()
 
     async def _wait(self):

@@ -50,7 +50,7 @@ def _binding(table):
     return DeliveryBinding(endpoint, client)
 
 
-def load_delivery_service(path, *, on_notice):
+def load_delivery_service(path, *, on_notice, diagnostic_status):
     """Consume immutable received bytes; construct owners without starting them."""
     try:
         raw = read_startup_file(path, maximum_bytes=65536, label="delivery configuration")
@@ -76,7 +76,7 @@ def load_delivery_service(path, *, on_notice):
             _path(document["state_directory"], "delivery state"), limits=QueueLimits(**document["limits"]),
             bindings=tuple(_binding(table) for table in bindings), request_seconds=document["request_seconds"],
             retry_initial_seconds=document["retry_initial_seconds"], retry_max_seconds=document["retry_max_seconds"],
-            on_notice=on_notice,
+            on_notice=on_notice, diagnostic_status=diagnostic_status,
         )
     except DeliveryConfigurationRejected:
         raise

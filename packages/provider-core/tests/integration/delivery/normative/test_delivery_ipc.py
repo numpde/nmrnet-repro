@@ -14,7 +14,7 @@ from provider_core.delivery_client import DeliveryClient, DeliveryEndpoint, Deli
 from provider_core.delivery_ipc import DeliveryInbox, DeliveryRequestRejected
 from provider_core.delivery_store import DeliveryFull, DeliveryQueue, QueueLimits
 from provider_core.failure_projection import owned_details
-from tests.fakes.delivery import outcome
+from tests.fakes.delivery import healthy_diagnostics, outcome
 
 
 class DeliveryIPCTests(unittest.IsolatedAsyncioTestCase):
@@ -30,7 +30,7 @@ class DeliveryIPCTests(unittest.IsolatedAsyncioTestCase):
         self.accepted, self.failures = Mock(), Mock()
         self.inbox = DeliveryInbox(
             self.queue, (self.endpoint,), request_seconds=1, on_accepted=self.accepted, on_failure=self.failures,
-            binding_status=Mock(return_value={"state": "inbox_only", "message": "No API publisher is attached to this test inbox."}),
+            binding_status=Mock(return_value={"state": "inbox_only", "message": "No API publisher is attached to this test inbox.", "diagnostics": healthy_diagnostics()}),
         )
         await self.inbox.start()
         self.addAsyncCleanup(self.inbox.close)
@@ -57,6 +57,17 @@ class DeliveryIPCTests(unittest.IsolatedAsyncioTestCase):
             await self.client.submit(outcome(suffix="1"))
         self.assertEqual(await self.client.submit(item), item.acceptance())
         self.assertEqual(self.queue.next_pending(item.api_origin, item.provider_ref), item)
+
+    async def test_display_diagnostic_changes_do_not_block_ownership_or_capacity_reads(self):
+        item = outcome()
+        await self.client.submit(item)
+        self.inbox.binding_status = lambda endpoint: {
+            "state": "inbox_only", "diagnostics": "display format changed", "new_diagnostic": {"count": 2},
+        }
+        pending = await self.client.pending()
+        self.assertEqual(pending["items"][0]["body_sha256"], item.body_sha256)
+        self.assertEqual(pending["capacity"]["provider_items"], 1)
+        self.assertEqual(pending["publisher"]["diagnostics"], "display format changed")
 
     async def test_lost_acknowledgement_does_not_change_or_duplicate_the_committed_body(self):
         item = outcome()

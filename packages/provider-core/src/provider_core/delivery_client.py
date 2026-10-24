@@ -128,9 +128,9 @@ class DeliveryClient:
         return reply
 
     def _metadata(self, value):
-        fields = {"job_ref", "execution_attempt_ref", "operation", "body_sha256", "body_bytes", "state", "created_at", "held_reason"}
-        if type(value) is not dict or set(value) != fields:
-            raise DeliveryRejected("Delivery metadata does not match the supported response fields.")
+        fields = {"job_ref", "execution_attempt_ref", "operation", "body_sha256", "body_bytes", "state"}
+        if type(value) is not dict or not fields <= value.keys():
+            raise DeliveryRejected("Delivery metadata is missing its Job, Attempt or retained-body identity.")
         try:
             require_attempt_ref(value["execution_attempt_ref"])
             require_job_ref(value["job_ref"])
@@ -144,18 +144,19 @@ class DeliveryClient:
 
     async def pending(self):
         reply = await self._request("GET", "/pending")
-        if (type(reply) is not dict or set(reply) != {"api_origin", "provider_ref", "items", "capacity", "publisher"}
+        if (type(reply) is not dict or not {"api_origin", "provider_ref", "items", "capacity", "publisher"} <= reply.keys()
                 or (reply["api_origin"], reply["provider_ref"]) != (self.endpoint.api_origin, self.endpoint.provider_ref)
                 or type(reply["items"]) is not list):
             raise DeliveryRejected("The pending inventory does not belong to the configured delivery binding.")
         publisher = reply["publisher"]
-        if (type(publisher) is not dict or set(publisher) != {"state", "message"}
-                or publisher["state"] not in ("inbox_only", "starting", "running", "paused", "stopping", "stopped")
-                or type(publisher["message"]) is not str or not 1 <= len(publisher["message"]) <= 1024):
-            raise DeliveryRejected("Delivery inventory has an unsupported publisher state or explanation.")
+        if (type(publisher) is not dict
+                or publisher.get("state") not in ("inbox_only", "starting", "running", "paused", "stopping", "stopped")):
+            raise DeliveryRejected("Delivery inventory has an unsupported publisher state.")
+        # Diagnostic text/counters are display facts. Their shape must not
+        # prevent ownership or capacity observation; they grant no admission.
         capacity = reply["capacity"]
-        if (type(capacity) is not dict or set(capacity) != {"provider_items", "provider_bytes"}
-                or any(type(value) is not int or value <= 0 for value in capacity.values())):
+        if (type(capacity) is not dict or not {"provider_items", "provider_bytes"} <= capacity.keys()
+                or any(type(capacity[name]) is not int or capacity[name] <= 0 for name in ("provider_items", "provider_bytes"))):
             raise DeliveryRejected("Delivery inventory requires positive item and byte allowances.")
         for item in reply["items"]:
             self._metadata(item)

@@ -118,6 +118,28 @@
       of changed/missing wheels and existing scientific dependency conflicts.
       Review caught and corrected the inference selector list's required sorting.
       No scientific dependency versions or inference calculations changed.</p>
+    <p>The installed <code>provider_core.delivery_main</code> command now consumes
+      the frozen configuration, establishes private creation modes, starts shared
+      delivery and handles SIGTERM through its original retirement owners. A real
+      local Unix CONNECT/TLS fixture qualifies one producer handoff, one signed API
+      publication, receipt-based deletion and clean signal retirement. A separate
+      malformed-configuration process check proves safe diagnostics with no runtime
+      state. All 27 connected delivery checks and 18 unit checks pass.</p>
+    <p>Logging follows the ordinary <code>StreamHandler</code> precedent in
+      <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/magnet_provider/provider_process.py#L718-L742">Magnet's process logger</a>.
+      The container owner supplies the existing bounded, non-blocking Docker log
+      policy; Python neither promises retained logs nor detects Docker's full-buffer
+      drops. See <a href="https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver">Docker's delivery-mode contract</a>.
+      There is no new logging queue, pipe-size gate, framing protocol or file
+      fallback. The queue alternative adds a sentinel and unbounded thread join
+      (<a href="https://github.com/python/cpython/blob/v3.12.12/Lib/logging/handlers.py#L1493-L1512">CPython 3.12.12 QueueListener.stop</a>);
+      process shutdown also acquires handlers and flushes streams
+      (<a href="https://github.com/python/cpython/blob/v3.12.12/Lib/logging/__init__.py#L2083-L2117">logging.shutdown</a>).
+      Review therefore retained the ordinary Docker-backed writer. Observed local
+      output failures appear in scoped status without reversing API acceptance or
+      deletion; a connected broken-stderr witness proves that separation. Diagnostic
+      display fields do not gate ownership/capacity reads. The daemon image,
+      producer integration, migration and deployed recovery remain outstanding.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.
