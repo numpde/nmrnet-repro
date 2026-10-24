@@ -19,6 +19,7 @@ from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
+from tests.integration.nmrnet.startup_process import record_startup_barriers
 from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.input_geometry import InputRejected
@@ -32,8 +33,8 @@ from nmrnet_provider.worker_client import PredictionExecutionFailed
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_record import acknowledge_start
-from provider_core.attempt_store import AttemptStore
-from provider_core.controller import ControllerFailed, StartRecovery, TerminalRecovery
+from provider_core.checkpoint_store import CheckpointStore
+from provider_core.controller import ControllerFailed, StartRecovery
 from provider_core.conversation import ConversationRetirementFailed
 from provider_core.execution import ConditionRecovery, ExecutionFailed, ObservationRecovery
 from provider_core.ownership import AttemptClaims
@@ -138,7 +139,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
-        for recovery_kind in ("observation", "start", "terminal", "condition", "prediction", "native"):
+        for recovery_kind in ("observation", "start", "delivery", "condition", "prediction", "native"):
             for failed_sink in (False, True):
                 with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
@@ -165,9 +166,11 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         self.policy = arguments["open_attempt"].on_operator_notice
                     elif recovery_kind == "prediction":
                         self.policy = arguments["open_attempt"].on_prediction_retry
+                    elif recovery_kind == "delivery":
+                        self.policy = arguments["open_attempt"].on_delivery_retry
                     else:
                         self.policy = getattr(arguments["open_attempt"], f"{recovery_kind}_recovery")
-                    if recovery_kind in ("start", "terminal") and self.policy.backoff_max_seconds != arguments["config"].service.policy.api_backoff_max_seconds:
+                    if recovery_kind == "start" and self.policy.backoff_max_seconds != arguments["config"].service.policy.api_backoff_max_seconds:
                         raise AssertionError("API retry pacing did not reach its configured policy")
 
                 async def run(self, _stop):
@@ -182,6 +185,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                             retirement=None if original_returncode is None else Retirement(original_returncode, True))
                         retired.proof = SimpleNamespace(retirement=Retirement(-15, True))
                         self.policy(attempt, outage, retired)
+                    elif recovery_kind == "delivery":
+                        self.policy(attempt, outage, 0.1)
                     elif recovery_kind == "condition":
                         self.policy.on_retry(attempt, "preparing", "waiting_capacity", outage, 0.1)
                         self.policy.on_recovered(attempt, "preparing", "waiting_capacity", outage)
@@ -243,6 +248,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     expected = ["prediction_retry_started"]
                 elif recovery_kind == "native":
                     expected = ["native_lifecycle_settled"]
+                elif recovery_kind == "delivery":
+                    expected = ["delivery_handoff_retry"]
                 self.assertEqual([item["event"] for item in notices], expected)
             for notice in notices:
                 self.assertEqual(notice["job_ref"], "[redacted]")
@@ -438,7 +445,11 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     while True:
                         os.write(writer, b"x" * 4096)
                 os.set_blocking(writer, True)
-                with os.fdopen(writer, "w", closefd=False) as output, redirect_stderr(output):
+                with (
+                    os.fdopen(writer, "w", closefd=False) as output,
+                    redirect_stderr(output),
+                    patch.object(NativeAttemptFactory, "prove_previous_retired", record_startup_barriers),
+                ):
                     task = asyncio.create_task(
                         run_provider(
                             fixture.config,
@@ -622,7 +633,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
         async with ProcessPeers() as fixture:
             fixture.files.state.mkdir(mode=0o700)
             config = fixture.config
-            store = AttemptStore(
+            store = CheckpointStore(
                 fixture.files.state, scope=config.lifecycle.scope, limits=config.lifecycle.store_limits, operation_seconds=2
             )
             await store.open()
@@ -658,11 +669,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 on_prediction_retry=lambda _attempt, _failure, _retired: self.fail("No prediction retry expected before admission"),
                 on_operator_notice=Mock(),
-                terminal_recovery=TerminalRecovery(
-                    config.service.policy.api_backoff_max_seconds,
-                    lambda _attempt, _failure, _seconds: self.fail("No terminal retry expected before admission"),
-                    lambda _attempt, _failure: self.fail("No terminal recovery expected before admission"),
-                ),
+                on_delivery_retry=lambda _attempt, _failure, _seconds: self.fail("No delivery retry expected before admission"),
             )
             service = ProviderService(
                 config=config,
@@ -671,7 +678,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 open_attempt=factory,
                 claims=factory.claims,
                 retire_native=factory.prove_previous_retired,
-                terminal_recovery=factory.terminal_recovery,
                 current_announcement=lambda: config.service.announcement,
                 policy=config.service.policy,
                 on_started=lambda: None,
@@ -680,7 +686,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             )
             entered, release = asyncio.Event(), threading.Event()
             loop = asyncio.get_running_loop()
-            read = store._files.records
+            read = store._database.inventory
 
             def blocked_read():
                 loop.call_soon_threadsafe(entered.set)
@@ -688,8 +694,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 return read()
 
             try:
-                with patch.object(store._files, "records", blocked_read):
-                    task = asyncio.create_task(store.records(owner=factory))
+                with patch.object(store._database, "inventory", blocked_read):
+                    task = asyncio.create_task(store.inventory(owner=factory))
                     await asyncio.wait_for(entered.wait(), 2)
                     task.cancel()
                     with self.assertRaises(asyncio.CancelledError):

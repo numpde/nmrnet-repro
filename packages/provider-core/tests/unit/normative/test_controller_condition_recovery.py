@@ -1,10 +1,12 @@
 """Controller-selected condition recovery keeps matching receipt before effects."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
 import tempfile
 import unittest
 from unittest.mock import Mock
 
-from provider_core.attempt_record import TerminalConfirmed
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.controller import AttemptController
 from provider_core.execution import ConditionRecovery
 from provider_core.ownership import AttemptClaims
@@ -13,7 +15,7 @@ from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import progress_response
 from tests.fakes.conditions import ReportingSession
 from tests.fakes.controller import empty_store, lifecycle_replies
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ControllerConditionRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -32,18 +34,18 @@ class ControllerConditionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     AttemptClaims(),
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                     condition_recovery=ConditionRecovery(1, 0.01, retry, recovered),
                 ).run(record())
-                self.assertIs(type(confirmed), TerminalConfirmed)
+                self.assertIs(type(confirmed), DeliveryAcceptedCheckpoint)
                 retry.assert_called_once()
                 recovered.assert_called_once()
                 self.assertEqual(retry.call_args.args[1:3], ("preparing", "waiting_capacity"))
                 self.assertIs(retry.call_args.args[3], recovered.call_args.args[3])
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertEqual(await store.records(), (confirmed,))
-                self.assertEqual(len(transport.calls), 11)
+                self.assertEqual(await store.inventory(), ())
+                self.assertEqual(len(transport.calls), 10)
             finally:
                 await store.close()

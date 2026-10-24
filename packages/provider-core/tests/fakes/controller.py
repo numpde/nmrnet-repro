@@ -4,18 +4,17 @@ import asyncio
 import threading
 from pathlib import Path
 
-from provider_core.attempt_record import MAX_RECORD_BYTES
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.checkpoint_store import CheckpointStore, CheckpointLimits
 from tests.fakes.api import reply
 from tests.fakes.attempt_store import scope
-from tests.fakes.attempts import complete_response, observation, progress_response, start_response
+from tests.fakes.attempts import observation, progress_response, start_response
 from tests.fakes.execution import Session
 from tests.fakes.job_input import response
 
 
 async def empty_store(directory, *, maximum_records):
-    store = AttemptStore(Path(directory), scope=scope(),
-                         limits=StoreLimits(maximum_records, maximum_records * MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
+    store = CheckpointStore(Path(directory), scope=scope(),
+                            limits=CheckpointLimits(maximum_records, maximum_records * 150000), operation_seconds=1)
     await store.open()
     return store
 
@@ -23,7 +22,7 @@ async def empty_store(directory, *, maximum_records):
 def lifecycle_replies():
     return (reply(start_response()), reply(observation()), reply(response()), reply(progress_response()),
             reply(observation()), reply(progress_response(phase="running")), reply(observation()),
-            reply(observation()), reply(complete_response(result_schema_id="result.v1")))
+            reply(observation()))
 
 
 class SingleRetirementSession(Session):

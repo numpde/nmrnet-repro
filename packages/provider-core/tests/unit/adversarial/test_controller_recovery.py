@@ -1,193 +1,180 @@
-"""Recovery stops on refusal, cleanup, storage failure and interruption."""
+"""Relay refusal, uncertain cleanup and cancellation never create another outcome."""
 
 import asyncio
-import ssl
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-import httpcore
-
-from provider_core.attempt_record import TerminalConfirmed, TerminalPending
-from provider_core.attempt_store import StoreFailed
-from provider_core.controller import AttemptController, ControllerFailed, TerminalRecovery
+from provider_core.checkpoint_store import CheckpointFailed
+from provider_core.controller import AttemptController, ControllerFailed
+from provider_core.delivery_client import DeliveryRejected, DeliveryUnavailable
+from provider_core.delivery_store import DeliveryFull
+from provider_core.execution import ExecutionFailed
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import PublicationFailed
+from provider_core.producer_checkpoint import TerminalSelectedCheckpoint
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, api
 from tests.fakes.attempt_store import record, scope
-from tests.fakes.attempts import complete_response
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.controller import SingleRetirementSession, cancel_task, empty_store, lifecycle_replies
-from tests.fakes.publication import api
 
 
 class ControllerRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
-    async def run_failure(self, terminal_reply, *, recovery, change_store=None, expected_exception=ControllerFailed):
+    async def test_permanent_refusal_or_unsettled_cleanup_never_retries(self):
+        for failure in (DeliveryRejected("Wrong relay acknowledgement"),
+                        DeliveryUnavailable("Local policy refused", status=403)):
+            with self.subTest(kind=type(failure).__name__), tempfile.TemporaryDirectory() as directory:
+                store = await empty_store(directory, maximum_records=1)
+                session, delivery, retry = SingleRetirementSession(store), RecordingDelivery(), Mock()
+                delivery.submit = AsyncMock(side_effect=failure)
+                controller = AttemptController(api(Transport(*lifecycle_replies()), scope().api_origin), store, AttemptClaims(), session,
+                    delivery=delivery, on_delivery_retry=retry, delivery_retry_initial_seconds=0.001,
+                    delivery_retry_max_seconds=0.002, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                try:
+                    with self.assertRaises(ControllerFailed) as caught:
+                        await controller.run(record())
+                    self.assertIsInstance(caught.exception.cause, ExecutionFailed)
+                    self.assertIs(caught.exception.cause.cause, failure)
+                    delivery.submit.assert_awaited_once()
+                    retry.assert_not_called()
+                    self.assertIs(type((await store.inventory())[0]), TerminalSelectedCheckpoint)
+                    self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
+                finally:
+                    await store.close()
+
+    async def test_failed_retry_recipient_keeps_original_send_evidence_without_new_submission(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)
-            session = SingleRetirementSession(store)
-            transport = Transport(*lifecycle_replies()[:-1], terminal_reply)
-            controller = AttemptController(
-                api(transport, scope().api_origin),
-                store,
-                AttemptClaims(),
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-                terminal_recovery=recovery,
-            )
-            if change_store is not None:
-                change_store(store)
+            session, delivery = SingleRetirementSession(store), RecordingDelivery()
+            original, output_failure = DeliveryFull("Relay queue full"), OSError("Authored recipient failure")
+            delivery.submit = AsyncMock(side_effect=original)
+            controller = AttemptController(api(Transport(*lifecycle_replies()), scope().api_origin), store, AttemptClaims(), session,
+                delivery=delivery, on_delivery_retry=Mock(side_effect=output_failure), delivery_retry_initial_seconds=0.001,
+                delivery_retry_max_seconds=0.002, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
-                with self.assertRaises(expected_exception) as caught:
+                with self.assertRaises(ControllerFailed) as caught:
                     await controller.run(record())
-                self.assertEqual(len(transport.calls), 9)
-                self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertIsInstance((await store.records())[0], TerminalPending)
-                return caught.exception, controller
+                self.assertIs(caught.exception.cause.cause, output_failure)
+                self.assertIs(output_failure.__context__, original)
+                delivery.submit.assert_awaited_once()
+                self.assertIs(type((await store.inventory())[0]), TerminalSelectedCheckpoint)
             finally:
                 await store.close()
 
-    async def test_permanent_reply_or_unsettled_cleanup_never_retries(self):
-        for response in (
-            reply(b"denied", status=401),
-            reply(b"invalid receipt"),
-            ExchangeFailed("Cleanup failed", primary=httpcore.ReadTimeout(), cleanup_failures=(OSError(),)),
-        ):
-            with self.subTest(response=response):
-                retry = Mock()
-                failure, _ = await self.run_failure(response, recovery=TerminalRecovery(0.01, retry, Mock()))
-                self.assertIsInstance(failure.cause, PublicationFailed)
-                retry.assert_not_called()
-
-    async def test_failed_retry_recipient_keeps_original_send_evidence_without_another_publication(self):
-        output_failure = OSError("Authored protected-recipient failure")
-        retry = Mock(side_effect=output_failure)
-        failure, _ = await self.run_failure(
-            reply(b"maintenance", status=503), recovery=TerminalRecovery(0.01, retry, Mock())
-        )
-        self.assertIs(failure.cause, output_failure)
-        self.assertIsInstance(output_failure.__context__, PublicationFailed)
-        self.assertEqual(output_failure.__context__.api_failure.status, 503)
-
-    async def test_receipt_storage_failure_never_replays_a_successful_send(self):
-        storage_failure = StoreFailed("Cannot retain receipt")
-
-        def fail_confirmation(store):
-            replace = store.replace
-
-            async def replace_or_fail(old, new, *, owner=None):
-                if type(new) is TerminalConfirmed:
-                    raise storage_failure
-                return await replace(old, new, owner=owner)
-
-            store.replace = replace_or_fail
-
-        retry = Mock()
-        failure, controller = await self.run_failure(
-            reply(complete_response(result_schema_id="result.v1")),
-            recovery=TerminalRecovery(0.01, retry, Mock()),
-            change_store=fail_confirmation,
-        )
-        self.assertIs(failure.cause.cause, storage_failure)
-        self.assertIsInstance(failure.cause.outcome, TerminalConfirmed)
-        retry.assert_not_called()
-        self.assertIs(controller.operation.last_failure, failure.cause)
-
-    async def test_cancelled_backoff_keeps_pending_publication_without_resending(self):
-        cancellation = asyncio.CancelledError()
-        with (
-            patch("provider_core.controller.asyncio.sleep", new=AsyncMock(side_effect=cancellation)),
-        ):
-            failure, _ = await self.run_failure(
-                reply(b"maintenance", status=503),
-                recovery=TerminalRecovery(0.01, Mock(), Mock()),
-                expected_exception=asyncio.CancelledError,
-            )
-        self.assertIs(failure, cancellation)
-        self.assertIsInstance(failure.__context__, PublicationFailed)
-
-    async def test_original_retirement_and_late_evidence_control_replay(self):
-        for late_evidence in ("certificate", "cleanup", "availability"):
-            with self.subTest(late_evidence=late_evidence):
-                await self.check_original_retirement(late_evidence)
-
-    async def check_original_retirement(self, late_evidence):
+    async def test_accepted_metadata_failure_drops_payload_without_replaying_successful_handoff(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)
-            session = SingleRetirementSession(store)
-            lost = ExchangeFailed("Read timed out", primary=httpcore.ReadTimeout())
-            transport = Transport(*lifecycle_replies()[:-1], lost,
-                                  reply(complete_response(result_schema_id="result.v1", replayed=True)))
-            original_exchange, original_retire = transport.exchange, transport.retire
-            retirement_started, release_retirement = asyncio.Event(), asyncio.Event()
-            cleanup = ExchangeFailed("Retirement failed", primary=OSError())
+            session, delivery, retry = SingleRetirementSession(store), RecordingDelivery(), Mock()
+            original_submit = delivery.submit
+            delivery.submit = AsyncMock(side_effect=original_submit)
+            failure = CheckpointFailed("Cannot retain accepted metadata")
+            controller = AttemptController(api(Transport(*lifecycle_replies()), scope().api_origin), store, AttemptClaims(), session,
+                delivery=delivery, on_delivery_retry=retry, delivery_retry_initial_seconds=0.001,
+                delivery_retry_max_seconds=0.002, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+            try:
+                with patch.object(store._database, "accept_delivery", side_effect=failure):
+                    with self.assertRaises(ControllerFailed) as caught:
+                        await controller.run(record())
+                self.assertIs(caught.exception.cause.cause, failure)
+                self.assertIsNone(caught.exception.cause.outcome)
+                self.assertIsNotNone(caught.exception.cause.delivery_acceptance)
+                self.assertIsNone(controller.operation._delivery_outcome)
+                with self.assertRaises(ControllerFailed):
+                    await controller.settle()
+                delivery.submit.assert_awaited_once()
+                retry.assert_not_called()
+                self.assertIs(type((await store.inventory())[0]), TerminalSelectedCheckpoint)
+            finally:
+                await store.close()
 
-            async def exchange(request, *, maximum_bytes, owner=None):
-                try:
-                    return await original_exchange(request, maximum_bytes=maximum_bytes, owner=owner)
-                except ExchangeFailed:
-                    transport.retirement_confirmed, transport.pending_owner = False, owner
-                    raise
-
-            async def retire(*, owner=None):
-                retirement_started.set()
-                await release_retirement.wait()
-                if late_evidence == "cleanup":
-                    raise cleanup
-                if late_evidence == "certificate":
-                    lost.primary = ssl.SSLCertVerificationError("PRIVATE_CERTIFICATE")
-                await original_retire(owner=owner)
-
-            transport.exchange, transport.retire = exchange, retire
-            retry = Mock()
-            controller = AttemptController(
-                api(transport, scope().api_origin),
-                store,
-                AttemptClaims(),
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-                terminal_recovery=TerminalRecovery(0.001, retry, Mock()),
-            )
+    async def test_caller_cancellation_stops_backoff_and_settle_never_creates_submission(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = await empty_store(directory, maximum_records=1)
+            session, delivery, entered = SingleRetirementSession(store), RecordingDelivery(), asyncio.Event()
+            delivery.submit = AsyncMock(side_effect=DeliveryFull("Relay full"))
+            controller = AttemptController(api(Transport(*lifecycle_replies()), scope().api_origin), store, AttemptClaims(), session,
+                delivery=delivery, on_delivery_retry=lambda *_: entered.set(), delivery_retry_initial_seconds=10,
+                delivery_retry_max_seconds=10, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             task = asyncio.create_task(controller.run(record()))
             try:
-                await asyncio.wait_for(retirement_started.wait(), 1)
-                self.assertEqual(len(transport.calls), 9)
+                await asyncio.wait_for(entered.wait(), 1)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                with self.assertRaises(ControllerFailed):
+                    await controller.settle()
+                delivery.submit.assert_awaited_once()
+                self.assertIs(type((await store.inventory())[0]), TerminalSelectedCheckpoint)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertFalse(task.done())
-                # Replay eligibility is checked after this original retirement,
-                # including any late independent certificate/cleanup evidence.
-                await asyncio.sleep(0.02)
-                release_retirement.set()
-                if late_evidence == "availability":
-                    confirmed = await task
-                    self.assertIsInstance(confirmed, TerminalConfirmed)
-                    retry.assert_called_once()
-                    self.assertEqual(len(transport.calls), 10)
-                    self.assertEqual([request.content for request, _ in transport.calls[-2:]], [confirmed.pending.body] * 2)
-                else:
-                    with self.assertRaises(ControllerFailed) as caught:
-                        await task
-                    failure = caught.exception.cause
-                    self.assertIsInstance(failure, PublicationFailed)
-                    self.assertIs(failure.api_failure.cause, lost)
-                    if late_evidence == "cleanup":
-                        self.assertIn(cleanup, failure.settlement_failures)
-                    retry.assert_not_called()
-                    self.assertEqual(len(transport.calls), 9)
-                    self.assertIsInstance((await store.records())[0], TerminalPending)
             finally:
-                release_retirement.set()
                 await cancel_task(task)
                 await store.close()
 
-    async def test_policy_rejects_nonfinite_bounds_and_missing_observers(self):
-        for value in (True, 0, -1, float("nan"), float("inf"), "1"):
-            with self.subTest(value=value):
-                with self.assertRaises(ValueError):
-                    TerminalRecovery(value, Mock(), Mock())
-        with self.assertRaises(ValueError):
-            TerminalRecovery(1, None, Mock())
+    async def test_original_ipc_retirement_and_late_permission_precede_retry(self):
+        for disposition in ("permanent", "cleanup", "available"):
+            with self.subTest(disposition=disposition), tempfile.TemporaryDirectory() as directory:
+                store = await empty_store(directory, maximum_records=1)
+                session, delivery = SingleRetirementSession(store), RecordingDelivery()
+                started, release = asyncio.Event(), asyncio.Event()
+                attempted, submit = [], delivery.submit
+                failure = DeliveryUnavailable("Original local transport unfinished")
+                async def interrupted(item):
+                    attempted.append(item.body)
+                    if len(attempted) == 1:
+                        delivery.retirement_confirmed = False
+                        raise failure
+                    return await submit(item)
+                delivery.submit = interrupted
+                async def retire():
+                    started.set()
+                    await release.wait()
+                    if disposition == "cleanup":
+                        raise ExchangeFailed("Original IPC cleanup is unconfirmed", primary=OSError())
+                    delivery.retirement_confirmed = True
+                delivery.retire = retire
+                delivery.can_retry = Mock(side_effect=lambda _: disposition == "available")
+                retry = Mock()
+                controller = AttemptController(api(Transport(*lifecycle_replies()), scope().api_origin), store, AttemptClaims(), session,
+                    delivery=delivery, on_delivery_retry=retry, delivery_retry_initial_seconds=0.001,
+                    delivery_retry_max_seconds=0.002, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                task = asyncio.create_task(controller.run(record()))
+                try:
+                    await asyncio.wait_for(started.wait(), 1)
+                    self.assertEqual(len(attempted), 1)
+                    self.assertFalse(task.done())
+                    delivery.can_retry.assert_not_called()
+                    retry.assert_not_called()
+                    release.set()
+                    if disposition == "available":
+                        await task
+                        self.assertEqual(attempted, [delivery.items[0].body] * 2)
+                        retry.assert_called_once()
+                        self.assertEqual(await store.inventory(), ())
+                    else:
+                        with self.assertRaises(ControllerFailed):
+                            await task
+                        self.assertEqual(len(attempted), 1)
+                        retry.assert_not_called()
+                        self.assertIs(type((await store.inventory())[0]), TerminalSelectedCheckpoint)
+                    self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
+                finally:
+                    release.set()
+                    await cancel_task(task)
+                    await store.close()
+
+    async def test_retry_settings_reject_nonfinite_bounds_and_missing_recipient_before_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = await empty_store(directory, maximum_records=1)
+            session, transport = SingleRetirementSession(store), Transport()
+            settings = dict(delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=1,
+                delivery_retry_max_seconds=2, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+            try:
+                for key, value in (("delivery_retry_initial_seconds", True), ("delivery_retry_initial_seconds", 0),
+                                   ("delivery_retry_max_seconds", float("nan")), ("delivery_retry_max_seconds", float("inf")),
+                                   ("delivery_retry_max_seconds", 0.5), ("on_delivery_retry", None)):
+                    with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                        AttemptController(api(transport, scope().api_origin), store, AttemptClaims(), session, **(settings | {key: value}))
+                self.assertEqual(session.events, [])
+                self.assertEqual(transport.calls, [])
+            finally:
+                await store.close()

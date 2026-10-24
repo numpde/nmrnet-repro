@@ -1,5 +1,8 @@
 """A bounded observation outage never repeats the original scientific operation."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import tempfile
 import unittest
@@ -10,7 +13,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import observation, progress_response
 from tests.fakes.execution import PausedSession, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class CompletedDuringOutage(PausedSession):
@@ -71,16 +74,17 @@ class ObservationRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 observation_recovery=ObservationRecovery(1, 0.02, retry, recovered),
             )
             try:
                 terminal = await asyncio.wait_for(executor.run(acknowledged), 3)
-                self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
-                self.assertEqual(terminal.evidence, session.outcome.evidence)
-                self.assertEqual(await store.records(), (terminal,))
+                self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
+                self.assertEqual(terminal.selection.body_sha256, executor.delivery.items[0].body_sha256)
+                self.assertIsNone(executor._outcome)
+                self.assertEqual(await store.inventory(), (terminal,))
                 self.assertEqual([item[0] for item in notices], ["retry", "recovered"])
                 self.assertIs(notices[0][1], notices[1][1])
                 self.assertEqual(notices[0][1].status, 503)

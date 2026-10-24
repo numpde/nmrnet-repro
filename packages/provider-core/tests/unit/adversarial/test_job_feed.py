@@ -9,7 +9,7 @@ from provider_core.job_feed import read_jobs_page
 from provider_core.response_json import ResponseRejected
 from tests.fakes.api import Transport, reply
 from tests.fakes.job_feed import page, response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class JobFeedFailureTests(unittest.IsolatedAsyncioTestCase):

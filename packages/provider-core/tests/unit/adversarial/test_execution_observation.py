@@ -1,11 +1,14 @@
 """Server stop and completion races preserve both ownership and scientific evidence."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from provider_core.attempt_record import SuppressedOutcome, SuppressionReason
+from provider_core.attempt_record import SuppressionReason
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
 from provider_core.transport import ExchangeFailed
@@ -13,7 +16,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import observation, progress_response
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class WaitingSession(Session):
@@ -63,7 +66,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=0.01,
                     task_settle_seconds=0.02,
                 )
@@ -93,7 +96,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.01,
             )
@@ -134,7 +137,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.1,
                 task_settle_seconds=0.02,
             )
@@ -147,11 +150,12 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                     claim.release()
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
-                retained = await executor.retain_suppressed_outcome()
-                self.assertIsInstance(retained, SuppressedOutcome)
+                retained = await executor.retain_suppressed_disposition()
+                self.assertIsInstance(retained, SuppressedCheckpoint)
                 self.assertIs(retained.reason, SuppressionReason.SERVER_STOP)
-                self.assertEqual(retained.candidate.evidence, session.outcome.evidence)
-                self.assertEqual(await store.records(), (retained,))
+                self.assertFalse(hasattr(retained, "candidate"))
+                self.assertIsNone(executor._outcome)
+                self.assertEqual(await store.inventory(), (retained,))
                 claim.release()
                 self.assertEqual([e[0] for e in session.events], ["prepare", "execute", "retire"])
             finally:
@@ -183,7 +187,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.02,
             )
@@ -195,10 +199,10 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(transport.calls), 7)
                 with self.assertRaises(OwnershipRefused):
                     claim.release()
-                retained = await executor.retain_suppressed_outcome()
+                retained = await executor.retain_suppressed_disposition()
                 self.assertIs(retained.reason, SuppressionReason.OBSERVATION_FAILED)
                 self.assertIs(executor.last_failure.cause, failed.exception.api_failure)
-                self.assertEqual(await store.records(), (retained,))
+                self.assertEqual(await store.inventory(), (retained,))
                 claim.release()
                 self.assertEqual([e[0] for e in session.events], ["prepare", "execute", "retire"])
             finally:
@@ -223,7 +227,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.01,
             )
@@ -240,9 +244,9 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(session.cancel_count, 1)
                 with self.assertRaises(OwnershipRefused):
                     claim.release()
-                retained = await executor.retain_suppressed_outcome()
+                retained = await executor.retain_suppressed_disposition()
                 self.assertIs(retained.reason, SuppressionReason.SERVER_STOP)
-                self.assertEqual(await store.records(), (retained,))
+                self.assertEqual(await store.inventory(), (retained,))
                 claim.release()
                 self.assertEqual(len(transport.calls), 7)
             finally:
@@ -264,7 +268,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=0.1,
                     task_settle_seconds=0.02,
                 )
@@ -307,7 +311,7 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.02,
             )

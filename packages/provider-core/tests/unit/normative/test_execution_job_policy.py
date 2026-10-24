@@ -1,5 +1,8 @@
 """An explicit consumer policy can continue a closed Job's active Attempt."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import tempfile
 import unittest
 
@@ -10,7 +13,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
 from tests.fakes.execution import PausedSession, acknowledged_store, execute_with_watchdog
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ExecutionJobPolicyTests(unittest.IsolatedAsyncioTestCase):
@@ -35,14 +38,14 @@ class ExecutionJobPolicyTests(unittest.IsolatedAsyncioTestCase):
                 return AttemptObservation(ATTEMPT_REF, "job:example", "in_progress", state)
 
             client.read_attempt = read_attempt
-            executor = AttemptExecutor(client, store, claim, session, allowed_job_states=frozenset({"open", "closed"}),
+            executor = AttemptExecutor(client, store, claim, session, delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open", "closed"}),
                                        poll_seconds=0.01, task_settle_seconds=0.1)
             try:
                 terminal = await execute_with_watchdog(executor, acknowledged)
-                self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
+                self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
                 self.assertIn("closed", observed)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertEqual(await store.records(), (terminal,))
+                self.assertEqual(await store.inventory(), (terminal,))
                 claim.release()
             finally:
                 session.release.set()

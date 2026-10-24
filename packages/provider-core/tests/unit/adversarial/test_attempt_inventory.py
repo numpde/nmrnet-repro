@@ -9,7 +9,7 @@ from provider_core.attempt_inventory import read_attempt_inventory
 from provider_core.response_json import ResponseRejected
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_inventory import page, response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class AttemptInventoryFailureTests(unittest.IsolatedAsyncioTestCase):

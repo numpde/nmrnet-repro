@@ -26,7 +26,6 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
-from provider_core.attempt_store import StoreLimits
 from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
 
@@ -94,10 +93,6 @@ class TerminalRecordFailureTests(unittest.TestCase):
             with self.assertRaises(ValueError) as failure:
                 decode_record(json.dumps(document).encode(), scope=scope())
             self.assertNotIn("private untrusted reason", str(failure.exception))
-
-    def test_capacity_cannot_admit_start_without_room_for_full_terminal_records(self):
-        with self.assertRaises(ValueError):
-            StoreLimits(1, MAX_RECORD_BYTES - 1, 0, confirmed_history_records=64)
 
     def pending(self):
         return TerminalPending(

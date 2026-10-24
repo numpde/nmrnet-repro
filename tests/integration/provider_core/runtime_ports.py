@@ -5,6 +5,7 @@ and preparation ports from test_nmrnet_interpreter.py, at c452e23. These peers
 exercise real HTTPS and the installed core, not a deployed API or external model.
 """
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -31,7 +32,10 @@ from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.attempt_store import AttemptStore
+from provider_core.checkpoint_store import CheckpointStore
+from provider_core.delivery_service import DeliveryBinding, DeliveryService
+from provider_core.delivery_client import DeliveryClient
+from provider_core.delivery_store import QueueLimits
 from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
 
@@ -68,6 +72,7 @@ class RuntimePeers:
         self.operator_notices = []
         self.progress_notices = []
         self.result = None
+        self.delivery_notices = []
         # These lifecycle witnesses inspect the complete public audit record.
         self.output = {"verbosity": "max"}
         self.corrupt_input = False
@@ -95,7 +100,7 @@ class RuntimePeers:
             self.config = load_provider_config(self.files.path)
             self.files.state.mkdir(mode=0o700)
             settings = self.config.lifecycle
-            self.store = AttemptStore(
+            self.store = CheckpointStore(
                 settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
             )
             self.stack.push_async_callback(self.store.close)
@@ -107,6 +112,25 @@ class RuntimePeers:
                 expected_topology=self.config.api.expected_topology,
             )
             self.stack.push_async_callback(self.api.retire)
+            relay_root = Path(directory) / "relay-state"
+            relay_root.mkdir(mode=0o700)
+            self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o700)
+            publisher = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport(),
+                                    expected_topology=self.config.api.expected_topology)
+            self.relay = DeliveryService(
+                relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
+                bindings=(DeliveryBinding(self.config.delivery.endpoint, publisher),), request_seconds=2,
+                retry_initial_seconds=0.01, retry_max_seconds=0.1,
+                on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
+                diagnostic_status=lambda: {"output_failures": 0},
+            )
+            self.relay_task = asyncio.create_task(self.relay.run())
+            self.stack.push_async_callback(self.close_relay)
+            await asyncio.wait_for(self.relay.ready.wait(), 2)
+            self.delivery = DeliveryClient(self.config.delivery.endpoint,
+                exchange_seconds=self.config.delivery.request_seconds,
+                retirement_seconds=self.config.delivery.retirement_seconds)
+            self.stack.push_async_callback(self.delivery.retire)
             return self
         except BaseException:
             await self.stack.aclose()
@@ -118,6 +142,16 @@ class RuntimePeers:
     async def settle_store(self):
         if self.store.pending_operation is not None:
             await self.store.settle()
+
+    async def close_relay(self):
+        self.relay.request_stop()
+        await asyncio.wait_for(asyncio.shield(self.relay_task), 3)
+        await self.relay.close()
+
+    async def wait_published(self, count=1):
+        async with asyncio.timeout(3):
+            while sum(facts["event"] == "delivery_published" for _, facts in self.delivery_notices) < count:
+                await asyncio.sleep(0.005)
 
     async def discover(self):
         discovered = await self.api.jobs(
@@ -160,7 +194,10 @@ class RuntimePeers:
             # Direct assembly keeps the explicit stopped-recovery qualification;
             # production's factory requires an enabled policy before allocation.
             "start_recovery": None,
-            "terminal_recovery": None,
+            "on_delivery_retry": lambda attempt, failure, seconds: self.delivery_notices.append(
+                (failure, {"event": "producer_delivery_retry", "retry_seconds": seconds,
+                           "execution_attempt_ref": attempt.admission.execution_attempt_ref})
+            ),
         }
 
     def observation_retry(self, _attempt, _failure, _seconds):

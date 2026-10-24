@@ -1,4 +1,4 @@
-"""Refused deployment inputs cannot publish a complete selected generation."""
+"""Invalid inputs stop before producing runnable deployment configuration."""
 
 import io
 import tempfile
@@ -11,7 +11,7 @@ from tools.provider_deployment import main
 
 
 class DeploymentRefusalTests(unittest.TestCase):
-    def test_unsafe_secret_and_invalid_route_or_dns_never_publish_completion(self):
+    def test_unsafe_secret_and_invalid_route_or_dns_never_produce_a_compose_plan(self):
         for failure in ("permissions", "escape", "missing", "interface", "resolvers", "legacy-profile"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 arguments, files = deployment_inputs(Path(directory))
@@ -32,13 +32,18 @@ class DeploymentRefusalTests(unittest.TestCase):
                     else:
                         raw = 'service_env = "legacy.env"\n' + raw
                     settings.write_text(raw)
-                command = [word for name, value in arguments.items() for word in ("--" + name.replace("_", "-"), str(value))]
+                command = []
+                for name, value in arguments.items():
+                    if name == "source_names":
+                        for source in value:
+                            command += ["--source", source]
+                    else:
+                        command += ["--" + name.replace("_", "-"), str(value)]
                 errors = io.StringIO()
                 with patch("sys.stderr", errors):
                     self.assertEqual(main(["freeze", *command]), 2)
                 self.assertNotIn("PRIVATE_MODEL_KEY", errors.getvalue())
-                self.assertFalse((arguments["bundle"] / "complete").exists())
-                self.assertFalse((Path(directory) / "output/bundle-name").exists())
+                self.assertFalse((arguments["bundle"] / "compose.json").exists())
                 if failure == "missing":
                     self.assertIn("FileNotFoundError", errors.getvalue())
                     self.assertIn('"errno": 2', errors.getvalue())

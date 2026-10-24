@@ -1,5 +1,7 @@
 """Phase delivery uncertainty cannot waive stop, cleanup or condition receipts."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -12,7 +14,7 @@ from tests.fakes.attempts import observation
 from tests.fakes.conditions import ConditionTransport, ReportingSession
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.phase_progress import PhaseProgressTransport
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -29,7 +31,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                         store,
                         claim,
                         session,
-                        allowed_job_states=frozenset({"open"}),
+                        delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                         poll_seconds=1,
                         task_settle_seconds=0.1,
                         on_unconfirmed_phase_progress=notice,
@@ -41,7 +43,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIs(caught.exception.cause.__context__, notice.call_args.args[2])
                         expected = ["retire"] if phase == "preparing" else ["prepare", "retire"]
                         self.assertEqual([event[0] for event in session.events], expected)
-                        self.assertEqual(await store.records(), (acknowledged,))
+                        self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                         notice.assert_called_once()
                         claim.release()
                     finally:
@@ -58,7 +60,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 on_unconfirmed_phase_progress=notice,
@@ -91,7 +93,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                     on_unconfirmed_phase_progress=notice,
@@ -124,7 +126,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                     on_unconfirmed_phase_progress=observer,
@@ -154,7 +156,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 on_unconfirmed_phase_progress=notice,
@@ -164,7 +166,7 @@ class PhaseProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                     await executor.run(acknowledged)
                 notice.assert_not_called()
                 self.assertEqual([event[0] for event in session.events], ["retire"])
-                self.assertEqual(await store.records(), (acknowledged,))
+                self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                 claim.release()
             finally:
                 await store.close()

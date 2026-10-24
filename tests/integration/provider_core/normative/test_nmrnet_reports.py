@@ -10,11 +10,12 @@ import io
 import itertools
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
 import httpcore
-from contextlib import redirect_stderr
+from contextlib import closing, redirect_stderr
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,8 +29,9 @@ from tests.fakes.condition_recovery import ConditionOutageTransport
 from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
 from tests.fakes.controller import empty_store
 from tests.fakes.execution import Session, acknowledged_store, unexpected_condition
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.smiles_ports import SessionPorts
@@ -46,25 +48,12 @@ from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, Gener
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import PredictionExecutionFailed
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import (
-    MAX_EVIDENCE_BYTES,
-    AcknowledgedAttempt,
-    LocalExecutionPhase,
-    ProtectedEvidence,
-    TerminalConfirmed,
-    TerminalHeld,
-    TerminalOperation,
-    TerminalPending,
-    TerminalReadNotVisible,
-    TerminalReadRequired,
-    TerminalStateObserved,
-    acknowledge_start,
-)
+from provider_core.attempt_record import MAX_EVIDENCE_BYTES, TerminalOperation, acknowledge_start
 from provider_core.attempt_request import fail_body
-from provider_core.attempt_response import AttemptObservation, read_fail
-from provider_core.attempt_store import StoreFailed
+from provider_core.attempt_response import AttemptObservation
+from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
 from provider_core.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
-from provider_core.controller import StartRecovery, TerminalRecovery
+from provider_core.controller import StartRecovery
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import (
@@ -77,14 +66,29 @@ from provider_core.execution import (
     ObservationRecovery,
 )
 from provider_core.ownership import AttemptClaims, OwnershipRefused
-from provider_core.publication import PublicationFailed, PublicationRefused
-from provider_core.recovery import RecoveryFailed, RecoveryRefused
+from provider_core.delivery_client import DeliveryRejected, DeliveryUnavailable
+from provider_core.delivery_store import DeliveryOutcome, DeliveryStorageFailed
+from provider_core.delivery_worker import DeliveryWorkerFailed
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, TerminalSelectedCheckpoint
+from provider_core.recovery import ObservedAttempt, RecoveryFailed, RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_sqlite_native_identity_reaches_operator_stderr_without_sql_or_private_names(self):
+        with closing(sqlite3.connect(":memory:")) as database:
+            try:
+                database.execute('SELECT * FROM "PRIVATE_SQL_TABLE"')
+            except sqlite3.Error as cause:
+                report = self.receive(CheckpointFailed("Cannot retain producer control", cause=cause))
+        rendered = json.dumps(report)
+        self.assertIn('"sqlite_errorcode": 1', rendered)
+        self.assertIn('"sqlite_errorname": "SQLITE_ERROR"', rendered)
+        self.assertNotIn("PRIVATE_SQL_TABLE", rendered)
+        self.assertNotIn("SELECT", rendered)
+
     async def test_connect_rejection_reaches_operator_as_proxy_status_without_private_reason_or_api_status(self):
         report = self.receive(ExchangeFailed(
             "The CONNECT proxy refused the tunnel",
@@ -118,23 +122,14 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         for private in (key, "FALLBACK_CREDENTIAL_", "PRIVATE_FIELD", "PRIVATE_RESPONSE_DUMP", "PRIVATE_INPUT", "C 0 0 0"):
             self.assertNotIn(private, rendered)
 
-    def test_history_expiry_preserves_observed_unlinks_native_cause_and_unsynced_directory_for_operator(self):
-        failure = StoreFailed(
-            "Confirmed-history expiry is unconfirmed",
-            cause=OSError(errno.EIO, "owned key=credential-canary"),
-            removed_history_records=("a" * 64 + ".json",),
-            uncertain_history_record="b" * 64 + ".json",
-            history_directory_synced=False,
-            history_trim_phase="unlink",
-        )
+    def test_checkpoint_failure_preserves_private_io_cause_without_inventing_history_facts(self):
+        failure = CheckpointFailed("Producer checkpoint operation failed", cause=OSError(errno.EIO, "owned key=credential-canary"))
         rendered = json.dumps(self.receive(failure, secrets=("credential-canary",)))
-        self.assertIn("removed_history_records", rendered)
-        self.assertIn("a" * 64 + ".json", rendered)
-        self.assertIn("b" * 64 + ".json", rendered)
-        self.assertIn('"history_directory_synced": false', rendered)
-        self.assertIn('"history_trim_phase": "unlink"', rendered)
+        self.assertIn("Producer checkpoint operation failed", rendered)
         self.assertIn('"errno": 5', rendered)
         self.assertNotIn("credential-canary", rendered)
+        self.assertNotIn("history_", rendered)
+        self.assertNotIn("record_visible", rendered)
 
     def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_in_stderr(self):
         first = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; known-key")
@@ -163,6 +158,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
+                delivery=RecordingDelivery(),
+                on_delivery_retry=Mock(),
+                delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04,
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.005,
                 task_settle_seconds=0.1,
@@ -188,7 +187,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", rendered)
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
-                await executor.retain_suppressed_outcome()
+                await executor.retain_suppressed_disposition()
                 claim.release()
             finally:
                 await store.close()
@@ -238,7 +237,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
-                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+                on_delivery_retry=Mock(),
                 start_recovery=StartRecovery(1, Mock(), Mock()),
             )
             allocation = Mock(
@@ -257,7 +256,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn('"errno": 13', rendered)
                 self.assertNotIn("execution_attempt_ref", rendered)
                 self.assertNotIn("PRIVATE", rendered)
-                self.assertEqual(await store.records(), ())
+                self.assertEqual(await store.inventory(), ())
                 self.assertEqual(transport.calls, [])
                 self.assertEqual(factory.allocations, [])
                 self.assertIsNone(factory.last_failure)
@@ -275,48 +274,31 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 await store.close()
 
     def test_read_only_recovery_diagnostics_distinguish_observation_from_receipt_and_durability(self):
-        pending = TerminalPending(
-            acknowledge_start(record(), admission()),
-            TerminalOperation.FAIL,
-            fail_body(ATTEMPT_REF, "input_rejected", "PRIVATE_MESSAGE"),
-            ProtectedEvidence("evidence.v1", b"PRIVATE_EVIDENCE"),
-        )
-        required = TerminalReadRequired(pending, 409, "request:publication")
-        observed = TerminalStateObserved(required, AttemptObservation(ATTEMPT_REF, "job:example", "succeeded", "closed"))
-        invisible = TerminalReadNotVisible(required, "request:read")
+        acknowledged = AcknowledgedCheckpoint(record(), admission())
+        selected = TerminalSelectedCheckpoint(acknowledged, TerminalOperation.FAIL, "sha256:" + "b" * 64, 42)
+        observed = ObservedAttempt(selected, AttemptObservation(ATTEMPT_REF, "job:example", "succeeded", "closed"))
         send = ApiFailure(
-            "publish outcome",
-            "No verified response was obtained",
-            response=HttpResponse(
-                409, ((b"x-request-id", b"request:publication"), (b"authorization", b"PRIVATE_HEADER")), b"PRIVATE_BODY"
-            ),
+            "publish outcome", "No verified response was obtained",
+            response=HttpResponse(409, ((b"x-request-id", b"request:publication"),
+                                        (b"authorization", b"PRIVATE_HEADER")), b"PRIVATE_BODY"),
         )
-        publication = PublicationFailed(
-            "Publication stopped for read-only reconciliation",
-            cause=send,
-            outcome=required,
-            api_failure=send,
-            settlement_failures=(),
-        )
-        report = self.receive(publication)
-        rendered = json.dumps(report)
-        self.assertIn('"terminal_receipt_received": false', rendered)
-        self.assertIn('"publication_outcome_kind": "TerminalReadRequired"', rendered)
+        publication = DeliveryWorkerFailed(cause=send, api_failure=send, cleanup_failures=(), api_receipt_received=False)
+        rendered = json.dumps(self.receive(publication))
+        self.assertIn('"api_receipt_received": false', rendered)
         self.assertIn("request:publication", rendered)
         self.assertNotIn("PRIVATE", rendered)
-        for result in (observed, invisible):
+        for result in (None, observed):
             failure = RecoveryFailed(OSError(errno.EIO, "PRIVATE_PATH"), observed_record=result)
             report = self.receive(failure)
+            owner = report["relationships"][0]["failure"]
+            self.assertIs(owner["attempt_observation_received"], result is observed)
             rendered = json.dumps(report)
-            self.assertIn('"terminal_readback_in_memory": true', rendered)
             self.assertIn('"errno": 5', rendered)
             if result is observed:
                 self.assertIn('"observed_attempt_state": "succeeded"', rendered)
-            else:
-                self.assertIn('"terminal_read_not_visible": true', rendered)
-                self.assertIn("request:read", rendered)
+                self.assertIn('"observed_job_state": "closed"', rendered)
             self.assertNotIn("PRIVATE", rendered)
-            self.assertNotIn("terminal_receipt_received", rendered)
+            self.assertNotIn("api_receipt_received", rendered)
             self.assertNotIn("readback_retained", rendered)
 
     # silent-defaults: allow-contract -- Fixtures without configured credentials still exercise the same receiving renderer; credential cases supply explicit keys.
@@ -348,6 +330,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
+                delivery=RecordingDelivery(),
+                on_delivery_retry=Mock(),
+                delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04,
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
@@ -356,9 +342,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ExecutionFailed) as caught:
                     await executor.run(acknowledged)
                 self.assertIs(caught.exception.outcome, session.outcome)
-                (retained,) = await store.records()
-                self.assertIs(type(retained), AcknowledgedAttempt)
-                self.assertIs(retained.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                (retained,) = await store.inventory()
+                self.assertIs(type(retained), EnteredCheckpoint)
                 self.assertEqual(len(transport.calls), 7)
                 report = self.receive(caught.exception)
                 rendered = json.dumps(report)
@@ -369,7 +354,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", rendered)
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
-                await executor.retain_suppressed_outcome()
+                await executor.retain_suppressed_disposition()
                 claim.release()
             finally:
                 await store.close()
@@ -397,6 +382,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
+                delivery=RecordingDelivery(),
+                on_delivery_retry=Mock(),
+                delivery_retry_initial_seconds=0.01,
+                delivery_retry_max_seconds=0.04,
                 allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
@@ -677,7 +666,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             OwnershipRefused("Attempt claim still owns an operation; settle it before another effect"),
             ExecutionRefused("Exact acknowledgement is not current in storage; reread it before preparing work"),
             StartRefused("Exact pending start is absent or has already advanced; reread storage before recovery"),
-            PublicationRefused("Terminal record belongs to another recovery scope"),
+            CheckpointRefused("Producer checkpoint belongs to another recovery scope"),
+            DeliveryRejected("The durable acknowledgement does not match this selected body"),
             RecoveryRefused("Selected recovery record is no longer current; reread storage before another action"),
             UploadInputRejected("inspect attached Uploads before selecting a source"),
         ):
@@ -900,46 +890,43 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ValueError", rendered)
         self.assertNotIn("PRIVATE", rendered)
 
-    def test_received_start_and_terminal_receipts_are_presence_facts_without_durability_claims(self):
+    def test_start_enqueue_and_api_receipt_presence_remain_distinct_without_cleanup_or_deletion_claims(self):
         active = acknowledge_start(record(), admission())
-        pending = TerminalPending(
-            active,
-            TerminalOperation.FAIL,
-            fail_body(ATTEMPT_REF, "input_rejected", " Explain\n雪\x01 "),
-            ProtectedEvidence("evidence.v1", b"PRIVATE_EVIDENCE"),
-        )
-        receipt = read_fail(
-            fail_response(), execution_attempt_ref=ATTEMPT_REF, failure_code="input_rejected", failure_message=" Explain\n雪\x01 "
-        )
-        confirmed = TerminalConfirmed(pending, receipt)
-        held = TerminalHeld(pending, "execution_attempt_outcome_expired", "request:conflict")
+        item = DeliveryOutcome(active.start.scope.api_origin, active.start.scope.provider_ref,
+            active.admission.job_ref, ATTEMPT_REF, TerminalOperation.FAIL,
+            fail_body(ATTEMPT_REF, "input_rejected", "PRIVATE_MESSAGE"))
         for acknowledgement in (None, active):
-            failure = StartFailed(
-                "Start acknowledgement durability is unconfirmed",
-                cause=OSError(errno.EIO, "PRIVATE"),
-                acknowledgement=acknowledgement,
-                api_failure=None,
-                settlement_failures=(),
-            )
+            failure = StartFailed("Start acknowledgement durability is unconfirmed",
+                cause=OSError(errno.EIO, "PRIVATE"), acknowledgement=acknowledgement,
+                api_failure=None, settlement_failures=())
             report = self.receive(failure)
             owner = report["relationships"][0]["failure"]
             self.assertEqual(owner["acknowledgement_received"], acknowledgement is active)
             if acknowledgement is active:
                 self.assertEqual(owner["observed_attempt_state"], "in_progress")
             self.assertNotIn("PRIVATE", json.dumps(report))
-        for outcome in (None, confirmed, held):
-            failure = PublicationFailed(
-                "Publication receipt durability is unconfirmed",
-                cause=OSError(errno.EIO, "PRIVATE"),
-                outcome=outcome,
-                api_failure=None,
-                settlement_failures=(),
+        for acceptance in (None, item.acceptance()):
+            failure = ExecutionFailed(cause=CheckpointFailed("Cannot retain accepted control", cause=OSError(errno.EIO, "PRIVATE")),
+                outcome=None, unconfirmed_record=None, api_failure=None, cleanup_failures=(), attempt=active)
+            failure.delivery_acceptance = acceptance
+            report = self.receive(failure)
+            owner = report["relationships"][0]["failure"]
+            self.assertEqual(owner["delivery_acceptance_received"], acceptance is not None)
+            self.assertNotIn("api_receipt_received", owner)
+            self.assertNotIn("retirement_confirmed", owner)
+            self.assertNotIn("PRIVATE", json.dumps(report))
+        for received in (False, True):
+            failure = DeliveryWorkerFailed(
+                cause=DeliveryStorageFailed("Cannot remove the published queue row", cause=OSError(errno.EIO, "PRIVATE_DISK")),
+                api_failure=None, cleanup_failures=(OSError(errno.EPIPE, "PRIVATE_CLEANUP"),),
+                api_receipt_received=received,
             )
             report = self.receive(failure)
             owner = report["relationships"][0]["failure"]
-            self.assertEqual(owner["publication_observation_received"], outcome is not None)
-            self.assertEqual(owner["terminal_receipt_received"], outcome is confirmed)
-            if outcome is not None:
-                self.assertEqual(owner["publication_outcome_kind"], type(outcome).__name__)
-                self.assertEqual(owner["terminal_operation"], "fail")
-            self.assertNotIn("PRIVATE", json.dumps(report))
+            self.assertIs(owner["api_receipt_received"], received)
+            rendered = json.dumps(report)
+            self.assertIn('"errno": 5', rendered)
+            self.assertIn('"errno": 32', rendered)
+            self.assertNotIn("delivery_acceptance_received", owner)
+            self.assertNotIn("queue_row_deleted", owner)
+            self.assertNotIn("PRIVATE", rendered)

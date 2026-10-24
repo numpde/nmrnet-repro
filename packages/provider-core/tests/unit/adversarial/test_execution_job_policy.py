@@ -1,5 +1,8 @@
 """A consumer's Job policy cannot authorize a terminal Attempt or unknown state."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import tempfile
 import unittest
 
@@ -9,7 +12,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import ATTEMPT_REF, observation, progress_response
 from tests.fakes.execution import PausedSession, Session, acknowledged_store, execute_with_watchdog
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ExecutionJobPolicyFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -22,7 +25,7 @@ class ExecutionJobPolicyFailureTests(unittest.IsolatedAsyncioTestCase):
                                frozenset({"cancelled"}), frozenset({"open", "cancelled"})):
                     with self.subTest(states=states), self.assertRaises(ValueError):
                         AttemptExecutor(api(Transport(), store.scope.api_origin), store, claim, Session(store),
-                                        allowed_job_states=states, poll_seconds=0.01, task_settle_seconds=0.1)
+                                        delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=states, poll_seconds=0.01, task_settle_seconds=0.1)
                 claim.release()
             finally:
                 await store.close()
@@ -35,14 +38,14 @@ class ExecutionJobPolicyFailureTests(unittest.IsolatedAsyncioTestCase):
                     session = Session(store)
                     transport = Transport(reply(observation(state=state, job_state=job_state)))
                     executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                               allowed_job_states=frozenset({"open", "closed"}),
+                                               delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open", "closed"}),
                                                poll_seconds=0.01, task_settle_seconds=0.1)
                     try:
                         with self.assertRaises(ExecutionFailed) as failed:
                             await executor.run(acknowledged)
                         self.assertIsInstance(failed.exception.cause, ExecutionStopped)
                         self.assertEqual([event[0] for event in session.events], ["retire"])
-                        self.assertEqual(await store.records(), (acknowledged,))
+                        self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                         self.assertEqual(len(transport.calls), 1)
                         claim.release()
                     finally:
@@ -66,7 +69,7 @@ class ExecutionJobPolicyFailureTests(unittest.IsolatedAsyncioTestCase):
                 return AttemptObservation(ATTEMPT_REF, "job:example", "in_progress", job_state)
 
             client.read_attempt = read_attempt
-            executor = AttemptExecutor(client, store, claim, session, allowed_job_states=states,
+            executor = AttemptExecutor(client, store, claim, session, delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=states,
                                        poll_seconds=0.01, task_settle_seconds=0.1)
             try:
                 with self.assertRaises(ExecutionFailed) as failed:

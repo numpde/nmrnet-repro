@@ -1,99 +1,83 @@
-"""Terminal recovery reuses retained publication, never the scientific session."""
+"""The controller retains one relay handoff across outages without new science."""
 
 import asyncio
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-import httpcore
-
-from provider_core.attempt_record import TerminalConfirmed
-from provider_core.controller import AttemptController, TerminalRecovery
+from provider_core.controller import AttemptController
+from provider_core.delivery_client import DeliveryUnavailable
 from provider_core.ownership import AttemptClaims
-from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
+from tests.fakes.api import Transport, api
 from tests.fakes.attempt_store import record, scope
-from tests.fakes.attempts import complete_response
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.controller import SingleRetirementSession, empty_store, lifecycle_replies
-from tests.fakes.publication import api
 
 
 class ControllerRecoveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_outage_beyond_thirty_seconds_replays_exact_terminal_bytes_without_new_science(self):
+    async def test_outage_beyond_thirty_seconds_preserves_exact_handoff_without_new_science(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)
-            session = SingleRetirementSession(store)
-            transport = Transport(
-                *lifecycle_replies()[:-1],
-                reply(b"maintenance", status=503),
-                reply(complete_response(result_schema_id="result.v1", replayed=True)),
-            )
+            session, delivery = SingleRetirementSession(store), RecordingDelivery()
+            attempted, submit = [], delivery.submit
+            failure = DeliveryUnavailable("Relay unavailable", status=503)
+            async def interrupted(item):
+                attempted.append(item.body)
+                if len(attempted) == 1:
+                    raise failure
+                return await submit(item)
+            delivery.submit = interrupted
+            delivery.can_retry = Mock(return_value=True)
             loop = asyncio.get_running_loop()
-            real_time = loop.time
-            outage_seconds = 0
-
-            def clock():
-                return real_time() + outage_seconds
-
-            def observe_retry(*_facts):
-                nonlocal outage_seconds
-                outage_seconds += 31
-            controller = AttemptController(
-                api(transport, scope().api_origin),
-                store,
-                AttemptClaims(),
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-                terminal_recovery=TerminalRecovery(0.001, observe_retry, Mock()),
-            )
+            real_time, elapsed = loop.time, 0
+            def retry(*_):
+                nonlocal elapsed
+                elapsed += 31
+            transport = Transport(*lifecycle_replies())
+            controller = AttemptController(api(transport, scope().api_origin), store, AttemptClaims(), session,
+                delivery=delivery, on_delivery_retry=retry, delivery_retry_initial_seconds=0.001,
+                delivery_retry_max_seconds=0.002, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
-                with patch.object(loop, "time", side_effect=clock):
-                    confirmed = await controller.run(record())
-                self.assertIsInstance(confirmed, TerminalConfirmed)
-                self.assertEqual(len(transport.calls), 10)
+                with patch.object(loop, "time", side_effect=lambda: real_time() + elapsed):
+                    accepted = await controller.run(record())
+                self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
+                self.assertEqual(elapsed, 31)
+                self.assertEqual(attempted, [delivery.items[0].body] * 2)
+                self.assertEqual(len(transport.calls), 8)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertEqual(outage_seconds, 31)
-                self.assertEqual([request.content for request, _ in transport.calls[-2:]], [confirmed.pending.body] * 2)
+                self.assertEqual(await store.inventory(), ())
             finally:
                 await store.close()
 
-    async def test_same_controller_recovers_exact_terminal_body_after_unverified_reply_without_repeating_science(self):
+    async def test_same_controller_retries_owned_bytes_then_clears_after_relay_ack_and_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)
-            session = SingleRetirementSession(store)
-            lost = ExchangeFailed("Unverified response", primary=httpcore.RemoteProtocolError("PRIVATE_WIRE"))
-            transport = Transport(
-                *lifecycle_replies()[:-1],
-                lost,
-                reply(b"maintenance", status=503),
-                reply(complete_response(result_schema_id="result.v1", replayed=True)),
-            )
-            retry, recovered = Mock(), Mock()
-            controller = AttemptController(
-                api(transport, scope().api_origin),
-                store,
-                AttemptClaims(),
-                session,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-                terminal_recovery=TerminalRecovery(0.002, retry, recovered),
-            )
+            session, delivery = SingleRetirementSession(store), RecordingDelivery()
+            attempted, submit = [], delivery.submit
+            failures = [DeliveryUnavailable("Unconfirmed relay reply"), DeliveryUnavailable("Relay unavailable", status=503)]
+            async def interrupted(item):
+                attempted.append(item.body)
+                if failures:
+                    raise failures.pop(0)
+                return await submit(item)
+            delivery.submit = interrupted
+            delivery.can_retry = Mock(return_value=True)
+            retry = Mock()
+            transport = Transport(*lifecycle_replies())
+            controller = AttemptController(api(transport, scope().api_origin), store, AttemptClaims(), session,
+                delivery=delivery, on_delivery_retry=retry, delivery_retry_initial_seconds=0.001,
+                delivery_retry_max_seconds=0.002, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
-                confirmed = await controller.run(record())
-                self.assertIsInstance(confirmed, TerminalConfirmed)
-                self.assertTrue(confirmed.receipt.replayed)
-                self.assertEqual(await store.records(), (confirmed,))
-                self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                sent = [request.content for request, _ in transport.calls[-3:]]
-                self.assertEqual(sent, [confirmed.pending.body] * 3)
-                self.assertEqual(len(transport.calls), 11)
+                accepted = await controller.run(record())
+                self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
+                self.assertEqual(attempted, [delivery.items[0].body] * 3)
+                self.assertEqual(accepted.selection.body_sha256, delivery.items[0].body_sha256)
                 self.assertEqual(retry.call_count, 2)
-                recovered.assert_called_once()
-                self.assertIs(recovered.call_args.args[0], confirmed.pending.attempt)
-                self.assertIs(recovered.call_args.args[1], retry.call_args_list[0].args[1])
+                self.assertEqual(retry.call_args.args[0].start, record())
+                self.assertEqual(len(transport.calls), 8)
+                self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
+                self.assertEqual(await store.inventory(), ())
                 self.assertIsNone(await controller.settle())
             finally:
                 await store.close()

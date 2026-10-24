@@ -1,5 +1,8 @@
 """Retry cannot turn unconfirmed/stale conditions into permission for effects."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock, patch
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import errno
 import itertools
@@ -8,7 +11,6 @@ import unittest
 from unittest.mock import Mock
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import SuppressedOutcome
 from provider_core.execution import (
     AttemptExecutor,
     ConditionRecovery,
@@ -25,7 +27,7 @@ from tests.fakes.attempts import observation
 from tests.fakes.condition_recovery import ConditionOutageTransport
 from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
 from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -63,7 +65,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.02, Mock(), Mock()),
@@ -94,7 +96,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.02, Mock(), Mock()),
@@ -148,29 +150,39 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.02, retry, Mock()),
                 observation_recovery=ObservationRecovery(1, 0.02, retry_read, recovered_read),
             )
-            task = asyncio.create_task(executor.run(acknowledged))
-            try:
-                await asyncio.wait_for(read_recovered.wait(), 1)
-                with self.assertRaises(asyncio.CancelledError) as interrupted:
-                    await task
-                self.assertIs(interrupted.exception.__cause__, executor.last_failure)
-                self.assertGreaterEqual(len(failures), 2)
-                self.assertIs(executor.last_failure.condition_failure, failures[0])
-                self.assertIsNot(executor.last_failure.api_failure, failures[-1])
-                self.assertIn(("latest condition failure", failures[-1]), tuple(owned_relationships(executor.last_failure)))
-                self.assertEqual([event[0] for event in session.events], ["retire"])
-                claim.release()
-            finally:
-                if not task.done():
-                    task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-                await store.close()
+            real_sleep = asyncio.sleep
+            async def condition_backoff(seconds):
+                # Keep the second condition wait pending while the independent
+                # monitor recovers. This checks separate evidence owners, not
+                # scheduler order between two legitimately paced API operations.
+                if asyncio.current_task() is executor._task and len(failures) >= 2:
+                    await asyncio.Event().wait()
+                else:
+                    await real_sleep(seconds)
+            with patch("provider_core.execution.asyncio.sleep", new=condition_backoff):
+                task = asyncio.create_task(executor.run(acknowledged))
+                try:
+                    await asyncio.wait_for(read_recovered.wait(), 1)
+                    with self.assertRaises(asyncio.CancelledError) as interrupted:
+                        await task
+                    self.assertIs(interrupted.exception.__cause__, executor.last_failure)
+                    self.assertGreaterEqual(len(failures), 2)
+                    self.assertIs(executor.last_failure.condition_failure, failures[0])
+                    self.assertIsNot(executor.last_failure.api_failure, failures[-1])
+                    self.assertIn(("latest condition failure", failures[-1]), tuple(owned_relationships(executor.last_failure)))
+                    self.assertEqual([event[0] for event in session.events], ["retire"])
+                    claim.release()
+                finally:
+                    if not task.done():
+                        task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                    await store.close()
 
     async def test_retry_waiting_behind_the_monitor_cannot_dispatch_after_its_window(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -185,7 +197,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.005,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(window, 0.02, Mock(), Mock()),
@@ -222,7 +234,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.02, retry, Mock()),
@@ -257,7 +269,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.04, Mock(), Mock()),
@@ -283,7 +295,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.005,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(0.03, 0.02, Mock(), Mock()),
@@ -300,9 +312,10 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(("first condition failure", first), tuple(owned_relationships(caught.exception)))
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
-                suppressed = await executor.retain_suppressed_outcome()
-                self.assertIs(type(suppressed), SuppressedOutcome)
-                self.assertEqual(suppressed.candidate.evidence, session.outcome.evidence)
+                suppressed = await executor.retain_suppressed_disposition()
+                self.assertIs(type(suppressed), SuppressedCheckpoint)
+                self.assertFalse(hasattr(suppressed, "candidate"))
+                self.assertIsNone(executor._outcome)
                 claim.release()
             finally:
                 await store.close()
@@ -319,7 +332,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.02, retry, recovered),
@@ -353,7 +366,7 @@ class ConditionRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=0.01,
                     task_settle_seconds=0.1,
                     condition_recovery=ConditionRecovery(1, 0.02, retry, Mock()),

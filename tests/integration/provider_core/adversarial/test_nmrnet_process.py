@@ -17,7 +17,9 @@ from tests.integration.nmrnet.process_ports import ProcessPeers, read_process_fa
 from nmrnet_provider.process import _publish
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRejected
-from provider_core.attempt_store import StoreRefused
+from provider_core.checkpoint_store import CheckpointFailed
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
+from tests.fakes.attempts import start_response
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
@@ -57,7 +59,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn('"errno": 5', rendered)
                         self.assertIn('"requires_host_retirement": true', rendered)
                         self.assertIsNone(process.returncode)
-                        with self.assertRaises(StoreRefused):
+                        with self.assertRaises(CheckpointFailed):
                             await fixture.reopen_store()
                         process.kill()
                         await asyncio.wait_for(process.communicate(), 5)
@@ -67,7 +69,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn('"requires_host_retirement": false', rendered)
                         self.assertNotIn("PRIVATE", stderr.decode())
                         (retained,) = await fixture.reopen_store()
-                        self.assertIsNone(retained.prepared_identity)
+                        self.assertIs(type(retained), AcknowledgedCheckpoint)
 
     async def test_reporting_stream_failure_does_not_release_held_process_or_store(self):
         async with ProcessPeers() as fixture:
@@ -88,7 +90,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('"errno": 32', report)
             self.assertNotIn("PRIVATE", report)
             self.assertIsNone(process.returncode)
-            with self.assertRaises(StoreRefused):
+            with self.assertRaises(CheckpointFailed):
                 await fixture.reopen_store()
             for absent in ("factory-exited", "factory-cleanup-entered", "store-close-entered", "result.json"):
                 self.assertFalse((fixture.diagnostics / absent).exists(), absent)
@@ -130,7 +132,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(b"Original service work is still pending", report)
             self.assertIsNone(process.returncode)
             self.assertTrue((fixture.diagnostics / "original-owner-retained").exists())
-            with self.assertRaisesRegex(StoreRefused, "lock|owner|owned|open"):
+            with self.assertRaisesRegex(CheckpointFailed, "lock|owner|owned|open"):
                 await fixture.reopen_store()
             # A second normal stop is not a second task cancellation. The marker
             # is published only by the real process's signal callback.
@@ -223,19 +225,33 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(fixture.files.state.exists())
                     self.assertEqual(fixture.peer.requests, [])
 
-    async def test_retained_pending_start_stops_before_hello_without_changing_its_bytes(self):
+    async def test_retained_terminal_start_replay_preserves_exact_request_and_runs_no_science(self):
         async with ProcessPeers() as fixture:
             pending = await fixture.seed_pending()
-            before = {path.name: path.read_bytes() for path in fixture.files.state.iterdir() if path.is_file()}
+            original = fixture.peer.response_factory
+            replayed = []
+
+            async def terminal_start(request, body):
+                if request.split(b"\r\n", 1)[0] == b"POST /provider/v1/execution-attempts/start HTTP/1.1":
+                    from tests.fakes.api_tls import verify_signed_request
+                    verify_signed_request(request, body, origin=fixture.peer.origin, key=fixture.config.api.identity.private_key)
+                    self.assertEqual(body, pending.body)
+                    replayed.append(body)
+                    return start_response(state="succeeded", replayed=True, analysis_kind_ref="peaks_from_mol")
+                return await original(request, body)
+
+            fixture.peer.response_factory = terminal_start
             process = await fixture.start()
+            await asyncio.wait_for(fixture.discovered.wait(), 5)
+            process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1, stderr.decode())
-            self.assertEqual(fixture.events, [])
-            self.assertEqual(await fixture.reopen_store(), (pending,))
-            self.assertEqual(before, {path.name: path.read_bytes() for path in fixture.files.state.iterdir() if path.is_file()})
-            self.assertIn(b"retained Attempt obligations require explicit recovery", stderr)
-            self.assertIn(b'"requires_host_retirement":false', stderr)
-            self.assertFalse((fixture.diagnostics / "result.json").exists())
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            self.assertEqual(replayed, [pending.body])
+            self.assertEqual(await fixture.reopen_store(), ())
+            self.assertTrue((fixture.diagnostics / "recording-startup-native-barriers").exists())
+            self.assertNotIn("complete", fixture.events)
+            self.assertNotIn("fail", fixture.events)
+            self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
     async def test_invalid_config_has_no_journal_or_requests_and_no_private_echo(self):
         async with ProcessPeers() as fixture:

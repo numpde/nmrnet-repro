@@ -1,976 +1,306 @@
-"""Finite deployment commands preserve literal inputs and discoverable ownership."""
+"""Exercise maintained Compose commands with a finite recording Engine.
 
+The real host entrypoint owns selection, literal argv and helper retirement.
+No Engine, network, API or scientific execution is granted to these fixtures.
+"""
 from tools.container_guard import require_container
-
 require_container()
 
+import hashlib
 import os
 import shutil
 import subprocess
 import tempfile
-import unittest
 import time
+import unittest
 from pathlib import Path
-from itertools import product
 
 ROOT = Path(__file__).resolve().parents[1]
+IMAGE = 'sha256:' + 'a' * 64
+CID = 'b' * 64
 
 
 class DeploymentLauncherTests(unittest.TestCase):
-    def test_completed_probes_do_not_point_to_removed_receipts_but_held_work_does(self):
-        for held in (False, True):
-            with self.subTest(held=held), tempfile.TemporaryDirectory() as temporary:
-                result = self.shell('''
-caller_uid=$(id -u) operation_root=$2 operation_established=true operation_owner=mutation
-deployment_name=fixture deployment_action=up deployment_recovery_observed=$3
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_diagnostic='Engine request ready-status-provider-0 failed (client status 1).'
-deployment_primary_failure_receipt=$2/probe.stderr deployment_additional_failure_receipt= pending_diagnostic=
-printf 'PRIVATE_ENGINE_DETAIL' > "$deployment_primary_failure_receipt"
-chmod 600 "$deployment_primary_failure_receipt"
-docker_client_cleanup() { :; }
-inference_native() { shift 3; "$@"; }
-deployment_next_actions() { :; }
-deployment_finish
-''', temporary, str(held).lower())
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("client status 1", result.stderr)
-                self.assertEqual("Protected primary Engine cause:" in result.stderr, held)
-                self.assertEqual("PRIVATE_ENGINE_DETAIL" in result.stderr, not held)
-                self.assertEqual((Path(temporary) / "probe.stderr").exists(), held)
-
-    def test_failed_recovered_diagnostic_delivery_retains_cause_without_undoing_action(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            result = self.shell('''
-caller_uid=$(id -u) operation_root=$2 operation_established=true operation_owner=mutation
-deployment_name=fixture deployment_action=up deployment_recovery_observed=false
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_diagnostic= deployment_primary_failure_receipt=$2/probe.stderr deployment_additional_failure_receipt= pending_diagnostic=
-printf 'useful original Engine cause' > "$deployment_primary_failure_receipt"
-chmod 600 "$deployment_primary_failure_receipt"
-docker_client_cleanup() { :; }
-inference_native() { inference_diagnostic='authored diagnostic recipient timeout'; return 7; }
-deployment_finish
-''', temporary)
-            self.assertEqual(result.returncode, 7, result.stderr)
-            self.assertIn("Deployment action completed; diagnostic delivery failed (status 7): authored diagnostic recipient timeout", result.stderr)
-            self.assertEqual((Path(temporary) / "probe.stderr").read_text(), "useful original Engine cause")
-
-    def test_bundle_pruning_keeps_current_stopped_and_uncertain_references(self):
-        for barrier in ("settled", "pending-query", "pending-mutation", "bad-inventory", "busy-query"):
-            with self.subTest(barrier=barrier), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                bundles = root / "bundles"
-                bundles.mkdir(mode=0o700)
-                for name in ("current", "stopped", "obsolete", "abandoned"):
-                    bundle = bundles / f"generation-{name}"
-                    bundle.mkdir(mode=0o700)
-                    (bundle / "config-copy").write_text("private input")
-                    bundle.chmod(0o500 if name != "abandoned" else 0o700)
-                outside = root / "attempts"
-                outside.mkdir()
-                (outside / "retained").write_text("durable work")
-                (bundles / "generation-link").symlink_to(outside)
-                (bundles / "unexpected-name").mkdir()
-                (bundles / "generation-unexpected-mode").mkdir(mode=0o755)
-                (root / "current").symlink_to("bundles/generation-current")
-                result = self.shell('''
-caller_uid=$(id -u) deployment_root=$2 operation_root=$2/operation/mutation
-operation_owner=mutation inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_recovery_observed=false
-mkdir -m 700 -- "$2/operation" "$operation_root" "$operation_root/effects"
-deployment_selected_bundle() { selected_bundle=$deployment_root/bundles/generation-current; }
-# The existing inventory owner has admitted the stopped container's original bundle.
-deployment_inventory() {
-    [[ $barrier != bad-inventory ]] || return 7
-    declare -gA deployment_bundles=([prediction]=generation-stopped)
-}
-barrier=$3
-if [[ $barrier == pending-query ]]; then
-    mkdir -m 700 -- "$2/operation/query" "$2/operation/query/effects"
-    : > "$2/operation/query/effects/unknown.intent"
-elif [[ $barrier == pending-mutation ]]; then : > "$operation_root/effects/unknown.intent"
-elif [[ $barrier == busy-query ]]; then exec 9< "$2/operation"; flock --nonblock 9; fi
-if deployment_prune_bundles; then [[ $barrier != bad-inventory ]]; else [[ $barrier == bad-inventory ]]; fi
-''', root, barrier)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertTrue((bundles / "generation-current/config-copy").exists())
-                self.assertTrue((bundles / "generation-stopped/config-copy").exists())
-                for name in ("obsolete", "abandoned"):
-                    self.assertEqual((bundles / f"generation-{name}").exists(), barrier != "settled")
-                self.assertTrue((bundles / "generation-link").is_symlink())
-                self.assertTrue((bundles / "unexpected-name").is_dir())
-                self.assertTrue((bundles / "generation-unexpected-mode").is_dir())
-                self.assertEqual((outside / "retained").read_text(), "durable work")
-
-    def test_success_removes_only_settled_command_scratch(self):
-        for held in (False, True):
-            with self.subTest(held=held), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                operation = root / "mutation"
-                operation.mkdir(mode=0o700)
-                (operation / "copied-config").write_text("temporary input")
-                store = root / "attempts"
-                store.mkdir()
-                (store / "retained-attempt").write_text("durable work")
-                result = self.shell('''
-caller_uid=$(id -u) operation_root=$2 operation_established=true operation_owner=mutation
-deployment_name=fixture deployment_action=up deployment_recovery_observed=$3
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_diagnostic= deployment_primary_failure_receipt= deployment_additional_failure_receipt= pending_diagnostic=
-docker_client_cleanup() { :; }
-deployment_next_actions() { :; }
-deployment_finish
-''', operation, str(held).lower())
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(operation.exists(), held)
-                self.assertEqual((store / "retained-attempt").read_text(), "durable work")
-
-    def test_finite_recovery_witness_retains_its_command_stop_and_join_owner(self):
-        result = self.shell('''
-source "$1/tools/provider_recovery_qualification.sh"
-provider_host_refuse() { printf '%s\\n' "$1" >&2; return 2; }
-sleep 60 &
-child=$! recovery_command_pid=$! recovery_command_signalled=false
-if recovery_witness_stop_command; then exit 91; fi
-[[ -z $recovery_command_pid && $recovery_command_signalled == true ]]
-if kill -0 "$child" 2>/dev/null; then exit 92; fi
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name) / 'checkout'
+        self.root.mkdir(mode=0o700)
+        self.home = Path(self.temporary.name) / 'home'
+        self.home.mkdir(mode=0o700)
+        tools = self.root / 'tools'
+        tools.mkdir()
+        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'delivery_deployment.sh'):
+            shutil.copyfile(ROOT / 'tools' / name, tools / name)
+        (tools / 'docker_client.sh').write_text('''docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
+docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
 ''')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Finite recovery command failed", result.stderr)
-
-    def test_next_action_failure_keeps_completed_action_and_reports_its_own_cause(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            result = self.shell('''
-operation_root=$2 operation_established=true operation_owner=mutation
-deployment_name=fixture deployment_action=up deployment_recovery_observed=false
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_diagnostic= deployment_primary_failure_receipt= deployment_additional_failure_receipt= pending_diagnostic=
-docker_client_cleanup() { :; }
-report_next_actions() { inference_diagnostic='authored reporting timeout'; return 9; }
-deployment_finish
-''', temporary)
-            self.assertEqual(result.returncode, 9, result.stderr)
-            self.assertEqual((Path(temporary) / "complete").read_bytes(), b"complete\n")
-            self.assertIn("Deployment action completed; next-action reporting failed: authored reporting timeout", result.stderr)
-            self.assertNotIn("Deployment command did not complete", result.stderr)
-
-    def test_command_exits_without_reading_a_new_checkout_tail(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            script, ready, sentinel = root / "provider_deployment.sh", root / "ready", root / "sentinel"
-            for helper in ("deployment_helper_grants.sh", "deployment_runtime_recovery.sh", "operator_guidance.sh"):
-                shutil.copyfile(ROOT / "tools" / helper, root / helper)
-            source = (ROOT / "tools/provider_deployment.sh").read_text()
-            entry = 'if [[ ${BASH_SOURCE[0]} == "$0" ]]; then'
-            self.assertIn(entry, source)
-            source = source.replace(entry, 'deployment_main() { touch "$TEST_READY"; read -r _finished; return 0; }\n' + entry)
-            script.write_text(source)
-            process = subprocess.Popen(
-                ["bash", str(script)], env=dict(os.environ, TEST_READY=str(ready), TEST_SENTINEL=str(sentinel)),
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            )
-            try:
-                deadline = time.monotonic() + 2
-                while not ready.exists() and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                self.assertTrue(ready.exists())
-                with script.open("a") as changed:
-                    changed.write('\nprintf replayed > "$TEST_SENTINEL"\n')
-                _stdout, stderr = process.communicate("completed\n", timeout=2)
-                self.assertEqual(process.returncode, 0, stderr)
-                self.assertFalse(sentinel.exists())
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                process.communicate()
-
-    def test_crash_exec_budget_covers_the_probe_window_and_requires_local_retirement(self):
-        for retired in ("true", "false"):
-            with self.subTest(retired=retired), tempfile.TemporaryDirectory() as directory:
-                result = self.shell('''
-source "$1/tools/compose_qualification.sh"
-scratch=$2 inference_retirement_confirmed=$3 inference_cancellation_status=0
-mkdir -m 700 -- "$scratch/reader-crash"
-deployment_command() {
-    local passed_probe_seconds=${!#}
-    [[ $4 == true && $5 == exec ]] && (( $2 >= passed_probe_seconds + 5 )) || return 91
-    deployment_command_status=137
-    return 1
+        (tools / 'inference_native.sh').write_text('''inference_native() {
+    local operation=$1 seconds=$2 result=$3 status=0; shift 3
+    printf '%s|%s|%s\\n' "$operation" "$seconds" "$result" >> "$repository_root/budgets"
+    "$@" || status=$?
+    inference_retirement_confirmed=${TEST_RETIRED-true}
+    return "$status"
 }
-if compose_witness_crash_execute aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb fixture 17; then
-    [[ $3 == true ]]
-else [[ $3 == false ]]; fi
-''', directory, retired)
-                self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_install_cannot_acquire_shutdown_authority_from_a_pending_start(self):
-        for state in ("running", "stopped-without-ack"):
-            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
-                result = self.shell('''
-caller_uid=$(id -u) deployment_name=fixture deployment_action=install deployment_root=$2 operation_root=$2/original
-operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/start-provider"
-printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
-fixture_state=$3
-deployment_bootstrap() { deployment_existing_count=1; }
-deployment_inventory() {
-    declare -gA deployment_ids=([provider]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
-    declare -gA deployment_running=([provider]=false) deployment_restarting=([provider]=false)
-    declare -gA deployment_pids=([provider]=0) deployment_stop_seconds=([provider]=2)
-    if [[ $fixture_state == running ]]; then deployment_running[provider]=true deployment_pids[provider]=1; fi
-}
-deployment_command() { : > "$deployment_root/unexpected-effect"; return 92; }
-if deployment_recover_runtime "$operation_root"; then exit 93; fi
-[[ ! -e $deployment_root/unexpected-effect && ! -e $operation_root/start-provider/reconciled && -f $operation_root/effects/start-provider.intent ]]
-''', directory, state)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("use down explicitly", result.stderr)
-
-    def test_reply_loss_occurs_only_after_the_actual_engine_command_finishes(self):
-        for native_status in (0, 9):
-            with self.subTest(native_status=native_status):
-                command = f"printf 'withheld response\\n'; printf 'actual Engine cause\\n' >&2; exit {native_status}"
-                result = subprocess.run(["bash", str(ROOT / "tools/compose_reply_loss.sh"), "bash", "-c", command],
-                    capture_output=True, text=True, timeout=3)
-                self.assertEqual(result.returncode, 7 if native_status == 0 else native_status)
-                self.assertEqual(result.stdout, "")
-                self.assertIn("actual Engine cause", result.stderr)
-                self.assertEqual("deliberately withheld" in result.stderr, native_status == 0)
-
-    def test_absent_old_target_settles_both_requests_without_controlling_its_replacement(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) deployment_root=$2 deployment_name=fixture deployment_action=down
-operation_root=$2/original operation_generation=cccccccccccccccccccccccccccccccc
-deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
-old=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-replacement=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-stop_phase=recover-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-stop-provider
-mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/start-provider" "$operation_root/$stop_phase"
-printf '%s\\0' start-provider 30 "$operation_root/start-provider" start "$old" > "$operation_root/effects/start-provider.intent"
-printf '%s\\0' "$stop_phase" 7 "$operation_root/$stop_phase" stop --time 2 "$old" > "$operation_root/effects/$stop_phase.intent"
-deployment_bootstrap() { deployment_existing_count=1; }
-deployment_inventory() { declare -gA deployment_ids=([provider]="$replacement") deployment_bundles=([provider]=generation-replacement); }
-reads=0
-deployment_command() {
-    [[ $4 == false && $5 == ps && ${!#} == "id=$old" ]] || return 91
-    reads=$((reads + 1)); mkdir -m 700 -- "$3"; : > "$3/response.stdout"
-}
-deployment_recover_runtime "$operation_root"
-[[ $reads == 1 && ${deployment_ids[provider]} == "$replacement" ]]
-cmp -s "$operation_root/start-provider/reconciled" <(printf 'fenced\\n')
-cmp -s "$operation_root/$stop_phase/reconciled" <(printf 'fenced\\n')
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_failed_log_loss_warning_preserves_the_stopped_containers(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-identifier=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-declare -A deployment_ids=([provider]="$identifier") deployment_pending_ids=([start-provider]="$identifier")
-deployment_runtime_root=$2 deployment_runtime_prefix=recover-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-
-deployment_command() { : > "$deployment_runtime_root/remove-called"; }
-if deployment_fence_role provider > /dev/full; then exit 91; fi
-[[ ! -e $2/remove-called && ${deployment_ids[provider]} == "$identifier" ]]
-declare -A deployment_bundles=([provider]=generation-old) deployment_running=([provider]=false)
-declare -A deployment_restarting=([provider]=false) deployment_pids=([provider]=0)
-deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-new; }
-deployment_plan_inputs() { :; }
-deployment_runtime_directories() { :; }
-if deployment_up > /dev/full; then exit 92; fi
-[[ ! -e $2/remove-called && ${deployment_ids[provider]} == "$identifier" ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("write error", result.stderr)
-
-    def test_same_direction_stop_reuses_an_acknowledged_stop_but_never_a_snapshot_alone(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            engine = root / "engine.sh"
-            engine.write_text('''set -euo pipefail
-root=$1; shift
-identifier=${!#}
-printf '%s\\n' "$1" >> "$root/calls"
-case $1 in
-    stop) printf '%s\\n' "$identifier" ;;
-    inspect) printf '%s|exited|false|0|false|0|false\\n' "$identifier" ;;
-    rm) rm -- "$root/present-$identifier" ;;
-    ps) identifier=${identifier#id=}; if [[ -e $root/present-$identifier ]]; then printf '%s\\n' "$identifier"; fi ;;
-    *) exit 91 ;;
-esac
 ''')
-            result = self.shell('''
-caller_uid=$(id -u) deployment_root=$2 deployment_name=fixture deployment_action=down
-operation_root=$2/original operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
-deployment_diagnostic= inference_diagnostic=
-mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/stop-provider"
-provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-: > "$2/present-$provider"
-printf '%s\\0' stop-provider 7 "$operation_root/stop-provider" stop --time 2 "$provider" > "$operation_root/effects/stop-provider.intent"
-engine=(bash "$3" "$2")
-inference_native() { shift 3; "$@"; }
-deployment_bootstrap() { deployment_existing_count=1; }
-deployment_inventory() {
-    declare -gA deployment_ids=([provider]="$provider") deployment_bundles=([provider]=generation-original)
-    declare -gA deployment_running=([provider]=false) deployment_restarting=([provider]=false)
-    declare -gA deployment_pids=([provider]=0) deployment_stop_seconds=([provider]=2)
-}
-deployment_recover_runtime "$operation_root"
-operation_generation=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-deployment_recover_runtime "$operation_root"
-[[ $deployment_recovery_observed == true && ! -e $operation_root/stop-provider/reconciled ]]
-effects=("$operation_root"/effects/*)
-[[ ${#effects[@]} == 2 ]]
-deployment_action=install operation_generation=cccccccccccccccccccccccccccccccc
-deployment_recover_runtime "$operation_root"
-[[ ! -e $2/present-$provider ]]
-cmp -s "$operation_root/stop-provider/reconciled" <(printf 'fenced\\n')
-''', root, engine)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "calls").read_text().splitlines(), ["stop", "inspect", "inspect", "rm", "ps"])
-
-    def test_opposing_provider_request_is_fenced_before_any_dependency_teardown(self):
-        for kind, failure in product(("start", "stop"), ("none", "stop", "remove", "absence")):
-            with self.subTest(kind=kind, failure=failure), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                engine = root / "engine.sh"
-                engine.write_text('''set -euo pipefail
-root=$1 failure=$2; shift 2
-identifier=${!#}
-printf '%s %s\\n' "$1" "$identifier" >> "$root/calls"
-case $1 in
-    stop) [[ $failure != stop ]] || exit 7; printf '%s\\n' "$identifier" ;;
-    inspect) printf '%s|exited|false|0|false|0|false\\n' "$identifier" ;;
-    rm) [[ $failure != remove ]] || exit 8; rm -- "$root/present-$identifier" ;;
-    ps) identifier=${identifier#id=}
-        if [[ -e $root/present-$identifier || $failure == absence ]]; then printf '%s\\n' "$identifier"; fi ;;
-    *) exit 91 ;;
-esac
-''')
-                result = self.shell('''
-caller_uid=$(id -u) caller_gid=$(id -g) repository_root=$1 deployment_root=$2
-deployment_name=fixture operation_root=$2/original kind=$5
-operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
-deployment_diagnostic= inference_diagnostic=
-mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/$kind-provider"
-provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-prediction=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-if [[ $kind == start ]]; then deployment_action=down budget=30 arguments=(start "$provider")
-else deployment_action=up budget=7 arguments=(stop --time 2 "$provider"); fi
-printf '%s\\0' "$kind-provider" "$budget" "$operation_root/$kind-provider" "${arguments[@]}" > "$operation_root/effects/$kind-provider.intent"
-: > "$2/present-$provider"; : > "$2/present-$prediction"
-engine=(bash "$3" "$2" "$4")
-inference_native() { shift 3; "$@"; }
-deployment_bootstrap() { deployment_existing_count=2; }
-deployment_inventory() {
-    declare -gA deployment_ids=([provider]="$provider" [prediction]="$prediction")
-    declare -gA deployment_bundles=([provider]=generation-original [prediction]=generation-original)
-    declare -gA deployment_running=([provider]=true [prediction]=true)
-    declare -gA deployment_restarting=([provider]=false [prediction]=false)
-    declare -gA deployment_pids=([provider]=1 [prediction]=2)
-    declare -gA deployment_stop_seconds=([provider]=2 [prediction]=2)
-}
-if deployment_recover_runtime "$operation_root"; then
-    [[ $4 == none && ! -e $2/present-$provider && -e $2/present-$prediction ]]
-    cmp -s "$operation_root/$kind-provider/reconciled" <(printf 'fenced\\n')
-else [[ $4 != none && ! -e $operation_root/$kind-provider/reconciled ]]; fi
-''', root, engine, failure, kind)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                calls = (root / "calls").read_text().splitlines()
-                dependency = "stop " + "b" * 64
-                if failure == "none":
-                    self.assertLess(calls.index("rm " + "a" * 64), calls.index(dependency))
-                else:
-                    self.assertNotIn(dependency, calls)
-                self.assertFalse(any(call.startswith("start ") or call.startswith("create ") for call in calls))
-
-    def test_same_intent_startup_resumes_only_nonrunning_ids_and_retains_the_original_restriction(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up repository_root=$1
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_begin_operation
-parent=$operation_root
-cp -- "$parent/intent" "$2/original-intent"
-provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-mkdir -m 700 -- "$parent/start-provider"
-printf '%s\\0' start-provider 30 "$parent/start-provider" start "$provider" > "$parent/effects/start-provider.intent"
-starts=0 observations=0
-deployment_bootstrap() { deployment_existing_count=7; }
-deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-original; }
-deployment_inventory() {
-    if [[ $1 == started ]]; then
-        for role in "${!deployment_ids[@]}"; do deployment_running[$role]=true; done
-        return 0
-    fi
-    declare -gA deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
-    for role in api interpreter store prediction reader smiles provider; do
-        deployment_ids[$role]=$role-id deployment_bundles[$role]=generation-original
-        deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
-    done
-    deployment_ids[provider]=$provider deployment_running[api]=true deployment_pids[api]=1
-}
-deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == false ]]; }
-deployment_runtime_directories() { :; }
-deployment_ready() { observations=$((observations + 1)); }
-deployment_command() {
-    [[ $1 == resume-*-start-* && $3 == "$parent/$1" && $4 == true && $5 == start && $6 != api-id ]] || return 91
-    starts=$((starts + 1))
-}
-deployment_begin_operation
-[[ $deployment_recovery_observed == true && $starts == 6 && $observations == 7 && ! -e $parent/complete ]]
-cmp -s "$parent/intent" "$2/original-intent"
-[[ -f $parent/effects/start-provider.intent && ! -e $parent/start-provider/reconciled ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_failed_recovery_witness_closes_its_local_lock_before_cleanup(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-source "$1/tools/compose_qualification.sh"
-private=$2
-compose_witness_recovery_effects() { return 7; }
-if compose_witness_recovery; then exit 91; else [[ $? == 7 ]]; fi
-flock --nonblock "$private" true
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_lost_role_create_uses_original_bundle_admission_without_repeating_create(self):
-        for outcome in ("realized", "absent", "foreign", "changed-command"):
-            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:
-                result = self.shell('''
-caller_uid=$(id -u) caller_gid=$(id -g) repository_root=$1 deployment_root=$2
-deployment_name=fixture deployment_action=up operation_root=$2/mutation
-operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
-mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/create-api" "$2/bundles" "$2/bundles/generation-original"
-digest=$(printf '%s\\0%s' "$repository_root" "$deployment_name" | sha256sum)
-deployment_project=nmrnet-${digest:0:20}
-bundle=$2/bundles/generation-original
-arguments=(compose --env-file /dev/null --project-name "$deployment_project" --project-directory "$repository_root" --file "$bundle/compose.json" create --no-build --pull never --no-recreate api)
-if [[ $3 == changed-command ]]; then arguments[9]=up; fi
-printf '%s\\0' create-api 60 "$operation_root/create-api" "${arguments[@]}" > "$operation_root/effects/create-api.intent"
-admissions=0
-expected_bundle=$bundle
-deployment_load_bootstrap() { [[ $1 == "$expected_bundle" ]] || return 91; }
-fixture_outcome=$3
-deployment_inventory() {
-    admissions=$((admissions + 1))
-    [[ $fixture_outcome != foreign ]] || return 2
-    declare -gA deployment_ids=() deployment_bundles=()
-    if [[ $fixture_outcome != absent ]]; then
-        deployment_ids[api]=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-        deployment_bundles[api]=generation-original
-    fi
-}
-deployment_command() { printf 'Unexpected Engine control\\n' >&2; return 92; }
-if deployment_recover_creates "$operation_root"; then
-    [[ $3 == realized && $admissions == 1 && -f $operation_root/create-api/reconciled ]]
-else
-    [[ $3 != realized && ! -e $operation_root/create-api/reconciled ]]
-    if [[ $3 == changed-command ]]; then [[ $admissions == 0 ]]; else [[ $admissions == 1 ]]; fi
-fi
-''', directory, outcome)
-                self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_native_event_receipts_exclude_application_output_and_preserve_engine_failure(self):
-        operation = "a" * 32
-        for status in (0, 7):
-            with self.subTest(status=status):
-                script = f'''printf '%s\\n' 'PRIVATE_APPLICATION_OUTPUT' \
-    'INFO event=child_started operation={operation} pid=14' \
-    'INFO event=child_retired operation={operation} returncode=-15 reason=owner_lost' \
-    'INFO event=child_started operation={operation} pid=15 PRIVATE_TRAILER' >&2
-if [[ {status} != 0 ]]; then printf 'Cannot read Docker logs: connection refused\\n' >&2; fi
-exit {status}
-'''
-                result = subprocess.run(["bash", str(ROOT / "tools/compose_runner_events.sh"), "b" * 64,
-                    "bash", "-c", script], capture_output=True, text=True, timeout=3)
-                self.assertEqual(result.returncode, status, result.stderr)
-                self.assertEqual(result.stdout, f"started\t{operation}\t14\nretired\t{operation}\t-15\towner_lost\n")
-                self.assertNotIn("PRIVATE", result.stdout)
-                self.assertIn("PRIVATE_APPLICATION_OUTPUT", result.stderr)
-                if status != 0:
-                    self.assertIn("Cannot read Docker logs: connection refused", result.stderr)
-
-    def test_primary_and_cleanup_engine_failures_keep_both_protected_causes(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) operation_root=$2 deployment_diagnostic= inference_diagnostic=
-inference_retirement_confirmed=true inference_cancellation_status=0
-deployment_primary_failure_receipt= deployment_additional_failure_receipt=
-engine=(bash -c 'printf "owned Engine cause\\n" >&2; exit 7' bash)
-inference_native() { shift 3; "$@"; }
-if deployment_command helper-start 10 "$2/start" false start; then exit 91; fi
-if deployment_command helper-stop 10 "$2/stop" false stop; then exit 92; fi
-[[ $deployment_primary_failure_receipt == "$2/start/response.stderr" && $deployment_additional_failure_receipt == "$2/stop/response.stderr" ]]
-deployment_name=fixture deployment_action=up operation_established=false operation_owner=mutation
-docker_client_cleanup() { :; }
-if false; then :; else deployment_finish; fi
-''', directory)
-            self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertIn(f"Protected primary Engine cause: {directory}/start/response.stderr", result.stderr)
-            self.assertIn(f"Protected additional Engine cause: {directory}/stop/response.stderr", result.stderr)
-
-    def test_failed_original_request_write_cannot_dispatch_an_engine_effect(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-operation_root=$2 caller_uid=$(id -u)
-inference_retirement_confirmed=true deployment_diagnostic= inference_diagnostic=
-mkdir -m 700 -- "$2/effects"
-inference_native() { : > "$operation_root/engine-called"; return 0; }
-printf() { return 28; }
-if deployment_command create-helper 30 "$2/create" true create; then exit 91; else observed=$?; fi
-[[ $observed == 28 && ! -e $2/engine-called && ! -e $2/effects/create-helper.intent ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_failed_helper_declaration_is_not_published_or_executed(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) caller_gid=$(id -g)
-repository_root=$1 operation_root=$2 operation_owner=query
-deployment_name=fixture deployment_action=status deployment_helper_retired=true
-operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-controller_image_id=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-deployment_tool_source=$1/tools/provider_deployment.py
-grants=() arguments=(inventory --help)
-deployment_command() {
-    [[ $1 == fixture-image-defaults ]] || { : > "$operation_root/engine-create-called"; return 92; }
-    mkdir -m 700 -- "$3"
-    builtin printf '%s\\0' "$controller_image_id" '[]' SIGTERM null '\"/work\"' > "$3/response.stdout"
-    builtin printf '\\n' >> "$3/response.stdout"
-}
-printf() { return 28; }
-if deployment_helper fixture grants arguments; then exit 91; else observed=$?; fi
-[[ $observed == 28 && ! -e $2/fixture/request && ! -e $2/engine-create-called && $deployment_helper_retired == true ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_query_lock_cannot_be_acquired_through_a_displaced_receipt_directory_inode(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            query = root / "operation/query"
-            query.mkdir(parents=True, mode=0o700)
-            query.parent.chmod(0o700)
-            (query / "retired").write_text("retired\n")
-            (query / "retired").chmod(0o600)
-            base = '''
-umask 077
-source "$1/tools/provider_deployment.sh"
-caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=status
-inference_retirement_confirmed=true deployment_helper_retired=true
-'''
-            owner_program = base + '''
-deployment_remove_operation() { printf 'remove-pending\\n'; read -r gate; rm -rf -- "$1"; }
-deployment_begin_operation
-printf 'owned\\n'
-read -r gate
-'''
-            delayed_program = base + '''
-flock() { printf 'opened\\n'; read -r gate; command flock "$@"; }
-deployment_begin_operation
-'''
-            def start(program):
-                return subprocess.Popen(["bash", "-euo", "pipefail", "-c", program, "bash", str(ROOT), str(root)],
-                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            owner = start(owner_program)
-            delayed = None
-            try:
-                self.assertEqual(owner.stdout.readline(), "remove-pending\n")
-                delayed = start(delayed_program)
-                self.assertEqual(delayed.stdout.readline(), "opened\n")
-                owner.stdin.write("continue\n")
-                owner.stdin.flush()
-                self.assertEqual(owner.stdout.readline(), "owned\n")
-                _, error = delayed.communicate("continue\n", timeout=3)
-                self.assertNotEqual(delayed.returncode, 0, error)
-                self.assertTrue((query / "intent").is_file())
-            finally:
-                if delayed is not None and delayed.poll() is None:
-                    delayed.kill()
-                    delayed.communicate(timeout=3)
-                owner.communicate("done\n", timeout=3)
-            self.assertEqual(owner.returncode, 0)
-
-    def test_realized_helper_must_match_original_environment_command_and_complete_bind_set(self):
-        for change in ("none", "environment", "command", "bind", "extra-bind", "name"):
-            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
-                result = self.shell('''
-source "$1/tools/deployment_helper_grants.sh"
-caller_uid=$(id -u) caller_gid=$(id -g)
-deployment_name=fixture deployment_action=up repository_root=$1 operation_owner=mutation
-operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-controller_image_id=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-deployment_tool_source=$1/tools/provider_deployment.py
-mkdir -m 700 -- "$2/helper"
-grants=(--mount "type=bind,src=$2/input.json,dst=/input.json,readonly")
-arguments=(inventory --help)
-deployment_command() {
-    mkdir -m 700 -- "$3"
-    printf '%s\\0' "$controller_image_id" '["PATH=/image/bin"]' '\"\"' null '\"/work\"' > "$3/response.stdout"
-    printf '\\n' >> "$3/response.stdout"
-}
-deployment_helper_declare "$2/helper" fixture nmrnet-helper-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fixture grants arguments 10
-mapfile -d '' -t original < "$2/helper/request"
-observed=(cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc created false false 0 "${original[@]}")
-case $3 in
-    environment) observed[14]='["API_KEY=PRIVATE_ENV_CANARY"]' ;;
-    command) observed[24]=PRIVATE_COMMAND_CANARY ;;
-    bind) observed[33]=/PRIVATE_BIND_CANARY ;;
-    extra-bind) observed[26]=3; observed+=(bind /extra /extra true rprivate) ;;
-    name) observed[5]=/foreign-helper ;;
-    none)
-        # Engine mount enumeration order is not grant authority.
-        observed=("${observed[@]:0:27}" "${observed[@]:32:5}" "${observed[@]:27:5}") ;;
-esac
-printf '%s\\0' "${observed[@]}" > "$2/observed"
-printf '\\n' >> "$2/observed"
-if deployment_helper_compare "$2/helper/request" "$2/observed"; then
-    [[ $3 == none && $deployment_admitted_helper_id == cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc ]]
-else [[ $3 != none && -z $deployment_admitted_helper_id ]]; fi
-# A lost create reply can be recovered only through the original name and the
-# same complete grant comparison, without starting the helper again.
-fixture_root=$2
-deployment_command() {
-    [[ $4 == false ]] || return 93
-    mkdir -m 700 -- "$3"
-    case $5 in
-        ps) printf '%s\\n' cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc > "$3/response.stdout" ;;
-        inspect) cp -- "$fixture_root/observed" "$3/response.stdout" ;;
-        *) return 94 ;;
+        (tools / 'provider_image.sh').write_text('provider_image_inputs=(tools/provider_deployment.py)\n')
+        (tools / 'geometry_image.sh').write_text('geometry_image_inputs=(tools/provider_deployment.py)\n')
+        (tools / 'git_metadata.sh').write_text('''repository_git() {
+    case " $* " in
+      *' rev-parse '*) printf '%040d\\n' 1 ;;
+      *' --name-only '*) printf 'tools/provider_deployment.py\\n' ;;
+      *) printf '160000 commit %040d\\tNMRNetplusplus\\n' 2 ;;
     esac
 }
-if deployment_helper_discover "$2/helper" fixture bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$((SECONDS + 10))"; then
-    [[ $3 == none && -f $2/helper/realization && $deployment_created_helper_id == cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc ]]
-else [[ $3 != none && ! -e $2/helper/realization ]]; fi
-''', directory, change)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertNotIn("PRIVATE_", result.stderr)
-
-    def test_received_identity_survives_a_later_partial_observation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u)
-mkdir -m 700 -- "$2/helper" "$2/helper/recovery-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-mkdir -m 700 -- "$2/helper/recovery-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/admit" "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/admit"
-printf 'complete\\n' > "$2/helper/recovery-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/admit/response.stdout"
-printf 'partial\\n' > "$2/helper/recovery-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/admit/response.stdout"
-deployment_helper_compare() {
-    deployment_admitted_helper_id=
-    if cmp -s "$2" <(printf 'complete\\n'); then
-        deployment_admitted_helper_id=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-    else return 2; fi
-}
-deployment_realized_helper "$2/helper"
-[[ $deployment_created_helper_id == cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc && -f $2/helper/realization ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_only_joined_read_only_retries_replace_the_latest_observation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) operation_root=$2
-inference_retirement_confirmed=true inference_cancellation_status=0
-mkdir -m 700 -- "$2/effects" "$2/helper"
-for generation in aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; do
-    mkdir -m 700 -- "$2/helper/recovery-$generation"
-    printf '%s\\n' "$generation" > "$2/helper/recovery-$generation/observed"
-    mkdir -m 700 -- "$2/helper/recovery-$generation/name"
-    printf 'bounded Engine cause\\n' > "$2/helper/recovery-$generation/name/response.stderr"
-    deployment_primary_failure_receipt=$2/helper/recovery-$generation/name/response.stderr
-    deployment_helper_retain_observation "$2/helper" "$2" fixture "$generation" "$2/helper/recovery-$generation"
-    [[ $deployment_primary_failure_receipt == "$2/helper/recovery-observation/name/response.stderr" && -f $deployment_primary_failure_receipt ]]
-done
-[[ $(cat "$2/helper/recovery-observation/observed") == bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]]
-held=cccccccccccccccccccccccccccccccc
-mkdir -m 700 -- "$2/helper/recovery-$held"
-: > "$2/effects/fixture-recovery-$held-stop.intent"
-if deployment_helper_retain_observation "$2/helper" "$2" fixture "$held" "$2/helper/recovery-$held"; then exit 91; else [[ $? == 1 ]]; fi
-deployment_helper_compact_observations "$2/helper" "$2" fixture
-[[ -d $2/helper/recovery-$held && ! -e $2/helper/recovery-$held/readonly-settled ]]
-shopt -s nullglob
-retained=("$2/helper"/recovery-*)
-[[ ${#retained[@]} == 2 ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_one_engine_restart_is_observed_under_original_budget_without_another_start(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-deployment_name=fixture deployment_action=up operation_root=$2
-declare -A deployment_ids=([api]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
-declare -A deployment_readiness_seconds=([api]=3)
-deployment_start_deadline=$((SECONDS + 3))
-polls=0
-deployment_command() {
-    [[ $4 == false && $5 == inspect ]] || return 92
-    polls=$((polls + 1))
-    mkdir -m 700 -- "$3"
-    if (( polls == 1 )); then
-        printf '%s|false|true|starting\\n' "${deployment_ids[api]}" > "$3/response.stdout"
-    else printf '%s|true|false|healthy\\n' "${deployment_ids[api]}" > "$3/response.stdout"; fi
-}
-deployment_process_status() { [[ $polls == 2 ]] || return 93; deployment_process_phase=ready deployment_process_age=0; }
-deployment_ready api
-[[ $polls == 2 ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_stopped_matching_stack_reuses_admitted_containers_without_noop_creates(self):
-        result = self.shell('''
-deployment_name=fixture deployment_project=nmrnet-fixture repository_root=/fixture operation_root=/fixture/operation deployment_runtime_effects=false
-declare -A deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
-for role in api interpreter store prediction reader smiles provider; do
-    deployment_ids[$role]=${role}-id deployment_bundles[$role]=generation-existing
-    deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
-done
-deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-existing; }
-deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == false ]]; }
-deployment_runtime_directories() { :; }
-deployment_ready() { :; }
-deployment_command() { [[ $1 == start-* ]] || return 92; printf '%s\\n' "$1"; }
-deployment_inventory() {
-    [[ $1 == started ]] || return 92
-    for role in api interpreter store prediction reader smiles provider; do deployment_running[$role]=true; done
-}
-deployment_up
 ''')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count("start-"), 7)
-        self.assertNotIn("create-", result.stdout)
-
-    def test_partial_matching_stack_preserves_running_and_restarting_roles(self):
-        result = self.shell('''
-deployment_name=fixture deployment_project=nmrnet-fixture repository_root=/fixture operation_root=/fixture/operation deployment_runtime_effects=false
-declare -A deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
-for role in api interpreter store prediction reader smiles provider; do
-    deployment_ids[$role]=${role}-id deployment_bundles[$role]=generation-existing
-    deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
-done
-deployment_running[api]=true deployment_pids[api]=123
-deployment_restarting[reader]=true
-deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-existing; }
-deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == false ]]; }
-deployment_runtime_directories() { :; }
-deployment_ready() { printf 'observed:%s\\n' "$1"; }
-deployment_command() { [[ $1 == start-* ]] || return 92; printf '%s\\n' "$1"; }
-deployment_inventory() {
-    [[ $1 == started ]] || return 92
-    for role in api interpreter store prediction reader smiles provider; do
-        deployment_running[$role]=true deployment_restarting[$role]=false
-    done
-}
-deployment_up
-''')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count("start-"), 5)
-        self.assertNotIn("start-api", result.stdout)
-        self.assertNotIn("start-reader", result.stdout)
-        self.assertEqual(result.stdout.count("observed:"), 7)
-
-    def test_interrupted_helper_is_retired_by_original_id_without_reexecution(self):
-        for failure in ("none", "stop", "remove", "absence", "logs"):
-            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                engine = root / "engine.sh"
-                engine.write_text('''set -euo pipefail
-root=$1 failure=$2; shift 2
-identifier=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-printf '%s\\n' "$1" >> "$root/engine-calls"
+        (tools / 'provider_deployment.py').write_text('# fixture source\n')
+        (tools / 'record-engine.sh').write_text(r'''root=$1; shift
+count=0
+[[ ! -f $root/count ]] || read -r count < "$root/count"
+count=$((count + 1)); printf '%s\n' "$count" > "$root/count"
+printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
-    ps) if [[ -f $root/present ]]; then printf '%s\\n' "$identifier"; fi ;;
-    stop) [[ $failure != stop ]] || exit 7 ;;
-    inspect) printf '%s exited false 0 false\\n' "$identifier" ;;
-    logs) [[ $failure != logs ]] || exit 8 ;;
-    rm) [[ $failure != remove ]] || exit 9
-        if [[ $failure != absence ]]; then rm -- "$root/present"; fi ;;
-    *) exit 91 ;;
+ ps) [[ ${TEST_LIVE-false} != true ]] || printf '%064d\n' 7 ;;
+ run)
+    if [[ ${TEST_RUN_STATUS-0} != 0 ]]; then printf 'actual helper cause\n' >&2; exit "$TEST_RUN_STATUS"; fi
+    arguments=("$@")
+    for ((i=0;i<${#arguments[@]};i++)); do
+      case ${arguments[i]} in
+        --bundle|--output) destination=${arguments[i+1]}; mkdir -p "$destination/bindings"; printf '{}\n' > "$destination/compose.json"; printf '[delivery]\n' > "$destination/daemon.toml" ;;
+      esac
+    done
+    ;;
+ inspect) printf 'sha256:%064d\n' 9 ;;
+ compose)
+    if [[ ${TEST_PAUSE-false} == true ]]; then
+      : > "$root/ready"
+      until [[ -f $root/release ]]; do sleep 0.01; done
+    fi
+    if [[ " $* " == *' ps --all --quiet prediction '* ]]; then printf '%064d\n' 8; fi
+    if [[ ${TEST_COMPOSE_STATUS-0} != 0 ]]; then printf 'actual Compose cause\n' >&2; exit "$TEST_COMPOSE_STATUS"; fi
+    ;;
+ rm) [[ ${TEST_RM_STATUS-0} == 0 ]] || exit "$TEST_RM_STATUS" ;;
+ *) exit 91 ;;
 esac
 ''')
-                result = self.shell('''
-caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
-inference_retirement_confirmed=true deployment_helper_retired=true inference_cancellation_status=0
-deployment_diagnostic= inference_diagnostic=
-engine=(bash "$3" "$2" "$4")
-inference_native() { shift 3; "$@"; }
-deployment_begin_operation
-original=$operation_root
-mkdir -m 700 -- "$original/inspection" "$original/inspection/create" "$original/inspection/start"
-identifier=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-printf '%s' "$identifier" > "$original/inspection/helper.cid"
-printf '%s\\n' "$identifier" > "$original/inspection/create/response.stdout"
-printf '%s\\0' inspection-create 30 "$original/inspection/create" create > "$original/effects/inspection-create.intent"
-printf '%s\\0' inspection-start 30 "$original/inspection/start" start "$identifier" > "$original/effects/inspection-start.intent"
-: > "$2/present"
-if deployment_begin_operation; then
-    [[ $4 == none && ! -e $original/inspection ]]
-else
-    [[ $4 != none && -f $original/effects/inspection-create.intent && ! -e $original/inspection/retired ]]
-fi
-''', root, engine, failure)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                calls = (root / "engine-calls").read_text().splitlines()
-                self.assertNotIn("create", calls)
-                self.assertNotIn("start", calls)
-                self.assertEqual(calls.count("stop"), 1)
+        for kind in ('provider', 'delivery', 'inference', 'preparation'):
+            directory = self.root / '.work' / kind
+            directory.mkdir(parents=True)
+            (directory / 'image-id').write_text(IMAGE + '\n')
+        (self.root / 'containers/inference').mkdir(parents=True)
+        (self.root / 'containers/inference/image-inputs.txt').write_text('tools/provider_deployment.py\n')
+        definitions = self.root / 'config/deployments/fixture'
+        definitions.mkdir(parents=True)
+        for name in ('provider.toml', 'deployment.toml'):
+            (definitions / name).write_text('fixture\n')
+        self.provider = self.root / 'secrets/deployments/fixture'
+        self.provider.mkdir(parents=True, mode=0o700)
+        (self.provider / 'signing.private.json').write_text('private credential\n')
+        (self.provider / 'unselected-directory').mkdir(mode=0o700)
+        (self.provider / 'unselected-directory/canary').write_text('never grant this root\n')
+        self.bundle = self.selected(self.provider)
+        self.delivery = self.home / '.local/share/nmr-api-delivery'
+        self.delivery.mkdir(parents=True, mode=0o700)
+        self.delivery_bundle = self.selected(self.delivery)
 
-    def test_cached_docker_health_cannot_accept_an_expired_record_or_borrow_another_role_budget(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-deployment_name=fixture deployment_action=up operation_root=$2
-declare -A deployment_ids=([api]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
-declare -A deployment_readiness_seconds=([api]=1 [provider]=100)
-deployment_start_deadline=$((SECONDS + 100))
-deployment_command() {
-    [[ $2 -le 1 && $4 == false ]] || return 92
-    mkdir -m 700 -- "$3"
-    printf '%s|true|false|healthy\\n' "${deployment_ids[api]}" > "$3/response.stdout"
-}
-deployment_process_status() { deployment_process_phase=ready deployment_process_age=31001; }
-if deployment_ready api; then exit 91; fi
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("api readiness was not confirmed within its 1s allowance", result.stderr)
+    def selected(self, root):
+        bundles = root / 'bundles'
+        bundles.mkdir(mode=0o700)
+        bundle = bundles / 'generation-original'
+        bundle.mkdir(mode=0o700)
+        (bundle / 'compose.json').write_text('{}\n')
+        (bundle / 'daemon.toml').write_text('[delivery]\n')
+        (root / 'current').symlink_to('bundles/generation-original')
+        return bundle
 
-    def test_repeated_up_observes_all_seven_without_lifecycle_dispatch(self):
-        result = self.shell('''
-deployment_name=fixture
-declare -A deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
-for role in api interpreter store prediction reader smiles provider; do
-    deployment_ids[$role]=${role}-id deployment_bundles[$role]=generation-existing
-    deployment_running[$role]=true deployment_restarting[$role]=false deployment_pids[$role]=123
-done
-deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-existing; }
-deployment_plan_inputs() { deployment_startup_seconds=30; [[ $1 == false ]]; }
-deployment_ready() { printf 'observed:%s\\n' "$1"; }
-deployment_command() { printf 'unexpected lifecycle command\\n' >&2; return 92; }
-deployment_runtime_directories() { return 93; }
-deployment_up
-''')
+    def run_command(self, action, role='provider', *, changes=None, extra=()):
+        environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture')
+        environment.update(changes or {})
+        return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
+                              env=environment, capture_output=True, text=True, timeout=5)
+
+    def calls(self):
+        count = int((self.root / 'count').read_text()) if (self.root / 'count').exists() else 0
+        return [[item.decode() for item in (self.root / f'call-{index}').read_bytes().split(b'\0')[:-1]]
+                for index in range(1, count + 1)]
+
+    def test_missing_or_executable_names_refuse_before_any_engine_call(self):
+        for name in ('', '../fixture', 'fixture; touch sentinel', '$(touch sentinel)', 'x\nup'):
+            with self.subTest(name=name):
+                result = self.run_command('up', changes={'NMRNET_DEPLOYMENT_INPUT': name})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.root / 'sentinel').exists())
+
+    def test_direct_commands_keep_literal_recipe_project_and_finite_options(self):
+        expected = {
+            'up': ['up', '--detach', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '120'],
+            'down': ['down', '--timeout', '60'], 'status': ['ps', '--all'],
+            'logs': ['logs', '--no-color', '--tail', '80'],
+        }
+        for role in ('provider', 'delivery'):
+            for action, suffix in expected.items():
+                with self.subTest(role=role, action=action):
+                    result = self.run_command(action, role)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    call = self.calls()[-1]
+                    project = 'nmr-api-delivery' if role == 'delivery' else 'nmrnet-' + hashlib.sha256(
+                        (str(self.root) + '\0fixture').encode()).hexdigest()[:20]
+                    bundle = self.delivery_bundle if role == 'delivery' else self.bundle
+                    directory = self.delivery if role == 'delivery' else self.root
+                    self.assertEqual(call, ['compose', '--env-file', '/dev/null', '--project-name', project,
+                                            '--project-directory', str(directory), '--file', str(bundle / 'compose.json'), *suffix])
+                    self.assertTrue((bundle / 'compose.json').exists())
+        self.assertFalse(any('--volumes' in call or '-v' in call for call in self.calls()))
+        self.assertTrue((self.root / 'cleanup').exists())
+
+    def test_failed_compose_preserves_original_status_and_selected_configuration_without_retry(self):
+        result = self.run_command('up', changes={'TEST_COMPOSE_STATUS': '7'})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertIn('actual Compose cause', result.stderr)
+        self.assertIn('No automatic retry', result.stderr)
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_completed_command_exits_without_reading_new_checkout_tail(self):
+        environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture', TEST_PAUSE='true')
+        process = subprocess.Popen(['bash', str(self.root / 'tools/provider_deployment.sh'), 'status'],
+                                   env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 2
+            while not (self.root / 'ready').exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue((self.root / 'ready').exists())
+            with (self.root / 'tools/compose_deployment.sh').open('a') as changed:
+                changed.write('\nprintf replayed > "$repository_root/sentinel"\n')
+            (self.root / 'release').touch()
+            _stdout, stderr = process.communicate(timeout=2)
+            self.assertEqual(process.returncode, 0, stderr)
+            self.assertFalse((self.root / 'sentinel').exists())
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.communicate()
+
+    def test_install_refuses_live_project_without_shutdown_or_replacement(self):
+        result = self.run_command('install', changes={'TEST_LIVE': 'true'})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(self.calls()[0][0:2], ['ps', '--quiet'])
+        self.assertEqual(len(self.calls()), 1)
+        self.assertIn('stop this deployment', result.stderr)
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
+        result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count("observed:"), 7)
-        self.assertIn("this command requested no starts", result.stdout)
+        call = next(call for call in self.calls() if call[0] == 'run')
+        for pair in (['--network', 'none'], ['--cap-drop', 'ALL'], ['--pull', 'never'],
+                     ['--security-opt', 'no-new-privileges:true'], ['--user', f'{os.getuid()}:{os.getgid()}'],
+                     ['--memory', '512m'], ['--memory-swap', '512m'], ['--pids-limit', '64']):
+            self.assertIn(pair, [call[index:index+2] for index in range(len(call)-1)])
+        self.assertIn('--read-only', call)
+        self.assertIn('--init', call)
+        mounts = [call[index + 1] for index, value in enumerate(call[:-1]) if value == '--mount']
+        self.assertIn(f'type=bind,src={self.provider}/signing.private.json,dst={self.provider}/signing.private.json,readonly', mounts)
+        self.assertFalse(any(f'src={self.provider},' in mount or 'unselected-directory' in mount for mount in mounts))
+        self.assertIn('freeze', call)
+        self.assertIn('--source-root', call)
+        self.assertIn('/opt/provider/environment/bin/python', call)
+        selected = self.provider / os.readlink(self.provider / 'current')
+        self.assertNotEqual(selected, self.bundle)
+        self.assertEqual(selected.stat().st_mode & 0o777, 0o500)
+        self.assertEqual((selected / 'compose.json').stat().st_mode & 0o777, 0o400)
+        self.assertTrue(self.bundle.exists())
+        self.assertFalse(any(call[0] in ('inspect', 'create', 'start') for call in self.calls()))
 
-    def test_control_handoff_refuses_partial_or_executable_role_before_publishing(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            sentinel = root / "must-not-execute"
-            initial, invalid = root / "initial", root / "invalid"
-            provider = ["provider", "1" * 64, "generation-first", "sha256:" + "2" * 64, "exited", "false", "false", "0", "30"]
-            reader = ["reader", "3" * 64, *provider[2:]]
-            initial.write_bytes(b"\0".join(value.encode() for value in provider) + b"\0")
-            invalid.write_bytes(b"\0".join(value.encode() for value in [*reader, f"$(touch {sentinel})"]) + b"\0")
-            for path in (initial, invalid):
-                path.chmod(0o600)
-            result = self.shell('''
-caller_uid=$(id -u)
-deployment_inventory_rows "$2" 9
-if deployment_inventory_rows "$3" 9; then exit 91; fi
-[[ ${deployment_ids[provider]} == "$4" && ! -v deployment_ids[reader] ]]
-''', initial, invalid, "1" * 64)
+    def test_private_qualification_project_is_passed_only_to_provider_freezer(self):
+        result = self.run_command('install', extra=('--delivery-project', 'fixture-private'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call = next(call for call in self.calls() if call[0] == 'run')
+        index = call.index('--delivery-project')
+        self.assertEqual(call[index+1], 'fixture-private')
+        self.assertIn('Private delivery namespace: fixture-private', result.stdout)
+        self.assertNotIn('Next: make delivery/deployment/install', result.stdout)
+
+    def test_failed_helper_is_removed_by_its_original_name_without_reexecution(self):
+        result = self.run_command('install', changes={'TEST_RUN_STATUS': '7'})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        calls = self.calls()
+        runs = [call for call in calls if call[0] == 'run']
+        self.assertEqual(len(runs), 1)
+        name = runs[0][runs[0].index('--name')+1]
+        self.assertEqual(calls[-1], ['rm', '--force', name])
+        self.assertIn('actual helper cause', result.stderr)
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_unretired_local_helper_never_dispatches_a_new_cleanup_client(self):
+        result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false'})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual([call[0] for call in self.calls()], ['ps', 'run'])
+        self.assertFalse((self.root / 'cleanup').exists())
+        self.assertIn('Configuration helper, if still present:', result.stderr)
+
+    def test_helper_removal_failure_preserves_the_original_command_failure(self):
+        result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RM_STATUS': '9'})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(self.calls()[-1][0], 'rm')
+
+    def test_client_inputs_uses_selected_prediction_image_and_readonly_bundle(self):
+        output = Path(self.temporary.name) / 'client'
+        result = self.run_command('client-inputs', changes={'NMRNET_OUTPUT_INPUT': str(output)})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        self.assertEqual(calls[0][-4:], ['ps', '--all', '--quiet', 'prediction'])
+        self.assertEqual(calls[1][0:3], ['inspect', '--type', 'container'])
+        call = calls[2]
+        self.assertIn(f'type=bind,src={self.bundle},dst={self.bundle},readonly', call)
+        self.assertEqual(call[call.index('client-inputs')+1:], ['--bundle', str(self.bundle),
+            '--prediction-image-id', 'sha256:' + f'{9:064d}', '--client-root', str(output)])
+
+    def test_delivery_prepare_uses_explicit_unique_provider_bundles(self):
+        result = self.run_command('install', 'delivery', changes={'NMRNET_DELIVERY_DEPLOYMENTS_INPUT': 'fixture'})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call = next(call for call in self.calls() if call[0] == 'run')
+        self.assertIn('nmrnet_provider.delivery_deployment', call)
+        self.assertIn(f'type=bind,src={self.bundle},dst={self.bundle},readonly', call)
+        self.assertEqual(call[call.index('--provider-bundle')+1], str(self.bundle))
+        self.assertFalse(any('nmr-api-delivery-queue' in value for value in call))
+        self.assertTrue((self.delivery_bundle / 'compose.json').exists())
+
+    def test_duplicate_delivery_binding_profiles_refuse_before_helper(self):
+        result = self.run_command('install', 'delivery', changes={'NMRNET_DELIVERY_DEPLOYMENTS_INPUT': 'fixture fixture'})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual([call[0] for call in self.calls()], ['ps'])
+
+    def test_held_and_discard_are_offline_with_exact_literal_selectors(self):
+        changes = {'NMRNET_API_ORIGIN_INPUT': 'https://api.example', 'NMRNET_PROVIDER_REF_INPUT': 'provider:fixture',
+                   'NMRNET_EXECUTION_ATTEMPT_REF_INPUT': 'execution_attempt:sha256:' + 'c'*64,
+                   'NMRNET_BODY_SHA256_INPUT': 'd'*64}
+        for action in ('held', 'discard'):
+            result = self.run_command(action, 'delivery', changes=changes)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertFalse(sentinel.exists())
+            call = self.calls()[-1]
+            self.assertEqual(call[0], 'run')
+            self.assertIn('provider_core.delivery_discard', call)
+            self.assertIn('type=volume,src=nmr-api-delivery-queue,dst=/state,volume-nocopy', call)
+            self.assertNotIn('signing.private.json', ' '.join(call))
+            self.assertEqual(call[call.index('--network')+1], 'none')
+            if action == 'held': self.assertEqual(call[-1], '--list-held')
+            else: self.assertEqual(call[-4:], ['--execution-attempt-ref', changes['NMRNET_EXECUTION_ATTEMPT_REF_INPUT'], '--body-sha256', 'd'*64])
 
-    def test_queries_are_discoverable_and_do_not_take_the_mutation_lock(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            base = '''
-caller_uid=$(id -u)
-deployment_name=fixture deployment_root=$2
-inference_retirement_confirmed=true deployment_helper_retired=true
-'''
-            program = 'source "$1/tools/provider_deployment.sh"\n' + base + '''
-deployment_action=install
-exec 9< "$deployment_root"
-flock --nonblock 9
-deployment_begin_operation
-printf 'owned\\n'
-read -r done
-'''
-            owner = subprocess.Popen(["bash", "-euo", "pipefail", "-c", program, "bash", str(ROOT), str(root)],
-                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            try:
-                self.assertEqual(owner.stdout.readline(), "owned\n")
-                query = self.shell(base + '''
-deployment_action=status
-deployment_begin_operation
-[[ $operation_root == "$deployment_root/operation/query" ]]
-[[ -f $deployment_root/operation/mutation/intent && -f $operation_root/intent ]]
-printf '%s\\0' pending-create 30 "$operation_root/pending/create" create > "$operation_root/effects/pending-create.intent"
-''', root)
-                self.assertEqual(query.returncode, 0, query.stderr)
-                again = self.shell(base + 'deployment_action=status\ndeployment_begin_operation\n', root)
-                self.assertNotEqual(again.returncode, 0)
-                self.assertIn("operation/query", again.stderr)
-            finally:
-                owner.communicate("done\n", timeout=3)
-            self.assertEqual(owner.returncode, 0)
+    def test_native_event_projection_and_engine_failure_keep_their_existing_owners(self):
+        operation = 'a'*32
+        for status in (0, 7):
+            script = f"printf '%s\\n' PRIVATE_APPLICATION_OUTPUT 'INFO event=child_started operation={operation} pid=14' 'INFO event=child_retired operation={operation} returncode=-15 reason=owner_lost' >&2; exit {status}"
+            result = subprocess.run(['bash', str(ROOT/'tools/compose_runner_events.sh'), 'b'*64, 'bash', '-c', script], capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, status, result.stderr)
+            self.assertEqual(result.stdout, f'started\t{operation}\t14\nretired\t{operation}\t-15\towner_lost\n')
+            self.assertNotIn('PRIVATE', result.stdout)
+            self.assertIn('PRIVATE_APPLICATION_OUTPUT', result.stderr)
 
-    def test_missing_and_malicious_names_fail_before_any_engine_call(self):
-        with tempfile.TemporaryDirectory() as directory:
-            sentinel = Path(directory) / "must-not-execute"
-            for name in ("", f"web$(touch {sentinel})"):
-                result = subprocess.run(["bash", str(ROOT / "tools/provider_deployment.sh"), "up"],
-                                        env=dict(os.environ, NMRNET_DEPLOYMENT_INPUT=name),
-                                        capture_output=True, text=True, timeout=3)
-                self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn("explicit DEPLOYMENT", result.stderr)
-                self.assertNotIn("Docker", result.stderr)
-            self.assertFalse(sentinel.exists())
-
-    def test_known_completed_effects_allow_recovery_without_deleting_receipts_by_hand(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_begin_operation
-first_generation=$operation_generation
-mkdir -m 700 -- "$operation_root/start-provider"
-printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
-printf '0\\n' > "$operation_root/start-provider/response.status"
-deployment_begin_operation
-[[ $operation_generation != "$first_generation" && ! -e $operation_root/start-provider ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_missing_mutation_reply_remains_held_even_when_next_action_is_down(self):
-        with tempfile.TemporaryDirectory() as directory:
-            result = self.shell('''
-caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_begin_operation
-printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
-deployment_action=down
-deployment_bootstrap() { return 2; } # No target grants have been admitted in this refusal fixture.
-if deployment_begin_operation; then exit 91; fi
-[[ -f $operation_root/effects/start-provider.intent ]]
-''', directory)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("unresolved effects", result.stderr)
-
-    def test_acknowledged_helper_create_and_start_do_not_establish_retirement(self):
-        for started in (False, True):
-            with self.subTest(started=started), tempfile.TemporaryDirectory() as directory:
-                result = self.shell('''
-caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
-inference_retirement_confirmed=true deployment_helper_retired=true
-deployment_begin_operation
-for phase in $3; do
-    mkdir -p -m 700 -- "$operation_root/inspection/$phase"
-    printf '%s\\0' "inspection-$phase" 30 "$operation_root/inspection/$phase" "$phase" > "$operation_root/effects/inspection-$phase.intent"
-    printf '0\\n' > "$operation_root/inspection/$phase/response.status"
-done
-if deployment_begin_operation; then exit 91; fi
-[[ -f $operation_root/effects/inspection-create.intent ]]
-''', directory, "create start" if started else "create")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("unresolved effects", result.stderr)
-
-    def shell(self, program, *arguments):
-        return subprocess.run(["bash", "-euo", "pipefail", "-c", 'umask 077\nsource "$1/tools/provider_deployment.sh"\n' + program,
-                               "bash", str(ROOT), *(str(value) for value in arguments)],
-                              capture_output=True, text=True, timeout=5)
+    def test_reply_loss_only_withholds_a_successful_original_command_reply(self):
+        for status in (0, 9):
+            result = subprocess.run(['bash', str(ROOT/'tools/compose_reply_loss.sh'), 'bash', '-c', f"printf withheld; printf 'actual Engine cause' >&2; exit {status}"], capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, 7 if status == 0 else status)
+            self.assertEqual(result.stdout, '')
+            self.assertIn('actual Engine cause', result.stderr)

@@ -3,7 +3,6 @@
 import asyncio
 import unittest
 from dataclasses import replace
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, PropertyMock, patch
 
 from tests.fakes.attempt_inventory import attempt
@@ -13,36 +12,47 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, require_admission_ready, select_pending_start
 from provider_core.api import ApiFailure, ProviderAPI
-from provider_core.attempt_store import StoreRefused
+from provider_core.delivery_store import DeliveryFull
+from tests.fakes.delivery import outcome
 
 
 class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
-    async def test_unresolved_local_record_and_low_headroom_refuse_before_api_reads(self):
-        for reason in ("local", "space"):
+    async def test_retained_control_and_full_real_relay_refuse_before_api_reads(self):
+        for reason in ("local", "capacity"):
             with self.subTest(reason=reason):
                 ports = SessionPorts()
                 async with AdmissionPeers(ports) as fixture:
                     before_requests = ()
                     if reason == "local":
                         pending = await fixture.discover()
-                        await fixture.store.admit(pending)
-                        before = await fixture.store.records()
+                        await fixture.store.retain_start(pending)
+                        before = await fixture.store.inventory()
                         before_requests = tuple(fixture.api_peer.requests)
-                        with self.assertRaisesRegex(AdmissionHeld, "retained"):
-                            await require_admission_ready(
-                                fixture.config, fixture.api, fixture.store, policy=AdmissionPolicy(1, 2), owner=self
-                            )
-                        self.assertEqual(await fixture.store.records(), before)
+                        with self.assertRaisesRegex(AdmissionHeld, "Retained"):
+                            await require_admission_ready(fixture.config, fixture.api, fixture.store,
+                                delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self)
+                        self.assertEqual(await fixture.store.inventory(), before)
                     else:
-                        with (
-                            patch(
-                                "provider_core.attempt_files.os.fstatvfs", return_value=SimpleNamespace(f_bavail=0, f_frsize=4096)
-                            ),
-                            self.assertRaises(StoreRefused),
-                        ):
-                            await require_admission_ready(
-                                fixture.config, fixture.api, fixture.store, policy=AdmissionPolicy(1, 2), owner=self
-                            )
+                        # Use the actual queue's serialized owner. Held requests
+                        # consume real capacity; no worker notification or science is issued.
+                        queue = fixture.relay.inbox.queue
+                        maximum = queue.limits.provider_items
+
+                        def retain_held(item):
+                            # Keep the real queue's reentrant lock across both
+                            # transactions; a worker cannot observe the pending intermediate row.
+                            with queue._serial:
+                                queue.enqueue(item)
+                                queue.hold(item, "Authored capacity fixture")
+
+                        for index in range(maximum):
+                            item = replace(outcome(provider=fixture.config.lifecycle.scope.provider_ref, suffix=format(index, "x")),
+                                           api_origin=fixture.api.origin)
+                            await fixture.relay.inbox.storage(retain_held, item)
+                        with self.assertRaises(DeliveryFull):
+                            await require_admission_ready(fixture.config, fixture.api, fixture.store,
+                                delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self)
+                        self.assertEqual(len((await fixture.delivery.pending())["items"]), maximum)
                     self.assertEqual(tuple(fixture.api_peer.requests), before_requests)
                     self.assertEqual(fixture.model_peer.requests, [])
                     self.assertEqual(ports.worker.events, [])
@@ -55,11 +65,11 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                 fixture.inventory_replies = [inventory_response(attempts=[attempt(analysis_kind_ref=kind)], next_cursor="YQ")]
                 with self.assertRaisesRegex(AdmissionHeld, "in-progress") as caught:
                     await require_admission_ready(
-                        fixture.config, fixture.api, fixture.store, policy=AdmissionPolicy(1, 2), owner=self
+                        fixture.config, fixture.api, fixture.store, delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self
                     )
                 self.assertEqual(caught.exception.remote_attempts[0].analysis_kind_ref, kind)
                 self.assertEqual(fixture.request_paths, ["/provider/v1/execution-attempts"])
-                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual(await fixture.store.inventory(), ())
                 self.assertEqual(ports.worker.events, [])
                 await ports.session.retire()
 
@@ -81,11 +91,11 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                         if route == "inventory":
                             fixture.inventory_replies = replies
                             operation = require_admission_ready(
-                                fixture.config, fixture.api, fixture.store, policy=policy, owner=self
+                                fixture.config, fixture.api, fixture.store, delivery=fixture.delivery, policy=policy, owner=self
                             )
                         else:
                             fixture.feed_replies = replies
-                            operation = select_pending_start(fixture.config, fixture.api, policy=policy, owner=self)
+                            operation = select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset())
                         expected = ApiFailure if failure == "bad_body" else AdmissionHeld
                         with self.assertRaises(expected) as caught:
                             await operation
@@ -93,7 +103,7 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                             self.assertIn("repeated a page cursor", str(caught.exception))
                         self.assertNotIn("PRIVATE", str(caught.exception))
                         self.assertEqual(len(fixture.api_peer.requests), 2)
-                        self.assertEqual(await fixture.store.records(), ())
+                        self.assertEqual(await fixture.store.inventory(), ())
                         self.assertEqual(ports.worker.events, [])
                         await ports.session.retire()
 
@@ -102,9 +112,9 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with AdmissionPeers(ports) as fixture:
             foreign = ProviderAPI(fixture.config.api.identity, fixture.config.api.http.new_transport(), expected_topology="web")
             try:
-                with patch.object(fixture.store, "admission_inventory", new=AsyncMock()) as reads, self.assertRaises(ValueError):
+                with patch.object(fixture.store, "inventory", new=AsyncMock()) as reads, self.assertRaises(ValueError):
                     await require_admission_ready(
-                        fixture.config, foreign, fixture.store, policy=AdmissionPolicy(1, 2), owner=self
+                        fixture.config, foreign, fixture.store, delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self
                     )
                 reads.assert_not_awaited()
                 self.assertEqual(fixture.api_peer.requests, [])
@@ -120,10 +130,10 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                 replace(fixture.config.api.identity), fixture.config.api.http.new_transport(), expected_topology="dev-local"
             )
             try:
-                with patch.object(fixture.store, "admission_inventory", new=AsyncMock()) as reads:
+                with patch.object(fixture.store, "inventory", new=AsyncMock()) as reads:
                     with self.assertRaisesRegex(ValueError, "signing identity"):
                         await require_admission_ready(
-                            fixture.config, foreign, fixture.store, policy=AdmissionPolicy(1, 2), owner=self
+                            fixture.config, foreign, fixture.store, delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self
                         )
                     scope = replace(fixture.store.scope, generation_id="other-generation")
                     with (
@@ -131,11 +141,11 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertRaisesRegex(ValueError, "scope"),
                     ):
                         await require_admission_ready(
-                            fixture.config, fixture.api, fixture.store, policy=AdmissionPolicy(1, 2), owner=self
+                            fixture.config, fixture.api, fixture.store, delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self
                         )
                     for policy, owner in ((AdmissionPolicy(1, 2), None), (object(), self)):
                         with self.assertRaises(ValueError):
-                            await require_admission_ready(fixture.config, fixture.api, fixture.store, policy=policy, owner=owner)
+                            await require_admission_ready(fixture.config, fixture.api, fixture.store, delivery=fixture.delivery, policy=policy, owner=owner)
                     reads.assert_not_awaited()
                 self.assertEqual(fixture.api_peer.requests, [])
                 self.assertEqual(ports.worker.events, [])
@@ -153,7 +163,7 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with AdmissionPeers(ports) as fixture:
             fixture.api_peer.mode = "headers-stall"
             task = asyncio.create_task(
-                require_admission_ready(fixture.config, fixture.api, fixture.store, policy=AdmissionPolicy(1, 2), owner=self)
+                require_admission_ready(fixture.config, fixture.api, fixture.store, delivery=fixture.delivery, policy=AdmissionPolicy(1, 2), owner=self)
             )
             await asyncio.wait_for(fixture.api_peer.received.wait(), 1)
             task.cancel()
@@ -162,6 +172,6 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(fixture.api.last_failure.cause.primary, asyncio.CancelledError)
             await fixture.api.retire(owner=self)
             self.assertEqual(len(fixture.api_peer.requests), 1)
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(ports.worker.events, [])
             await ports.session.retire()

@@ -1,28 +1,24 @@
-"""Capacity observation preserves records and does not reserve a start."""
+"""Reading compact control inventory does not consume admission capacity."""
 
 import tempfile
 import unittest
 from pathlib import Path
 
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
 from tests.fakes.attempt_store import record, scope
 
 
 class AdmissionInventoryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_preflight_returns_the_exact_inventory_without_consuming_a_slot(self):
+    async def test_inventory_returns_exact_control_without_consuming_a_slot(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
+            store = CheckpointStore(Path(directory), scope=scope(), limits=CheckpointLimits(2, 300000), operation_seconds=1)
             await store.open()
             try:
-                self.assertEqual(await store.admission_inventory(owner=self), ())
-                self.assertEqual(list(root.iterdir()), [])
-                await store.admit(record())
-                before = {path.name: path.read_bytes() for path in root.iterdir()}
-                self.assertEqual(await store.admission_inventory(owner=self), (record(),))
-                self.assertEqual(await store.admission_inventory(owner=self), (record(),))
-                self.assertEqual({path.name: path.read_bytes() for path in root.iterdir()}, before)
-                await store.admit(record("retained:two"))
-                self.assertEqual(len(await store.records()), 2)
+                self.assertEqual(await store.inventory(owner=self), ())
+                await store.retain_start(record())
+                self.assertEqual(await store.inventory(owner=self), (record(),))
+                self.assertEqual(await store.inventory(owner=self), (record(),))
+                await store.retain_start(record("retained:two"))
+                self.assertCountEqual(await store.inventory(), (record(), record("retained:two")))
             finally:
                 await store.close()

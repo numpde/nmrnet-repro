@@ -1,8 +1,8 @@
-"""Verified Upload selection reaches one retained, complete signed Job result.
+"""Verified Upload selection reaches compact control and one exact handoff.
 
 The fixture invokes the pure XYZ parser in this container and records reader
-retirement. Choice and science are recording ports; this establishes neither
-model accuracy nor an external interpreter workflow.
+retirement. Choice, science and relay handoff are recording ports; its exact
+handed-off body also reaches a separate real signed TLS receiving call. This establishes neither model accuracy nor an external interpreter workflow.
 """
 
 import asyncio
@@ -16,7 +16,7 @@ from collections import Counter
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.acquisition import store_headers
@@ -24,7 +24,8 @@ from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_input import facts, response
-from tests.fakes.publication import api
+from tests.fakes.api import api
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
@@ -33,14 +34,8 @@ from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
-from provider_core.attempt_record import (
-    MAX_RECORD_BYTES,
-    AcknowledgedAttempt,
-    LocalExecutionPhase,
-    TerminalConfirmed,
-    TerminalPending,
-)
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, EnteredCheckpoint, EvidenceDigest
 from provider_core.controller import AttemptController
 from provider_core.ownership import AttemptClaims
 from provider_core.transport import HttpTransport
@@ -111,10 +106,10 @@ class ScientificWorker:
     async def execute(self, handle):
         self.test.assertIs(handle, self.handle)
         self.events.append("execute")
-        (active,) = await self.test.store.records()
-        self.test.assertIsInstance(active, AcknowledgedAttempt)
-        self.test.assertIs(active.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-        self.test.candidate = json.loads(active.prepared_identity.content)
+        (active,) = await self.test.store.inventory()
+        self.test.assertIs(type(active), EnteredCheckpoint)
+        self.test.assertEqual(active.prepared, EvidenceDigest.from_evidence(self.test.prepared_identity))
+        self.test.candidate = json.loads(self.test.prepared_identity.content)
         self.test.assert_sources(self.test.candidate["geometries"])
         outcomes = []
         for raw, positions in zip(self.requests, ((1, 2), (0, 2, 3, 4)), strict=True):
@@ -138,7 +133,8 @@ class ScientificWorker:
                     "private_warnings": [],
                 }
             )
-        return tuple(outcomes)
+        self.test.native_outcomes = tuple(outcomes)
+        return self.test.native_outcomes
 
     def close(self):
         self.events.append("close")
@@ -220,9 +216,8 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.confirmed and self.reader_host.confirmed)
         self.assertTrue(self.reader.closed and self.reader.observed)
         self.assertTrue(all(transport.retirement_confirmed for transport in self.source_transports))
-        (retained,) = await self.store.records()
-        self.assertIsInstance(retained, TerminalPending)
-        self.assertEqual(body, retained.body)
+        self.assertEqual(await self.store.inventory(), ())
+        self.assertEqual(body, self.delivery.items[0].body)
         content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
         result = json.loads(content)
         self.result_content = content
@@ -237,7 +232,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
             result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
         )
 
-    async def test_verified_upload_selected_2_1_is_retained_before_one_batch_and_published_whole(self):
+    async def test_verified_upload_selected_2_1_digest_precedes_batch_and_handoff_is_published_whole(self):
         await self.run_lifecycle()
 
     async def run_lifecycle(self):
@@ -277,34 +272,69 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
             )
             recovery_scope = replace(scope(), api_origin=peer.origin)
             with tempfile.TemporaryDirectory() as directory:
-                self.store = AttemptStore(
-                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
+                self.store = CheckpointStore(
+                    Path(directory), scope=recovery_scope, limits=CheckpointLimits(1, 300000), operation_seconds=1
                 )
                 await self.store.open()
                 try:
+                    self.delivery = RecordingDelivery()
+                    self.delivery.endpoint = replace(self.delivery.endpoint, api_origin=peer.origin)
+                    lifecycle_api = api(lifecycle, peer.origin)
                     controller = AttemptController(
-                        api(lifecycle, peer.origin),
+                        lifecycle_api,
                         self.store,
                         AttemptClaims(),
                         session,
+                        delivery=self.delivery,
+                        on_delivery_retry=lambda *_: self.fail("Unexpected relay retry"),
+                        delivery_retry_initial_seconds=0.01,
+                        delivery_retry_max_seconds=0.04,
                         allowed_job_states=frozenset({"open"}),
                         poll_seconds=1,
                         task_settle_seconds=0.1,
                     )
-                    confirmed = await controller.run(replace(record(), scope=recovery_scope, input=facts(INSTRUCTIONS)))
-                    self.assertIsInstance(confirmed, TerminalConfirmed)
-                    self.assertEqual(await self.store.records(), (confirmed,))
+                    prepare, execute = session.prepare, session.execute
+
+                    async def capture_prepared(*args, **kwargs):
+                        handle = await prepare(*args, **kwargs)
+                        self.prepared_identity = handle.identity
+                        return handle
+
+                    async def capture_outcome(*args, **kwargs):
+                        outcome = await execute(*args, **kwargs)
+                        self.scientific_evidence = outcome.evidence
+                        return outcome
+
+                    with (
+                        patch.object(session, "prepare", side_effect=capture_prepared),
+                        patch.object(session, "execute", side_effect=capture_outcome),
+                    ):
+                        accepted = await controller.run(replace(record(), scope=recovery_scope, input=facts(INSTRUCTIONS)))
+                    self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
+                    self.assertEqual(await self.store.inventory(), ())
+                    self.assertEqual(len(self.delivery.items), 1)
+                    item = self.delivery.items[0]
+                    self.assertEqual(item.body_sha256, accepted.selection.body_sha256)
+                    evidence = json.loads(self.scientific_evidence.content)
+                    self.assertEqual(evidence["geometries"], list(self.native_outcomes))
+                    # A separate real TLS receiving assertion follows the recording
+                    # handoff; this fixture does not run a relay daemon.
+                    receipt = await lifecycle_api.complete_attempt(item.body, execution_attempt_ref=item.execution_attempt_ref)
+                    self.assertEqual(receipt.execution_attempt_ref, ATTEMPT_REF)
+                    self.assertEqual(peer.request_bodies[-1], item.body)
+                    for private in (self.source, self.prepared_identity.content, self.scientific_evidence.content, item.body):
+                        self.assertNotIn(private, (Path(directory) / "checkpoints.sqlite3").read_bytes())
                 finally:
                     await session.retire()
                     await self.store.close()
                     for transport in (lifecycle, *self.source_transports):
                         await transport.retire()
-                reopened = AttemptStore(
-                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
+                reopened = CheckpointStore(
+                    Path(directory), scope=recovery_scope, limits=CheckpointLimits(1, 300000), operation_seconds=1
                 )
                 await reopened.open()
                 try:
-                    self.assertEqual(await reopened.records(), (confirmed,))
+                    self.assertEqual(await reopened.inventory(), ())
                 finally:
                     await reopened.close()
             self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])

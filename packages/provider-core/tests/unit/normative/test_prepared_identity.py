@@ -1,6 +1,11 @@
 """The final admitted candidate is retained before science may consume its handle."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import json
+from pathlib import Path
+from provider_core.producer_checkpoint import decode_checkpoint, encode_checkpoint
 import tempfile
 import unittest
 from dataclasses import replace
@@ -22,7 +27,7 @@ from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import observation, progress_response
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 IDENTITY = ProtectedEvidence("fixture.prepared_input.v1", b"private candidate identity")
 
@@ -74,13 +79,14 @@ class PreparedIdentityTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                 ).run(acknowledged)
-                self.assertEqual(IDENTITY, session.events[1][1].prepared_identity)
-                self.assertEqual(IDENTITY, terminal.attempt.prepared_identity)
-                self.assertEqual(IDENTITY, decode_record(encode_record(terminal), scope=scope()).attempt.prepared_identity)
+                self.assertEqual(EvidenceDigest.from_evidence(IDENTITY), session.events[1][1].prepared)
+                self.assertEqual(EvidenceDigest.from_evidence(IDENTITY), terminal.selection.attempt.prepared)
+                self.assertEqual(terminal, decode_checkpoint(encode_checkpoint(terminal), scope=scope()))
+                self.assertNotIn(IDENTITY.content, (Path(directory) / "checkpoints.sqlite3").read_bytes())
                 claim.release()
             finally:
                 await store.close()

@@ -13,7 +13,7 @@ from dataclasses import asdict, replace
 from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
-from tests.fakes.attempt_inventory import response as inventory_response
+from tests.fakes.attempt_inventory import attempt as inventory_attempt, response as inventory_response
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import page
@@ -27,18 +27,18 @@ from nmrnet_provider.admission import AdmissionPolicy
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.service import Announcement, ProviderService, ServicePolicy
-from provider_core.attempt_files import history_directory_name, record_name
-from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalOperation, TerminalPending, decode_record
-from provider_core.attempt_store import AttemptStore
+from provider_core.attempt_record import StartPending, TerminalOperation
+from provider_core.checkpoint_store import CheckpointStore
 from provider_core.hello import AnalysisOffering
 from provider_core.job_input import verify_job_input
-from provider_core.publication import TerminalRecovery
 
 
 class ServicePeers(AdmissionPeers):
     def __init__(self, *, maximum_records=2):
         super().__init__(InputPorts(), maximum_records=maximum_records)
         self.inventory_replies = [inventory_response(attempts=[], next_cursor=None)] * 2
+        self.remote_attempts = {}
+        self.started_jobs = set()
         self.events = []
         self.api_notices = []
         self.allocations = []
@@ -80,11 +80,6 @@ class ServicePeers(AdmissionPeers):
             "open_attempt": self.open_attempt,
             "claims": self.claims,
             "retire_native": AsyncMock(),
-            "terminal_recovery": TerminalRecovery(
-                policy.api_backoff_max_seconds,
-                lambda attempt, failure, seconds: self.api_notices.append(("retry", "terminal", failure, seconds, attempt.admission)),
-                lambda attempt, failure: self.api_notices.append(("recovered", "terminal", failure, attempt.admission)),
-            ),
             "current_announcement": lambda: self.snapshot,
             "policy": policy,
             "on_started": lambda: self.events.append("started"),
@@ -118,7 +113,19 @@ class ServicePeers(AdmissionPeers):
                     if not self.resist_factory_cancel:
                         raise
                     await self.factory_release.wait()
-            return await assemble_attempt(**self.arguments(pending))
+            controller = await assemble_attempt(**self.arguments(pending))
+            ports.session = controller.session
+            prepare = ports.session.prepare
+
+            async def observe_preparation(*args, **kwargs):
+                outcome = await prepare(*args, **kwargs)
+                # Observe the actual session return in memory, never attach
+                # private evidence to the relay's public DeliveryOutcome.
+                ports.preparation_outcome = outcome
+                return outcome
+
+            ports.session.prepare = observe_preparation
+            return controller
         except BaseException as cause:
             failures = [cause]
             # Assembly's read uses owner=None. Only this serialized factory
@@ -163,14 +170,33 @@ class ServicePeers(AdmissionPeers):
             return receipt()
         if path == "/provider/v1/execution-attempts":
             self.events.append("inventory")
+            if not self.inventory_replies:
+                self.request_paths.append(path)
+                return inventory_response(attempts=list(self.remote_attempts.values()), next_cursor=None)
         elif path == "/provider/v1/jobs":
             self.events.append("discover")
             self.discovery_entered.set()
             if self.discovery_release is not None:
                 await self.discovery_release.wait()
+            if self.feed_replies is None and self.ports.instructions.job_ref in self.started_jobs:
+                self.request_paths.append(path)
+                return json.dumps(page() | {"analysis_kind_ref": ANALYSIS_KIND_REF, "jobs": [], "next_cursor": None}).encode()
         elif path.endswith("/start"):
             self.events.append("start")
         result = await super().api_reply(request, body)
+        if path.endswith("/start"):
+            accepted = json.loads(result)
+            value = json.loads(body)
+            self.started_jobs.add(accepted["job_ref"])
+            self.remote_attempts[accepted["execution_attempt_ref"]] = inventory_attempt(
+                analysis_kind_ref=accepted["analysis_kind_ref"],
+                execution_attempt_ref=accepted["execution_attempt_ref"],
+                job_ref=accepted["job_ref"],
+                provider_attempt_key=value["provider_attempt_key"],
+                started_at=accepted["started_at"],
+            )
+        if path.endswith(("/complete", "/fail")):
+            self.remote_attempts.pop(json.loads(body)["execution_attempt_ref"], None)
         if path.endswith("/complete"):
             self.completed.set()
             if self.stop_after_complete:
@@ -241,29 +267,10 @@ class SuccessiveServicePeers(ServicePeers):
     def failure_receipt(self, _index, _value, _pending):
         raise AssertionError("This successive-Job fixture expects successful science")
 
-    async def retained_records(self):
-        """Inspect these three known Job keys, including their original history bytes."""
-        records = {record_name(record): record for record in await self.store.records()}
-        history = self.config.lifecycle.store_root / history_directory_name(self.store.scope)
-        for body in self.start_bodies:
-            name = hashlib.sha256(json.loads(body)["provider_attempt_key"].encode("ascii")).hexdigest() + ".json"
-            path = history / name
-            if path.exists():
-                historical = decode_record(path.read_bytes(), scope=self.store.scope)
-                if (
-                    type(historical) is not TerminalConfirmed
-                    or record_name(historical) != name
-                    or historical.pending.attempt.start.body != body
-                    or (name in records and records[name] != historical)
-                ):
-                    raise AssertionError("Prior durable confirmation changed or conflicts with active storage")
-                records[name] = historical
-        return tuple(records[name] for name in sorted(records))
-
     async def reopen_store(self):
         await self.store.close()
         settings = self.config.lifecycle
-        self.store = AttemptStore(
+        self.store = CheckpointStore(
             settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
         )
         self.stack.push_async_callback(self.store.close)
@@ -286,7 +293,7 @@ class SuccessiveServicePeers(ServicePeers):
         if path == "/provider/v1/hello":
             return await super().api_reply(request, body)
         if path == "/provider/v1/execution-attempts":
-            return inventory_response(attempts=[], next_cursor=None)
+            return inventory_response(attempts=list(self.remote_attempts.values()), next_cursor=None)
         if path == "/provider/v1/jobs":
             available = self.jobs[len(self.start_bodies) : len(self.start_bodies) + 1]
             return json.dumps(
@@ -308,18 +315,19 @@ class SuccessiveServicePeers(ServicePeers):
             index = len(self.start_bodies)
             if index >= len(self.jobs) or json.loads(body)["job_ref"] != self.jobs[index].job_ref:
                 raise AssertionError("A started Job was redispatched or eligibility order changed")
-            inventory = await self.store.records()
+            inventory = await self.store.inventory()
             retained = [item for item in inventory if type(item) is StartPending]
             if len(retained) != 1 or retained[0].body != body or retained[0].input != self.jobs[index].identity:
                 raise AssertionError("Start does not match the exact durable discovered Job")
-            retained_history = await self.retained_records()
-            expected_confirmed = min(index, self.config.lifecycle.store_limits.confirmed_history_records)
-            if (
-                len(retained_history) != expected_confirmed + 1
-                or sum(type(item) is TerminalConfirmed for item in retained_history) != expected_confirmed
-            ):
-                raise AssertionError("A successive Job started before prior outcomes were durably confirmed")
+            if len(inventory) != 1:
+                raise AssertionError("A successive Job started before prior producer checkpoints were cleared")
             self.start_bodies.append(body)
+            self.remote_attempts[self.attempt_refs[index]] = inventory_attempt(
+                analysis_kind_ref=ANALYSIS_KIND_REF,
+                execution_attempt_ref=self.attempt_refs[index],
+                job_ref=self.jobs[index].job_ref,
+                provider_attempt_key=json.loads(body)["provider_attempt_key"],
+            )
             return start_response(
                 execution_attempt_ref=self.attempt_refs[index],
                 job_ref=self.jobs[index].job_ref,
@@ -337,15 +345,16 @@ class SuccessiveServicePeers(ServicePeers):
             raise AssertionError("Unexpected successive-service API request")
         value = json.loads(body)
         index = self.attempt_refs.index(value["execution_attempt_ref"])
-        pending = [item for item in await self.store.records() if type(item) is TerminalPending]
-        if len(pending) != 1 or pending[0].body != body or pending[0].attempt.start.input != self.jobs[index].identity:
-            raise AssertionError("Publication did not use the exact durable Job outcome")
+        pending = self.relay.queue.next_pending(self.config.api.identity.origin, self.config.lifecycle.scope.provider_ref)
+        if pending is None or pending.body != body or pending.job_ref != self.jobs[index].job_ref:
+            raise AssertionError("API publication did not use the exact durable relay item for this Job")
         if path.endswith("/fail"):
-            if pending[0].operation is not TerminalOperation.FAIL:
+            if pending.operation is not TerminalOperation.FAIL:
                 raise AssertionError("Failure request differs from the retained terminal choice")
-            self.require_retired_science(index + 1)
-            return self.failure_receipt(index, value, pending[0])
-        if pending[0].operation is not TerminalOperation.COMPLETE:
+            result = self.failure_receipt(index, value, pending)
+            self.remote_attempts.pop(self.attempt_refs[index], None)
+            return result
+        if pending.operation is not TerminalOperation.COMPLETE:
             raise AssertionError("Completion request differs from the retained terminal choice")
         content = base64.b64decode(value["canonical_result_base64"], validate=True)
         public = json.loads(content)
@@ -361,12 +370,12 @@ class SuccessiveServicePeers(ServicePeers):
             self.jobs[index].identity.input_fingerprint,
         ):
             raise AssertionError("Generated source selection does not belong to the current Job")
-        self.require_retired_science(index + 1)
         replayed = index in self.accepted_outcomes
         if replayed and self.accepted_outcomes[index] != body:
             raise AssertionError("Recovery changed the accepted terminal bytes")
         self.complete_bodies.append(body)
         self.accepted_outcomes[index] = body
+        self.remote_attempts.pop(self.attempt_refs[index], None)
         if index == 1 and not replayed and self.lose_second_completion:
             return None
         if index == 1 and self.recovery_release is not None:

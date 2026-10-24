@@ -1,5 +1,8 @@
 """Unconfirmed phase delivery needs a fresh lifecycle read, never a PUT replay."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import json
 import tempfile
 import unittest
@@ -8,7 +11,7 @@ from provider_core.attempt_record import LocalExecutionPhase, TerminalOperation
 from provider_core.execution import AttemptExecutor
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.phase_progress import PhaseProgressTransport
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class PhaseProgressTests(unittest.IsolatedAsyncioTestCase):
@@ -42,7 +45,7 @@ class PhaseProgressTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 on_unconfirmed_phase_progress=unconfirmed,
@@ -52,10 +55,11 @@ class PhaseProgressTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(notices), 1)
                 self.assertEqual(transport.fresh_reads, 1)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertIs(session.events[1][1].local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-                self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
-                self.assertEqual(terminal.evidence, session.outcome.evidence)
-                self.assertEqual(await store.records(), (terminal,))
+                self.assertIs(type(session.events[1][1]), EnteredCheckpoint)
+                self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
+                self.assertEqual(terminal.selection.body_sha256, executor.delivery.items[0].body_sha256)
+                self.assertIsNone(executor._outcome)
+                self.assertEqual(await store.inventory(), (terminal,))
                 commands = [json.loads(request.content) for request, _ in transport.calls if request.method == "PUT"]
                 self.assertEqual(
                     [(item["phase"], item["condition_code"]) for item in commands], [("preparing", None), ("running", None)]
@@ -77,7 +81,7 @@ class PhaseProgressTests(unittest.IsolatedAsyncioTestCase):
                         store,
                         claim,
                         session,
-                        allowed_job_states=frozenset({"open"}),
+                        delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                         poll_seconds=1,
                         task_settle_seconds=0.1,
                         on_unconfirmed_phase_progress=False,

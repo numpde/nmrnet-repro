@@ -1,7 +1,8 @@
-"""Installed core publishes a NMRNet result through the real signed TLS/store path.
+"""NMRNet sessions preserve scientific inputs through compact control and handoff.
 
-Science and host retirement are recording ports here; their real-worker and
-real-engine qualifications remain separate and are not claimed by this fixture.
+Science, retirement and relay handoff are recording ports. The final case also
+sends its exact handed-off body through real signed TLS, as a separate receiving
+proof. It does not qualify a running relay, real workers or Engine retirement.
 """
 
 import asyncio
@@ -19,8 +20,9 @@ from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
 from tests.fakes.execution import unexpected_condition
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.job_input import facts, response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
@@ -30,12 +32,10 @@ from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, Re
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
-    MAX_RECORD_BYTES,
-    LocalExecutionPhase,
-    TerminalConfirmed,
     acknowledge_start,
 )
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, EnteredCheckpoint, EvidenceDigest
 from provider_core.controller import AttemptController
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
@@ -506,7 +506,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(self.session.last_retirement_failure.cause, first)
         self.assertEqual(self.worker.events, ["closed"])
 
-    async def test_signed_api_lifecycle_publishes_exact_retained_scientific_result(self):
+    async def test_signed_api_receives_exact_handed_off_scientific_result_after_durable_entry(self):
         diagnostic = "PRIVATE_PREPARATION_LIFECYCLE"
         preparation = AsyncMock()
         preparation.interpreter_diagnostics = None
@@ -544,29 +544,46 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
             client = api(transport, peer.origin)
             with tempfile.TemporaryDirectory() as directory:
-                store = AttemptStore(
-                    Path(directory),
-                    scope=recovery_scope,
-                    limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64),
-                    operation_seconds=1,
+                store = CheckpointStore(
+                    Path(directory), scope=recovery_scope,
+                    limits=CheckpointLimits(1, 300000), operation_seconds=1,
                 )
                 await store.open()
                 try:
+                    delivery = RecordingDelivery()
+                    delivery.endpoint = replace(delivery.endpoint, api_origin=peer.origin)
                     controller = AttemptController(
                         client,
                         store,
                         AttemptClaims(),
                         self.session,
+                        delivery=delivery,
+                        on_delivery_retry=lambda *_: self.fail("Unexpected handoff retry in the receiving fixture"),
+                        delivery_retry_initial_seconds=0.01,
+                        delivery_retry_max_seconds=0.04,
                         allowed_job_states=frozenset({"open"}),
                         poll_seconds=1,
                         task_settle_seconds=0.1,
                     )
                     prepare_worker = self.worker.prepare
+                    prepare_session, execute_session = self.session.prepare, self.session.execute
+                    observed = {}
+
+                    async def capture_prepared(*args, **kwargs):
+                        handle = await prepare_session(*args, **kwargs)
+                        observed["identity"] = handle.identity
+                        return handle
+
+                    async def capture_outcome(*args, **kwargs):
+                        outcome = await execute_session(*args, **kwargs)
+                        observed["outcome"] = outcome
+                        return outcome
 
                     async def require_retained_identity(raw_requests):
-                        (entered,) = await store.records()
-                        self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-                        candidate = json.loads(entered.prepared_identity.content)
+                        (entered,) = await store.inventory()
+                        self.assertIs(type(entered), EnteredCheckpoint)
+                        self.assertEqual(entered.prepared, EvidenceDigest.from_evidence(observed["identity"]))
+                        candidate = json.loads(observed["identity"].content)
                         self.assertEqual(candidate["preparation_diagnostics"][0]["diagnostic"], diagnostic)
                         self.assertEqual(
                             [hashlib.sha256(raw).hexdigest() for raw in raw_requests],
@@ -574,20 +591,35 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                         )
                         return await prepare_worker(raw_requests)
 
-                    with patch.object(self.worker, "prepare", side_effect=require_retained_identity):
-                        confirmed = await controller.run(pending)
-                    terminal = confirmed.pending
-                    self.assertIsInstance(confirmed, TerminalConfirmed)
-                    self.assertEqual(await store.records(), (confirmed,))
-                    self.assertEqual(peer.request_bodies[-1], terminal.body)
-                    candidate = json.loads(terminal.attempt.prepared_identity.content)
-                    result = json.loads(base64.b64decode(json.loads(terminal.body)["canonical_result_base64"]))
+                    with (
+                        patch.object(self.session, "prepare", side_effect=capture_prepared),
+                        patch.object(self.session, "execute", side_effect=capture_outcome),
+                        patch.object(self.worker, "prepare", side_effect=require_retained_identity),
+                    ):
+                        accepted = await controller.run(pending)
+                    self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
+                    self.assertEqual(await store.inventory(), ())
+                    self.assertEqual(len(delivery.items), 1)
+                    item = delivery.items[0]
+                    self.assertEqual(item.body_sha256, accepted.selection.body_sha256)
+                    candidate = json.loads(observed["identity"].content)
+                    result = json.loads(base64.b64decode(json.loads(item.body)["canonical_result_base64"], validate=True))
                     self.assertEqual(candidate["geometries"][0]["request_sha256"], result["geometries"][0]["request_sha256"])
                     self.assertNotIn(diagnostic, json.dumps(result))
                     self.assertEqual(
-                        json.loads(terminal.evidence.content)["preparation_diagnostics"][0]["diagnostic"], diagnostic
+                        json.loads(observed["outcome"].evidence.content)["preparation_diagnostics"][0]["diagnostic"], diagnostic
                     )
+                    database = (Path(directory) / "checkpoints.sqlite3").read_bytes()
+                    for private in (diagnostic.encode(), observed["identity"].content,
+                                    observed["outcome"].content, observed["outcome"].evidence.content):
+                        self.assertNotIn(private, database)
                     self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
+                    self.assertEqual(len(peer.requests), 8)
+                    # This is a separate signed wire assertion after recording
+                    # handoff, not a claim that the fixture ran a delivery daemon.
+                    receipt = await client.complete_attempt(item.body, execution_attempt_ref=item.execution_attempt_ref)
+                    self.assertEqual(receipt.execution_attempt_ref, item.execution_attempt_ref)
+                    self.assertEqual(peer.request_bodies[-1], item.body)
                     self.assertEqual(len(peer.requests), 9)
                 finally:
                     await store.close()

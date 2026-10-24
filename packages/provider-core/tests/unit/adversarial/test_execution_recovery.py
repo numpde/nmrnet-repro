@@ -1,5 +1,8 @@
 """An observation deadline preserves the actual read and any completed science."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import errno
 import json
@@ -7,7 +10,7 @@ import tempfile
 import time
 import unittest
 
-from provider_core.attempt_record import SuppressedOutcome, SuppressionReason
+from provider_core.attempt_record import SuppressionReason
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ObservationGapExpired, ObservationRecovery
 from provider_core.failure_projection import owned_details, owned_relationships
 from provider_core.ownership import OwnershipRefused
@@ -17,7 +20,7 @@ from tests.fakes.attempts import observation, progress_response
 from tests.fakes.conditions import ReportingSession
 from tests.fakes.execution import PausedSession, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -39,7 +42,7 @@ class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 observation_recovery=ObservationRecovery(
@@ -111,7 +114,7 @@ class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 observation_recovery=ObservationRecovery(
@@ -138,7 +141,7 @@ class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                     with self.assertRaises(OwnershipRefused):
                         claim.release()
                     with self.assertRaises(ExecutionRefused):
-                        await executor.retain_suppressed_outcome()
+                        await executor.retain_suppressed_disposition()
                 cleanup_release.set()
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
@@ -152,10 +155,11 @@ class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(owned_details(expired)["gap_seconds"], 0.1)
                 self.assertIn(("owned cause", expired.cause), tuple(owned_relationships(expired)))
                 self.assertTrue(transport.retirement_confirmed)
-                retained = await executor.retain_suppressed_outcome()
-                self.assertIs(type(retained), SuppressedOutcome)
+                retained = await executor.retain_suppressed_disposition()
+                self.assertIs(type(retained), SuppressedCheckpoint)
                 self.assertIs(retained.reason, SuppressionReason.OBSERVATION_FAILED)
-                self.assertEqual(retained.candidate.evidence, session.outcome.evidence)
+                self.assertFalse(hasattr(retained, "candidate"))
+                self.assertIsNone(executor._outcome)
                 self.assertEqual([item[0] for item in session.events], ["prepare", "execute", "retire"])
                 claim.release()
             finally:
@@ -195,7 +199,7 @@ class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 observation_recovery=ObservationRecovery(
@@ -271,7 +275,7 @@ class ObservationRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 observation_recovery=ObservationRecovery(

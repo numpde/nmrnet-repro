@@ -1,5 +1,8 @@
 """No fresh science dispatch may omit or replace its retained candidate identity."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import json
 import tempfile
 import unittest
@@ -21,7 +24,7 @@ from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import observation, progress_response
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class PreparedIdentityRefusalTests(unittest.TestCase):
@@ -87,7 +90,7 @@ class UnidentifiedPreparationTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                 )
@@ -95,7 +98,7 @@ class UnidentifiedPreparationTests(unittest.IsolatedAsyncioTestCase):
                     await executor.run(acknowledged)
                 self.assertIsInstance(failed.exception.cause, TypeError)
                 self.assertEqual(["prepare", "retire"], [event[0] for event in session.events])
-                self.assertEqual((acknowledged,), await store.records())
+                self.assertEqual((AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),), await store.inventory())
                 self.assertEqual(4, len(transport.calls))
                 claim.release()
             finally:

@@ -36,7 +36,7 @@ class UploadChildSession(ChildSession):
     async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
         if acknowledged.start.input != instructions.identity or self.source.job_ref != instructions.job_ref:
             raise ValueError("Upload child preparation requires this Job's admitted instructions and source receipt")
-        self.phases.append((await self.store.records())[0].local_phase)
+        self.phases.append(type((await self.store.inventory())[0]))
         self._launch = asyncio.create_task(self.child.start(self.mode, pass_fds=(self.directory_fd,)))
         await asyncio.shield(self._launch)
         await self.child.send(

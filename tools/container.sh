@@ -402,6 +402,7 @@ case "$1" in
                     exit 2
                 }
                 command+=(--init --entrypoint /usr/local/bin/python --env PYTHONPATH=/fixture
+                    --mount "type=bind,src=$repository_root/tools/provider_api_qualification.sh,dst=/fixture/provider_api_qualification.sh,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_prediction.py,dst=/fixture/test_api_prediction_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_api_prediction.py,dst=/fixture/test_api_prediction_adversarial.py,readonly"
@@ -529,7 +530,7 @@ case "$1" in
                 done
                 core_suite=unit
                 if [[ "$1" == test/contract/provider-core ]]; then core_suite=contract; fi
-                if [[ "$1" == test/integration/provider/proxy || "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/runner || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/recovery || "$1" == test/integration/provider-core/interpreter-ambiguity || "$1" == test/integration/provider-core/process || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core/output || "$1" == test/integration/provider-core/interpreter ]]; then
+                if [[ "$1" == test/integration/provider/proxy || "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/runner || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/interpreter-ambiguity || "$1" == test/integration/provider-core/process || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core/output || "$1" == test/integration/provider-core/interpreter ]]; then
                     core_suite=integration
                     require_source_directory nmrnet_provider
                     require_source_directory nmrnet_inference
@@ -593,6 +594,7 @@ case "$1" in
                 if [[ "$1" == */adversarial ]]; then core_suite=unit/adversarial; fi
                 if [[ "$1" == test/integration/provider-core/chat ]]; then core_suite=integration/chat; fi
                 if [[ "$1" == test/integration/provider-core/delivery ]]; then core_suite=integration/delivery; fi
+                if [[ "$1" == test/integration/provider-core/recovery ]]; then core_suite=integration/recovery; fi
                 if [[ "$1" == test/integration/provider-core/starting ]]; then core_suite=integration/starting; fi
                 if [[ "$1" == test/integration/provider-core/hello ]]; then core_suite=integration/hello; fi
                 if [[ "$1" == test/integration/provider-core/transport ]]; then core_suite=integration/transport; fi
@@ -644,10 +646,10 @@ case "$1" in
                     command+=(--pattern test_nmrnet_service_admission.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
-                    command+=(--pattern test_nmrnet_service.py test_nmrnet_service_recovery.py)
+                    command+=(--pattern test_nmrnet_service.py test_nmrnet_service_recovery.py test_nmrnet_service_delivery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/recovery ]]; then
-                    command+=(--pattern test_nmrnet_recovery.py test_nmrnet_recovery_capture.py test_publication.py test_terminal_store.py)
+                    command+=(--pattern test_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
                     command+=(--pattern test_nmrnet_interpreter_ambiguity.py)
@@ -668,7 +670,7 @@ case "$1" in
                     command+=(--pattern 'test_nmrnet_runner_*.py')
                 fi
                 if [[ "$1" == test/unit/provider-core/prepared-identity ]]; then
-                    command+=(--pattern test_prepared_identity.py 'test_execution*.py'
+                    command+=(--pattern test_prepared_identity.py 'test_execution*.py' test_suppressed_persistence.py
                         test_attempt_transitions.py test_terminal_record.py test_recovery.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/credential ]]; then
@@ -684,10 +686,10 @@ case "$1" in
                     command+=(--pattern test_transport.py test_network.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/api ]]; then
-                    command+=(--pattern 'test_api*.py' test_attempt_start.py test_attempt_progress.py test_attempt_outcome.py test_upload_api.py test_publication.py)
+                    command+=(--pattern 'test_api*.py' test_attempt_start.py test_attempt_progress.py test_attempt_outcome.py test_upload_api.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/admission ]]; then
-                    command+=(--pattern test_admission_inventory.py test_attempt_store.py test_attempt_history.py)
+                    command+=(--pattern test_admission_inventory.py test_checkpoint_store.py test_delivery_store.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/uploads ]]; then
                     command+=(--pattern test_upload_acquisition.py test_upload_file_acquisition.py test_upload_snapshot.py)
@@ -705,7 +707,7 @@ case "$1" in
                     command+=(--pattern test_starting.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/recovery ]]; then
-                    command+=(--pattern test_terminal_record.py test_publication.py test_recovery.py 'test_controller*.py' test_failure_projection.py)
+                    command+=(--pattern test_terminal_record.py test_delivery_execution.py test_recovery.py 'test_controller*.py' test_failure_projection.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_nmrnet_session.py test_nmrnet_prediction_recovery.py test_attempt_store.py test_terminal_store.py

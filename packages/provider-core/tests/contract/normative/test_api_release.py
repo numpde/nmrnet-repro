@@ -23,7 +23,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import ATTEMPT_REF
 from tests.fakes.job_input import facts
 from tests.fakes.job_input import response as input_response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 from tests.fakes.uploads import UPLOAD_REF
 
 

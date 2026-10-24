@@ -1,289 +1,142 @@
-"""Recovery reserves aliases without bypassing live owners or replaying stale state."""
+"""Missing relay ownership and interrupted writes never authorize new science."""
 
 import asyncio
-import errno
-import os
 import tempfile
 import threading
 import unittest
 from dataclasses import replace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from provider_core.api import ApiFailure
-from provider_core.attempt_record import TerminalStateObserved, acknowledge_start
 from provider_core.ownership import AttemptClaims, OwnershipRefused
-from provider_core.publication import TerminalRecovery
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.recovery import AttemptRecovery, RecoveryFailed
-from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, api, reply
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, observation
-from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api, retained_failure, retained_read_required, terminal_refusal
+from tests.fakes.checkpoint_execution import acknowledged_store
+from tests.unit.normative.test_recovery import Relay, selected
 
 
-class RecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
-    async def test_stop_during_terminal_backoff_keeps_pending_bytes_and_failure_without_resending(self):
+class CompactRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_active_attempt_without_relay_ownership_is_retained_without_publication(self):
         with tempfile.TemporaryDirectory() as directory:
-            store, pending = await retained_failure(directory, scope())
-            claim = AttemptClaims().claim_record(pending)
-            transport = Transport(reply(b"maintenance", status=503))
-            entered = asyncio.Event()
-            recovery = AttemptRecovery(
-                api(transport, scope().api_origin), store, claim,
-                terminal_recovery=TerminalRecovery(10, lambda *_: entered.set(), Mock()),
-            )
-            task = asyncio.create_task(recovery.recover(pending))
+            store, acknowledged, claim = await acknowledged_store(directory)
             try:
-                await asyncio.wait_for(entered.wait(), 1)
-                task.cancel()
-                with self.assertRaises(asyncio.CancelledError):
-                    await task
-                self.assertEqual(await store.records(), (pending,))
+                checkpoint, _ = await selected(store, acknowledged)
+                relay, transport = Relay(), Transport(reply(observation()))
+                with self.assertRaises(RecoveryFailed):
+                    await AttemptRecovery(api(transport, store.scope.api_origin), store, claim,
+                                          delivery=relay).recover(checkpoint)
+                self.assertEqual(await store.inventory(), (checkpoint,))
                 self.assertEqual(len(transport.calls), 1)
-                self.assertEqual(transport.calls[0][0].content, pending.body)
-                self.assertEqual(recovery.last_failure.api_failure.status, 503)
-                self.assertIsNone(claim.operation_owner)
+                self.assertEqual(transport.calls[0][0].method, "GET")
+                self.assertEqual(relay.items, [])
                 claim.release()
             finally:
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
                 await store.close()
 
-    async def test_bad_or_unbound_read_preserves_the_read_only_obligation(self):
-        for response in (
-            reply(b"{}", status=404),
-            terminal_refusal(404, code="unreviewed"),
-            reply(observation(job_ref="job:other")),
-            reply(observation(state="private-canary")),
-        ):
-            with self.subTest(response=response.status), tempfile.TemporaryDirectory() as directory:
-                store, required = await retained_read_required(directory, scope())
-                claim = AttemptClaims().claim_record(required)
-                transport = Transport(response)
+    async def test_mismatched_relay_choice_does_not_clear_or_overwrite_selected_identity(self):
+        for field, value in (("job_ref", "job:other"), ("operation", "complete"),
+                             ("body_sha256", "sha256:" + "9" * 64), ("body_bytes", 1)):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                store, acknowledged, claim = await acknowledged_store(directory)
                 try:
-                    with self.assertRaises(RecoveryFailed) as failure:
-                        await AttemptRecovery(api(transport, scope().api_origin), store, claim).recover(required)
-                    self.assertIsNone(failure.exception.observed_record)
-                    self.assertEqual(await store.records(), (required,))
-                    self.assertEqual(len(transport.calls), 1)
-                    self.assertEqual(transport.calls[0][0].method, "GET")
-                    self.assertNotIn("private-canary", str(failure.exception))
+                    checkpoint, item = await selected(store, acknowledged)
+                    relay = Relay({**item.acceptance(), "body_bytes": len(item.body), field: value})
+                    transport = Transport()
+                    with self.assertRaises(RecoveryFailed):
+                        await AttemptRecovery(api(transport, store.scope.api_origin), store, claim,
+                                              delivery=relay).recover(checkpoint)
+                    self.assertEqual(await store.inventory(), (checkpoint,))
+                    self.assertEqual((transport.calls, relay.items), ([], []))
                     claim.release()
                 finally:
                     await store.close()
 
-    async def test_cancelled_read_retires_original_owner_without_a_write_or_second_get(self):
+    async def test_unbound_or_unreadable_api_reply_preserves_control(self):
+        for body in (b"{}", observation(execution_attempt_ref=ATTEMPT_REF[:-1] + "b")):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as directory:
+                store, acknowledged, claim = await acknowledged_store(directory)
+                try:
+                    checkpoint = AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission)
+                    relay, transport = Relay(), Transport(reply(body))
+                    with self.assertRaises(RecoveryFailed):
+                        await AttemptRecovery(api(transport, store.scope.api_origin), store, claim,
+                                              delivery=relay).recover(checkpoint)
+                    self.assertEqual(await store.inventory(), (checkpoint,))
+                    self.assertEqual(len(transport.calls), 1)
+                    self.assertEqual(relay.items, [])
+                    claim.release()
+                finally:
+                    await store.close()
+
+    async def test_stale_checkpoint_sends_nothing_and_keeps_actual_state(self):
         with tempfile.TemporaryDirectory() as directory:
-            store, required = await retained_read_required(directory, scope())
-            claim = AttemptClaims().claim_record(required)
-            transport = Transport(asyncio.CancelledError())
-            transport.retirement_confirmed = False
-            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim)
+            store, acknowledged, claim = await acknowledged_store(directory)
             try:
-                with patch.object(store._files, "replace", wraps=store._files.replace) as writes:
-                    with self.assertRaises(asyncio.CancelledError):
-                        await recovery.recover(required)
-                    with self.assertRaises(OwnershipRefused):
-                        claim.release()
-                    self.assertIsNone(await recovery.settle())
-                    writes.assert_not_called()
-                self.assertEqual(await store.records(), (required,))
-                self.assertEqual(len(transport.calls), 1)
+                checkpoint = AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission)
+                stale = replace(checkpoint, admission=replace(checkpoint.admission, replayed=True))
+                transport, relay = Transport(), Relay()
+                with self.assertRaises(RecoveryFailed):
+                    await AttemptRecovery(api(transport, store.scope.api_origin), store, claim,
+                                          delivery=relay).recover(stale)
+                self.assertEqual(await store.inventory(), (checkpoint,))
+                self.assertEqual((transport.calls, relay.items), ([], []))
                 claim.release()
             finally:
                 await store.close()
 
-    async def test_cancelled_readback_write_settles_the_same_write_before_claim_release(self):
+    async def test_cancelled_clear_settles_the_original_write_without_second_get(self):
         with tempfile.TemporaryDirectory() as directory:
-            store, required = await retained_read_required(directory, scope())
-            claim = AttemptClaims().claim_record(required)
-            transport = Transport(reply(observation(state="succeeded")))
-            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim)
-            reached, release = threading.Event(), threading.Event()
-            original = os.replace
-
-            def delayed_replace(*args, **kwargs):
-                reached.set()
-                if not release.wait(3):
-                    raise TimeoutError("Test readback write was not released")
-                return original(*args, **kwargs)
-
+            store, acknowledged, claim = await acknowledged_store(directory)
+            checkpoint = AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission)
+            transport, relay = Transport(reply(observation(state="failed"))), Relay()
+            recovery = AttemptRecovery(api(transport, store.scope.api_origin), store, claim, delivery=relay)
+            entered, release = threading.Event(), threading.Event()
+            original = store._database.clear_observed_after_cleanup
+            def delayed(*arguments):
+                entered.set()
+                release.wait(3)
+                return original(*arguments)
+            task = None
             try:
-                with patch("provider_core.attempt_files.os.replace", side_effect=delayed_replace) as writes:
-                    task = asyncio.create_task(recovery.recover(required))
-                    self.assertTrue(await asyncio.to_thread(reached.wait, 1))
+                with patch.object(store._database, "clear_observed_after_cleanup", side_effect=delayed) as clear:
+                    task = asyncio.create_task(recovery.recover(checkpoint))
+                    self.assertTrue(await asyncio.to_thread(entered.wait, 1))
                     task.cancel()
                     with self.assertRaises(asyncio.CancelledError):
                         await task
-                    retained = recovery.last_failure.observed_record
-                    self.assertIsInstance(retained, TerminalStateObserved)
                     with self.assertRaises(OwnershipRefused):
                         claim.release()
                     release.set()
-                    self.assertEqual(await recovery.settle(), retained)
-                    self.assertEqual(writes.call_count, 1)
-                self.assertEqual(await store.records(), (retained,))
+                    await recovery.settle()
+                    self.assertEqual(clear.call_count, 1)
+                self.assertEqual(await store.inventory(), ())
                 self.assertEqual(len(transport.calls), 1)
+                self.assertEqual(relay.items, [])
                 claim.release()
             finally:
                 release.set()
+                if task is not None and not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                if store.pending_operation is not None:
+                    await store.settle(owner=store.pending_owner)
                 await store.close()
 
-    async def test_failed_readback_write_keeps_observation_and_claim_without_retry(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, required = await retained_read_required(directory, scope())
-            claim = AttemptClaims().claim_record(required)
-            transport = Transport(reply(observation(state="failed")))
-            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim)
-            try:
-                with patch("provider_core.attempt_files.os.replace", side_effect=OSError(errno.EIO, "PRIVATE_PATH")) as writes:
-                    with self.assertRaises(RecoveryFailed) as failure:
-                        await recovery.recover(required)
-                    observed = failure.exception.observed_record
-                    self.assertIsInstance(observed, TerminalStateObserved)
-                    with self.assertRaises(RecoveryFailed) as settlement:
-                        await recovery.settle()
-                    self.assertIs(settlement.exception.cause, failure.exception.cause)
-                    self.assertEqual(settlement.exception.observed_record, observed)
-                    self.assertEqual(writes.call_count, 1)
-                with self.assertRaises(OwnershipRefused):
-                    claim.release()
-                self.assertEqual(len(transport.calls), 1)
-                self.assertIs(settlement.exception, failure.exception)
-                self.assertEqual(settlement.exception.cleanup_failures, ())
-                with self.assertRaises(RecoveryFailed) as repeated:
-                    await recovery.settle()
-                self.assertIs(repeated.exception, failure.exception)
-            finally:
-                await store.close()
-
-    async def test_unexpected_storage_defect_preserves_its_cause_and_observed_record(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, required = await retained_read_required(directory, scope())
-            claim = AttemptClaims().claim_record(required)
-            transport = Transport(reply(observation()))
-            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim)
-            defect = RuntimeError("PRIVATE_DEFECT")
-            try:
-                with patch.object(store, "replace", side_effect=defect) as writes:
-                    with self.assertRaises(RecoveryFailed) as failure:
-                        await recovery.recover(required)
-                    self.assertIs(failure.exception.cause, defect)
-                    self.assertIsInstance(failure.exception.observed_record, TerminalStateObserved)
-                    with self.assertRaises(RecoveryFailed) as settlement:
-                        await recovery.settle()
-                    self.assertIs(settlement.exception, failure.exception)
-                    writes.assert_awaited_once()
-                with self.assertRaises(OwnershipRefused):
-                    claim.release()
-                self.assertEqual(await store.records(), (required,))
-                self.assertEqual(len(transport.calls), 1)
-            finally:
-                await store.close()
-
-    async def test_remote_conflict_leaves_no_new_start_alias(self):
+    async def test_atomic_claim_inventory_keeps_existing_owner_and_reserves_no_partial_aliases(self):
         claims = AttemptClaims()
-        pending = record()
-        retained = acknowledge_start(pending, admission())
+        first = AcknowledgedCheckpoint(record(), admission())
+        second = AcknowledgedCheckpoint(record("second"), admission())
         existing = claims.claim(scope(), ATTEMPT_REF)
         with self.assertRaises(OwnershipRefused):
-            claims.claim_record(retained)
-        claims.claim_start(pending).release()
+            claims.claim_records((first, second))
+        claims.claim_start(first.start).release()
+        claims.claim_start(second.start).release()
         existing.require(scope(), ATTEMPT_REF)
         existing.release()
-
-    async def test_duplicate_remote_across_inventory_reserves_nothing(self):
-        claims = AttemptClaims()
-        first = acknowledge_start(record(), admission())
-        second = acknowledge_start(record("second"), admission())
         with self.assertRaises(OwnershipRefused):
             claims.claim_records((first, second))
         claims.claim_start(first.start).release()
         claims.claim_start(second.start).release()
         claims.claim(scope(), ATTEMPT_REF).release()
-
-    async def test_late_inventory_conflict_preserves_existing_owner_and_reserves_nothing(self):
-        claims = AttemptClaims()
-        first, second = record(), record("second")
-        existing = claims.claim_start(second)
-        with self.assertRaises(OwnershipRefused):
-            claims.claim_records((first, second))
-        claims.claim_start(first).release()
-        existing.require_start(second)
-        existing.release()
-
-    async def test_stale_acknowledgement_sends_nothing_and_retains_record(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, retained, original_claim = await acknowledged_store(directory)
-            original_claim.release()
-            stale = replace(retained, admission=replace(retained.admission, replayed=True))
-            claim = AttemptClaims().claim_record(stale)
-            transport = Transport()
-            recovery = AttemptRecovery(api(transport, store.scope.api_origin), store, claim)
-            try:
-                with self.assertRaises(RecoveryFailed):
-                    await recovery.recover(stale)
-                self.assertEqual(transport.calls, [])
-                self.assertEqual(await store.records(), (retained,))
-                claim.release()
-            finally:
-                await store.close()
-
-    async def test_cancelled_read_keeps_current_transport_evidence_until_settlement(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, retained, claim = await acknowledged_store(directory)
-            transport = Transport(asyncio.CancelledError())
-            transport.retirement_confirmed = False
-            cause = ExchangeFailed("private transport retirement cause")
-            transport.last_failure = cause
-            client = api(transport, store.scope.api_origin)
-            recovery = AttemptRecovery(client, store, claim)
-            try:
-                with self.assertRaises(asyncio.CancelledError):
-                    await recovery.recover(retained)
-                self.assertIs(recovery.last_failure.api_failure, client.last_failure)
-                self.assertIs(recovery.last_failure.api_failure.cause, cause)
-                with self.assertRaises(OwnershipRefused):
-                    claim.release()
-                await recovery.settle()
-                self.assertEqual(len(transport.calls), 1)
-                self.assertIs(recovery.last_failure.api_failure.cause, cause)
-                claim.release()
-            finally:
-                await store.close()
-
-    async def test_cancelled_inventory_settles_original_read_without_stale_api_evidence(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, retained, claim = await acknowledged_store(directory)
-            transport = Transport()
-            client = api(transport, store.scope.api_origin)
-            client.last_failure = ApiFailure("previous operation", "old evidence")
-            recovery = AttemptRecovery(client, store, claim)
-            reached, release = threading.Event(), threading.Event()
-            original = store._files.records
-
-            def delayed_records():
-                reached.set()
-                if not release.wait(2):
-                    raise TimeoutError("test inventory was not released")
-                return original()
-
-            try:
-                with patch.object(store._files, "records", side_effect=delayed_records) as reads:
-                    task = asyncio.create_task(recovery.recover(retained))
-                    self.assertTrue(await asyncio.to_thread(reached.wait, 1))
-                    task.cancel()
-                    with self.assertRaises(asyncio.CancelledError):
-                        await task
-                    self.assertIsNone(recovery.last_failure.api_failure)
-                    with self.assertRaises(OwnershipRefused):
-                        claim.release()
-                    release.set()
-                    await recovery.settle()
-                    self.assertEqual(reads.call_count, 1)
-                self.assertEqual(transport.calls, [])
-                claim.release()
-            finally:
-                release.set()
-                await store.close()

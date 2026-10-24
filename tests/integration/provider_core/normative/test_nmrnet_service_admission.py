@@ -12,7 +12,7 @@ from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
 from nmrnet_provider.runtime import assemble_attempt
-from provider_core.attempt_record import TerminalConfirmed
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, checkpoint_start
 
 
 class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
@@ -31,14 +31,14 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             }
             second = first | {"job_ref": "job:second"}
             fixture.feed_replies = [feed_response(jobs=[first, second], next_cursor=None)]
-            await require_admission_ready(fixture.config, fixture.api, fixture.store, policy=policy, owner=self)
-            pending = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self)
+            await require_admission_ready(fixture.config, fixture.api, fixture.store, delivery=fixture.delivery, policy=policy, owner=self)
+            pending = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset())
             self.assertEqual(pending.input, ports.instructions.identity)
             self.assertEqual(pending.scope, fixture.store.scope)
             body = json.loads(pending.body)
             self.assertEqual(body["job_ref"], ports.instructions.identity.job_ref)
             self.assertRegex(body["provider_attempt_key"], r"^[0-9a-f]{32}$")
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(ports.worker.events, [])
             self.assertEqual(fixture.request_paths, ["/provider/v1/execution-attempts"] * 2 + ["/provider/v1/jobs"])
             self.assertIn(b"&cursor=YQ ", fixture.api_peer.requests[1])
@@ -50,9 +50,10 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(controller.settle)
             outcome = await controller.run(pending)
-            self.assertIsInstance(outcome, TerminalConfirmed)
-            self.assertEqual(outcome.pending.attempt.start, pending)
-            self.assertEqual(await fixture.store.records(), (outcome,))
+            self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
+            await fixture.wait_published()
+            self.assertEqual(checkpoint_start(outcome), pending)
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertTrue(ports.host.confirmed)
             self.assertEqual(ports.worker.events.count("execute"), 1)
 
@@ -71,11 +72,11 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                     next_cursor="Yg",
                 ),
             ]
-            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self)
+            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, excluded_jobs=frozenset())
             self.assertEqual(selected.input.job_ref, "job:z")
             self.assertEqual(json.loads(selected.body)["job_ref"], "job:z")
             self.assertEqual(len(fixture.api_peer.requests), 2)
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(ports.worker.events, [])
             await ports.session.retire()
 
@@ -91,11 +92,11 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                 "nmrnet_provider.admission.secrets.token_hex",
                 side_effect=AssertionError("Empty discovery must create no start key"),
             ):
-                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self))
+                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset()))
             fixture.feed_replies = None
-            selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self)
+            selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset())
             self.assertEqual(selected.input, ports.instructions.identity)
             self.assertNotIn(b"cursor=", fixture.api_peer.requests[2])
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(ports.worker.events, [])
             await ports.session.retire()

@@ -1,5 +1,8 @@
 """Condition acknowledgement precedes dependent binding effects in each phase."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import json
 import tempfile
@@ -9,7 +12,7 @@ from provider_core.attempt_record import LocalExecutionPhase, TerminalOperation
 from provider_core.execution import AttemptExecutor
 from tests.fakes.conditions import ConditionTransport, ReportingSession
 from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ObservedExecutor(AttemptExecutor):
@@ -32,7 +35,7 @@ class ExecutionConditionTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                 ).run(acknowledged)
@@ -48,9 +51,9 @@ class ExecutionConditionTests(unittest.IsolatedAsyncioTestCase):
                         ("running", None),
                     ],
                 )
-                self.assertIs(session.events[0][1].local_phase, LocalExecutionPhase.NOT_ENTERED)
-                self.assertIs(session.events[1][1].local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-                self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
+                self.assertIs(type(session.events[0][1]), AcknowledgedCheckpoint)
+                self.assertIs(type(session.events[1][1]), EnteredCheckpoint)
+                self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
                 claim.release()
             finally:
                 await store.close()
@@ -67,7 +70,8 @@ class ExecutionConditionTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01,
+                    delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=0.005,
                     task_settle_seconds=0.1,
                 )

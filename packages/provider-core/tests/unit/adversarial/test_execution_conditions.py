@@ -1,5 +1,8 @@
 """Expired or failed condition capabilities cannot authorize later effects."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import tempfile
 import unittest
@@ -10,7 +13,7 @@ from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionR
 from provider_core.transport import ExchangeFailed
 from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
 from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class PausingSession(ReportingSession):
@@ -50,7 +53,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.005,
                 task_settle_seconds=0.1,
             )
@@ -88,7 +91,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.005,
                 task_settle_seconds=0.1,
             )
@@ -135,7 +138,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
@@ -163,7 +166,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                         store,
                         claim,
                         session,
-                        allowed_job_states=frozenset({"open"}),
+                        delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                         poll_seconds=1,
                         task_settle_seconds=0.1,
                     ).run(acknowledged)
@@ -191,7 +194,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                 )
@@ -203,10 +206,10 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIs(failed.exception.api_failure, session.caught)
                     self.assertIn(cleanup, failed.exception.cleanup_failures)
                     self.assertIs(failed.exception.outcome, session.outcome if phase == "execute" else None)
-                    (retained,) = await store.records()
+                    (retained,) = await store.inventory()
                     self.assertIs(
-                        retained.local_phase,
-                        LocalExecutionPhase.EXECUTION_ENTERED if phase == "execute" else LocalExecutionPhase.NOT_ENTERED,
+                        type(retained),
+                        EnteredCheckpoint if phase == "execute" else AcknowledgedCheckpoint,
                     )
                     if phase == "prepare":
                         self.assertNotIn("execute", [event[0] for event in session.events])
@@ -237,7 +240,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )
@@ -272,7 +275,7 @@ class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
             )

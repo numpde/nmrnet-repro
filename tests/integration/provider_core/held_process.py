@@ -17,7 +17,8 @@ from nmrnet_provider import process as process_module
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
-from provider_core.attempt_store import AttemptStore
+from provider_core.checkpoint_store import CheckpointStore
+from tests.integration.nmrnet.startup_process import record_startup_barriers
 
 
 def mark(name):
@@ -49,9 +50,9 @@ async def held_factory(factory, _pending):
         release.wait()
         raise AssertionError("The parent must kill this exact child before the injected read can finish")
 
-    factory.store._files.records = held_read
+    factory.store._database.inventory = held_read
     try:
-        await factory.store.records(owner=factory)
+        await factory.store.inventory(owner=factory)
     except asyncio.CancelledError:
         if asyncio.current_task() is original and factory.store.pending_owner is factory:
             mark("original-owner-retained")
@@ -96,8 +97,9 @@ if __name__ == "__main__":
         process_module._failure_report = fail_reporting_stream
     with (
         patch.object(NativeAttemptFactory, "__call__", held_factory),
+        patch.object(NativeAttemptFactory, "prove_previous_retired", record_startup_barriers),
         patch.object(NativeAttemptFactory, "settle", forbidden_factory_cleanup),
-        patch.object(AttemptStore, "close", forbidden_store_close),
+        patch.object(CheckpointStore, "close", forbidden_store_close),
         patch.object(process_module, "_run_signalled", observe_signals),
     ):
         raise SystemExit(main())

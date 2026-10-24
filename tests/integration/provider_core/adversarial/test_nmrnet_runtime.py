@@ -14,8 +14,7 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
 from provider_core.api import ProviderAPI
-from provider_core.attempt_files import AttemptFiles
-from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.signing import SigningIdentity
 from provider_core.uploads import UploadFailed, UploadInputRejected
@@ -71,7 +70,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             foreign = ProviderAPI(fixture.config.api.identity, fixture.config.api.http.new_transport(), expected_topology="web")
             try:
                 with (
-                    patch.object(fixture.store, "records", new=AsyncMock()) as reads,
+                    patch.object(fixture.store, "inventory", new=AsyncMock()) as reads,
                     self.assertRaisesRegex(ValueError, "topology"),
                 ):
                     await assemble_attempt(**(fixture.arguments(pending) | {"api": foreign}))
@@ -92,7 +91,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             with patch("nmrnet_provider.runtime.NMRNetSession", side_effect=primary), self.assertRaises(RuntimeError) as caught:
                 await assemble_attempt(**fixture.arguments(pending))
             self.assertIs(caught.exception, primary)
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(len(fixture.api_peer.requests), 1)
             self.assertEqual(ports.worker.events, [])
@@ -101,7 +100,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(ports.host.confirmed)
             fixture.allocate_prediction.assert_not_awaited()
 
-    async def test_unconfirmed_scientific_retirement_blocks_publication_without_repeating_science(self):
+    async def test_unconfirmed_retirement_blocks_reuse_while_approved_handoff_publishes_once(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
@@ -115,13 +114,16 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", str(caught.exception))
                 self.assertEqual(controller.session.last_retirement_failure.failures, (("native_retirement", cleanup),))
                 self.assertFalse(ports.host.confirmed)
-                self.assertIsNone(fixture.result)
+                await fixture.wait_published()
+                self.assertIsNotNone(fixture.result)
             finally:
                 ports.host.failure = None
             await controller.settle()
             self.assertTrue(ports.host.confirmed)
             self.assertEqual(ports.worker.events.count("execute"), 1)
-            self.assertIsNone(fixture.result)
+            self.assertIsNotNone(fixture.result)
+            self.assertEqual(await fixture.store.inventory(), ())
+            self.assertEqual(sum(b"/complete HTTP/1.1" in request for request in fixture.api_peer.requests), 1)
 
     async def test_cancelled_model_exchange_never_acquires_prediction(self):
         ports = SessionPorts()
@@ -158,9 +160,8 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             fixture.allocate_prediction.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
             ports.allocate_reader.assert_not_awaited()
-            (retained,) = await fixture.store.records()
-            self.assertIsInstance(retained, AcknowledgedAttempt)
-            self.assertIs(retained.local_phase, LocalExecutionPhase.NOT_ENTERED)
+            (retained,) = await fixture.store.inventory()
+            self.assertIsInstance(retained, AcknowledgedCheckpoint)
             self.assertIsNone(fixture.result)
 
     async def test_cancelled_preflight_retains_the_original_inventory_io_for_caller_settlement(self):
@@ -168,23 +169,23 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             entered, release = threading.Event(), threading.Event()
-            original = AttemptFiles.records
+            original = fixture.store._database.inventory
 
-            def delayed_inventory(files):
+            def delayed_inventory():
                 entered.set()
                 if not release.wait(2):
                     raise TimeoutError("Fixture inventory was not released")
-                return original(files)
+                return original()
 
             try:
-                with patch.object(AttemptFiles, "records", autospec=True, side_effect=delayed_inventory) as reads:
+                with patch.object(fixture.store._database, "inventory", side_effect=delayed_inventory) as reads:
                     task = asyncio.create_task(assemble_attempt(**fixture.arguments(pending)))
                     self.assertTrue(await asyncio.to_thread(entered.wait, 1))
                     task.cancel("fixture preflight cancellation")
                     with self.assertRaises(asyncio.CancelledError) as caught:
                         await task
                     self.assertIs(fixture.store.last_failure.cause, caught.exception)
-                    self.assertEqual(fixture.store.pending_operation, "read Attempt inventory")
+                    self.assertEqual(fixture.store.pending_operation, "read producer checkpoints")
                     self.assertEqual(ports.worker.events, [])
                     self.assertFalse(ports.host.confirmed)
                     ports.allocate_generator.assert_not_awaited()
@@ -203,10 +204,10 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
-            await fixture.store.admit(pending)
+            await fixture.store.retain_start(pending)
             with self.assertRaisesRegex(ControllerRefused, "recovery"):
                 await assemble_attempt(**fixture.arguments(pending))
-            self.assertEqual(await fixture.store.records(), (pending,))
+            self.assertEqual(await fixture.store.inventory(), (pending,))
             self.assertEqual(len(fixture.api_peer.requests), 1)
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(ports.worker.events, [])
@@ -231,7 +232,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             ):
                 with self.subTest(changes=tuple(changes)), self.assertRaises(ValueError):
                     await assemble_attempt(**(fixture.arguments(pending) | changes))
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(len(fixture.api_peer.requests), 1)
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(ports.worker.events, [])

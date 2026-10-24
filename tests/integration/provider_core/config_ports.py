@@ -98,13 +98,19 @@ consumer_id = "lane:fixture"
 generation_id = "generation:stable-fixture"
 store_root = {json.dumps(str(self.state))}
 maximum_records = {maximum_records}
-confirmed_history_records = 64
-filesystem_reserve_bytes = 0
+maximum_checkpoint_bytes = 1048576
 store_seconds = 2
 allowed_job_states = ["open"]
 poll_seconds = 0.2
 task_settle_seconds = 1
 observation_gap_seconds = 30
+
+[delivery]
+socket_path = {json.dumps(str(self.root / "delivery/http.sock"))}
+request_seconds = 2
+retirement_seconds = 1
+retry_initial_seconds = 0.01
+retry_max_seconds = 0.1
 
 [service]
 display_name = "NMRNet local fixture"

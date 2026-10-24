@@ -1,5 +1,8 @@
 """A current awaited condition recovers only before a matching acknowledgement."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import asyncio
 import json
 import tempfile
@@ -12,7 +15,7 @@ from tests.fakes.api import reply
 from tests.fakes.condition_recovery import ConditionOutageTransport
 from tests.fakes.conditions import ReportingSession
 from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ConditionRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -53,17 +56,17 @@ class ConditionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=0.01,
                 task_settle_seconds=0.1,
                 condition_recovery=ConditionRecovery(1, 0.04, retry, recovered),
             )
             try:
                 terminal = await asyncio.wait_for(executor.run(acknowledged), 3)
-                self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
+                self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
                 self.assertEqual(len(notices), 2)
                 recovered.assert_called_once_with(
-                    acknowledged if failed_put < 4 else terminal.attempt,
+                    acknowledged if failed_put < 4 else executor._record,
                     "preparing" if failed_put < 4 else "running",
                     transport.condition,
                     notices[0],
@@ -75,7 +78,7 @@ class ConditionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len({request.headers["signature-input"] for request in requests}), 3)
                 self.assertEqual(len({request.headers["signature"] for request in requests}), 3)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertEqual(await store.records(), (terminal,))
+                self.assertEqual(await store.inventory(), (terminal,))
                 self.assertEqual(
                     json.loads(requests[0].content)["condition_code"], None if failed_put in (3, 6) else "waiting_capacity"
                 )

@@ -1,5 +1,7 @@
 """START replay cannot cross received acknowledgement or unsettled cleanup."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 import asyncio
 import errno
 import os
@@ -11,9 +13,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import httpcore
 
-from provider_core.attempt_files import record_name
 from provider_core.attempt_record import AcknowledgedAttempt, StartPending, encode_record
-from provider_core.attempt_store import StoreRefused
+from provider_core.checkpoint_store import CheckpointRefused
 from provider_core.controller import AttemptController, ControllerFailed, StartRecovery
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.starting import StartFailed
@@ -22,7 +23,7 @@ from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import start_response
 from tests.fakes.controller import SingleRetirementSession, StoreCallBarrier, cancel_task, empty_store
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -36,7 +37,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 AttemptClaims(),
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 start_recovery=recovery,
@@ -46,7 +47,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                     await controller.run(record())
                 self.assertEqual(len(transport.calls), 1)
                 self.assertEqual([event[0] for event in session.events], ["retire"])
-                self.assertIsInstance((await store.records())[0], StartPending)
+                self.assertIsInstance((await store.inventory())[0], StartPending)
                 return caught.exception, controller
             finally:
                 await store.close()
@@ -77,14 +78,14 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 AttemptClaims(),
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 start_recovery=StartRecovery(0.001, retry, Mock()),
             )
             try:
                 with (
-                    patch("provider_core.attempt_files.os.replace", side_effect=OSError(errno.EIO, "PRIVATE_DISK")),
+                    patch.object(store._database, "acknowledge_start", side_effect=OSError(errno.EIO, "PRIVATE_DISK")),
                     self.assertRaises(ControllerFailed) as caught,
                 ):
                     await controller.run(pending)
@@ -94,9 +95,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(controller.operation.last_failure, failure)
                 self.assertEqual(len(transport.calls), 1)
                 self.assertEqual([event[0] for event in session.events], ["retire"])
-                self.assertEqual((Path(directory) / record_name(pending)).read_bytes(), encode_record(pending))
-                with self.assertRaises(StoreRefused):
-                    await store.records()
+                self.assertEqual(await store.inventory(), (pending,))
                 retry.assert_not_called()
             finally:
                 await store.close()
@@ -112,13 +111,13 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 AttemptClaims(),
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 start_recovery=StartRecovery(0.001, retry, Mock()),
             )
             barrier = StoreCallBarrier(lambda: None)
-            original_replace = os.replace
+            original_replace = store._database.acknowledge_start
 
             def held_replace(*args, **kwargs):
                 barrier.call()
@@ -126,7 +125,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
 
             task = None
             try:
-                with patch("provider_core.attempt_files.os.replace", side_effect=held_replace) as writes:
+                with patch.object(store._database, "acknowledge_start", side_effect=held_replace) as writes:
                     task = asyncio.create_task(controller.run(record()))
                     self.assertTrue(await asyncio.to_thread(barrier.reached.wait, 1))
                     task.cancel()
@@ -138,7 +137,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                     barrier.release.set()
                     acknowledged = await controller.settle()
                     self.assertEqual(writes.call_count, 1)
-                self.assertEqual(await store.records(), (acknowledged,))
+                self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                 self.assertEqual(len(transport.calls), 1)
                 self.assertEqual([event[0] for event in session.events], ["retire"])
                 retry.assert_not_called()
@@ -197,7 +196,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claims,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 start_recovery=StartRecovery(0.001, retry, Mock()),
@@ -216,7 +215,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsInstance(result, AcknowledgedAttempt)
                     retry.assert_called_once()
                     self.assertEqual(len(transport.calls), 2)
-                    self.assertEqual(await store.records(), (result,))
+                    self.assertEqual(await store.inventory(), ())
                 else:
                     with self.assertRaises(ControllerFailed) as caught:
                         await task
@@ -226,7 +225,7 @@ class ControllerStartRecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn(cleanup, failure.settlement_failures)
                     retry.assert_not_called()
                     self.assertEqual(len(transport.calls), 1)
-                    self.assertEqual(await store.records(), (record(),))
+                    self.assertEqual(await store.inventory(), (record(),))
             finally:
                 release.set()
                 await cancel_task(task)

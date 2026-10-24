@@ -1,5 +1,8 @@
 """Execution follows verified source, preparation, progress and durable entry."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import tempfile
 import unittest
 
@@ -10,7 +13,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import observation, progress_response
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ExecutionTests(unittest.IsolatedAsyncioTestCase):
@@ -30,14 +33,15 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             try:
                 executor = AttemptExecutor(
                     api(transport, store.scope.api_origin), store, claim, session,
-                    allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
                 )
                 terminal = await executor.run(acknowledged)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
-                self.assertIs(session.events[1][1].local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-                self.assertEqual(await store.records(), (terminal,))
-                self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
-                self.assertEqual(terminal.evidence, session.outcome.evidence)
+                self.assertIs(type(session.events[1][1]), EnteredCheckpoint)
+                self.assertEqual(await store.inventory(), (terminal,))
+                self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
+                self.assertEqual(terminal.selection.body_sha256, executor.delivery.items[0].body_sha256)
+                self.assertIsNone(executor._outcome)
                 self.assertEqual(len(transport.calls), 7)
                 claim.release()
             finally:
@@ -54,11 +58,11 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             try:
                 terminal = await AttemptExecutor(
                     api(transport, store.scope.api_origin), store, claim, session,
-                    allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
                 ).run(acknowledged)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "retire"])
-                self.assertIs(terminal.attempt.local_phase, LocalExecutionPhase.NOT_ENTERED)
-                self.assertIs(terminal.operation, TerminalOperation.FAIL)
+                self.assertIs(type(terminal.selection.attempt), AcknowledgedCheckpoint)
+                self.assertIs(terminal.selection.operation, TerminalOperation.FAIL)
                 self.assertEqual(len(transport.calls), 4)
                 claim.release()
             finally:

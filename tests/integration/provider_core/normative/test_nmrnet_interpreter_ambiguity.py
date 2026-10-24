@@ -1,16 +1,50 @@
 """Scripted probe mechanics are separate from a selected real-model decision."""
 
+import asyncio
 import json
+import signal
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from interpreter_ambiguity import admit_selection, batch_budget, load_cases, run_batch
+from interpreter_ambiguity import _run_signalled, admit_selection, batch_budget, load_cases, run_batch
 from tests.integration.nmrnet.ambiguity_ports import format_carrier, scripted_carrier, selected_files, settings
 
 
 class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_first_signal_cancels_original_operation_and_repeated_signal_preserves_cleanup(self):
+        loop = asyncio.get_running_loop()
+        entered, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        callbacks = {}
+        previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+
+        async def operation():
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await release.wait()
+
+        with (
+            patch.object(loop, "add_signal_handler", side_effect=lambda number, callback: callbacks.__setitem__(number, callback)),
+            patch.object(loop, "remove_signal_handler") as remove,
+            patch("interpreter_ambiguity.signal.signal") as restore,
+        ):
+            task = asyncio.create_task(_run_signalled(operation()))
+            await entered.wait()
+            callbacks[signal.SIGTERM]()
+            await cleaning.wait()
+            callbacks[signal.SIGINT]()
+            self.assertEqual(task.cancelling(), 1)
+            self.assertFalse(task.done())
+            release.set()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual({call.args[0] for call in remove.call_args_list}, set(previous))
+            self.assertEqual({call.args for call in restore.call_args_list}, set(previous.items()))
+
     def test_fragment_admission_reuses_exact_selected_files_and_original_clock_policies(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

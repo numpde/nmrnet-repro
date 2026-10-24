@@ -12,15 +12,15 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.api import response_headers, signature_window_problem
 from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
+from tests.fakes.delivery import outcome
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_nmrnet_session import ScientificWorker
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.service import Announcement, ServiceFailed, ServiceRefused
 from provider_core.api import ApiFailure
-from provider_core.attempt_files import AttemptFiles
-from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, TerminalPending
-from provider_core.attempt_store import StoreRefused
+from provider_core.producer_checkpoint import EnteredCheckpoint
+from provider_core.checkpoint_store import CheckpointRefused
 from provider_core.controller import ControllerFailed
 from provider_core.execution import ExecutionFailed
 from provider_core.transport import ExchangeFailed
@@ -30,7 +30,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_stop_in_storage_after_read_retry_does_not_attach_the_previous_api_failure(self):
         async with ServicePeers() as fixture:
             reply = fixture.api_peer.response_factory
-            inventory = fixture.store.admission_inventory
+            inventory = fixture.store.inventory
             entered = asyncio.Event()
 
             async def unavailable(request, body):
@@ -48,7 +48,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
 
             fixture.api_peer.response_factory = unavailable
             service = fixture.service()
-            with patch.object(fixture.store, "admission_inventory", new=AsyncMock(side_effect=admission_inventory)):
+            with patch.object(fixture.store, "inventory", new=AsyncMock(side_effect=admission_inventory)):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
                     await asyncio.wait_for(entered.wait(), 2)
@@ -105,30 +105,31 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(service.last_failure)
                 for _event, _kind, failure, _seconds in fixture.api_notices:
                     self.assertEqual(failure.request_id, "request:clock")
-                    self.assertIn("clock", str(failure))
+                    self.assertEqual(failure.problem_code, code)
+                    self.assertIn("signature", str(failure))
                     self.assertNotIn("PRIVATE_SERVER_DETAIL", str(failure))
             finally:
                 fixture.stop.set()
                 await asyncio.gather(task, return_exceptions=True)
                 await service.settle()
 
-    async def test_failed_history_trim_stops_before_fresh_api_observation_or_science(self):
+    async def test_checkpoint_inventory_refusal_stops_before_fresh_api_observation_or_science(self):
         async with ServicePeers() as fixture:
             await fixture.service().run(fixture.stop)
             before = tuple(fixture.api_peer.requests)
-            failure = StoreRefused("Confirmed history trim is not complete")
+            failure = CheckpointRefused("Checkpoint inventory is not available")
             fixture.stop = asyncio.Event()
             service = fixture.service()
             with (
-                patch.object(fixture.store, "trim_confirmed_history", new=AsyncMock(side_effect=failure)) as trim,
+                patch.object(fixture.store, "inventory", new=AsyncMock(side_effect=failure)) as inspect,
                 self.assertRaises(ServiceFailed) as caught,
             ):
                 await service.run(fixture.stop)
             self.assertIs(caught.exception.cause, failure)
-            trim.assert_awaited_once()
+            inspect.assert_awaited_once()
             self.assertEqual(tuple(fixture.api_peer.requests), before)
             self.assertEqual(len(fixture.allocations), 1)
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             await service.settle()
 
     async def test_hello_retirement_failure_keeps_the_outage_and_blocks_another_send(self):
@@ -218,9 +219,8 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(fixture.allocations[0].host.confirmed)
             self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
             fixture.allocations[0].generator_host.retire.assert_awaited_once()
-            (record,) = await fixture.store.records()
-            self.assertIsInstance(record, AcknowledgedAttempt)
-            self.assertIs(record.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+            (record,) = await fixture.store.inventory()
+            self.assertIs(type(record), EnteredCheckpoint)
             self.assertIsNone(fixture.result)
             self.assertFalse(
                 any(
@@ -230,7 +230,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertTrue(all(b"PRIVATE_SCIENTIFIC_PROCESS_FAILURE" not in body for body in fixture.api_peer.request_bodies))
             await service.settle()
-            self.assertEqual(await fixture.store.records(), (record,))
+            self.assertEqual(await fixture.store.inventory(), (record,))
             self.assertEqual(len(fixture.allocations), 1)
             self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
 
@@ -252,7 +252,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", str(service.last_failure))
                 self.assertEqual(len(fixture.api_peer.requests), 1)
                 self.assertEqual(fixture.allocations, [])
-                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual(await fixture.store.inventory(), ())
             finally:
                 fixture.stop.set()
                 if not task.done():
@@ -307,18 +307,21 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                         await task
                 await service.settle()
 
-    async def test_low_headroom_stops_before_hello_or_allocation(self):
+    async def test_full_relay_announces_without_discovery_or_allocation(self):
         async with ServicePeers() as fixture:
-            service = fixture.service()
-            with (
-                patch("provider_core.attempt_files.os.fstatvfs", return_value=SimpleNamespace(f_bavail=0, f_frsize=4096)),
-                self.assertRaises(ServiceFailed) as caught,
-            ):
-                await service.run(fixture.stop)
-            self.assertIsInstance(caught.exception.cause, StoreRefused)
-            self.assertEqual(fixture.api_peer.requests, [])
+            for worker in fixture.relay.workers.values():
+                worker.request_stop()
+            await asyncio.gather(*fixture.relay._worker_tasks)
+            for suffix in "01234567":
+                fixture.relay.queue.enqueue(replace(outcome(provider=fixture.store.scope.provider_ref, suffix=suffix),
+                                                   api_origin=fixture.store.scope.api_origin))
+            service = fixture.service(on_started=fixture.stop.set)
+            await asyncio.wait_for(service.run(fixture.stop), 2)
+            self.assertEqual(len(fixture.hellos), 1)
+            self.assertNotIn("discover", fixture.events)
+            self.assertNotIn("start", fixture.events)
             self.assertEqual(fixture.allocations, [])
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             await service.settle()
 
     async def test_initial_hello_or_started_callback_failure_sends_no_discovery_or_allocation(self):
@@ -347,17 +350,17 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
         async with ServicePeers() as fixture:
             service = fixture.service()
             entered, release = threading.Event(), threading.Event()
-            original = AttemptFiles.records
+            original = fixture.store._database.inventory
 
-            def held(files):
+            def held():
                 if not fixture.factory_entered.is_set():
-                    return original(files)
+                    return original()
                 entered.set()
                 if not release.wait(3):
                     raise TimeoutError("Fixture setup inventory was not released")
-                return original(files)
+                return original()
 
-            with patch.object(AttemptFiles, "records", held):
+            with patch.object(fixture.store._database, "inventory", held):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
                     self.assertTrue(await asyncio.to_thread(entered.wait, 1))
@@ -374,7 +377,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNone(fixture.store.pending_operation)
                     self.assertFalse(fixture.allocations[0].host.confirmed)
                     self.assertEqual(fixture.allocations[0].worker.events, [])
-                    self.assertEqual(await fixture.store.records(), ())
+                    self.assertEqual(await fixture.store.inventory(), ())
                 finally:
                     release.set()
                     fixture.stop.set()
@@ -396,9 +399,8 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(fixture.allocations), 1)
                 self.assertTrue(fixture.allocations[0].host.confirmed)
                 self.assertIsNone(fixture.result)
-                (record,) = await fixture.store.records()
-                self.assertIsInstance(record, AcknowledgedAttempt)
-                self.assertIs(record.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                (record,) = await fixture.store.inventory()
+                self.assertIs(type(record), EnteredCheckpoint)
             finally:
                 fixture.stop.set()
                 fixture.execution_release.set()
@@ -441,16 +443,18 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                         await task
                 await service.settle()
 
-    async def test_lost_completion_cannot_replay_before_native_retirement_is_proved(self):
+    async def test_lost_api_receipt_remains_relay_owned_while_failed_native_proof_blocks_fresh_science(self):
         async with ServicePeers(maximum_records=1) as fixture:
             fixture.lose_completion = True
             service = fixture.service()
             service.policy = replace(service.policy, hello_seconds=30)
-            with self.assertRaises(ServiceFailed):
-                await service.run(fixture.stop)
+            await asyncio.wait_for(service.run(fixture.stop), 3)
             await service.settle()
-            (retained,) = await fixture.store.records()
-            self.assertIsInstance(retained, TerminalPending)
+            self.assertEqual(await fixture.store.inventory(), ())
+            retained = fixture.relay.queue.next_pending(fixture.store.scope.api_origin, fixture.store.scope.provider_ref)
+            self.assertIsNotNone(retained)
+            await fixture.close_relay()
+            requests_before = tuple(fixture.api_peer.requests)
             fixture.stop = asyncio.Event()
             barrier = AsyncMock(side_effect=TimeoutError("Native retirement is not proved"))
             replacement = fixture.service(retire_native=barrier)
@@ -464,8 +468,10 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True)
                 if b"/complete HTTP" in request.split(b"\r\n", 1)[0]
             ]
-            self.assertEqual(complete_bodies, [retained.body])
-            self.assertEqual(await fixture.store.records(), (retained,))
+            self.assertTrue(complete_bodies)
+            self.assertEqual(set(complete_bodies), {retained.body})
+            self.assertEqual(tuple(fixture.api_peer.requests), requests_before)
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(len(fixture.allocations), 1)
             self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
             self.assertTrue(fixture.allocations[0].host.confirmed)
@@ -496,7 +502,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(paused.wait(), 1)
                 self.assertEqual(fixture.allocations, [])
                 self.assertNotIn("start", fixture.events)
-                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual(await fixture.store.inventory(), ())
             finally:
                 fixture.stop.set()
                 fixture.discovery_release.set()
@@ -567,7 +573,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(caught.exception.cause, AdmissionHeld)
             self.assertEqual(fixture.events, ["inventory"])
             self.assertEqual(fixture.allocations, [])
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
             await service.settle()
 
     async def test_late_factory_return_after_stop_is_retired_without_starting(self):
@@ -591,7 +597,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(fixture.allocations[0].worker.events, [])
                 self.assertFalse(fixture.allocations[0].host.confirmed)
                 self.assertNotIn("start", fixture.events)
-                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual(await fixture.store.inventory(), ())
             finally:
                 fixture.stop.set()
                 fixture.factory_release.set()

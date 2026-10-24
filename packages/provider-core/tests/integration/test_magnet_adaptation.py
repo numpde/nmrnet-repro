@@ -5,6 +5,9 @@ not import, replace or qualify the current monolithic G01 processor or its model
 Pinned source paths and synthetic-result rationale belong to fakes/magnet.py.
 """
 
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
 import base64
 import hashlib
 import json
@@ -14,11 +17,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 from provider_core.attempt_record import MAX_RECORD_BYTES, LocalExecutionPhase, StartPending, TerminalConfirmed
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.checkpoint_store import CheckpointStore, CheckpointLimits
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import TerminalPublisher
-from provider_core.recovery import AttemptRecovery, ObservedAttempt
+from provider_core.recovery import AttemptRecovery, RecoveryFailed, RecoveryRefused
 from provider_core.starting import AttemptStarter
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import scope
@@ -33,7 +35,7 @@ from tests.fakes.magnet import (
     RetrySafeUnavailable,
     prediction,
 )
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
@@ -47,24 +49,22 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
                         "model_input": {"smiles": "  CCO  ", "h_solvent": "CDCl3", "c_solvent": "CDCl3"},
                         "prediction": prediction()}
             expected_bytes = json.dumps(expected, sort_keys=True, separators=(",", ":")).encode()
-            transport = Transport(reply(start_response(analysis_kind_ref=ANALYSIS_KIND)), *self._run_replies(), reply(complete_response(
-                result_schema_id=RESULT_SCHEMA_ID, result_fingerprint="sha256:" + hashlib.sha256(expected_bytes).hexdigest(),
-                result_byte_length=len(expected_bytes))))
+            transport = Transport(reply(start_response(analysis_kind_ref=ANALYSIS_KIND)), *self._run_replies())
             client = api(transport, store.scope.api_origin)
             try:
                 acknowledged = await AttemptStarter(client, store, claim).start(pending)
-                terminal = await self._executor(client, store, claim, session).run(acknowledged)
-                confirmed = await TerminalPublisher(client, store, claim).publish(terminal)
-                self.assertIsInstance(confirmed, TerminalConfirmed)
+                executor = self._executor(client, store, claim, session)
+                terminal = await executor.run(acknowledged)
+                self.assertIs(type(terminal), DeliveryAcceptedCheckpoint)
                 interpreter.assert_awaited_once_with(SOURCE)
                 worker.assert_awaited_once_with({"smiles": "  CCO  ", "h_solvent": "CDCl3", "c_solvent": "CDCl3"})
-                sent = json.loads(transport.calls[-1][0].content)
+                sent = json.loads(executor.delivery.items[0].body)
                 content = base64.b64decode(sent["canonical_result_base64"])
                 self.assertEqual(content, expected_bytes)
                 self.assertEqual(json.loads(content), expected)
                 self.assertEqual(json.loads(content)["prediction"]["future_binding_field"], {"retain": "exact product-owned content"})
-                self.assertEqual(await store.records(), (confirmed,))
-                self.assertEqual(session.phases, [LocalExecutionPhase.NOT_ENTERED, LocalExecutionPhase.EXECUTION_ENTERED])
+                self.assertEqual(await store.inventory(), (terminal,))
+                self.assertEqual(session.phases, [AcknowledgedCheckpoint, EnteredCheckpoint])
                 self.assertTrue(session.retired)
                 claim.release()
             finally:
@@ -85,7 +85,7 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ExecutionFailed) as failed:
                     await executor.run(acknowledged)
                 self.assertIs(failed.exception.cause, unavailable)
-                self.assertEqual(await store.records(), (acknowledged,))
+                self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
                 self.assertIs(acknowledged.local_phase, LocalExecutionPhase.NOT_ENTERED)
                 worker.assert_not_awaited()
                 self.assertTrue(session.retired)
@@ -96,7 +96,7 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
                 retry_session = MagnetSession(store, AsyncMock(return_value={"smiles": "  CCO  ", "solvent": "CDCl3"}), retry_worker)
                 retry_client = api(Transport(*self._run_replies()), store.scope.api_origin)
                 terminal = await self._executor(retry_client, store, claim, retry_session).run(acknowledged)
-                self.assertIs(terminal.attempt.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                self.assertIs(type(terminal.selection.attempt), EnteredCheckpoint)
                 retry_worker.assert_awaited_once()
                 claim.release()
             finally:
@@ -114,20 +114,22 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ExecutionFailed) as failed:
                     await self._executor(client, store, claim, session).run(acknowledged)
                 self.assertIs(failed.exception.cause, indeterminate)
-                (entered,) = await store.records()
-                self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                (entered,) = await store.inventory()
+                self.assertIs(type(entered), EnteredCheckpoint)
                 self.assertTrue(session.retired)
                 claim.release()
             finally:
                 await store.close()
-            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
+            reopened = CheckpointStore(Path(directory), scope=scope(), limits=CheckpointLimits(1, 150000), operation_seconds=1)
             await reopened.open()
             try:
-                (retained,) = await reopened.records()
+                (retained,) = await reopened.inventory()
                 recovered_claim, = AttemptClaims().claim_records((retained,))
                 observed_client = api(Transport(reply(observation())), reopened.scope.api_origin)
-                result = await AttemptRecovery(observed_client, reopened, recovered_claim).recover(retained)
-                self.assertIsInstance(result, ObservedAttempt)
+                with self.assertRaises(RecoveryFailed) as unresolved:
+                    await AttemptRecovery(observed_client, reopened, recovered_claim, delivery=RecordingDelivery()).recover(retained)
+                self.assertIsInstance(unresolved.exception.cause, RecoveryRefused)
+                self.assertEqual(await reopened.inventory(), (retained,))
                 with self.assertRaises(ExecutionRefused):
                     await self._executor(observed_client, reopened, recovered_claim, session).run(retained)
                 worker.assert_awaited_once()
@@ -137,13 +139,13 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
 
     async def _open(self, directory):
         pending = StartPending(scope(), ANALYSIS_KIND, facts(SOURCE), retained_start())
-        store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
+        store = CheckpointStore(Path(directory), scope=scope(), limits=CheckpointLimits(1, 150000), operation_seconds=1)
         await store.open()
         return pending, store, AttemptClaims().claim_start(pending)
 
     def _executor(self, client, store, claim, session):
         return AttemptExecutor(client, store, claim, session,
-                               allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                               delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.02, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
 
     def _run_replies(self, *, preparation_only=False):
         beginning = (reply(observation()), reply(response(SOURCE)), reply(progress_response()))

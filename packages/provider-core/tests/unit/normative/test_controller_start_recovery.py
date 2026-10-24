@@ -1,5 +1,8 @@
 """A lost START reply reuses its retained command before science is entered."""
 
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 import asyncio
 import tempfile
 import unittest
@@ -7,7 +10,8 @@ from unittest.mock import Mock, patch
 
 import httpcore
 
-from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed
+from provider_core.attempt_record import AcknowledgedAttempt
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.controller import AttemptController, StartRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.transport import ExchangeFailed
@@ -15,7 +19,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import start_response
 from tests.fakes.controller import SingleRetirementSession, empty_store, lifecycle_replies
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -46,7 +50,7 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claims,
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 start_recovery=StartRecovery(0.002, retry, recovered),
@@ -54,20 +58,22 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
             try:
                 with patch.object(loop, "time", side_effect=lambda: clock() + elapsed):
                     confirmed = await controller.run(pending)
-                self.assertIsInstance(confirmed, TerminalConfirmed)
-                self.assertEqual(await store.records(), (confirmed,))
+                self.assertIsInstance(confirmed, DeliveryAcceptedCheckpoint)
+                self.assertEqual(await store.inventory(), ())
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
                 # The actual prepare callback observes a durable replayed acknowledgement.
-                self.assertIsInstance(session.events[0][1], AcknowledgedAttempt)
+                self.assertIsInstance(session.events[0][1], AcknowledgedCheckpoint)
                 self.assertTrue(session.events[0][1].admission.replayed)
                 starts = [request for request, _ in transport.calls[:3]]
                 self.assertEqual([request.content for request in starts], [pending.body] * 3)
                 self.assertEqual(len({request.headers["signature-input"] for request in starts}), 3)
                 self.assertEqual(len({request.headers["signature"] for request in starts}), 3)
-                self.assertEqual(len(transport.calls), 11)
+                self.assertEqual(len(transport.calls), 10)
                 self.assertEqual(retry.call_count, 2)
                 self.assertIs(retry.call_args.args[0], pending)
-                recovered.assert_called_once_with(session.events[0][1], retry.call_args_list[0].args[1])
+                recovered.assert_called_once()
+                self.assertEqual(recovered.call_args.args[0].admission, session.events[0][1].admission)
+                self.assertIs(recovered.call_args.args[1], retry.call_args_list[0].args[1])
                 self.assertIsNone(await controller.settle())
                 released = claims.claim_start(pending)
                 released.release()
@@ -87,7 +93,7 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     AttemptClaims(),
                     session,
-                    allowed_job_states=frozenset({"open"}),
+                    delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                     poll_seconds=1,
                     task_settle_seconds=0.1,
                     start_recovery=StartRecovery(0.001, Mock(), recovered),
@@ -95,7 +101,7 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 try:
                     acknowledged = await controller.run(pending)
                     self.assertEqual(acknowledged.admission.state, state)
-                    self.assertEqual(await store.records(), (acknowledged,))
+                    self.assertEqual(await store.inventory(), ())
                     self.assertEqual([event[0] for event in session.events], ["retire"])
                     self.assertEqual([request.content for request, _ in transport.calls], [pending.body] * 2)
                     recovered.assert_called_once()
@@ -122,7 +128,7 @@ class ControllerStartRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 AttemptClaims(),
                 session,
-                allowed_job_states=frozenset({"open"}),
+                delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}),
                 poll_seconds=1,
                 task_settle_seconds=0.1,
                 start_recovery=StartRecovery(0.001, Mock(), Mock()),

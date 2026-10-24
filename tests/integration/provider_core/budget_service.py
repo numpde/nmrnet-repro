@@ -67,7 +67,7 @@ class InputCallLimitPeers(SuccessiveServicePeers):
             raise AssertionError("Failure recipient did not receive the configured limit and next action")
         if any(token in value["failure_message"] for token in (self.source_text.strip(), "PRIVATE", "invalid_input")):
             raise AssertionError("Failure guidance contains source/private text or mislabels a capacity limit as invalid input")
-        evidence = json.loads(pending.evidence.content)
+        evidence = json.loads(self.allocations[index].preparation_outcome.evidence.content)
         if evidence["input_worker_call_limit"] != {"maximum_calls": 1, "calls_started": 1}:
             raise AssertionError("Protected failure evidence lost actual per-Job call accounting")
         if not evidence["interpreter_diagnostics"]:
@@ -116,7 +116,7 @@ class InputTimeLimitPeers(SuccessiveServicePeers):
             raise AssertionError("Failure recipient lost the configured limit or next action")
         if any(token in value["failure_message"] for token in ("PRIVATE", "invalid_input", self.jobs[0].specification_text)):
             raise AssertionError("Time-limit guidance leaked private input or claimed invalid molecular input")
-        evidence = json.loads(pending.evidence.content)
+        evidence = json.loads(self.allocations[index].preparation_outcome.evidence.content)
         if evidence["input_selection_time_limit"] != {"seconds": 0.2}:
             raise AssertionError("Protected time-limit evidence lost the owned aggregate budget")
         rendered = json.dumps(evidence["interpreter_diagnostics"])

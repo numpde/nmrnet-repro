@@ -58,10 +58,22 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/attempt_response.py",
                 "provider_core/attempt_request.py",
                 "provider_core/attempt_record.py",
-                "provider_core/attempt_files.py",
-                "provider_core/attempt_store.py",
+                "provider_core/api_config.py",
+                "provider_core/checkpoint_store.py",
+                "provider_core/delivery_client.py",
+                "provider_core/delivery_config.py",
+                "provider_core/delivery_discard.py",
+                "provider_core/delivery_ipc.py",
+                "provider_core/delivery_logging.py",
+                "provider_core/delivery_main.py",
+                "provider_core/delivery_service.py",
+                "provider_core/delivery_store.py",
+                "provider_core/delivery_worker.py",
+                "provider_core/diagnostics.py",
+                "provider_core/producer_checkpoint.py",
+                "provider_core/startup_file.py",
+                "provider_core/unix_http.py",
                 "provider_core/ownership.py",
-                "provider_core/publication.py",
                 "provider_core/starting.py",
                 "provider_core/analysis.py",
                 "provider_core/execution.py",
@@ -73,7 +85,7 @@ class InstallationContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            set(distribution.requires), {"cryptography==50.0.0", "http-sf==1.2.1", "httpx==0.28.1", "httpcore==1.0.9"}
+            set(distribution.requires), {"cryptography==50.0.0", "http-sf==1.2.1", "httpx==0.28.1", "httpcore==1.0.9", "h11==0.16.0"}
         )
 
     def test_core_imports_without_scientific_or_repository_packages(self):
@@ -87,7 +99,7 @@ class InstallationContractTests(unittest.TestCase):
                 "forbidden = {'tests','packages','repository_checks','tools','rdkit','torch','nmrnet_provider','nmrnet_inference'}; "
                 "assert all(importlib.util.find_spec(name) is None for name in forbidden); "
                 "import provider_core.failure_projection, provider_core.runner, provider_core.runner_protocol, provider_core.runner_session, provider_core.process_status; "
-                "import provider_core.chat, provider_core.conversation, provider_core.credential, provider_core.hello, provider_core.job_input, provider_core.job_feed, provider_core.paging, provider_core.attempt_inventory, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.controller, provider_core.recovery; import sys; "
+                "import provider_core.chat, provider_core.conversation, provider_core.credential, provider_core.hello, provider_core.job_input, provider_core.job_feed, provider_core.paging, provider_core.attempt_inventory, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.controller, provider_core.recovery, provider_core.api_config, provider_core.checkpoint_store, provider_core.delivery_client, provider_core.delivery_config, provider_core.delivery_discard, provider_core.delivery_ipc, provider_core.delivery_logging, provider_core.delivery_main, provider_core.delivery_service, provider_core.delivery_store, provider_core.delivery_worker, provider_core.diagnostics, provider_core.producer_checkpoint, provider_core.startup_file, provider_core.unix_http; import sys; "
                 "assert not any(n.split('.')[0] in forbidden for n in sys.modules)",
             ],
             capture_output=True,

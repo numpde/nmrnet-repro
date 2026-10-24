@@ -1,18 +1,17 @@
-"""Hold the real entry rename without replacing the store's ownership machinery."""
+"""Hold the real entry transaction without replacing the store's ownership machinery."""
 
-import os
 import threading
 
 
 class EntryWriteBarrier:
-    def __init__(self):
+    def __init__(self, original):
         self.reached = threading.Event()
         self.release = threading.Event()
-        self.original = os.replace
+        self.original = original
         self.calls = 0
         self.failure = None
 
-    def replace(self, *args, **kwargs):
+    def write(self, *args, **kwargs):
         self.calls += 1
         if self.calls == 1:
             self.reached.set()

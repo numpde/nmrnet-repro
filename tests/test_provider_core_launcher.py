@@ -32,6 +32,7 @@ class CoreLauncherTests(unittest.TestCase):
             "tests/integration/provider_core",
             "tests/integration/provider_runtime",
             "tests/fixtures/preparation/normative",
+            "tests/fixtures/scientific_inputs",
         ):
             (root / name).mkdir(parents=True, exist_ok=True)
         for name in (
@@ -72,7 +73,7 @@ class CoreLauncherTests(unittest.TestCase):
                 (
                     "test/unit/provider-core/admission",
                     "unit",
-                    ["test_admission_inventory.py", "test_attempt_store.py", "test_attempt_history.py"],
+                    ["test_admission_inventory.py", "test_checkpoint_store.py", "test_delivery_store.py"],
                 ),
                 (
                     "test/unit/provider-core/uploads",
@@ -85,7 +86,7 @@ class CoreLauncherTests(unittest.TestCase):
                     "unit",
                     [
                         "test_terminal_record.py",
-                        "test_publication.py",
+                        "test_delivery_execution.py",
                         "test_recovery.py",
                         "test_controller*.py",
                         "test_failure_projection.py",
@@ -100,7 +101,6 @@ class CoreLauncherTests(unittest.TestCase):
                         "test_attempt_progress.py",
                         "test_attempt_outcome.py",
                         "test_upload_api.py",
-                        "test_publication.py",
                     ],
                 ),
                 ("test/unit/provider-core/normative", "unit/normative", []),
@@ -117,7 +117,7 @@ class CoreLauncherTests(unittest.TestCase):
                 (
                     "test/integration/provider-core/service",
                     "integration",
-                    ["test_nmrnet_service.py", "test_nmrnet_service_recovery.py"],
+                    ["test_nmrnet_service.py", "test_nmrnet_service_recovery.py", "test_nmrnet_service_delivery.py"],
                 ),
                 ("test/integration/provider-core/native-factory", "integration", ["test_nmrnet_native_factory.py"]),
                 ("test/integration/provider-core/lifecycle", "integration", ["test_nmrnet_*_lifecycle.py"]),
@@ -139,6 +139,7 @@ class CoreLauncherTests(unittest.TestCase):
                     [
                         "test_prepared_identity.py",
                         "test_execution*.py",
+                        "test_suppressed_persistence.py",
                         "test_attempt_transitions.py",
                         "test_terminal_record.py",
                         "test_recovery.py",

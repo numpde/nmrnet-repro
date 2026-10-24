@@ -4,26 +4,19 @@ import asyncio
 import unittest
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import (
-    ProtectedEvidence,
-    TerminalConfirmed,
-    TerminalHeld,
-    TerminalOperation,
-    TerminalPending,
-    acknowledge_start,
-)
-from provider_core.attempt_request import fail_body
-from provider_core.attempt_response import read_fail
+from provider_core.attempt_record import ProtectedEvidence, acknowledge_start
+from provider_core.analysis import AnalysisSuccess
+from provider_core.delivery_worker import DeliveryWorkerFailed
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.chat import ChatFailed
 from provider_core.conversation import ConversationRetirementFailed, ToolRejected
 from provider_core.execution import ExecutionFailed
 from provider_core.failure_projection import owned_details, owned_relationships
-from provider_core.publication import PublicationFailed
 from provider_core.starting import StartFailed
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected
 from tests.fakes.attempt_store import admission, record
-from tests.fakes.attempts import ATTEMPT_REF, fail_response
+from tests.fakes.attempts import ATTEMPT_REF
 
 
 class CoreFailureProjectionTests(unittest.TestCase):
@@ -131,17 +124,8 @@ class CoreFailureProjectionTests(unittest.TestCase):
 
     def test_received_start_and_terminal_facts_do_not_infer_durability_or_outcome_acceptance(self):
         active = acknowledge_start(record(), admission())
-        pending = TerminalPending(
-            active,
-            TerminalOperation.FAIL,
-            fail_body(ATTEMPT_REF, "input_rejected", " Explain\n雪\x01 "),
-            ProtectedEvidence("evidence.v1", b"PRIVATE_EVIDENCE"),
-        )
-        receipt = read_fail(
-            fail_response(), execution_attempt_ref=ATTEMPT_REF, failure_code="input_rejected", failure_message=" Explain\n雪\x01 "
-        )
-        confirmed = TerminalConfirmed(pending, receipt)
-        held = TerminalHeld(pending, "execution_attempt_outcome_expired", "request:held")
+        candidate = AnalysisSuccess("result.v1", b"PRIVATE_RESULT", ProtectedEvidence("evidence.v1", b"PRIVATE_EVIDENCE"))
+        checkpoint = AcknowledgedCheckpoint(active.start, active.admission)
         for acknowledgement in (None, active):
             failure = StartFailed(
                 "Start storage is unconfirmed",
@@ -153,16 +137,13 @@ class CoreFailureProjectionTests(unittest.TestCase):
             details = owned_details(failure)
             self.assertEqual(details["acknowledgement_received"], acknowledgement is active)
             self.assertEqual("observed_attempt_state" in details, acknowledgement is active)
-        for outcome in (None, confirmed, held):
-            failure = PublicationFailed(
-                "Outcome storage is unconfirmed", cause=OSError(), outcome=outcome, api_failure=None, settlement_failures=()
-            )
+        for received in (False, True):
+            failure = DeliveryWorkerFailed(cause=OSError(), api_failure=None, cleanup_failures=(), api_receipt_received=received)
             details = owned_details(failure)
-            self.assertEqual(details["publication_observation_received"], outcome is not None)
-            self.assertEqual(details["terminal_receipt_received"], outcome is confirmed)
+            self.assertEqual(details["api_receipt_received"], received)
             self.assertNotIn("PRIVATE", repr(details))
         execution = ExecutionFailed(
-            cause=OSError(), outcome=confirmed, unconfirmed_record=pending, api_failure=None, cleanup_failures=(), attempt=active
+            cause=OSError(), outcome=candidate, unconfirmed_record=checkpoint, api_failure=None, cleanup_failures=(), attempt=active
         )
         details = owned_details(execution)
         self.assertTrue(details["outcome_in_memory"])
@@ -172,3 +153,18 @@ class CoreFailureProjectionTests(unittest.TestCase):
         self.assertEqual(details["execution_attempt_ref"], ATTEMPT_REF)
         self.assertNotIn("local_phase", details)
         self.assertNotIn("PRIVATE", repr(details))
+
+    def test_execution_distinguishes_relay_acceptance_from_api_receipt_and_preserves_delivery_cause(self):
+        active = acknowledge_start(record(), admission())
+        cause, interruption = OSError(), asyncio.CancelledError()
+        failure = ExecutionFailed(cause=cause, outcome=None, unconfirmed_record=None,
+                                  api_failure=None, cleanup_failures=(), attempt=active)
+        self.assertFalse(owned_details(failure)["delivery_acceptance_received"])
+        failure.delivery_acceptance = {"body_sha256": "sha256:" + "b" * 64}
+        failure.delivery_failure, failure.handoff_interruption = cause, interruption
+        details = owned_details(failure)
+        self.assertTrue(details["delivery_acceptance_received"])
+        self.assertNotIn("api_receipt_received", details)
+        relationships = list(owned_relationships(failure))
+        self.assertIn(("local delivery failure", cause), relationships)
+        self.assertIn(("handoff interruption", interruption), relationships)

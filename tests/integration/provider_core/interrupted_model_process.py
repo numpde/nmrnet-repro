@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import httpcore
 from tests.integration.nmrnet.smiles_ports import SessionPorts
+from tests.integration.nmrnet.startup_process import record_startup_barriers
 
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
@@ -56,7 +57,7 @@ async def recording_factory(factory, pending):
         condition_recovery=factory.condition_recovery,
         start_recovery=factory.start_recovery,
         on_unconfirmed_phase_progress=factory.on_unconfirmed_phase_progress,
-        terminal_recovery=factory.terminal_recovery,
+        on_delivery_retry=factory.on_delivery_retry,
     )
     if (root / "inject-input-cleanup-failure").exists():
         retire = controller.session._input_preparation.retire
@@ -93,6 +94,7 @@ if __name__ == "__main__":
     original_head = httpcore.AsyncHTTPProxy.handle_async_request
     with (
         patch.object(NativeAttemptFactory, "__call__", recording_factory),
+        patch.object(NativeAttemptFactory, "prove_previous_retired", record_startup_barriers),
         patch.object(httpcore.AsyncHTTPProxy, "handle_async_request", observed_head),
     ):
         raise SystemExit(main())

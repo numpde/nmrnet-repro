@@ -17,8 +17,9 @@ from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
-from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, TerminalConfirmed
-from provider_core.attempt_store import AttemptStore
+from provider_core.attempt_record import AcknowledgedAttempt
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, EnteredCheckpoint, EvidenceDigest
+from provider_core.checkpoint_store import CheckpointStore
 from provider_core.job_input import verify_job_input
 from provider_core.uploads import UploadInputRejected
 
@@ -64,7 +65,8 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             controller = await assemble_attempt(**arguments)
             fixture.stack.push_async_callback(controller.settle)
             outcome = await controller.run(pending)
-            self.assertIs(type(outcome), TerminalConfirmed)
+            self.assertIs(type(outcome), DeliveryAcceptedCheckpoint)
+            await fixture.wait_published()
             self.assertEqual(len(fixture.model_peer.requests), 1)
             ports.allocate_generator.assert_awaited_once()
             ports.generator.generate.assert_awaited_once()
@@ -112,20 +114,32 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             fixture.stack.push_async_callback(controller.settle)
             prepare = ports.worker.prepare
             durable = []
+            execute_session = controller.session.execute
+            selected_identity = None
+
+            async def capture_identity(handle, **kwargs):
+                nonlocal selected_identity
+                selected_identity = handle.identity
+                return await execute_session(handle, **kwargs)
 
             async def require_frozen_selection(requests):
-                (entered,) = await fixture.store.records()
-                self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-                identity = json.loads(entered.prepared_identity.content)
-                self.assertEqual(entered.start.input, pending.input)
+                (entered,) = await fixture.store.inventory()
+                self.assertIs(type(entered), EnteredCheckpoint)
+                self.assertEqual(entered.prepared, EvidenceDigest.from_evidence(selected_identity))
+                identity = json.loads(selected_identity.content)
+                self.assertEqual(entered.acknowledgement.start.input, pending.input)
                 self.assertEqual(identity["geometries"][0]["source"]["input_fingerprint"], pending.input.input_fingerprint)
                 durable.append(identity)
                 return await prepare(requests)
 
-            with patch.object(ports.worker, "prepare", side_effect=require_frozen_selection):
+            with (
+                patch.object(controller.session, "execute", side_effect=capture_identity),
+                patch.object(ports.worker, "prepare", side_effect=require_frozen_selection),
+            ):
                 outcome = await controller.run(pending)
-            self.assertIsInstance(outcome, TerminalConfirmed)
-            self.assertEqual(await fixture.store.records(), (outcome,))
+            self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
+            await fixture.wait_published()
+            self.assertEqual(await fixture.store.inventory(), ())
             self.assertEqual(len(fixture.model_peer.requests), 2)
             self.assertEqual(fixture.result["interpretation"], durable[0]["interpretation"])
             self.assertEqual(fixture.result["output"]["verbosity"], "medium")
@@ -144,7 +158,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(durable[0]["geometries"][0]["source"], geometry["source"])
             self.assertEqual(durable[0]["geometries"][0]["request_sha256"], hashlib.sha256(ports.worker.requests[0]).hexdigest())
             self.assertEqual(
-                durable[0]["interpretation"], json.loads(outcome.pending.attempt.prepared_identity.content)["interpretation"]
+                durable[0]["interpretation"], json.loads(selected_identity.content)["interpretation"]
             )
             ports.allocate_reader.assert_awaited_once()
             ports.reader.read.assert_awaited_once_with(source, source_format="table", source_unit="nm", selection=None)
@@ -152,7 +166,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
             self.assertTrue(ports.host.confirmed)
 
-    async def test_selected_precision_and_exact_evidence_survive_store_reopen_without_rerender(self):
+    async def test_selected_precision_and_exact_ram_evidence_are_independent_of_reopened_control(self):
         ports = SessionPorts()
         execute = ports.worker.execute
 
@@ -167,24 +181,37 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(controller.settle)
-            with patch.object(ports.worker, "execute", side_effect=long_predictions):
+            execute_session = controller.session.execute
+            captured = None
+
+            async def capture_outcome(handle, **kwargs):
+                nonlocal captured
+                captured = await execute_session(handle, **kwargs)
+                return captured
+
+            with (
+                patch.object(ports.worker, "execute", side_effect=long_predictions),
+                patch.object(controller.session, "execute", side_effect=capture_outcome),
+            ):
                 outcome = await controller.run(pending)
-            self.assertIsInstance(outcome, TerminalConfirmed)
+            self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
+            await fixture.wait_published()
             self.assertEqual(fixture.result["output"], {"shift_significant_digits": 4, "verbosity": "max"})
             for geometry in fixture.result["geometries"]:
                 self.assertTrue(all(row["shift_ppm"] == 32.31 for row in geometry["predictions"]))
-            evidence = json.loads(outcome.pending.evidence.content)
+            evidence = json.loads(captured.evidence.content)
             for geometry in evidence["geometries"]:
                 self.assertTrue(all(row["shift_ppm"] == 32.309967041015625 for row in geometry["prediction"]["predictions"]))
-            body, raw_evidence = outcome.pending.body, outcome.pending.evidence.content
+            body, raw_evidence = fixture.api_peer.request_bodies[-1], captured.evidence.content
+            self.assertEqual(hashlib.sha256(body).hexdigest(), outcome.selection.body_sha256.removeprefix("sha256:"))
             await fixture.store.close()
             settings = fixture.config.lifecycle
-            reopened = AttemptStore(
-                settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
-            )
+            reopened = CheckpointStore(settings.store_root, scope=settings.scope,
+                limits=settings.store_limits, operation_seconds=settings.store_seconds)
             fixture.stack.push_async_callback(reopened.close)
             await reopened.open()
-            self.assertEqual(await reopened.records(), (outcome,))
+            self.assertEqual(await reopened.inventory(), ())
+            self.assertNotIn(raw_evidence, (settings.store_root / "checkpoints.sqlite3").read_bytes())
 
             alternative = SessionPorts()
 
@@ -193,15 +220,10 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             session = alternative.make_session(alternative.owner(choose))
             fixture.stack.push_async_callback(session.retire)
-            handle = await session.prepare(
-                alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition
-            )
-            self.assertEqual(
-                json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2, "verbosity": "medium"}
-            )
-            (retained,) = await reopened.records()
-            self.assertEqual(retained.pending.body, body)
-            self.assertEqual(retained.pending.evidence.content, raw_evidence)
+            handle = await session.prepare(alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition)
+            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2, "verbosity": "medium"})
+            self.assertEqual(fixture.api_peer.request_bodies[-1], body)
+            self.assertEqual(captured.evidence.content, raw_evidence)
             self.assertEqual(alternative.worker.events, [])
             self.assertEqual(len(fixture.model_peer.requests), 1)
             self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
@@ -276,13 +298,20 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(controller.settle)
-            confirmed = await controller.run(pending)
-            self.assertIsInstance(confirmed, TerminalConfirmed)
+            execute_session = controller.session.execute
+            selected = None
+
+            async def capture_identity(handle, **kwargs):
+                nonlocal selected
+                selected = handle.identity
+                return await execute_session(handle, **kwargs)
+
+            with patch.object(controller.session, "execute", side_effect=capture_identity):
+                confirmed = await controller.run(pending)
+            self.assertIsInstance(confirmed, DeliveryAcceptedCheckpoint)
+            await fixture.wait_published()
             self.assertEqual(fixture.result["interpretation"]["corrections"], 1)
-            self.assertEqual(
-                fixture.result["interpretation"],
-                json.loads(confirmed.pending.attempt.prepared_identity.content)["interpretation"],
-            )
+            self.assertEqual(fixture.result["interpretation"], json.loads(selected.content)["interpretation"])
             self.assertEqual(len(fixture.model_peer.requests), 3 if mistake == "not_inspected" else 4)
             self.assertEqual(len(fixture.store_peer.requests), 1)
             self.assertEqual(sum(b"/read-capability " in request for request in fixture.api_peer.requests), 1)
@@ -300,7 +329,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             fixture.allocate_prediction.assert_not_awaited()
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(len(fixture.api_peer.requests), 1)
-            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(await fixture.store.inventory(), ())
 
     async def test_three_routes_consume_discovered_identity_and_publish_a_complete_result(self):
         for route in ("smiles", "pasted", "upload"):
@@ -320,8 +349,9 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ports.allocate_generator.assert_not_awaited()
                     ports.allocate_reader.assert_not_awaited()
                     outcome = await controller.run(pending)
-                    self.assertIsInstance(outcome, TerminalConfirmed)
-                    self.assertEqual(await fixture.store.records(), (outcome,))
+                    self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
+                    await fixture.wait_published()
+                    self.assertEqual(await fixture.store.inventory(), ())
                     self.assertTrue(ports.host.confirmed)
                     self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
                     self.assertEqual(fixture.result["input_fingerprint"], pending.input.input_fingerprint)

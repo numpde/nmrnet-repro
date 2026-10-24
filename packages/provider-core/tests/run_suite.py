@@ -34,6 +34,7 @@ def main():
         "integration/api",
         "integration/delivery",
         "integration/starting",
+        "integration/recovery",
     }:
         raise ValueError("Unknown provider-core test selection")
     if selection == "integration":

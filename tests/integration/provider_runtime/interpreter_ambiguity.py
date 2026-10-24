@@ -16,6 +16,7 @@ import asyncio
 import hashlib
 import json
 import math
+import signal
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,7 +28,6 @@ from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.interpreter import InputInterpreter, ModelReportedInputProblem
 from nmrnet_provider.process import _diagnostics_directory, _failure_report, _publish
 from nmrnet_provider.process_reports import failure_evidence, operator_redactor
-from nmrnet_provider.recovery import _run_signalled
 from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
 from provider_core.job_input import INPUT_SCHEMA, FeedInputFacts, VerifiedJobInput
@@ -407,6 +407,35 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
         ),
     )
     return 0 if passed == _CASE_COUNTS[probe] else 1
+
+
+
+async def _run_signalled(operation):
+    """Cancel this probe once, allowing its owned endpoint retirement to settle.
+
+    Copied from nmrnet_provider/recovery.py::_run_signalled at
+    376c97ac6681e90717e8e4258e2de81cfb275ac0, before that CLI was removed.
+    Repeated signals cannot interrupt cleanup already handling cancellation.
+    """
+    task = asyncio.current_task()
+    loop = asyncio.get_running_loop()
+    previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    interrupted = False
+
+    def stop():
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            task.cancel()
+
+    try:
+        for number in previous:
+            loop.add_signal_handler(number, stop)
+        return await operation
+    finally:
+        for number, handler in previous.items():
+            loop.remove_signal_handler(number)
+            signal.signal(number, handler)
 
 
 def main():

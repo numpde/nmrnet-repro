@@ -27,7 +27,10 @@ from tests.fakes.api_tls import verify_signed_request
 from nmrnet_provider.config import load_provider_config
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.attempt_store import AttemptStore
+from provider_core.api import ProviderAPI
+from provider_core.checkpoint_store import CheckpointStore
+from provider_core.delivery_service import DeliveryBinding, DeliveryService
+from provider_core.delivery_store import QueueLimits
 from tools.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
@@ -57,6 +60,8 @@ class ProcessPeers:
         self.bad_reply = False
         self.offer_job = False
         self.peer = self.proxy = self.proxy_thread = None
+        self.relay = self.relay_task = None
+        self.delivery_notices = []
         self.model_peer = model_peer
         self.ports = InputPorts()
         self.result = None
@@ -93,6 +98,20 @@ class ProcessPeers:
             **model_options,
         )
         self.config = load_provider_config(self.files.path)
+        relay_root = self.root / "relay-state"
+        relay_root.mkdir(mode=0o700)
+        self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o700)
+        publisher = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport(),
+                                expected_topology=self.config.api.expected_topology)
+        self.relay = DeliveryService(
+            relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
+            bindings=(DeliveryBinding(self.config.delivery.endpoint, publisher),), request_seconds=2,
+            retry_initial_seconds=0.01, retry_max_seconds=0.1,
+            on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
+            diagnostic_status=lambda: {"output_failures": 0},
+        )
+        self.relay_task = asyncio.create_task(self.relay.run())
+        await asyncio.wait_for(self.relay.ready.wait(), 2)
         self.diagnostics = self.root / "diagnostics"
         self.diagnostics.mkdir(mode=0o700)
         self.execution = self.root / "execution.json"
@@ -143,6 +162,10 @@ class ProcessPeers:
                 self.process.kill()
                 await self.process.communicate()
         finally:
+            if self.relay_task is not None:
+                # Reuse the existing real relay's stop/join/close owner before
+                # releasing its API peer or any producer socket grants.
+                await RuntimePeers.close_relay(self)
             try:
                 if self.proxy_thread is not None and self.proxy_thread.is_alive():
                     await asyncio.to_thread(self.proxy.shutdown)
@@ -187,12 +210,12 @@ class ProcessPeers:
             "PROVIDER_CORE_IN_CONTAINER": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
-        if child_script is not None:
-            # The installed runner's disposable test root is not the script's
-            # directory. Only test-only children import its recording ports.
-            environment["PYTHONPATH"] += os.pathsep + str(Path.cwd())
-        # silent-defaults: allow-contract -- A requested child-only fixture changes native/fault ports; ordinary tests keep the real process entrypoint.
-        command = [str(Path(__file__).with_name(child_script))] if child_script is not None else ["-m", "nmrnet_provider.process"]
+        # The contained receiving fixture records startup native barriers only;
+        # real runner barrier proof belongs to the separate deployment lane.
+        # Each script still invokes the actual foreground process entrypoint.
+        environment["PYTHONPATH"] += os.pathsep + str(Path.cwd())
+        script = child_script if child_script is not None else "startup_process.py"
+        command = [str(Path(__file__).with_name(script))]
         self.process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-B",
@@ -247,7 +270,7 @@ class ProcessPeers:
         await asyncio.wait_for(wait(), 5)
 
     async def reopen_store(self):
-        store = AttemptStore(
+        store = CheckpointStore(
             self.files.state,
             scope=self.config.lifecycle.scope,
             limits=self.config.lifecycle.store_limits,
@@ -255,13 +278,13 @@ class ProcessPeers:
         )
         try:
             await store.open()
-            return await store.records()
+            return await store.inventory()
         finally:
             await store.close()
 
     async def seed_pending(self):
         self.files.state.mkdir(mode=0o700)
-        store = AttemptStore(
+        store = CheckpointStore(
             self.files.state,
             scope=self.config.lifecycle.scope,
             limits=self.config.lifecycle.store_limits,
@@ -271,7 +294,7 @@ class ProcessPeers:
         pending = StartPending(self.config.lifecycle.scope, "peaks_from_mol", source, start_body(source.job_ref, "a" * 32))
         try:
             await store.open()
-            await store.admit(pending)
+            await store.retain_start(pending)
         finally:
             await store.close()
         return pending

@@ -15,7 +15,7 @@ from tests.contract.provider_calls import provider_calls
 from tests.fakes.api import Transport, reply
 from tests.fakes.job_input import facts
 from tests.fakes.job_input import response as input_response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ReleasedApiRefusalTests(PinnedApiRelease, unittest.IsolatedAsyncioTestCase):

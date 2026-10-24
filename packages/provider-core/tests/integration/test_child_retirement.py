@@ -4,6 +4,9 @@ This qualifies the core session seam, not a sibling's scientific worker/protocol
 process tree, source selection, native parser, warm reuse or production isolation.
 """
 
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
 import asyncio
 import base64
 import hashlib
@@ -25,7 +28,7 @@ from tests.fakes.attempts import observation, progress_response
 from tests.fakes.child_session import ChildChannelClosed, ChildSession, ChildStopUnconfirmed
 from tests.fakes.execution import acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 from tests.fakes.transport import Client, Stream
 from tests.fakes.upload_child_session import UploadChildSession
 from tests.fakes.uploads import UPLOAD_REF
@@ -74,7 +77,7 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(session.source_removals, 1)
             self.assertEqual(session.generations, 1)
             self.assertEqual(source_api.calls.count("grant"), 1)
-            self.assertIs((await store.records())[0].local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+            self.assertIs(type((await store.inventory())[0]), EnteredCheckpoint)
             claim.release()
 
     async def test_cancelled_reader_work_reaps_the_same_child_before_releasing_its_acquired_source(self):
@@ -101,7 +104,7 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(session.generations, 0)
             self.assertEqual(source_api.calls.count("grant"), 1)
             self.assertIsNone(executor.last_failure.outcome)
-            self.assertIs((await store.records())[0].local_phase, LocalExecutionPhase.NOT_ENTERED)
+            self.assertIs(type((await store.inventory())[0]), AcknowledgedCheckpoint)
             claim.release()
 
     async def test_prestart_source_rejection_cleans_its_owned_file_without_claiming_a_child_was_stopped(self):
@@ -119,7 +122,7 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(source.exists())
                     self.assertEqual(session.source_removals, 1)
                     self.assertEqual(session.generations, 0)
-                    self.assertIs((await store.records())[0].local_phase, LocalExecutionPhase.NOT_ENTERED)
+                    self.assertIs(type((await store.inventory())[0]), AcknowledgedCheckpoint)
                     claim.release()
 
     async def _source_resources(self, cleanup, mode):
@@ -147,19 +150,19 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim, session = await self._resources(cleanup, "success")
             executor = self._executor(store, claim, session)
             terminal = await self._run(cleanup, executor, acknowledged)
-            self.assertIsInstance(terminal, TerminalPending)
-            self.assertIs(terminal.operation, TerminalOperation.COMPLETE)
-            self.assertEqual(session.phases, [LocalExecutionPhase.NOT_ENTERED, LocalExecutionPhase.EXECUTION_ENTERED])
+            self.assertIs(type(terminal), DeliveryAcceptedCheckpoint)
+            self.assertIs(terminal.selection.operation, TerminalOperation.COMPLETE)
+            self.assertEqual(session.phases, [AcknowledgedCheckpoint, EnteredCheckpoint])
             self.assertEqual(session.generations, 1)
             self.assertTrue(session.child.pipes_closed)
             self.assertIsNotNone(session.child.process.returncode)
-            body = json.loads(terminal.body)
+            body = json.loads(executor.delivery.items[0].body)
             result = json.loads(base64.b64decode(body["canonical_result_base64"], validate=True))
             self.assertEqual(
                 result,
                 {"state": "result", "source_fingerprint": acknowledged.start.input.input_fingerprint, "value": "scripted-only"},
             )
-            self.assertEqual(await store.records(), (terminal,))
+            self.assertEqual(await store.inventory(), (terminal,))
             claim.release()
 
     async def test_scripted_preparation_rejection_never_records_entry_or_generates(self):
@@ -167,8 +170,8 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim, session = await self._resources(cleanup, "reject")
             executor = self._executor(store, claim, session, preparation_only=True)
             terminal = await self._run(cleanup, executor, acknowledged)
-            self.assertIs(terminal.operation, TerminalOperation.FAIL)
-            self.assertIs(terminal.attempt.local_phase, LocalExecutionPhase.NOT_ENTERED)
+            self.assertIs(terminal.selection.operation, TerminalOperation.FAIL)
+            self.assertIs(type(terminal.selection.attempt), AcknowledgedCheckpoint)
             self.assertEqual(session.generations, 0)
             self.assertIsNotNone(session.child.process.returncode)
             self.assertTrue(session.child.pipes_closed)
@@ -191,7 +194,7 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(session.child.pipes_closed)
             self.assertEqual(session.generations, 1)
             self.assertIsNone(executor.last_failure.outcome)
-            self.assertIs((await store.records())[0].local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+            self.assertIs(type((await store.inventory())[0]), EnteredCheckpoint)
             claim.release()
 
     async def test_closed_output_does_not_release_claim_until_that_same_child_is_stopped_and_reaped(self):
@@ -218,7 +221,7 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(original_process.returncode)
             self.assertTrue(session.child.pipes_closed)
             self.assertEqual(session.generations, 1)
-            self.assertIs((await store.records())[0].local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+            self.assertIs(type((await store.inventory())[0]), EnteredCheckpoint)
             claim.release()
 
     async def _resources(self, cleanup, mode):
@@ -263,7 +266,7 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
             store,
             claim,
             session,
-            allowed_job_states=frozenset({"open"}),
+            delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.02, allowed_job_states=frozenset({"open"}),
             poll_seconds=10,
             task_settle_seconds=1,
         )

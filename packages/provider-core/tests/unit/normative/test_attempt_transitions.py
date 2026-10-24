@@ -14,7 +14,8 @@ from provider_core.attempt_record import (
     encode_record,
     mark_execution_entered,
 )
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
+from provider_core.producer_checkpoint import EvidenceDigest
 from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 
 
@@ -32,30 +33,35 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_acknowledgement_and_execution_entry_survive_reopen(self):
         pending = record()
-        acknowledged = acknowledge_start(pending, admission())
-        entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
-        self.assertEqual(acknowledged.local_phase, LocalExecutionPhase.NOT_ENTERED)
-        self.assertEqual(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
-        self.assertEqual(entered.start.body, pending.body)
-        for retained in (acknowledged, entered):
-            self.assertEqual(decode_record(encode_record(retained), scope=scope()), retained)
+        live = acknowledge_start(pending, admission())
+        self.assertIs(live.local_phase, LocalExecutionPhase.NOT_ENTERED)
+        self.assertIs(mark_execution_entered(live, PREPARED_IDENTITY).local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+        digest = EvidenceDigest.from_evidence(PREPARED_IDENTITY)
         with tempfile.TemporaryDirectory() as directory:
-            for expected, replacement in ((pending, acknowledged), (acknowledged, entered)):
-                store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
-                await store.open()
-                try:
-                    if expected == pending:
-                        await store.admit(pending)
-                    self.assertEqual(await store.replace(expected, replacement), replacement)
-                    self.assertEqual(await store.records(), (replacement,))
-                finally:
-                    await store.close()
-            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
-            await reopened.open()
+            root = Path(directory)
+            store = CheckpointStore(root, scope=scope(), limits=CheckpointLimits(1, 300000), operation_seconds=1)
+            await store.open()
             try:
-                self.assertEqual(await reopened.records(), (entered,))
+                await store.retain_start(pending)
+                acknowledged = await store.acknowledge_start(pending, admission())
             finally:
-                await reopened.close()
+                await store.close()
+            store = CheckpointStore(root, scope=scope(), limits=CheckpointLimits(1, 300000), operation_seconds=1)
+            await store.open()
+            try:
+                self.assertEqual(await store.inventory(), (acknowledged,))
+                entered = await store.mark_entered(acknowledged, digest)
+            finally:
+                await store.close()
+            store = CheckpointStore(root, scope=scope(), limits=CheckpointLimits(1, 300000), operation_seconds=1)
+            await store.open()
+            try:
+                self.assertEqual(await store.inventory(), (entered,))
+                self.assertEqual(entered.prepared, digest)
+                self.assertEqual(entered.acknowledgement.start.body, pending.body)
+                self.assertNotIn(PREPARED_IDENTITY.content, (root / "checkpoints.sqlite3").read_bytes())
+            finally:
+                await store.close()
 
     async def test_terminal_start_replay_is_retained_without_local_execution(self):
         for state in ("succeeded", "failed", "expired"):

@@ -1,5 +1,8 @@
 """Late inventory/admission persistence never resumes a cancelled controller."""
 
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from unittest.mock import Mock
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 import asyncio
 import tempfile
 import unittest
@@ -13,9 +16,8 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import start_response
 from tests.fakes.controller import SingleRetirementSession, StoreCallBarrier, cancel_task, empty_store
-from tests.fakes.entry_write import EntryWriteBarrier
 from tests.fakes.execution import execute_with_watchdog
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class ControllerCancellationTests(unittest.IsolatedAsyncioTestCase):
@@ -27,11 +29,11 @@ class ControllerCancellationTests(unittest.IsolatedAsyncioTestCase):
             transport = Transport()
             session = SingleRetirementSession(store)
             controller = AttemptController(api(transport, scope().api_origin), store, AttemptClaims(), session,
-                                           allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                                           delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             cleanup.push_async_callback(controller.settle)
-            barrier = StoreCallBarrier(store._files.records)
+            barrier = StoreCallBarrier(store._database.inventory)
             cleanup.callback(barrier.release.set)
-            with patch.object(store._files, "records", barrier.call):
+            with patch.object(store._database, "inventory", barrier.call):
                 task = asyncio.create_task(execute_with_watchdog(controller, record()))
                 cleanup.push_async_callback(cancel_task, task)
                 self.assertTrue(await asyncio.to_thread(barrier.reached.wait, 1))
@@ -48,7 +50,7 @@ class ControllerCancellationTests(unittest.IsolatedAsyncioTestCase):
                 barrier.release.set()
                 self.assertIsNone(await controller.settle())
             self.assertEqual(transport.calls, [])
-            self.assertEqual(await store.records(), ())
+            self.assertEqual(await store.inventory(), ())
 
     async def test_cancelled_acknowledgement_write_settles_to_original_admission_without_science(self):
         async with AsyncExitStack() as cleanup:
@@ -58,13 +60,15 @@ class ControllerCancellationTests(unittest.IsolatedAsyncioTestCase):
             transport = Transport(reply(start_response()))
             session = SingleRetirementSession(store)
             controller = AttemptController(api(transport, scope().api_origin), store, AttemptClaims(), session,
-                                           allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                                           delivery=RecordingDelivery(), on_delivery_retry=Mock(), delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             cleanup.push_async_callback(controller.settle)
-            # Admission uses a no-replace link. Its first rename is precisely the
-            # acknowledgement write, so the existing real rename barrier applies.
-            barrier = EntryWriteBarrier()
+            barrier = StoreCallBarrier(lambda: None)
+            original_ack = store._database.acknowledge_start
+            def held_ack(*arguments):
+                barrier.call()
+                return original_ack(*arguments)
             cleanup.callback(barrier.release.set)
-            with patch("os.replace", barrier.replace):
+            with patch.object(store._database, "acknowledge_start", side_effect=held_ack):
                 task = asyncio.create_task(execute_with_watchdog(controller, record()))
                 cleanup.push_async_callback(cancel_task, task)
                 self.assertTrue(await asyncio.to_thread(barrier.reached.wait, 1))
@@ -77,7 +81,7 @@ class ControllerCancellationTests(unittest.IsolatedAsyncioTestCase):
                 acknowledged = await controller.settle()
             self.assertIsInstance(acknowledged, AcknowledgedAttempt)
             self.assertIs(acknowledged.local_phase, LocalExecutionPhase.NOT_ENTERED)
-            self.assertEqual(await store.records(), (acknowledged,))
+            self.assertEqual(await store.inventory(), (AcknowledgedCheckpoint(acknowledged.start, acknowledged.admission),))
             self.assertEqual([event[0] for event in session.events], ["retire"])
             self.assertEqual(len(transport.calls), 1)
             with self.assertRaises(ControllerRefused):
