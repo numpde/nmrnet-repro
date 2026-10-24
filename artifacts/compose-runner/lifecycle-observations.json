@@ -1,0 +1,49 @@
+{
+  "source": "bounded Docker logs read after final shutdown with make provider/deployment/logs DEPLOYMENT=qualification-gxvn4S3r, plus the maintained down command's exact-ID stopped observations",
+  "date": "2026-10-24",
+  "source_revision": "bc6e840760ed4b53f60025fa671a27f2878272aa",
+  "scope": "reviewed lifecycle/resource fields only; no transcript, credentials, raw inspect or general log archive",
+  "provider": {
+    "started_utc": ["2026-10-24T01:24:40.610Z", "2026-10-24T01:25:23.520Z"],
+    "settled_utc": ["2026-10-24T01:24:54.820Z", "2026-10-24T01:25:36.327Z"],
+    "settled_exit_status": [0, 0]
+  },
+  "prediction": {
+    "child_started": [{"operation": "14918b8e601947e1bc97be8ab308f11c", "pid": 14}],
+    "child_retired": [{"operation": "14918b8e601947e1bc97be8ab308f11c", "returncode": -15, "reason": "owner_lost"}],
+    "cgroup_observation": {
+      "operation": "14918b8e601947e1bc97be8ab308f11c",
+      "scope": "persistent_container_cumulative",
+      "cpu.max": "200000 100000",
+      "memory.max": "4294967296",
+      "memory.peak": "2786230272",
+      "memory.swap.max": "0",
+      "pids.max": "64"
+    }
+  },
+  "reader": {
+    "child_started": [{"operation": "b7f38a0123854b3d9412951780c09ed7", "pid": 14}],
+    "child_retired": [{"operation": "b7f38a0123854b3d9412951780c09ed7", "returncode": -15, "reason": "owner_lost"}],
+    "cgroup_observation": {
+      "operation": "b7f38a0123854b3d9412951780c09ed7",
+      "scope": "persistent_container_cumulative",
+      "cpu.max": "200000 100000",
+      "memory.max": "536870912",
+      "memory.peak": "24477696",
+      "memory.swap.max": "0",
+      "pids.max": "64"
+    }
+  },
+  "smiles": {"child_started": []},
+  "proxy_ready_messages": {"api": 2, "interpreter": 2, "store": 2},
+  "final_stops": [
+    {"role": "provider", "exit_code": 0, "oom_killed": false},
+    {"role": "prediction", "exit_code": 0, "oom_killed": false},
+    {"role": "reader", "exit_code": 0, "oom_killed": false},
+    {"role": "smiles", "exit_code": 0, "oom_killed": false},
+    {"role": "api", "exit_code": 143, "oom_killed": false},
+    {"role": "interpreter", "exit_code": 143, "oom_killed": false},
+    {"role": "store", "exit_code": 143, "oom_killed": false}
+  ],
+  "interpretation": "Child returncode -15 records control-owner retirement after scientific replies, not a failed prediction or a clean child exit. Component exit and durable Attempt outcome remain separate facts."
+}

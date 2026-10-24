@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-24",
+  "source_revision": "bc6e840760ed4b53f60025fa671a27f2878272aa",
+  "command": "make test/integration/provider/deployment",
+  "scope": "local signed TLS API, scripted interpretation, installed production Compose and native runner path",
+  "engine_version": "29.9.2",
+  "compose_version": "5.5.1",
+  "images": {
+    "controller": "sha256:aec83c6f527d48c7f87968795305ca524ba22dc62622687faa13563050c3279e",
+    "geometry": "sha256:4556b1d2427d0c6a783a0af40a1aba43ebfc11a6f1d0d9734d01091437cb6e30",
+    "prediction": "sha256:6a635601ab119aa0f06dc486f04d9468fb04fcbd5a8088077d6f0c5ec0440b99"
+  },
+  "observations": {
+    "model_exchanges": 1,
+    "attempt_starts": 1,
+    "result_publications": 1,
+    "hello_requests": 14,
+    "prediction_children_in_retained_logs": 1,
+    "reader_children_in_retained_logs": 1,
+    "smiles_children_in_retained_logs": 0,
+    "prediction_cgroup_memory_peak_bytes": 2786230272,
+    "prediction_cgroup_memory_limit_bytes": 4294967296,
+    "restart_without_new_science": true,
+    "repeated_up_without_component_restart": true,
+    "final_seven_containers_stopped_without_oom": true
+  },
+  "receipts": {
+    "peer_receipt": "compose-runner/peer-receipt.json",
+    "peer_receipt_sha256": "36e6d9b49dee93b38a89902ddb71e76a4e55f07615152aade6033a424dd9f2e3",
+    "completed_receipt": "compose-runner/completed-receipt.json",
+    "completed_receipt_sha256": "81f7cdf8e9028ea221a9c4972d5a1e5e31617a4a7cbfaf8ccd1c131ac524c567",
+    "result_artifact": "compose-runner/result.json",
+    "lifecycle_observations": "compose-runner/lifecycle-observations.json",
+    "lifecycle_observations_sha256": "de8eaf0a2c709b8a26ed75aaacf4ed615e6e6cdeb0c93f5c17f2b51e34d56de5",
+    "result_artifact_sha256": "48c0667443c1e8cd75367a3e0f94f398ff42d462db991ba59c743a1a999d961d"
+  },
+  "limits": [
+    "Scripted interpretation is not a live language-model qualification.",
+    "Loopback signed API is not an external API or GUI deployment qualification.",
+    "This case checks independent supplied-coordinate conversion, H/C population and finite shifts, not numerical shift accuracy.",
+    "Four-reference and real 128-atom native-path qualification remain outstanding.",
+    "Interrupted Engine-effect reconciliation, named legacy cutover and legacy-path deletion remain outstanding."
+  ]
+}
