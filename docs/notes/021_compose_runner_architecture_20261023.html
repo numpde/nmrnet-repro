@@ -2061,6 +2061,18 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       factory controls cover all three roles, no clients and held cleanup followed
       by settlement. Independent lifecycle and scientific reviews found no issue.
       This slice is not yet wired into service startup or terminal replay.</p>
+    <p><strong>Shared terminal pacing implemented:</strong> the existing
+      controller loop and its <code>TerminalRecovery</code> policy now belong to
+      <code>TerminalPublisher</code>. Both the controller and an explicitly opted-in
+      <code>AttemptRecovery</code> use that owner; stopped recovery remains one-send
+      by default. Settlement precedes API retry permission, and received but
+      unretained outcomes, permanent refusal and cleanup uncertainty still prevent
+      replay. The two new tests failed before implementation; all 87 focused
+      publication/recovery/controller/projection tests then passed. Controls cover
+      exact retained bytes after outage without a scientific session and stop
+      during backoff with the pending record and original failure preserved.
+      Independent ownership and maintenance reviews found no issue. Startup must
+      still establish native retirement before selecting this policy.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker

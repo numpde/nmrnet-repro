@@ -26,7 +26,7 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_response import AttemptObservation
 from provider_core.attempt_store import StoreFailed, StoreRefused
-from provider_core.publication import TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
+from provider_core.publication import TerminalPublisher, TerminalRecovery, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter
 from provider_core.transport import ExchangeFailed
 
@@ -65,13 +65,16 @@ class AttemptRecovery:
     Recovery does not prove worker exit or release resources for another analysis.
     """
 
-    # silent-defaults: allow-contract -- Explicit terminal replay remains the existing NMRNet policy; consumers requiring SECS-style read-only recovery select READ_STATE.
-    def __init__(self, api, store, claim, *, refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING):
+    # silent-defaults: allow-contract -- Stopped recovery sends once unless its caller explicitly supplies outage pacing; terminal refusals retain NMRNet's exact replay policy unless READ_STATE is selected.
+    def __init__(self, api, store, claim, *, refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING, terminal_recovery=None):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure recovery: signing origin differs from retained storage scope")
         self.api, self.store, self.claim = api, store, claim
         require_refusal_policy(refusal_policy)
+        if terminal_recovery is not None and type(terminal_recovery) is not TerminalRecovery:
+            raise ValueError("Attempt recovery requires an admitted terminal retry policy.")
         self._refusal_policy = refusal_policy
+        self._terminal_recovery = terminal_recovery
         self._used = False
         self._child = None
         self._active = False
@@ -98,7 +101,9 @@ class AttemptRecovery:
         if type(record) is TerminalPending:
             self._child = TerminalPublisher(self.api, self.store, self.claim, refusal_policy=self._refusal_policy)
             self._used = True
-            return await self._child.publish(record)
+            return await self._child.publish_until_resolved(
+                record, recovery=self._terminal_recovery, initial_seconds=1
+            )
         self.claim.begin(self)
         self._used = self._active = self._observing = True
         try:

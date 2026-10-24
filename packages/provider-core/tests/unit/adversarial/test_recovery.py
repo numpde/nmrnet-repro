@@ -7,21 +7,49 @@ import tempfile
 import threading
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import TerminalStateObserved, acknowledge_start
 from provider_core.ownership import AttemptClaims, OwnershipRefused
+from provider_core.publication import TerminalRecovery
 from provider_core.recovery import AttemptRecovery, RecoveryFailed
 from provider_core.transport import ExchangeFailed
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, observation
 from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api, retained_read_required, terminal_refusal
+from tests.fakes.publication import api, retained_failure, retained_read_required, terminal_refusal
 
 
 class RecoveryFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_during_terminal_backoff_keeps_pending_bytes_and_failure_without_resending(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            claim = AttemptClaims().claim_record(pending)
+            transport = Transport(reply(b"maintenance", status=503))
+            entered = asyncio.Event()
+            recovery = AttemptRecovery(
+                api(transport, scope().api_origin), store, claim,
+                terminal_recovery=TerminalRecovery(10, lambda *_: entered.set(), Mock()),
+            )
+            task = asyncio.create_task(recovery.recover(pending))
+            try:
+                await asyncio.wait_for(entered.wait(), 1)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                self.assertEqual(await store.records(), (pending,))
+                self.assertEqual(len(transport.calls), 1)
+                self.assertEqual(transport.calls[0][0].content, pending.body)
+                self.assertEqual(recovery.last_failure.api_failure.status, 503)
+                self.assertIsNone(claim.operation_owner)
+                claim.release()
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                await store.close()
+
     async def test_bad_or_unbound_read_preserves_the_read_only_obligation(self):
         for response in (
             reply(b"{}", status=404),

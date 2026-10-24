@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 from provider_core.attempt_record import (
     MAX_RECORD_BYTES,
@@ -22,7 +23,7 @@ from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import read_fail
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims, OwnershipRefused
-from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher, TerminalRefusalPolicy
+from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher, TerminalRecovery, TerminalRefusalPolicy
 from provider_core.recovery import AttemptRecovery, ObservedAttempt
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import PREPARED_IDENTITY, scope
@@ -32,6 +33,29 @@ from tests.fakes.publication import api, retained_failure, terminal_refusal
 
 
 class RecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_retained_terminal_recovers_an_outage_without_a_controller_or_scientific_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            claim = AttemptClaims().claim_record(pending)
+            transport = Transport(reply(b"maintenance", status=503), reply(fail_response(replayed=True)))
+            retry, recovered = Mock(), Mock()
+            recovery = AttemptRecovery(
+                api(transport, scope().api_origin), store, claim,
+                terminal_recovery=TerminalRecovery(0.001, retry, recovered),
+            )
+            try:
+                confirmed = await recovery.recover(pending)
+                self.assertIsInstance(confirmed, TerminalConfirmed)
+                self.assertTrue(confirmed.receipt.replayed)
+                self.assertEqual([request.content for request, _ in transport.calls], [pending.body, pending.body])
+                self.assertEqual(await store.records(), (confirmed,))
+                retry.assert_called_once()
+                recovered.assert_called_once_with(pending.attempt, retry.call_args.args[1])
+                self.assertIsNone(claim.operation_owner)
+                claim.release()
+            finally:
+                await store.close()
+
     async def test_read_only_policy_survives_reopen_and_observed_success_is_not_a_receipt(self):
         for status in (404, 409):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:

@@ -3,7 +3,8 @@
 Pinned precedents: NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
 nmrpeak_provider/attempt_journal.py::prepared_terminal_replay; SECS
 34f5915c1534278bbf61b4c6592afa44cf94ab08, src/secs_inference/provider/execution.py::_publish.
-No retry loop, science callback, record deletion or worker release belongs here.
+Reviewed exact-request pacing belongs to this owner; no science callback,
+record deletion or worker release belongs here.
 """
 
 from provider_core.container_guard import require_container
@@ -11,10 +12,14 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+import math
+import random
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import TerminalConfirmed, TerminalHeld, TerminalOperation, TerminalPending, TerminalReadRequired
+from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed, TerminalHeld, TerminalOperation, TerminalPending, TerminalReadRequired
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.transport import ExchangeFailed
 
@@ -47,6 +52,27 @@ class TerminalRefusalPolicy(Enum):
     READ_STATE = "read_state"
 
 
+@dataclass(frozen=True, slots=True)
+class TerminalRecovery:
+    """Pace reviewed exact publication retries until resolution or cancellation.
+
+    Callers establish native retirement before using this policy. Individual
+    exchanges and settlement remain bounded; availability waits do not expire
+    the durable command. Observers receive its acknowledgement and failed send.
+    """
+
+    backoff_max_seconds: float
+    on_retry: Callable[[AcknowledgedAttempt, ApiFailure, float], None] = field(repr=False)
+    on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
+
+    def __post_init__(self):
+        value = self.backoff_max_seconds
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError("Terminal recovery backoff maximum must be finite positive seconds")
+        if not callable(self.on_retry) or not callable(self.on_recovered):
+            raise ValueError("Terminal recovery requires explicit protected retry and recovery observers")
+
+
 def require_refusal_policy(policy):
     if type(policy) is not TerminalRefusalPolicy:
         raise ValueError("Terminal refusal policy must explicitly retain pending publication or require read-only state recovery")
@@ -74,6 +100,48 @@ class TerminalPublisher:
         self._api_failure = None
         self._observing = False
         self.last_failure = None
+
+    async def publish_until_resolved(self, pending, *, recovery, initial_seconds):
+        """Pace only replayable failures after this publisher settles original I/O.
+
+        Cancellation ends availability waiting, preserving the durable request
+        and this owner's latest failure. Neither a received-but-unretained outcome
+        nor failed cleanup grants another send.
+        """
+        if recovery is None:
+            return await self.publish(pending)
+        if type(recovery) is not TerminalRecovery:
+            raise ValueError("Terminal publication requires an admitted recovery policy.")
+        if type(initial_seconds) not in (int, float) or not math.isfinite(initial_seconds) or initial_seconds <= 0:
+            raise ValueError("Terminal retry initial delay must be finite positive seconds.")
+        first_failure = None
+        delay = min(initial_seconds, recovery.backoff_max_seconds)
+        while True:
+            try:
+                result = await self.publish(pending)
+            except PublicationFailed as failure:
+                if (
+                    type(failure) is not PublicationFailed
+                    or failure.cause is not failure.api_failure
+                    or failure.api_failure is None
+                    or failure.outcome is not None
+                    or failure.settlement_failures
+                ):
+                    raise
+                if self.claim.operation_owner is self:
+                    await self.settle()
+                if not self.api.can_replay_terminal(failure.api_failure):
+                    raise
+                if first_failure is None:
+                    first_failure = failure.api_failure
+                seconds = random.uniform(delay / 2, delay)
+                recovery.on_retry(pending.attempt, failure.api_failure, seconds)
+                await asyncio.sleep(seconds)
+                delay = min(recovery.backoff_max_seconds, delay * 2)
+            else:
+                if first_failure is not None and type(result) is TerminalConfirmed:
+                    recovery.on_recovered(pending.attempt, first_failure)
+                return result
 
     async def publish(self, pending):
         """Send the retained outcome once and durably record the API response.

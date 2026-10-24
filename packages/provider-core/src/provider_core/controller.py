@@ -29,7 +29,7 @@ from provider_core.execution import (
     require_observation_recovery,
     require_phase_progress_observer,
 )
-from provider_core.publication import PublicationFailed, TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
+from provider_core.publication import TerminalPublisher, TerminalRecovery, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter, StartFailed
 
 
@@ -68,27 +68,6 @@ class StartRecovery:
             raise ValueError("START recovery backoff maximum must be finite positive seconds")
         if not callable(self.on_retry) or not callable(self.on_recovered):
             raise ValueError("START recovery requires explicit protected retry and recovery observers")
-
-
-@dataclass(frozen=True, slots=True)
-class TerminalRecovery:
-    """Pace reviewed exact publication retries until resolution or cancellation.
-
-    Science has already retired. Individual exchanges and settlement remain
-    bounded; availability waits do not expire the durable terminal command.
-    Synchronous observers receive the actual acknowledgement and failed send.
-    """
-
-    backoff_max_seconds: float
-    on_retry: Callable[[AcknowledgedAttempt, ApiFailure, float], None] = field(repr=False)
-    on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
-
-    def __post_init__(self):
-        value = self.backoff_max_seconds
-        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-            raise ValueError("Terminal recovery backoff maximum must be finite positive seconds")
-        if not callable(self.on_retry) or not callable(self.on_recovered):
-            raise ValueError("Terminal recovery requires explicit protected retry and recovery observers")
 
 
 class _Lifetime(Enum):
@@ -217,7 +196,9 @@ class AttemptController:
         terminal = await self._operation.run(acknowledged)
         # The executor confirmed session retirement before returning this record.
         self._operation = TerminalPublisher(self.api, self.store, self._claim, refusal_policy=self._refusal_policy)
-        return await self._publish_terminal(terminal)
+        return await self._operation.publish_until_resolved(
+            terminal, recovery=self._terminal_recovery, initial_seconds=self._poll_seconds
+        )
 
     async def _start_attempt(self, pending):
         policy = self._start_recovery
@@ -254,41 +235,6 @@ class AttemptController:
                 if first_failure is not None:
                     policy.on_recovered(acknowledged, first_failure)
                 return acknowledged
-
-    async def _publish_terminal(self, terminal):
-        policy = self._terminal_recovery
-        first_failure = None
-        delay = min(self._poll_seconds, policy.backoff_max_seconds) if policy is not None else None
-        while True:
-            try:
-                result = await self._operation.publish(terminal)
-            except PublicationFailed as failure:
-                if (
-                    type(failure) is not PublicationFailed
-                    or policy is None
-                    or failure.cause is not failure.api_failure
-                    or failure.api_failure is None
-                    or failure.outcome is not None
-                    or failure.settlement_failures
-                ):
-                    raise
-                # Only the original publisher may settle its borrowed I/O.
-                # A cleanup failure propagates that owner's updated evidence,
-                # before retry eligibility is evaluated again.
-                if self._claim.operation_owner is self._operation:
-                    await self._operation.settle()
-                if not self.api.can_replay_terminal(failure.api_failure):
-                    raise
-                if first_failure is None:
-                    first_failure = failure.api_failure
-                seconds = random.uniform(delay / 2, delay)
-                policy.on_retry(terminal.attempt, failure.api_failure, seconds)
-                await asyncio.sleep(seconds)
-                delay = min(policy.backoff_max_seconds, delay * 2)
-            else:
-                if first_failure is not None and type(result) is TerminalConfirmed:
-                    policy.on_recovered(terminal.attempt, first_failure)
-                return result
 
     async def _retire_after_failure(self):
         # silent-defaults: allow-contract -- Admission can fail before a claim exists; that state has no borrowed operation to settle.
