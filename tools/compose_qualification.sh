@@ -72,6 +72,12 @@ compose_witness_recovery() {
     if flock --nonblock "$lock"; then
         if compose_witness_recovery_effects; then :; else status=$?; fi
     else status=$?; fi
+    if (( status != 0 )) && [[ ${inference_retirement_confirmed-false} == true \
+        && -d $private/operation/mutation && ! -L $private/operation/mutation ]]; then
+        if ! cp -a -- "$private/operation/mutation" "$scratch/recovery-failed-receipts"; then
+            qualification_cleanup_held=true
+        fi
+    fi
     # Releasing the finite caller's lock does not settle Engine effects. The
     # original operation receipts remain the next command's recovery barrier.
     exec {lock}<&- || return $?
@@ -174,8 +180,78 @@ compose_witness_resume_startup() {
     [[ $deployment_recovery_observed == true && ${#deployment_ids[@]} == 7 && ${deployment_ids[api]} == "$identifier" \
         && ! -e $operation_root/complete && ! -e $operation_root/$phase/reconciled ]] || return 2
     cmp -s "$operation_root/intent" "$scratch/resumed-original.intent" || return $?
+    compose_witness_reader_crash || return $?
     cp -a -- "$operation_root" "$scratch/resumed-startup-receipts" || return $?
     printf 'Startup recovery confirmed all seven roles ready; the original late-start restriction remains retained.\n'
+}
+
+compose_witness_reader_crash() {
+    local identifier=${deployment_ids[reader]} image=${deployment_images[reader]} operation observed count budget
+    local deployment_start_deadline
+    local probe_seconds=15
+    local probe_source
+    local -a grants=() arguments=()
+    deployment_command crash-container 10 "$operation_root/crash-container" false inspect --type container "$identifier" || return $?
+    deployment_command crash-image 10 "$operation_root/crash-image" false image inspect "$image" || return $?
+    mkdir -m 700 -- "$scratch/crash-admission" "$scratch/reader-crash" || return $?
+    grants=(--mount "type=bind,src=$selected_bundle/compose.json,dst=/plan/compose.json,readonly"
+        --mount "type=bind,src=$operation_root/crash-container/response.stdout,dst=/evidence/container.json,readonly"
+        --mount "type=bind,src=$operation_root/crash-image/response.stdout,dst=/evidence/image.json,readonly"
+        --mount "type=bind,src=$scratch/crash-admission,dst=/output")
+    arguments=(--plan /plan/compose.json --inspection /evidence/container.json --images /evidence/image.json
+        --checkout "$repository_root" --deployment "$deployment_name" --container-id "$identifier" --output /output/receipt.json)
+    local deployment_tool_source=$capture/tests/integration/provider_runtime/runner_crash_admission.py
+    deployment_helper crash-admission grants arguments || return $?
+    deployment_command crash-before 10 "$operation_root/crash-before" false inspect --type container \
+        --format '{{.Id}}|{{.RestartCount}}' "$identifier" || return $?
+    cmp -s "$operation_root/crash-before/response.stdout" <(printf '%s|0\n' "$identifier") || return 2
+    deployment_start_deadline=$((SECONDS + 60))
+    : > "$peer_data/reader-crash-start"
+    compose_witness_wait "$peer_data/reader-crash-operation" 15 || return $?
+    IFS= read -r operation < "$peer_data/reader-crash-operation" || return 2
+    [[ $operation =~ ^[0-9a-f]{32}$ ]] \
+        && cmp -s "$peer_data/reader-crash-operation" <(printf '%s\n' "$operation") || return 2
+    probe_source=$(< "$capture/tests/integration/provider_runtime/runner_crash_probe.py")
+    # Killing init's main child may kill this exec probe as well. Its exit code
+    # cannot establish old-child retirement; the external pidfd observer does.
+    (( deployment_start_deadline - SECONDS >= probe_seconds + 5 )) || return 2
+    compose_witness_crash_execute "$identifier" "$operation" "$probe_source" "$probe_seconds" || return $?
+    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
+    if (( budget > 15 )); then budget=15; fi
+    compose_witness_wait "$peer_data/reader-old-child-exited.json" "$budget" || return $?
+    deployment_ready reader || return $?
+    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
+    if (( budget > 5 )); then budget=5; fi
+    deployment_command crash-restarted "$budget" "$operation_root/crash-restarted" false inspect --type container \
+        --format '{{.Id}}|{{.RestartCount}}' "$identifier" || return $?
+    IFS='|' read -r observed count < "$operation_root/crash-restarted/response.stdout" || return 2
+    [[ $observed == "$identifier" && $count =~ ^[1-9][0-9]*$ ]] \
+        && cmp -s "$operation_root/crash-restarted/response.stdout" <(printf '%s|%s\n' "$identifier" "$count") || return 2
+    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
+    if (( budget > 5 )); then budget=5; fi
+    deployment_command crash-fresh-root "$budget" "$operation_root/crash-fresh-root" false exec "$identifier" \
+        /opt/rdkit/environment/bin/python -I -B -c 'import os; assert not os.listdir("/scratch"), "Restarted reader retained old scratch"; print("fresh-root")' || return $?
+    cmp -s "$operation_root/crash-fresh-root/response.stdout" <(printf 'fresh-root\n') || return 2
+    printf 'fresh-root\n' > "$peer_data/reader-fresh-root.pending" || return $?
+    mv -- "$peer_data/reader-fresh-root.pending" "$peer_data/reader-fresh-root" || return $?
+    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
+    if (( budget > 15 )); then budget=15; fi
+    compose_witness_wait "$peer_data/reader-crash-receipt.json" "$budget" || return $?
+    printf 'Reader supervisor crash retired its stopped child; Engine restarted the same container with fresh scratch and a new session.\n'
+}
+
+compose_witness_crash_execute() {
+    local identifier=$1 operation=$2 program=$3 probe_seconds=$4
+    local operation_root=$scratch/reader-crash
+    mkdir -m 700 -- "$operation_root/effects" || return $?
+    # This probe's own window plus the existing five-second Engine response margin.
+    if deployment_command supervisor-crash "$((probe_seconds + 5))" "$operation_root/exec" true exec "$identifier" \
+        /opt/rdkit/environment/bin/python -I -B -c "$program" "$operation" "$probe_seconds"; then :
+    else
+        [[ $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
+        printf 'Supervisor crash exec returned client status %s; protected probe cause: %s. Child exit is checked independently.\n' \
+            "$deployment_command_status" "$operation_root/exec/response.stderr" >&2
+    fi
 }
 
 compose_witness_old_id_rejected() {
@@ -197,6 +273,10 @@ compose_witness_old_id_rejected() {
 compose_witness_finish() {
     local status=$? cleanup=0
     trap - EXIT
+    if [[ ${qualification_cleanup_held-false} == true ]]; then
+        printf 'Qualification retains its original receipts and containers because failed-control evidence could not be preserved: %s\n' "$scratch" >&2
+        exit 2
+    fi
     if [[ $inference_retirement_confirmed != true ]]; then
         printf 'Qualification retains its original receipts and containers because the local Engine client has not retired: %s\n' "$scratch" >&2
         exit 2
@@ -243,6 +323,7 @@ compose_witness_main() {
     source "$repository_root/tools/provider_image.sh"
     docker_client_directory= pending_diagnostic= inference_diagnostic= worker_retirement_diagnostic=
     inference_retirement_confirmed=true inference_cancellation_status=0
+    qualification_cleanup_held=false
     unset deployment_runtime_root deployment_runtime_prefix
     deployment_resuming=false deployment_runtime_fence=false deployment_recovery_observed=false
     peer_id= deployment_installed=false peer_creation_attempted=false print_command=false
@@ -253,6 +334,13 @@ compose_witness_main() {
     mkdir -p -m 700 -- "$public" "$private"
     peer_data=$scratch/data
     mkdir -m 700 -- "$scratch/peer" "$peer_data"
+    local -a crash_grants=()
+    if [[ $scientific_case == recovery ]]; then
+        mkdir -m 700 -- "$private/runtime" "$private/runtime/reader" || return $?
+        # The controlled client needs one fixture socket in this role's leaf.
+        # It receives no host requests, receipts, store or other runtime leaf.
+        crash_grants=(--mount "type=bind,src=$private/runtime/reader,dst=/reader-witness")
+    fi
     trap compose_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
@@ -263,7 +351,8 @@ compose_witness_main() {
     printf '%s\n' "$revision" > "$scratch/source-revision"
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
-        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests \
+        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/runner_crash_probe.py \
+        tests/integration/provider_runtime/runner_crash_admission.py tests/integration/provider_core packages/provider-core/tests \
         tools/compose_runner_events.sh tools/compose_reply_loss.sh \
         tests/fixtures/preparation/expected.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
@@ -276,6 +365,7 @@ compose_witness_main() {
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
         --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=128m,mode=0700,uid=$(id -u),gid=$(id -g)" \
         --mount "type=bind,src=$peer_data,dst=$peer_data" \
+        "${crash_grants[@]}" \
         --mount "type=bind,src=$capture/packages/provider-core/tests,dst=/fixture/core-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_core,dst=/fixture/binding-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer.py,dst=/fixture/compose_peer.py,readonly" \

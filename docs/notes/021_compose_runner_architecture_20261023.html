@@ -545,8 +545,13 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       original plan before controlling it. Engine inspection owns live IDs; no second
       live-container manifest is introduced. <a href="#S1">Source S1, ComposeProject.inventory</a>.</p>
     <p>Thus down still finds and stops stack A after install selects bundle B. Install
-      refuses running, transitional or uncertain ownership; it may select B after A has
-      stopped while preserving A's containers and bundle. A unique admitted subset left
+      refuses running or transitional ownership and never implicitly shuts down work.
+      After an explicit acknowledged down, it may fence remaining late-stop restrictions
+      by removing only already-stopped original IDs, warning of Docker-log loss and
+      confirming absence. A stopped snapshot without an exact-ID/grace stop acknowledgement
+      is insufficient; request explicit down instead. Thus down/install/up does not need
+      an extra startup to clear bookkeeping. Otherwise install preserves A's stopped
+      containers and bundle while selecting B. A unique admitted subset left
       by interrupted creation can be torn down; foreign/duplicate roles, missing original
       plans or mismatched grants are refused with actual IDs, without guessed stop/delete
       commands. Preserve and settle original receipts for uncertain Engine effects before

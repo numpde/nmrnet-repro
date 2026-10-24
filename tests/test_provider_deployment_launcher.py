@@ -15,6 +15,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_crash_exec_budget_covers_the_probe_window_and_requires_local_retirement(self):
+        for retired in ("true", "false"):
+            with self.subTest(retired=retired), tempfile.TemporaryDirectory() as directory:
+                result = self.shell('''
+source "$1/tools/compose_qualification.sh"
+scratch=$2 inference_retirement_confirmed=$3 inference_cancellation_status=0
+mkdir -m 700 -- "$scratch/reader-crash"
+deployment_command() {
+    local passed_probe_seconds=${!#}
+    [[ $4 == true && $5 == exec ]] && (( $2 >= passed_probe_seconds + 5 )) || return 91
+    deployment_command_status=137
+    return 1
+}
+if compose_witness_crash_execute aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb fixture 17; then
+    [[ $3 == true ]]
+else [[ $3 == false ]]; fi
+''', directory, retired)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_install_cannot_acquire_shutdown_authority_from_a_pending_start(self):
         for state in ("running", "stopped-without-ack"):
             with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:

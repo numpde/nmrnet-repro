@@ -118,6 +118,7 @@ async def serve(root, store_root, seconds, case):
     from tests.integration.nmrnet.runtime_ports import RuntimePeers, require_api_credentials, require_download_credentials, require_model_credentials
     from tests.integration.nmrnet.interpreter_ports import tool_reply
     from tests.integration.nmrnet.scientific_inputs import load_scientific_inputs
+    from tests.integration.nmrnet.runner_crash_peer import reader_crash_witness
     from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
     from provider_core.job_input import verify_job_input
 
@@ -151,7 +152,9 @@ async def serve(root, store_root, seconds, case):
     expected = json.loads(oracle_bytes, parse_float=Decimal)["geometries"]["chloromethane"]
 
     def publish(name, value):
-        content = (json.dumps(value, sort_keys=True) + "\n").encode()
+        publish_bytes(name, (json.dumps(value, sort_keys=True) + "\n").encode())
+
+    def publish_bytes(name, content):
         pending = root / ("." + name + ".pending")
         with pending.open("xb") as stream:
             stream.write(content)
@@ -270,14 +273,22 @@ async def serve(root, store_root, seconds, case):
         (root / "deployment.toml").write_text(
             f'store_root = {json.dumps(str(store_root))}\nmaximum_startup_bytes = 4194304\n' + routes)
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin})
+        crash = None
         while not (root / "done").exists():
+            if case == "recovery" and crash is None and (root / "reader-crash-start").exists():
+                crash = asyncio.create_task(asyncio.to_thread(reader_crash_witness, root, Path("/reader-witness"), publish, publish_bytes))
+            if crash is not None and crash.done():
+                crash.result()
             await asyncio.sleep(0.1)
+        if case == "recovery":
+            assert crash is not None, "Recovery qualification omitted its reader supervisor crash."
+            await asyncio.shield(crash)
         minimum_hellos = 1 if case == "recovery" else 2
         if calls["model"] != expected_model_calls or any(calls[name] != expected_jobs for name in ("start", "complete")) or calls["hello"] < minimum_hellos:
             raise AssertionError("Connected initial/restart witness changed the intended number of scientific executions")
         if calls["download"] != (0 if pasted_case else 1):
             raise AssertionError("Connected initial/restart witness repeated or omitted Upload acquisition")
-        scope = "local signed API; actual Compose startup/replacement recovery; no Job, model or scientific operation" if case == "recovery" else "local signed API; scripted model; actual Compose/native path"
+        scope = "local signed API; actual Compose and reader-supervisor recovery; no Job, model call or scientific input/inference" if case == "recovery" else "local signed API; scripted model; actual Compose/native path"
         publish("receipt.json", {"calls": calls, "scope": scope})
 
 
