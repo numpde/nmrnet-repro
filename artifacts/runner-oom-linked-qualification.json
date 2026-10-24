@@ -1,0 +1,29 @@
+{
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "af7406412dacef16fe3f5a72bca29deee008dd83",
+  "command": "make test/integration/provider/prediction-recovery",
+  "image_id": "sha256:714b70d96b59553de71ac0b76ce541dd0f8ec4c009c4d6514ad05290193418e4",
+  "scope": "Rerun the existing bounded synthetic kernel-OOM witness with final installed diagnostics; no released models, API, live interpreter or network grant.",
+  "previous_qualification": "runner-oom-qualification.json",
+  "runner": {"container_id": "65b5ca3c5f80182cd2586144237bdc3d3893c310fa4bc29473602a3607fe815b", "restart_count": 0, "running_before_retirement": true, "restarting": false},
+  "observations": {
+    "oom_kill_delta": 1,
+    "child_returncodes": [-9, -15],
+    "generation": "3e18374e6cd34c64af216967f34f663c",
+    "retry_operation": "a52f44547fa949cb9313c45266f07cf4",
+    "retry_job_ref": "job:oom-proof",
+    "retry_execution_attempt_ref": "execution_attempt:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "retry_reason": "Original IncompleteReadError with its protected frame evidence, plus original native role/operation/generation/observed return code.",
+    "replacement": "Exactly one, after original child reap, scratch release and channel settlement, within the same runner generation.",
+    "unchanged_science": "Both request-observation files and synthetic result are byte-identical to the previous qualification's corresponding files. Expected outputs and tolerances were not changed."
+  },
+  "final_state": "Both finite containers retired after direct bounded Docker-log delivery; no log dump retained.",
+  "retained_outputs": [
+    {"path": "runner-oom-linked/summary.json", "sha256": "8d39f31714c057018d079d26a686810e0fc7ef2dc4a8a4c8b998aeff13a1d381"},
+    {"path": "runner-oom-linked/retry.json", "sha256": "b1e8dc3ad80d18d473464d8ab18032c28af0b83474d32427c0d2b86f08e1a5cd"},
+    {"path": "runner-oom-linked/result.json", "sha256": "81a476cbdf9b25ff03398e299884c2bf6adf93ba0b1b6e488af65d356399c7b3"},
+    {"path": "runner-oom-linked/first-request.json", "sha256": "96c60eba70fc5faf7813d091b8d621062dad4072a74bd8dbfcb8ea9863aae439"},
+    {"path": "runner-oom-linked/second-request.json", "sha256": "b3b44ed384e970c2919fcdbbc8aca9db34bc21412d47436d16010595004bc949"}
+  ],
+  "limits": "SIGKILL alone is not an OOM diagnosis; the independent cgroup counter supplies that evidence here. No released-model accuracy, daemon-reboot or external delivery claim."
+}

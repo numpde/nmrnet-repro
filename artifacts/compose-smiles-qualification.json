@@ -1,0 +1,38 @@
+{
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "af7406412dacef16fe3f5a72bca29deee008dd83",
+  "command": "make test/integration/provider/deployment/smiles",
+  "scope": "Installed seven-role Compose path, local signed API and scripted interpretation; actual RDKit generation and released fold-0 CPU inference. No live model, external API, GUI, independent geometry or shift-accuracy claim.",
+  "deployment": "qualification-SkBASeQ7",
+  "bundle": "generation-soFUD4B8",
+  "images": {
+    "controller": "sha256:714b70d96b59553de71ac0b76ce541dd0f8ec4c009c4d6514ad05290193418e4",
+    "geometry": "sha256:e37044fe1ef38401e0669da45f8a48e08c8aba004cf7e0a7657f3ec4c3570ff1",
+    "prediction": "sha256:9493277a9733125608315a90d2017516110424bbff75a015641dec7e56226071"
+  },
+  "scientific_fixture": {
+    "path": "../tests/fixtures/preparation/smiles.json",
+    "sha256": "3528754347d039b959f0453ddfa1adc19c6e50a826206556b2ec0bde6bbe5be0",
+    "case": "normative/implicit_hydrogens",
+    "requested_conformers": 2,
+    "request_rationale": "Reuse the existing RuntimePeers SMILES/count request, with the fixture's unchanged source atom and hydrogen-parent facts. The fixture's single-conformer count is not the count requested by this connection.",
+    "observed_conformers": 2,
+    "predictions": {"H": 6, "C": 2},
+    "checks": "Actual distinct conformer IDs; source C/Cl order and three H parents; finite angstrom coordinates; exact request digest and binary32 projection; complete finite H/C output population.",
+    "accuracy": "No coordinate or shift expectations were regenerated or compared. The existing four-reference numerical qualification remains separately scoped."
+  },
+  "final_peer_calls": {"model": 1, "start": 1, "complete": 1, "download": 0, "hello": 17},
+  "restart_scope": "One down/up/repeated-up/down sequence added no interpretation, Attempt start or completion. Final fixed-field log projections show one generator operation and one prediction operation; the reader projection is empty.",
+  "native_retirement": "Both scientific replies preceded owner-session closure, child reap and scratch release. Observed child return code -15 after owner closure is not a failed prediction.",
+  "native_projection_source": "tools/compose_runner_events.sh at source_revision; bounded Docker logs remain in their containers, and only fixed lifecycle fields are retained here. This projection is not a lifecycle authority.",
+  "resource_observation": "Prediction cgroup cumulative memory.peak 2953105408 bytes under its 4294967296-byte ceiling; generator peak 84967424 bytes under 536870912. These are observed cumulative snapshots, not an accuracy result.",
+  "diagnostics": "One initial provider process-status query returned client status 1 before readiness subsequently succeeded; its original protected Engine receipt remains retained. All seven final containers were observed stopped; proxy exit 143 and native supervisor exit 0 do not change durable Attempt outcomes.",
+  "retained_outputs": [
+    {"path": "compose-runner/smiles/result.json", "sha256": "c81c41667f4b110db35732bc9523ea7e21587cc92e6b6fadb7f9a0dce098ca93"},
+    {"path": "compose-runner/smiles/completed-receipt.json", "sha256": "fc8e1048fe4f350d8e0a1cba42c05c6e290678dd554b63077829f62932ffebe7"},
+    {"path": "compose-runner/smiles/peer-receipt.json", "sha256": "ec3b27ce92670f40b531a7d5c660de7bbef5b008ecf74723ac93c13c6726b478"},
+    {"path": "compose-runner/smiles/prediction.events", "sha256": "ee9b3e62c246869b3d5d4d978c6804a31a91312a2f4b0f6a63e92326921377df"},
+    {"path": "compose-runner/smiles/reader.events", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"path": "compose-runner/smiles/smiles.events", "sha256": "aff2de6438bf47f68749a07f32c19913837dc298fb725ac75c23d20d0aa40143"}
+  ]
+}
