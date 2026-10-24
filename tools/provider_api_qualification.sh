@@ -258,6 +258,12 @@ api_witness_existing_pasted() {
     local -a provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py
         --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT"
         --user-id "$NMRNET_USER_ID_INPUT" --readback-seconds 900 --process-seconds 960 --case-kind pasted)
+    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+        provider_host_path "$NMRNET_JOB_RECEIPT_INPUT" || return $?
+        [[ -f $NMRNET_JOB_RECEIPT_INPUT && ! -L $NMRNET_JOB_RECEIPT_INPUT ]] || return 2
+        provider_host_grants+=(--mount "type=bind,src=$NMRNET_JOB_RECEIPT_INPUT,dst=/input/job-receipt.json,readonly")
+        provider_host_argv+=(--job-receipt /input/job-receipt.json)
+    fi
     provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client 980 || return $?
     provider_host_remove client || return $?

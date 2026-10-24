@@ -297,6 +297,8 @@ unexport DEPLOYMENTS
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
 override export NMRNET_DELIVERY_DEPLOYMENTS_INPUT := $(if $(filter command line,$(origin DEPLOYMENTS)),$(value DEPLOYMENTS))
 unexport UPLOAD_RECEIPT
+unexport JOB_RECEIPT
+override export NMRNET_JOB_RECEIPT_INPUT := $(if $(filter command line,$(origin JOB_RECEIPT)),$(value JOB_RECEIPT))
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
 unexport API_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
@@ -383,7 +385,7 @@ help:
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
 		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.html for required selectors.' \
-		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job to the admitted deployment; create only its finite public client (opt-in).' \
+		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job; JOB_RECEIPT=<created.json> instead reads that original Job only. Fresh OUTPUT required (opt-in).' \
 		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \

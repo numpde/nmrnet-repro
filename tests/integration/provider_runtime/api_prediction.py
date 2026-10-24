@@ -45,6 +45,7 @@ from nmr_api.public.job_upload_set_replace_request import parse_job_upload_set_r
 from nmr_api.public.schema_ids import UPLOAD_PUBLISH_CAPABILITY_RESPONSE_SCHEMA_ID
 from nmr_api.public.upload_create_request import parse_upload_create_request
 from nmr_api.request_ids import require_request_id
+from nmr_api.operations.job_refs import require_job_ref
 from nmr_api.security.project_refs import require_project_ref
 from nmr_api.security.user_credential_artifacts import validate_user_credential_artifacts
 from nmr_api.security.user_ids import UserAuthorityRefs
@@ -909,6 +910,7 @@ def main():
     parser.add_argument("--readback-seconds", required=True, type=int)
     parser.add_argument("--process-seconds", required=True, type=int)
     parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "smiles-multiple", "upload", "sdf-zip"))
+    parser.add_argument("--job-receipt", type=Path, help="Read back this original Job only; never create, select or open a Job")
     parser.add_argument(
         "--upload-receipt",
         type=Path,
@@ -957,7 +959,16 @@ def main():
         frozen = Path(scratch) / "signing.private.json"
         frozen.write_bytes(artifacts["signing.private.json"])
         client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
-        receipt = submit(client, case, case_kind=args.case_kind, upload_receipt=args.upload_receipt)
+        if args.job_receipt is None:
+            receipt = submit(client, case, case_kind=args.case_kind, upload_receipt=args.upload_receipt)
+        else:
+            with args.job_receipt.open("rb") as stream:
+                raw = stream.read(65537)
+            require(len(raw) <= 65536, "Original Job receipt exceeds the readback ceiling")
+            receipt = decode_strict_json(raw.decode("utf-8"))
+            require(isinstance(receipt, dict) and receipt.get("project_ref") == project_ref,
+                    "Original Job receipt must name the selected project")
+            require_job_ref("Original Job receipt job_ref", receipt.get("job_ref"))
         receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind, prediction_image_id=identity["prediction_image_id"])
         (output / "passed.json").write_text(
             json.dumps(
