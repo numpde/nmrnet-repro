@@ -1,0 +1,15 @@
+# Inactive reference: the deployment loader reads provider.toml only, not this file.
+# To enable Qwen again, restore this endpoint stanza under [interpreter] in
+# provider.toml and reinstall the deployment. Renaming this file does not enable it.
+# Disabled by operator instruction after the production witness received HTTP 400;
+# that response did not establish why the endpoint refused the request.
+[[interpreter.endpoints]]
+configuration_id = "qwen3.8-flash-next"
+url = "https://chat.randompile.net/api/chat/completions"
+model = "qwen3.8-flash-next"
+key_file = "/srv/nmrnet/input/qwen.key"
+request_bytes = 65536
+response_bytes = 262144
+exchange_seconds = 25
+retirement_seconds = 5
+reasoning_effort = "medium"

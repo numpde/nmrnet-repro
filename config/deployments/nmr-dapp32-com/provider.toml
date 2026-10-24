@@ -19,17 +19,6 @@ retirement_seconds = 5
 max_turns = 6
 
 [[interpreter.endpoints]]
-configuration_id = "qwen3.8-flash-next"
-url = "https://chat.randompile.net/api/chat/completions"
-model = "qwen3.8-flash-next"
-key_file = "/srv/nmrnet/input/qwen.key"
-request_bytes = 65536
-response_bytes = 262144
-exchange_seconds = 25
-retirement_seconds = 5
-reasoning_effort = "medium"
-
-[[interpreter.endpoints]]
 configuration_id = "openai-gpt-5-6-luna"
 url = "https://api.openai.com/v1/chat/completions"
 model = "gpt-5.6-luna"

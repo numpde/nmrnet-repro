@@ -4,6 +4,7 @@
 !/config/deployments/nmr-dapp32-com/
 /config/deployments/nmr-dapp32-com/*
 !/config/deployments/nmr-dapp32-com/provider.toml
+!/config/deployments/nmr-dapp32-com/qwen.toml.disabled
 !/config/deployments/nmr-localhost/
 /config/deployments/nmr-localhost/*
 !/config/deployments/nmr-localhost/provider.toml

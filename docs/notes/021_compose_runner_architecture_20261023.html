@@ -2002,6 +2002,16 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       reconstruct the earlier production server reason. The subsequent operator
       instruction disables Qwen rather than authorizing further availability
       probes; no new API Job or model request was made for this repair.</p>
+    <p><strong>Qwen disabled by operator instruction:</strong> the production
+      definition now retains OpenAI as its sole active endpoint. The original
+      Qwen stanza is preserved in
+      <code>config/deployments/nmr-dapp32-com/qwen.toml.disabled</code> as an explicitly
+      inactive reference. This deployment loader reads only
+      <code>provider.toml</code>; renaming that reference does not activate it.
+      Re-enabling requires restoring its stanza and reinstalling. The observed
+      HTTP 400 does not establish an offline endpoint or its rejection reason.
+      No endpoint-discovery mechanism, availability probe or additional Job is
+      needed for this configuration change. Existing private keys are retained.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
