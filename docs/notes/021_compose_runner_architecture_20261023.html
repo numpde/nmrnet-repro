@@ -32,6 +32,7 @@
       systemd/host-supervisor choice. It retains that record's historical evidence.
       The operator guide now describes the maintained Compose commands.</p>
     <nav aria-label="Record sections"><ul>
+      <li><a href="#shared-delivery">Shared result delivery — design agreed 24 October</a></li>
       <li><a href="#decision">Decision, purpose and completion contract</a></li>
       <li><a href="#current">Initial implementation baseline</a></li>
       <li><a href="#local-api-delivery">Observed real local API delivery</a></li>
@@ -45,6 +46,153 @@
       <li><a href="#principles">U/A review and evolution checks</a></li>
       <li><a href="#sources">Precise sources and adoption rationale</a></li>
     </ul></nav>
+
+    <h2 id="shared-delivery">Shared result delivery — design, 24 October 2026</h2>
+    <p><strong>Design only; not implemented.</strong> Run one delivery service per
+      Docker host, shared by its providers and runners. It owns durable acceptance
+      and API publication of final immutable completion or failure requests.
+      Providers own scientific decisions, execution and cleanup. This replaces
+      provider result-file dumps and completed-payload history; it does not change
+      molecular inputs, prediction, result formatting or the API contract.
+      Earlier implementation and retention descriptions below record the preceding design.</p>
+    <h3>Small deployment and explicit ownership</h3>
+    <p>Use the existing <code>provider-core</code> package for a small delivery
+      daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.
+      It is the sole writer of one SQLite database in a named Docker volume.
+      Copy Magnet's private transactional outbox boundary, including durable
+      commits, but omit its retained confirmed payloads. Reuse core's API signing,
+      request/receipt parsing, effect classification and permitted retry behavior;
+      replace the publisher's current dependency on a producer's full Attempt record.</p>
+    <p>Use SQLite <code>journal_mode=DELETE</code>, <code>synchronous=EXTRA</code>
+      and <code>secure_delete=ON</code>. EXTRA supplies the directory sync for
+      rollback-journal commit durability; secure deletion clears removed content
+      in ordinary database tables. These are built-in settings, not a per-Job
+      vacuum or erasure subsystem. Sources:
+      <a href="https://www.sqlite.org/pragma.html#pragma_synchronous">SQLite commit synchronization</a>
+      and <a href="https://www.sqlite.org/pragma.html#pragma_secure_delete">deleted-content clearing</a>.</p>
+    <p>Give each configured producer its own Unix socket directory, mounted only
+      into that producer and the service. That mount is the handoff capability.
+      Trusted deployment configuration binds the socket to an API origin, expected
+      topology, provider identity, credential and admitted outbound route.
+      Derive those bindings from the existing provider configuration instead of
+      asking operators to maintain a second copy. Producers cannot choose another
+      destination or signing identity, and do not mount the delivery database.
+      Reconfiguration must not retarget queued bodies to another API/provider;
+      a different identity gets a separate binding. Credential rotation may keep
+      the same API/provider identity.
+      Native prediction children continue returning results to their provider.</p>
+    <h3>Handoff and ordinary delivery</h3>
+    <ol>
+      <li>The provider finishes its existing result-acceptance decision and encodes
+        the final API request once. It submits those exact bytes to its socket.
+        Delivery does not wait for native cleanup; cleanup still gates safe reuse.</li>
+      <li>The service admits the complete/fail request using existing core parsers,
+        enforces its byte/item limits and commits the immutable body before
+        acknowledging acceptance. The key is API origin, provider and Attempt;
+        complete and fail are competing choices for that same key.</li>
+      <li>A repeated outstanding submission with the same operation/body is
+        acknowledged without creating another item. A conflicting outstanding
+        submission is refused without replacing the original.</li>
+      <li>After the durable acknowledgement, the provider drops its body and the
+        service alone owns publication. It signs each API exchange afresh while
+        preserving the submitted body. Existing API rules decide when exact replay
+        or reconciliation is permitted; a timeout alone grants neither.</li>
+      <li>After validating the matching API receipt, delete the queue row and body
+        in one transaction. Keep no completed-result archive, permanent tombstone
+        or second producer acknowledgement protocol. Subsequent duplicate
+        submissions can be queued again: the API remains the final authority for
+        already-completed replay and conflict.</li>
+    </ol>
+    <p>The client operations are <code>submit</code>, <code>status</code> for a
+      selected Attempt, and a scoped <code>pending</code> inventory with its capacity
+      summary. Submission carries the operation, Job and Attempt references and exact request bytes; routing
+      comes from the socket binding. Status/inventory return identity, disposition,
+      body digest and safe delay/failure facts, never molecular payloads.
+      The Job reference supplies the existing API read/reconciliation binding.
+      There is no arbitrary HTTP forwarding or model-specific plugin interface.</p>
+    <h3>Retention, capacity and failures</h3>
+    <p>The database holds only outstanding request bodies, their binding/Attempt
+      and Job identity, and retry or held-disposition facts. It does not copy raw Job text,
+      Uploads, preparation arrays, unrounded scientific evidence or transcripts.
+      Bodies may themselves contain the coordinates and shifts selected for the
+      public result. Normal confirmation removes them; an unresolved permanent
+      refusal retains its body for an explicit operator disposition.</p>
+    <p>Allocate the host's byte/item budget among providers and bound send
+      concurrency. Check capacity before additional computation; an unaccepted
+      result stops further admission and remains bounded by producer concurrency.
+      Enqueue is the authoritative capacity check, not a promise made by an earlier
+      status read. Queue-full or unavailable storage returns no acceptance
+      acknowledgement. There is no direct-send fallback or silent result eviction.
+      Pace permitted retries with capped jittered backoff and request deadlines.
+      A held item must not block other items; one provider's outage must not occupy
+      all delivery slots or consume another provider's capacity.</p>
+    <table><thead><tr><th>Event</th><th>Practical behavior</th></tr></thead><tbody>
+      <tr><td>Enqueue reply is lost</td><td>The live producer retries identical bytes.
+        The existing row deduplicates them, or API replay resolves a later resubmission.</td></tr>
+      <tr><td>API accepts, reply is lost</td><td>Keep the original body and uncertainty;
+        follow the existing exact-request replay/reconciliation policy. Never recompute.</td></tr>
+      <tr><td>Delivery process restarts</td><td>Reopen committed outstanding rows and
+        resume their owned delivery. A crash before local deletion can cause safe API replay.</td></tr>
+      <tr><td>Producer restarts</td><td>Consult scoped relay ownership and API state.
+        Positively relay-owned Attempts do not require another prediction or block
+        unrelated admission. An API terminal read establishes lifecycle closure,
+        not proof that a particular candidate body committed.</td></tr>
+      <tr><td>Producer dies before durable handoff</td><td>A result held only in its
+        memory can be lost. Missing queue state never authorizes scientific replay;
+        the producer owns interrupted-Attempt reconciliation and native cleanup.</td></tr>
+    </tbody></table>
+    <p>Keep any necessary execution checkpoint with the producer in managed volume
+      storage, without result payloads or completed history. One concrete need is
+      the original small START request/key when a process dies after sending START
+      but before receiving its reply. Retain only current unresolved control identity
+      and entry/handoff facts needed by actual restart code; obtain remote facts
+      from the API where it already owns them. The delivery service does not become
+      an execution journal or infer that missing state permits another execution.</p>
+    <p>Use Docker restart policy and bounded Docker logs. Status/logs identify the
+      provider, Attempt, queue age, retry delay, safe cause and required action;
+      distinguish service availability, durable enqueue and API acceptance.
+      Permanent authentication/configuration failures pause the affected binding
+      with a useful diagnosis. A local volume covers container/process replacement,
+      not loss of the host disk; no replication or host failover is proposed.</p>
+    <h3>Implementation handoff</h3>
+    <p>Proposed Make flow below is not available yet. Build from the existing shared
+      wheelhouse, install the host's admitted bindings, then start the service.
+      Each successful command should print its next useful action. Provider setup
+      mounts its own endpoint and preserves the selected host interface where needed.</p>
+    <pre><code>make delivery/image/build WHEELHOUSE=/data/cache/wheelhouse
+make delivery/install CONFIG=config/delivery/host.toml
+make delivery/up
+make delivery/status
+make delivery/logs
+make delivery/down</code></pre>
+    <p>For a permanently held item, status must explain the refusal and the exact
+      next action. A proposed <code>make delivery/discard PROVIDER=&lt;binding&gt;
+      ATTEMPT=&lt;reference&gt;</code> removes only the explicitly selected held item
+      when the operator chooses to abandon delivery; it does not claim API acceptance.</p>
+    <p>Cutover has one delivery owner: stop the old publisher, preserve its current
+      records, and import already-selected pending terminal bodies unchanged.
+      Verify durable service acceptance before deleting displaced result files.
+      Move only necessary producer control metadata to its managed store; remove
+      completed scientific payload archives and the displaced file-writing paths.
+      Preserve unresolved non-delivery obligations for their producer's recovery
+      owner. Do not retain a permanent dual-write or fallback implementation.
+      Existing intentional qualification evidence remains a separate repository record.</p>
+    <p>Use a few connected checks at the changed boundary: lose the enqueue reply;
+      lose the API reply and restart delivery; keep a second provider progressing
+      while the first backs off; exercise queue-full refusal; and confirm accepted
+      payload removal and absence from logs. Verify unchanged bytes and one
+      scientific execution, using controlled API fixtures. No scientific benchmark,
+      new real Job or exhaustive fault matrix is needed to design this service.</p>
+    <p>Sources: core at
+      <a href="https://github.com/numpde/nmrnet-repro/blob/8e145752ca3d5d667f2e1ce59c9bbeace398ce11/packages/provider-core/src/provider_core/publication.py">publication ownership and retry</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/8e145752ca3d5d667f2e1ce59c9bbeace398ce11/packages/provider-core/src/provider_core/attempt_request.py">exact request parsing</a> and
+      <a href="https://github.com/numpde/nmrnet-repro/blob/8e145752ca3d5d667f2e1ce59c9bbeace398ce11/packages/provider-core/src/provider_core/attempt_response.py">matching receipts</a>;
+      Magnet at
+      <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/magnet_provider/terminal_outbox.py#L71-L126">private SQLite ownership and commits</a>,
+      <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/magnet_provider/terminal_outbox.py#L315-L359">retained requests and confirmation</a> and
+      <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/compose/provider.yml#L28-L64">Docker volume and logging</a>.
+      Durable handoff, payload deletion, provider isolation and independent cleanup
+      are adaptations agreed here; Magnet's retained confirmed rows are not copied.</p>
 
     <h2 id="decision">Decision, purpose and completion contract</h2>
     <p>The product remains a provider of atom-indexed H/C chemical shifts from
