@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from provider_core.attempt_record import RecoveryScope, StartPending, TerminalOperation
+from provider_core.attempt_response import AttemptObservation
 from provider_core.delivery_store import DeliveryOutcome
 from provider_core.producer_checkpoint import (
     AcknowledgedCheckpoint, DeliveryAcceptedCheckpoint, EnteredCheckpoint,
@@ -225,9 +226,25 @@ class _CheckpointDatabase:
     def clear_after_cleanup(self, accepted):
         if type(accepted) is not DeliveryAcceptedCheckpoint:
             raise CheckpointRefused("Clearing a handed-off checkpoint requires its accepted delivery identity and caller-confirmed cleanup.")
+        self._clear(accepted)
+
+    def clear_terminal_start_after_cleanup(self, acknowledged):
+        if type(acknowledged) is not AcknowledgedCheckpoint or acknowledged.admission.state == "in_progress":
+            raise CheckpointRefused("Clearing a terminal START replay requires its actual terminal admission and caller-confirmed cleanup.")
+        self._clear(acknowledged)
+
+    def clear_observed_after_cleanup(self, checkpoint, observation):
+        acknowledged = checkpoint_acknowledgement(checkpoint)
+        if (type(observation) is not AttemptObservation or observation.state == "in_progress"
+                or observation.execution_attempt_ref != acknowledged.admission.execution_attempt_ref
+                or observation.job_ref != acknowledged.start.input.job_ref):
+            raise CheckpointRefused("Clearing interrupted control requires its matching terminal API observation and caller-confirmed cleanup.")
+        self._clear(checkpoint)
+
+    def _clear(self, checkpoint):
         with self._transaction():
-            self._require(accepted)
-            self._db.execute("DELETE FROM checkpoints WHERE start_key=?", (_key(accepted),))
+            self._require(checkpoint)
+            self._db.execute("DELETE FROM checkpoints WHERE start_key=?", (_key(checkpoint),))
 
     def close(self):
         if self._db is not None:
@@ -318,6 +335,12 @@ class CheckpointStore:
 
     async def clear_after_cleanup(self, accepted, *, owner=None):
         return await self._run("clear retired producer checkpoint", self._database.clear_after_cleanup, accepted, owner=owner)
+
+    async def clear_terminal_start_after_cleanup(self, acknowledged, *, owner=None):
+        return await self._run("clear terminal START checkpoint", self._database.clear_terminal_start_after_cleanup, acknowledged, owner=owner)
+
+    async def clear_observed_after_cleanup(self, checkpoint, observation, *, owner=None):
+        return await self._run("clear observed terminal checkpoint", self._database.clear_observed_after_cleanup, checkpoint, observation, owner=owner)
 
     async def settle(self, *, owner=None):
         if self._pending is None or self._pending.owner is not owner:

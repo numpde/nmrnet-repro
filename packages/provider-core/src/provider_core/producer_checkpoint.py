@@ -17,7 +17,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from provider_core.attempt_record import (
-    MAX_PENDING_RECORD_BYTES, ProtectedEvidence, StartPending, SuppressionReason, TerminalOperation,
+    MAX_PENDING_RECORD_BYTES, ProtectedEvidence, RecoveryScope, StartPending, SuppressionReason, TerminalOperation,
     _admission_bytes, _decode_pending, _encode_pending,
 )
 from provider_core.attempt_request import _scalar_text
@@ -28,6 +28,14 @@ from provider_core.response_json import read_document
 # digest/size and fixed state labels; there is no future result-body reservation.
 MAX_CHECKPOINT_BYTES = MAX_PENDING_RECORD_BYTES + ATTEMPT_RESPONSE_BYTES + 16384
 SCHEMA = "provider_core.producer_checkpoint.v1"
+
+
+def checkpoint_volume_name(scope):
+    """Keep producer control private to its original API/provider/lane/generation."""
+    if type(scope) is not RecoveryScope:
+        raise ValueError("Checkpoint volume naming requires the admitted recovery scope.")
+    raw = json.dumps(asdict(scope), sort_keys=True, separators=(",", ":")).encode()
+    return "nmr-api-delivery-control-" + hashlib.sha256(raw).hexdigest()
 
 
 def _require_digest(value):

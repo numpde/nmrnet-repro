@@ -31,8 +31,8 @@ from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderPro
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.diagnostics import write_stderr as _write_stderr, write_notice as _write_api_notice
-from provider_core.attempt_store import AttemptStore
-from provider_core.controller import StartRecovery, TerminalRecovery
+from provider_core.checkpoint_store import CheckpointStore
+from provider_core.controller import StartRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.process_status import ProcessStatus
@@ -361,7 +361,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         process_status.refresh("starting")
         status_task = asyncio.create_task(refresh_status(), name="process-readiness")
         config.lifecycle.store_root.mkdir(mode=0o700, exist_ok=True)
-        store = AttemptStore(
+        store = CheckpointStore(
             config.lifecycle.store_root,
             scope=config.lifecycle.scope,
             limits=config.lifecycle.store_limits,
@@ -434,12 +434,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 ),
                 lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_start_recovered"}),
             ),
-            terminal_recovery=TerminalRecovery(
-                config.service.policy.api_backoff_max_seconds,
-                lambda attempt, failure, seconds: report_attempt_notice(
-                    attempt, failure, {"event": "api_terminal_retry", "retry_seconds": seconds}
-                ),
-                lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_terminal_recovered"}),
+            on_delivery_retry=lambda attempt, failure, seconds: report_attempt_notice(
+                attempt, failure, {"event": "delivery_handoff_retry", "retry_seconds": seconds}
             ),
         )
         service = ProviderService(
@@ -449,7 +445,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             open_attempt=factory,
             claims=factory.claims,
             retire_native=factory.prove_previous_retired,
-            terminal_recovery=factory.terminal_recovery,
             current_announcement=lambda: config.service.announcement,
             policy=config.service.policy,
             on_started=startup_accepted,

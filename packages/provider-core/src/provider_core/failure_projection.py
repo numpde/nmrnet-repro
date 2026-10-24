@@ -15,15 +15,7 @@ require_container()
 
 from provider_core.api import ApiFailure
 from provider_core.api_config import ApiConfigurationRejected
-from provider_core.attempt_record import (
-    AcknowledgedAttempt,
-    TerminalConfirmed,
-    TerminalHeld,
-    TerminalReadNotVisible,
-    TerminalReadRequired,
-    TerminalStateObserved,
-)
-from provider_core.attempt_store import StoreFailed, StoreRefused
+from provider_core.attempt_record import AcknowledgedAttempt
 from provider_core.chat import ChatFailed
 from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
 from provider_core.controller import ControllerFailed, ControllerRefused
@@ -42,8 +34,7 @@ from provider_core.execution import (
     ObservationGapExpired,
 )
 from provider_core.ownership import OwnershipRefused
-from provider_core.publication import PublicationFailed, PublicationRefused
-from provider_core.recovery import RecoveryFailed, RecoveryRefused
+from provider_core.recovery import ObservedAttempt, RecoveryFailed, RecoveryRefused
 from provider_core.runner_protocol import LifecycleRejected, RetirementUnconfirmed
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.startup_file import StartupFileRejected
@@ -69,14 +60,12 @@ def owned_relationships(error):
     if kind in (
         CredentialRejected,
         ApiFailure,
-        StoreFailed,
         CheckpointFailed,
         ControllerFailed,
         ExecutionFailed,
         ObservationGapExpired,
         ConditionRecoveryExpired,
         RecoveryFailed,
-        PublicationFailed,
         StartFailed,
         ChatFailed,
         UploadFailed,
@@ -93,7 +82,6 @@ def owned_relationships(error):
     ):
         yield "owned cause", error.cause
     if kind in (
-        StoreFailed,
         ControllerFailed,
         ExecutionFailed,
         RecoveryFailed,
@@ -114,10 +102,10 @@ def owned_relationships(error):
         yield "analysis operation interruption", error.operation_interruption
         yield "first condition failure", error.condition_failure
         yield "latest condition failure", error.latest_condition_failure
-    if kind in (PublicationFailed, StartFailed):
+    if kind is StartFailed:
         for cause in error.settlement_failures:
             yield "independent settlement", cause
-    if kind in (ExecutionFailed, PublicationFailed, StartFailed, RecoveryFailed, DeliveryWorkerFailed):
+    if kind in (ExecutionFailed, StartFailed, RecoveryFailed, DeliveryWorkerFailed):
         yield "API failure", error.api_failure
     if kind is ExchangeFailed:
         yield "transport primary", error.primary
@@ -139,8 +127,6 @@ def owned_details(error):
     if kind not in (
         CredentialRejected,
         ApiFailure,
-        StoreFailed,
-        StoreRefused,
         CheckpointFailed,
         CheckpointRefused,
         ControllerFailed,
@@ -151,8 +137,6 @@ def owned_details(error):
         ObservationGapExpired,
         ConditionRecoveryExpired,
         OwnershipRefused,
-        PublicationFailed,
-        PublicationRefused,
         StartFailed,
         StartRefused,
         RecoveryFailed,
@@ -198,15 +182,6 @@ def owned_details(error):
             issuance_may_have_committed=error.issuance_may_have_committed,
             attempt_mutation_may_have_committed=error.attempt_mutation_may_have_committed,
         )
-    if kind is StoreFailed:
-        details["record_visible"] = error.record_visible
-        if error.history_directory_synced is not None:
-            details.update(
-                removed_history_records=error.removed_history_records,
-                uncertain_history_record=error.uncertain_history_record,
-                history_directory_synced=error.history_directory_synced,
-                history_trim_phase=error.history_trim_phase,
-            )
     if kind is ExecutionFailed and type(error.attempt) is AcknowledgedAttempt:
         details.update(
             job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref,
@@ -246,21 +221,11 @@ def owned_details(error):
         details["acknowledgement_received"] = error.acknowledgement is not None
         if error.acknowledgement is not None:
             details["observed_attempt_state"] = error.acknowledgement.admission.state
-    if kind is PublicationFailed:
-        # A held conflict is a refusal, not a terminal commit receipt. None of
-        # these received/in-memory facts establishes the following write's durability.
-        details["publication_observation_received"] = error.outcome is not None
-        details["terminal_receipt_received"] = type(error.outcome) is TerminalConfirmed
-        if type(error.outcome) in (TerminalConfirmed, TerminalHeld, TerminalReadRequired):
-            details["publication_outcome_kind"] = type(error.outcome).__name__
-            details["terminal_operation"] = error.outcome.pending.operation.value
     if kind is RecoveryFailed:
-        details["terminal_readback_in_memory"] = error.observed_record is not None
-        if type(error.observed_record) is TerminalStateObserved:
+        details["attempt_observation_received"] = type(error.observed_record) is ObservedAttempt
+        if type(error.observed_record) is ObservedAttempt:
             details.update(
                 observed_attempt_state=error.observed_record.observation.state,
                 observed_job_state=error.observed_record.observation.job_state,
             )
-        elif type(error.observed_record) is TerminalReadNotVisible:
-            details.update(terminal_read_not_visible=True, request_id=error.observed_record.request_id)
     return details

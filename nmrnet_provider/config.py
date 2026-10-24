@@ -26,9 +26,11 @@ from provider_core.api_config import (
     ApiConfigurationRejected, ApiSettings, HttpsSettings,
     api_settings, https_settings, require_api_fields,
 )
-from provider_core.attempt_files import StoreLimits
-from provider_core.attempt_record import MAX_RECORD_BYTES, RecoveryScope
-from provider_core.attempt_store import require_store_settings
+from provider_core.attempt_record import RecoveryScope
+from provider_core.checkpoint_store import CheckpointLimits
+from provider_core.delivery_client import DeliveryEndpoint
+from provider_core.delivery_worker import require_delivery_retry_settings
+from provider_core.transport import _positive_seconds
 from provider_core.chat import ChatEndpointSpec, require_chat_limits
 from provider_core.conversation import require_turn_limit
 from provider_core.execution import require_execution_settings, require_observation_gap
@@ -98,7 +100,7 @@ class PreparationSettings:
 class LifecycleSettings:
     scope: RecoveryScope
     store_root: Path
-    store_limits: StoreLimits
+    store_limits: CheckpointLimits
     store_seconds: float
     allowed_job_states: frozenset[str]
     poll_seconds: float
@@ -107,9 +109,22 @@ class LifecycleSettings:
 
     def __post_init__(self):
         require_observation_gap(self.observation_gap_seconds)
-        require_store_settings(
-            root=self.store_root, scope=self.scope, limits=self.store_limits, operation_seconds=self.store_seconds
-        )
+        _path(self.store_root, "Producer checkpoint store")
+        _positive_seconds(self.store_seconds)
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class DeliverySettings:
+    endpoint: DeliveryEndpoint
+    request_seconds: float
+    retirement_seconds: float
+    retry_initial_seconds: float
+    retry_max_seconds: float
+
+    def __post_init__(self):
+        _positive_seconds(self.request_seconds)
+        _positive_seconds(self.retirement_seconds)
+        require_delivery_retry_settings(self.retry_initial_seconds, self.retry_max_seconds)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -126,24 +141,8 @@ class ProviderConfig:
     uploads: UploadSettings
     preparation: PreparationSettings
     lifecycle: LifecycleSettings
+    delivery: DeliverySettings
     service: ServiceSettings
-    source_sha256: str
-
-
-@dataclass(frozen=True, slots=True, repr=False)
-class RecoveryInspection:
-    """TOML-declared storage scope, without authenticated API admission."""
-
-    lifecycle: LifecycleSettings
-    source_sha256: str
-
-
-@dataclass(frozen=True, slots=True, repr=False)
-class RecoveryConfig:
-    """Only the authenticated API and existing store policies used by recovery."""
-
-    api: ApiSettings
-    lifecycle: LifecycleSettings
     source_sha256: str
 
 
@@ -165,6 +164,7 @@ def _read_provider_config(path, read_file):
             _uploads(document["uploads"], read_file),
             _preparation(document["preparation"]),
             _lifecycle(document["lifecycle"], api.identity.origin, provider_ref),
+            _delivery(document["delivery"], api.identity.origin, provider_ref),
             _service(document["service"]),
             hashlib.sha256(raw).hexdigest(),
         )
@@ -185,71 +185,10 @@ def _configuration_document(path, read_file):
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
-    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "service"}, "configuration")
+    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service"}, "configuration")
     if document["schema_id"] != "nmrnet.provider.runtime_config.v1":
         raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v1.")
     return raw, document
-
-
-def load_recovery_inspection(path):
-    """Admit the declared store scope without reading credentials or trust files."""
-    return _read_recovery_inspection(path, read_startup_file)
-
-
-def _read_recovery_inspection(path, read_file):
-    raw, document = _configuration_document(path, read_file)
-    _api_fields(document["api"])
-    try:
-        lifecycle = _lifecycle(document["lifecycle"], document["api"]["origin"], document["api"]["provider_ref"])
-        return RecoveryInspection(lifecycle, hashlib.sha256(raw).hexdigest())
-    except ConfigurationRejected:
-        raise
-    except OverflowError as cause:
-        raise ConfigurationRejected(
-            "configured time limits must fit the runtime's finite seconds representation.", cause=cause
-        ) from None
-    except ValueError as cause:
-        raise ConfigurationRejected(str(cause), cause=cause) from None
-
-
-def _read_recovery_config(path, read_file):
-    raw, document = _configuration_document(path, read_file)
-    try:
-        api, provider_ref = _api(document["api"], read_file)
-        lifecycle = _lifecycle(document["lifecycle"], api.identity.origin, provider_ref)
-        return RecoveryConfig(api, lifecycle, hashlib.sha256(raw).hexdigest())
-    except ConfigurationRejected:
-        raise
-    except OverflowError as cause:
-        raise ConfigurationRejected(
-            "configured time limits must fit the runtime's finite seconds representation.", cause=cause
-        ) from None
-    except ValueError as cause:
-        raise ConfigurationRejected(str(cause), cause=cause) from None
-
-
-def load_recovery_config(path):
-    """Read only this TOML, API signing artifact and optional API trust file."""
-    return _read_recovery_config(path, read_startup_file)
-
-
-def recovery_input_paths(path):
-    """Project declared API-only file grants; this is not credential admission.
-
-    The contained host helper can read only TOML during this first pass. A later
-    capture must re-admit the same bytes and each explicitly granted file.
-    """
-    return _read_recovery_input_paths(path, read_startup_file)
-
-
-def _read_recovery_input_paths(path, read_file):
-    _raw, document = _configuration_document(path, read_file)
-    table = document["api"]
-    _api_fields(table)
-    paths = [_path(path, "configuration"), _path(table["credential_file"], "API signing credential")]
-    if "ca_file" in table:
-        paths.append(_path(table["ca_file"], "API CA"))
-    return tuple(dict.fromkeys(paths))
 
 
 def _fields(document, required, label, optional=frozenset()):
@@ -386,8 +325,7 @@ def _lifecycle(table, api_origin, provider_ref):
             "generation_id",
             "store_root",
             "maximum_records",
-            "confirmed_history_records",
-            "filesystem_reserve_bytes",
+            "maximum_checkpoint_bytes",
             "store_seconds",
             "allowed_job_states",
             "poll_seconds",
@@ -406,17 +344,21 @@ def _lifecycle(table, api_origin, provider_ref):
     return LifecycleSettings(
         RecoveryScope(api_origin, provider_ref, table["consumer_id"], table["generation_id"]),
         _path(table["store_root"], "Attempt store"),
-        StoreLimits(
-            table["maximum_records"],
-            MAX_RECORD_BYTES,
-            table["filesystem_reserve_bytes"],
-            confirmed_history_records=table["confirmed_history_records"],
-        ),
+        CheckpointLimits(table["maximum_records"], table["maximum_checkpoint_bytes"]),
         table["store_seconds"],
         states,
         table["poll_seconds"],
         table["task_settle_seconds"],
         table["observation_gap_seconds"],
+    )
+
+
+def _delivery(table, api_origin, provider_ref):
+    _fields(table, {"socket_path", "request_seconds", "retirement_seconds", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
+    return DeliverySettings(
+        DeliveryEndpoint(api_origin, provider_ref, _path(table["socket_path"], "Delivery socket")),
+        table["request_seconds"], table["retirement_seconds"],
+        table["retry_initial_seconds"], table["retry_max_seconds"],
     )
 
 

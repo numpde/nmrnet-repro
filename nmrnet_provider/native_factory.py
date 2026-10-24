@@ -22,7 +22,7 @@ from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
 from nmrnet_provider.worker_protocol import require_seconds
-from provider_core.controller import StartRecovery, TerminalRecovery
+from provider_core.controller import StartRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
@@ -74,7 +74,7 @@ class NativeAttemptFactory:
         on_prediction_retry,
         on_operator_notice,
         start_recovery,
-        terminal_recovery,
+        on_delivery_retry,
     ):
         if type(policy) is not NativePolicy:
             raise ValueError("Native factory requires explicit admitted allocation and channel budgets.")
@@ -86,8 +86,8 @@ class NativeAttemptFactory:
             raise ValueError("Native factory requires bounded condition recovery and protected diagnostic observers.")
         if type(start_recovery) is not StartRecovery:
             raise ValueError("Native factory requires bounded exact START recovery and protected diagnostic observers.")
-        if type(terminal_recovery) is not TerminalRecovery:
-            raise ValueError("Native factory requires bounded exact terminal recovery and protected diagnostic observers.")
+        if not callable(on_delivery_retry):
+            raise ValueError("Native factory requires a protected delivery retry observer.")
         if not callable(on_unconfirmed_phase_progress):
             raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
         if not callable(on_prediction_retry):
@@ -102,7 +102,7 @@ class NativeAttemptFactory:
             raise ValueError("Native factory requires a protected operator diagnostic observer.")
         self.on_operator_notice = on_operator_notice
         self.start_recovery = start_recovery
-        self.terminal_recovery = terminal_recovery
+        self.on_delivery_retry = on_delivery_retry
         self.allocations, self.clients = [], {}
         self.last_failure = None
         self._operation = None
@@ -130,7 +130,7 @@ class NativeAttemptFactory:
                 condition_recovery=self.condition_recovery,
                 on_unconfirmed_phase_progress=self.on_unconfirmed_phase_progress,
                 start_recovery=self.start_recovery,
-                terminal_recovery=self.terminal_recovery,
+                on_delivery_retry=self.on_delivery_retry,
             )
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures = await self._settle_store()

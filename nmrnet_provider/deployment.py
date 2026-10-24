@@ -17,6 +17,8 @@ import math
 import re
 
 from nmrnet_provider.config import ConfigurationRejected
+from provider_core.delivery_client import delivery_volume_name
+from provider_core.producer_checkpoint import checkpoint_volume_name
 from nmrnet_provider.process import _declared_execution
 from nmrnet_provider.startup_capture import _bind_path, startup_authorities, prediction_lifetime_seconds
 from tools.provider_proxy import ServicePolicy, ServiceRefused
@@ -170,9 +172,12 @@ def admit_container(record, *, role, original_plan, image):
         missing = len(expected_environment.keys() - observed_environment.keys())
         changed = sum(observed_environment[name] != expected_environment[name] for name in observed_environment.keys() & expected_environment.keys())
         raise ConfigurationRejected(f"{role} Config.Env differs from image defaults and plan overrides: {extra} extra, {missing} missing, {changed} changed assignments.")
-    health = service["healthcheck"]
-    expected_health = {"Test": health["test"], "Interval": 5_000_000_000, "Timeout": 2_000_000_000,
-                       "Retries": 3, "StartPeriod": int(health["start_period"][:-1]) * 1_000_000_000}
+    health = service.get("healthcheck")
+    if health is None:
+        expected_health = defaults.get("Healthcheck")
+    else:
+        expected_health = {"Test": health["test"], "Interval": 5_000_000_000, "Timeout": 2_000_000_000,
+                           "Retries": 3, "StartPeriod": int(health["start_period"][:-1]) * 1_000_000_000}
     if _stop_signal(actual) != _stop_signal(defaults) or actual.get("Healthcheck") != expected_health:
         raise ConfigurationRejected("deployment container signal or healthcheck adds an unplanned execution path.")
     for name, value in (("ReadonlyRootfs", True), ("Privileged", False), ("Init", True)):
@@ -180,11 +185,21 @@ def admit_container(record, *, role, original_plan, image):
             _refuse_grant(role, "HostConfig." + name, value, host.get(name))
     if host.get("CapDrop") != ["ALL"]:
         _refuse_grant(role, "HostConfig.CapDrop (ALL required)", ["ALL"], host.get("CapDrop"))
-    if host.get("CapAdd") not in (None, []):
-        _refuse_grant(role, "HostConfig.CapAdd", [], host.get("CapAdd"))
+    expected_caps = service.get("cap_add", [])
+    observed_caps = host.get("CapAdd")
+    if observed_caps is None:
+        observed_caps = []
+    if observed_caps != expected_caps:
+        _refuse_grant(role, "HostConfig.CapAdd", expected_caps, host.get("CapAdd"))
     if host.get("SecurityOpt") not in (["no-new-privileges:true"], ["no-new-privileges"]):
         _refuse_grant(role, "HostConfig.SecurityOpt (no-new-privileges required)", ["no-new-privileges:true"], host.get("SecurityOpt"))
-    for name in ("Devices", "DeviceRequests", "DeviceCgroupRules", "GroupAdd", "ExtraHosts", "Dns", "DnsOptions", "DnsSearch", "Links", "VolumesFrom"):
+    expected_groups = [str(value) for value in service.get("group_add", [])]
+    if expected_groups:
+        if host.get("GroupAdd") != expected_groups:
+            _refuse_grant(role, "HostConfig.GroupAdd", expected_groups, host.get("GroupAdd"))
+    elif host.get("GroupAdd") not in (None, []):
+        _refuse_grant(role, "HostConfig.GroupAdd", [], host.get("GroupAdd"))
+    for name in ("Devices", "DeviceRequests", "DeviceCgroupRules", "ExtraHosts", "Dns", "DnsOptions", "DnsSearch", "Links", "VolumesFrom"):
         # Docker serializes empty optional list grants as either null or [].
         # Any populated value is an extra grant; no image default supplies one.
         if host.get(name) not in (None, []):
@@ -217,18 +232,29 @@ def admit_container(record, *, role, original_plan, image):
         raise ConfigurationRejected("deployment container restart policy differs from its original plan.")
     if host.get("LogConfig") != {"Type": service["logging"]["driver"], "Config": service["logging"]["options"]}:
         raise ConfigurationRejected("deployment container log delivery or rotation differs from its bounded Docker log policy.")
-    expected_binds = {grant["target"]: grant for grant in service["volumes"]}
+    expected_binds = {grant["target"]: grant for grant in service["volumes"] if grant["type"] == "bind"}
+    expected_volumes = {grant["target"]: grant for grant in service["volumes"] if grant["type"] == "volume"}
     expected_tmpfs = dict(value.split(":", 1) for value in service["tmpfs"])
     mounts = record.get("Mounts")
     if type(mounts) is not list:
         raise ConfigurationRejected("deployment inspection is missing its complete mount inventory.")
-    seen, binds = set(), set()
+    seen, binds, volumes = set(), set(), set()
     for mount in mounts:
         if type(mount) is not dict or type(mount.get("Destination")) is not str or mount["Destination"] in seen:
             raise ConfigurationRejected("deployment mount inventory contains a malformed or duplicate destination.")
         target = mount["Destination"]
         seen.add(target)
         if mount.get("Type") == "tmpfs" and target in expected_tmpfs and mount.get("RW") is True:
+            continue
+        if mount.get("Type") == "volume" and target in expected_volumes:
+            grant = expected_volumes[target]
+            if (mount.get("Name") != grant["source"] or type(mount.get("RW")) is not bool
+                    or mount["RW"] != (not grant["read_only"])):
+                raise ConfigurationRejected("deployment named volume identity or write permission differs from its role grant.")
+            if (mount.get("Propagation") not in ("", "rprivate") or type(mount.get("Mode")) is not str
+                    or set(filter(None, mount["Mode"].split(","))) - {"ro", "rw", "z"}):
+                raise ConfigurationRejected("deployment named volume adds unplanned propagation or mount behavior.")
+            volumes.add(target)
             continue
         if mount.get("Type") != "bind" or target not in expected_binds:
             raise ConfigurationRejected("deployment container has an extra mount or replaces a required tmpfs with host storage.")
@@ -239,6 +265,8 @@ def admit_container(record, *, role, original_plan, image):
         if mount.get("Propagation") not in ("", "rprivate") or type(mount.get("Mode")) is not str or set(filter(None, mount["Mode"].split(","))) - {"ro", "rw", "rprivate"}:
             raise ConfigurationRejected("deployment bind mount adds unplanned propagation or relabeling behavior.")
         binds.add(target)
+    if volumes != set(expected_volumes):
+        raise ConfigurationRejected("deployment container is missing its required named socket volume.")
     if binds != set(expected_binds):
         raise ConfigurationRejected("deployment container is missing a required bind grant.")
     tmpfs = host.get("Tmpfs")
@@ -344,8 +372,16 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     provider["depends_on"] = {role: {"condition": "service_started"} for role in ("prediction", "reader", "smiles", "api", "interpreter", "store")}
     provider["command"] = ["--config", str(bundle / "config/provider.toml"), "--execution", "/input/execution.json",
                            "--models", "/input/prediction-models.json", "--diagnostics", "/run"]
+    control_volume = checkpoint_volume_name(config.lifecycle.scope)
     provider["volumes"] = [_bind(bundle, bundle), _bind(bundle / "execution.json", "/input/execution.json"),
-                           _bind(bundle / "prediction-models.json", "/input/prediction-models.json"), _bind(store, store, readonly=False)]
+                           _bind(bundle / "prediction-models.json", "/input/prediction-models.json"),
+                           {"type": "volume", "source": control_volume, "target": str(store), "read_only": False,
+                            "volume": {"nocopy": True}}]
+    delivery_volume = delivery_volume_name(config.delivery.endpoint.api_origin, config.delivery.endpoint.provider_ref)
+    provider["volumes"].append({"type": "volume", "source": delivery_volume,
+                                "target": str(config.delivery.endpoint.socket_path.parent), "read_only": True,
+                                "volume": {"nocopy": True}})
+    provider["group_add"] = [str(gid)]
     services["provider"] = provider
     native = config.service.native
     for role in ("prediction", "reader", "smiles"):
@@ -440,7 +476,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
                                                   "provider_core.process_status", status_path, status_role],
                                   "interval": "5s", "timeout": "2s", "retries": 3,
                                   "start_period": f"{math.ceil(startup)}s"}
-    return {"name": project, "services": services, "networks": networks}
+    return {"name": project, "services": services, "networks": networks,
+            "volumes": {name: {"name": name, "external": True} for name in (delivery_volume, control_volume)}}
 
 
 def compose_bytes(plan):

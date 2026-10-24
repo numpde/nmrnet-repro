@@ -48,8 +48,7 @@ consumer_id = "lane:nmrnet-local"
 generation_id = "generation:local"
 store_root = "/srv/nmrnet/attempts"
 maximum_records = 2
-confirmed_history_records = 64
-filesystem_reserve_bytes = 1073741824
+maximum_checkpoint_bytes = 262144
 store_seconds = 10
 allowed_job_states = ["open"]
 poll_seconds = 2
@@ -79,3 +78,10 @@ settle_seconds = 10
 allocation_seconds = 30
 prediction_seconds = 90
 source_seconds = 10
+
+[delivery]
+socket_path = "/delivery/provider.sock"
+request_seconds = 30
+retirement_seconds = 5
+retry_initial_seconds = 1
+retry_max_seconds = 30

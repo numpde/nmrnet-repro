@@ -249,6 +249,25 @@
       Preserve scientific admission and actual ownership; defer broad legacy test
       ports, extra failure timings and polish rather than delaying the connected
       service. The clean-cut decision below removes legacy data conversion.</p>
+    <p><strong>Runtime cutover source, 25 October 2026:</strong> controller, recovery,
+      admission, factory and process now use compact checkpoints and independent
+      relay clients. Successful handoff plus native cleanup clears producer
+      control without history. Restart reconciles positive relay ownership or
+      terminal API lifecycle state without recreating science or claiming an API
+      publication receipt. Admission excludes the relay's exact current Jobs and
+      Attempts; it keeps no completed-Job list. File-backed storage, producer
+      terminal publication and stopped-file recovery commands are removed.</p>
+    <p>The host deployment owner derives API-only inputs from installed provider
+      bundles. Its stable project and queue volume are independent of checkouts
+      and provider generations. Delivery owns separate API proxies. Each producer
+      mounts only its own external socket volume, with an explicit supplementary
+      group; queue and credentials remain private. Producer control also uses a
+      named volume scoped to its API, provider, lane and generation, mounted only
+      by that producer. A finite initializer receives queue/control/socket volume
+      roots and CHOWN capability. It never changes
+      original credentials or existing volume contents. The installed-image build
+      and minimal operational/API smoke are the next qualification; broader legacy
+      test ports and refinements are explicitly deferred in note 022.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.
@@ -349,16 +368,17 @@
       with a useful diagnosis. A local volume covers container/process replacement,
       not loss of the host disk; no replication or host failover is proposed.</p>
     <h3>Implementation handoff</h3>
-    <p>Proposed Make flow below is not available yet. Build from the existing shared
-      wheelhouse, install the host's admitted bindings, then start the service.
+    <p>The maintained Make flow below is implemented in source; installed proof is
+      pending. Build from the existing shared wheelhouse, install the providers'
+      frozen bundles, then derive the host delivery bindings and start the service.
       Each successful command should print its next useful action. Provider setup
       mounts its own endpoint and preserves the selected host interface where needed.</p>
     <pre><code>make delivery/image/build WHEELHOUSE=/data/cache/wheelhouse
-make delivery/install CONFIG=config/delivery/host.toml
-make delivery/up
-make delivery/status
-make delivery/logs
-make delivery/down</code></pre>
+make delivery/deployment/install DEPLOYMENTS="provider-name ..."
+make delivery/deployment/up
+make delivery/deployment/status
+make delivery/deployment/logs
+make delivery/deployment/down</code></pre>
     <p>For a permanently held item, status must explain the refusal and the exact
       next action. A proposed <code>make delivery/discard PROVIDER=&lt;binding&gt;
       ATTEMPT=&lt;reference&gt;</code> removes only the explicitly selected held item

@@ -1,14 +1,11 @@
-"""Observe service admission and select fresh work without allocating it.
+"""Select fresh science after scoped control, relay and live API observations.
 
 NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
 nmrpeak_provider/attempt_inventory.py:62-116 and provider_process.py:192-214,
-445-495 establish complete bounded inventory before fresh work. Here any live
-remote row refuses admission, so no collected reconciliation map is needed.
-API 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
-nmr_api/operations/provider_execution_attempt_list_service.py:38-108 owns the
-provider-wide visible live view. Empty traversal is neither an atomic snapshot
-nor a cross-process fence. Host singleton ownership and server admission remain
-authoritative. Core owns page syntax, exact start bodies and durable admission.
+445-495 establish complete bounded inventory before fresh work. Note021 moves
+terminal ownership to the relay: its current scoped rows exclude those exact
+Jobs/Attempts from computation without claiming API publication. These reads
+reserve no queue space and never authorize replay of scientific work.
 """
 
 from tools.container_guard import require_container
@@ -19,14 +16,16 @@ import secrets
 from dataclasses import dataclass
 
 from nmrnet_provider.config import ANALYSIS_KIND_REF, ProviderConfig
-from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalPending
+from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
+from provider_core.delivery_store import DeliveryFull
 from provider_core.paging import paging_query
 
 
 class AdmissionHeld(RuntimeError):
     """Safe hold explanation; remote ownership observations stay protected."""
 
+    # silent-defaults: allow-contract -- Local control holds have no remote inventory; remote ownership holds retain the actual received rows.
     def __init__(self, message, *, remote_attempts=()):
         super().__init__(message)
         self.remote_attempts = remote_attempts
@@ -45,132 +44,55 @@ class AdmissionPolicy:
 
 def _require_context(config, api, policy, owner):
     if type(config) is not ProviderConfig or type(policy) is not AdmissionPolicy or owner is None:
-        raise ValueError(
-            "Cannot observe service admission: admitted configuration, page policy and an explicit I/O owner are required."
-        )
+        raise ValueError("Admission requires configured API identity, page policy and an explicit I/O owner.")
     if api.identity is not config.api.identity or api.expected_topology != config.api.expected_topology:
-        raise ValueError("Cannot observe service admission: API must use the configured signing identity and topology.")
+        raise ValueError("Admission API must use the configured signing identity and topology.")
 
 
-def _require_store_context(config, api, store, policy, owner):
+async def require_admission_ready(config, api, store, *, delivery, policy, owner):
+    """Return current relay inventory after excluding only its exact remote rows."""
     _require_context(config, api, policy, owner)
     if store.scope != config.lifecycle.scope:
-        raise ValueError("Cannot observe service admission: retained storage must use the configured recovery scope.")
-
-
-def _require_confirmed_inventory(records):
-    if any(type(record) is not TerminalConfirmed for record in records):
-        raise AdmissionHeld(
-            "Cannot admit fresh NMRNet work: retained Attempt obligations require explicit recovery. Preserve their records."
-        )
-
-
-async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
-    """Archive a clean active inventory before attempting fresh admission.
-
-    The service calls this only at clean startup or after its preceding controller
-    returned and released its claim. Any unresolved neighbor prevents the entire
-    pass. This is explicit storage work, outside the service's read-retry loop;
-    it grants no API, claim-release or native-retirement authority.
-    """
-    _require_store_context(config, api, store, policy, owner)
-    if stop.is_set():
-        return None
-    await store.require_confirmed_history_capacity(owner=owner)
-    if stop.is_set():
-        return None
-    records = await store.records(owner=owner)
-    if stop.is_set():
-        return None
-    _require_confirmed_inventory(records)
-    # Passing the complete inventory/stop gate admits one maintenance batch.
-    # Its remaining ordered phases must settle even if stop arrives later.
-    for record in records:
-        await store.archive_confirmed(record, owner=owner)
-    return len(records)
-
-
-async def read_terminal_recovery_inventory(config, api, store, *, policy, owner, stop):
-    """Admit the complete stopped inventory before native or publication effects.
-
-    Pending terminal bytes may be replayed after physical retirement proof.
-    Unknown entered work and every other unresolved disposition still require
-    explicit reconciliation; they cannot be skipped to recover a neighbor.
-    """
-    _require_store_context(config, api, store, policy, owner)
-    records = await store.records(owner=owner)
-    if stop.is_set():
-        return ()
-    if any(type(record) not in (TerminalPending, TerminalConfirmed) for record in records):
-        raise AdmissionHeld(
-            "Cannot recover NMRNet startup automatically: retained Attempt obligations require explicit recovery. "
-            "Only pending terminal results and confirmed receipts can resume automatically; preserve the complete inventory."
-        )
-    return records
-
-
-async def require_admission_ready(config, api, store, *, policy, owner):
-    """Hold fresh work until local capacity and a complete empty live view agree.
-
-    This reserves nothing and resolves no recovery obligation. With per-exchange
-    deadlines supplied by the configured API, maximum_pages bounds the whole
-    traversal's work. Failure/cancellation propagates unchanged; the caller must
-    settle any original store/API I/O under owner before reuse or closure.
-    """
-    _require_store_context(config, api, store, policy, owner)
-    records = await store.admission_inventory(owner=owner)
-    _require_confirmed_inventory(records)
+        raise ValueError("Admission checkpoint storage must use the configured recovery scope.")
+    if await store.inventory(owner=owner):
+        raise AdmissionHeld("Retained producer control requires reconciliation before new science; no previous computation will be repeated.")
+    relay = await delivery.pending()
+    owned = {(item["execution_attempt_ref"], item["job_ref"]) for item in relay["items"]}
+    if (len(relay["items"]) >= relay["capacity"]["provider_items"]
+            or sum(item["body_bytes"] for item in relay["items"]) >= relay["capacity"]["provider_bytes"]):
+        raise DeliveryFull("Delivery capacity is full; wait for existing results before starting more computation.")
     cursor, seen = None, set()
     for _page_number in range(policy.maximum_pages):
         page = await api.execution_attempts(state="in_progress", limit=policy.page_size, cursor=cursor, owner=owner)
-        if page.attempts:
-            raise AdmissionHeld(
-                "Cannot admit fresh NMRNet work: the provider has in-progress Attempts. Reconcile ownership before starting more work.",
-                remote_attempts=page.attempts,
-            )
+        unowned = tuple(item for item in page.attempts if (item.execution_attempt_ref, item.job_ref) not in owned)
+        if unowned:
+            raise AdmissionHeld("The provider has in-progress Attempts without verified relay ownership; reconcile them before new science.", remote_attempts=unowned)
         cursor = _next_cursor(page.next_cursor, seen, operation="live Attempt inventory")
         if cursor is None:
-            return
-    raise AdmissionHeld(
-        "Cannot admit fresh NMRNet work: live Attempt inventory exceeded the page bound. Admission remains held until a complete view is available."
-    )
+            return relay
+    raise AdmissionHeld("Live Attempt inventory exceeded its page bound; admission needs a complete view.")
 
 
-async def select_pending_start(config, api, *, policy, owner):
-    """Select the first eligible server-ordered Job, starting each walk afresh.
-
-    Returns an in-memory start, not a retained command or execution permission.
-    The service serializes readiness, selection and allocation; abandonment
-    requires fresh observations, not reuse of this selection as a readiness token.
-    The existing controller must retain these exact start bytes before sending.
-    """
+async def select_pending_start(config, api, *, policy, owner, excluded_jobs):
+    """Choose the first eligible Job outside this cycle's actual relay inventory."""
     _require_context(config, api, policy, owner)
     cursor, seen = None, set()
     for _page_number in range(policy.maximum_pages):
-        page = await api.jobs(
-            analysis_kind_ref=ANALYSIS_KIND_REF,
-            has_provider_execution_attempt=False,
-            limit=policy.page_size,
-            cursor=cursor,
-            owner=owner,
-        )
-        if page.jobs:
-            selected = page.jobs[0]
-            body = start_body(selected.input.job_ref, secrets.token_hex(16))
-            return StartPending(config.lifecycle.scope, selected.analysis_kind_ref, selected.input, body)
+        page = await api.jobs(analysis_kind_ref=ANALYSIS_KIND_REF, has_provider_execution_attempt=False,
+                              limit=policy.page_size, cursor=cursor, owner=owner)
+        for selected in page.jobs:
+            if selected.input.job_ref not in excluded_jobs:
+                body = start_body(selected.input.job_ref, secrets.token_hex(16))
+                return StartPending(config.lifecycle.scope, selected.analysis_kind_ref, selected.input, body)
         cursor = _next_cursor(page.next_cursor, seen, operation="Job discovery")
         if cursor is None:
             return None
-    raise AdmissionHeld(
-        "Cannot select fresh NMRNet work: Job discovery exceeded the page bound. Retry only after reviewing the incomplete discovery."
-    )
+    raise AdmissionHeld("Job discovery exceeded its page bound; review the incomplete view before retrying.")
 
 
 def _next_cursor(cursor, seen, *, operation):
     if cursor is not None:
         if cursor in seen:
-            raise AdmissionHeld(
-                f"Cannot finish {operation}: the API repeated a page cursor. Preserve the failed observation and investigate before retrying."
-            )
+            raise AdmissionHeld(f"Cannot finish {operation}: the API repeated a page cursor; investigate the incomplete observation.")
         seen.add(cursor)
     return cursor

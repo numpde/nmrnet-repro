@@ -199,10 +199,6 @@ test/integration/provider-core/runtime:
 test/integration/provider-core/native-factory:
 	bash tools/container.sh $@
 
-.PHONY: test/integration/provider/deployment/store-recovery
-test/integration/provider/deployment/store-recovery:
-	bash tools/provider_recovery_qualification.sh
-
 test/integration/provider-core/admission:
 	bash tools/container.sh $@
 
@@ -297,7 +293,9 @@ unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES HOST_DRAIN_S
 unexport RECORD_SHA256
 unexport LOG_LEVEL
 unexport DEPLOYMENT
+unexport DEPLOYMENTS
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
+override export NMRNET_DELIVERY_DEPLOYMENTS_INPUT := $(if $(filter command line,$(origin DEPLOYMENTS)),$(value DEPLOYMENTS))
 unexport UPLOAD_RECEIPT
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
@@ -362,6 +360,11 @@ help:
 		'make delivery/image/build              Build the offline shared API delivery image; no scientific runtime.' \
 		'make provider/prepare                  Acquire dependencies/models and build images; choose cache and interface once.' \
 		'make provider/deployment/install DEPLOYMENT=<name> Freeze public configuration and private inputs into an immutable Compose bundle.' \
+		'make delivery/deployment/install DEPLOYMENTS="name ..." Freeze API-only inputs for the shared host delivery service.' \
+		'make delivery/deployment/up            Start shared delivery and its independent API routes.' \
+		'make delivery/deployment/status        Inspect the shared host delivery containers.' \
+		'make delivery/deployment/logs          Read bounded shared delivery Docker logs.' \
+		'make delivery/deployment/down          Stop shared delivery; retain queued outcomes and IPC volumes.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Inspect the actual deployment containers against their original bundles.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
@@ -373,8 +376,6 @@ help:
 		'make test/integration/provider/deployment/successive Run two distinct Jobs through one service, then check restart without replay (opt-in).' \
 		'make test/integration/provider/deployment/recovery Check lost Engine replies, startup recovery and fenced replacement without scientific work (opt-in).' \
 		'make test/unit/provider/deployment     Check finite deployment and API-client orchestration offline.' \
-		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
-		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
 		'make test/unit/provider/proxy          Check service destination grants and acquisition proxy regressions offline.' \
 		'make test/integration/provider/proxy   Verify destination TLS through the actual Unix service proxy offline.' \
@@ -412,7 +413,6 @@ help:
 		'make test/integration/provider-core/interpreter-ambiguity Test the fixed interpreter-probe mechanics offline.' \
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
-		'make test/integration/provider/deployment/store-recovery Check installed host inspection, exact replay and idle restart against synthetic local TLS.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Uploads, Job results and the proposed SECS byte-consumption boundary.' \
@@ -516,7 +516,7 @@ test/unit/provider/worker-startup:
 provider/prepare:
 	bash tools/provider_prepare.sh
 
-.PHONY: provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
+.PHONY: provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 .PHONY: provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
@@ -529,14 +529,12 @@ test/integration/provider/deployment/smiles test/integration/provider/deployment
 provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
 	bash tools/provider_deployment.sh $(notdir $@)
 
+.PHONY: delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down
+delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down:
+	bash tools/delivery_deployment.sh $(notdir $@)
+
 test/unit/provider/deployment:
 	bash tools/container.sh $@
-
-provider/recovery/inspect:
-	bash tools/provider_recovery.sh inspect
-
-provider/recovery/run:
-	bash tools/provider_recovery.sh run
 
 provider/qualify/api/pasted:
 	bash tools/provider_api_qualification.sh scripted-pasted

@@ -17,9 +17,10 @@ from nmrnet_provider.input_preparation import InputPreparation
 from nmrnet_provider.interpreter import InputInterpreter
 from nmrnet_provider.session import NMRNetSession
 from provider_core.api import ProviderAPI
-from provider_core.attempt_record import StartPending, TerminalConfirmed
+from provider_core.attempt_record import StartPending
 from provider_core.chat import ChatEndpoint
 from provider_core.controller import AttemptController, ControllerRefused
+from provider_core.delivery_client import DeliveryClient
 from provider_core.uploads import JobUploads
 
 
@@ -42,7 +43,7 @@ async def assemble_attempt(
     condition_recovery,
     on_unconfirmed_phase_progress,
     start_recovery,
-    terminal_recovery,
+    on_delivery_retry,
 ):
     """Return the existing controller, which must run this same selected pending.
 
@@ -71,7 +72,7 @@ async def assemble_attempt(
         )
     if pending.analysis_kind_ref != ANALYSIS_KIND_REF:
         raise ValueError("Cannot assemble NMRNet Attempt: the selected Job must request peaks_from_mol.")
-    if any(type(record) is not TerminalConfirmed for record in await store.records(owner=setup_owner)):
+    if await store.inventory(owner=setup_owner):
         raise ControllerRefused("Cannot assemble new work: retained Attempt obligations require explicit recovery first.")
 
     source_api_transport = config.api.http.new_transport()
@@ -122,6 +123,11 @@ async def assemble_attempt(
         store,
         claims,
         session,
+        delivery=DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,
+                                retirement_seconds=config.delivery.retirement_seconds),
+        on_delivery_retry=on_delivery_retry,
+        delivery_retry_initial_seconds=config.delivery.retry_initial_seconds,
+        delivery_retry_max_seconds=config.delivery.retry_max_seconds,
         allowed_job_states=settings.allowed_job_states,
         poll_seconds=settings.poll_seconds,
         task_settle_seconds=settings.task_settle_seconds,
@@ -129,5 +135,4 @@ async def assemble_attempt(
         condition_recovery=condition_recovery,
         on_unconfirmed_phase_progress=on_unconfirmed_phase_progress,
         start_recovery=start_recovery,
-        terminal_recovery=terminal_recovery,
     )

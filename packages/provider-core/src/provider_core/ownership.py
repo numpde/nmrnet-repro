@@ -14,7 +14,8 @@ require_container()
 import asyncio
 import json
 
-from provider_core.attempt_record import RecoveryScope, StartPending, acknowledged_attempt, pending_start
+from provider_core.attempt_record import RecoveryScope, StartPending
+from provider_core.producer_checkpoint import checkpoint_acknowledgement, checkpoint_start
 from provider_core.attempt_response import require_attempt_ref
 
 
@@ -63,10 +64,10 @@ class AttemptClaims:
         """
         groups = []
         for record in records:
-            start = pending_start(record)
+            start = checkpoint_start(record)
             identities = [_start_identity(start)]
             if type(record) is not StartPending:
-                acknowledged = acknowledged_attempt(record)
+                acknowledged = checkpoint_acknowledgement(record)
                 identities.append(_identity(start.scope, acknowledged.admission.execution_attempt_ref))
             groups.append(identities)
         return self._reserve(groups)

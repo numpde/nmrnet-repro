@@ -5,6 +5,7 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,14 @@ from provider_core.upload_response import require_job_ref
 MAX_IPC_RESPONSE_BYTES = 2097152
 
 
+def delivery_volume_name(api_origin, provider_ref):
+    """Name the shared socket grant for this exact authenticated binding."""
+    if _https_origin(api_origin)[0] != api_origin:
+        raise ValueError("Delivery requires the configured canonical API origin.")
+    require_provider_ref(provider_ref)
+    return "nmr-api-delivery-ipc-" + hashlib.sha256((api_origin + "\0" + provider_ref).encode()).hexdigest()
+
+
 class DeliveryRejected(RuntimeError):
     """No valid durable acknowledgement was obtained from this request."""
 
@@ -43,12 +52,18 @@ class DeliveryEndpoint:
     api_origin: str
     provider_ref: str
     socket_path: Path
+    # silent-defaults: allow-contract -- Direct same-UID embeddings may retain private IPC; deployed shared bindings explicitly grant a socket group.
+    socket_group_id: int | None = None
 
     def __post_init__(self):
         if _https_origin(self.api_origin)[0] != self.api_origin:
             raise ValueError("Delivery requires the configured canonical API origin.")
         require_provider_ref(self.provider_ref)
         require_unix_socket_path(str(self.socket_path))
+        if self.socket_group_id is not None and (
+            type(self.socket_group_id) is not int or not 1 <= self.socket_group_id <= 4294967294
+        ):
+            raise ValueError("Delivery socket group must be an explicit nonzero GID.")
 
 
 class DeliveryClient:

@@ -33,18 +33,25 @@ class DeliveryRequestRejected(ValueError):
 
 
 @contextmanager
-def _socket_grant(path):
+def _socket_grant(path, socket_group_id):
     """Hold one private directory lock before replacing its retired listener.
 
     Ports tools/provider_proxy.py::socket_grant at NMRNet 8e14575. This new
     listener needs no separate readiness file; its owner closes servers first.
     """
+    shared = socket_group_id is not None
+    parent_modes = (0o710, 0o2710) if shared else (0o700,)
+    socket_mode = 0o660 if shared else 0o600
+    if shared and socket_group_id != os.getegid():
+        raise DeliveryUnavailable("Cannot open delivery IPC: the configured socket group must be the daemon's primary GID.")
     parent = path.parent.lstat()
     if (path.parent.resolve() != path.parent or not stat.S_ISDIR(parent.st_mode)
-            or parent.st_uid != os.geteuid() or stat.S_IMODE(parent.st_mode) != 0o700):
+            or parent.st_uid != os.geteuid() or stat.S_IMODE(parent.st_mode) not in parent_modes
+            or (shared and parent.st_gid != socket_group_id)):
         raise DeliveryUnavailable(
-            "Cannot open delivery IPC: its parent must be canonical, caller-owned and mode 0700; "
-            f"observed uid {parent.st_uid}, mode {stat.S_IMODE(parent.st_mode):04o}, caller uid {os.geteuid()}."
+            "Cannot open delivery IPC: require a canonical daemon-owned parent, "
+            + ("mode 0710 or 02710 with the configured socket GID; " if shared else "mode 0700; ")
+            + f"observed uid {parent.st_uid}, gid {parent.st_gid}, mode {stat.S_IMODE(parent.st_mode):04o}, caller uid {os.geteuid()}."
         )
     descriptor = os.open(path.parent / ".socket.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     listener = None
@@ -58,11 +65,13 @@ def _socket_grant(path):
         except FileNotFoundError:
             old = None
         if old is not None:
-            if not stat.S_ISSOCK(old.st_mode) or old.st_uid != os.geteuid() or stat.S_IMODE(old.st_mode) != 0o600:
+            if (not stat.S_ISSOCK(old.st_mode) or old.st_uid != os.geteuid() or stat.S_IMODE(old.st_mode) != socket_mode
+                    or (shared and old.st_gid != socket_group_id)):
                 raise DeliveryUnavailable("Cannot replace delivery IPC: the prior leaf is not its private socket. Leave it unchanged for inspection.")
             path.unlink()
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        previous = os.umask(0o177)
+        # Grant group connect access at birth; credentials and database stay private.
+        previous = os.umask(0o117 if shared else 0o177)
         try:
             listener.bind(str(path))
         finally:
@@ -97,7 +106,7 @@ class DeliveryInbox:
         try:
             for endpoint in self.endpoints:
                 try:
-                    listener = self._grants.enter_context(_socket_grant(endpoint.socket_path))
+                    listener = self._grants.enter_context(_socket_grant(endpoint.socket_path, endpoint.socket_group_id))
                     server = await asyncio.start_unix_server(
                         lambda reader, writer, selected=endpoint: self._client(selected, reader, writer),
                         sock=listener, limit=MAX_HEADER_BYTES,

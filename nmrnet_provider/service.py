@@ -18,13 +18,15 @@ from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, archive_confirmed_history, read_terminal_recovery_inventory, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, require_admission_ready, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
-from provider_core.attempt_record import TerminalConfirmed, TerminalPending
+from provider_core.attempt_record import AcknowledgedAttempt
+from provider_core.delivery_client import DeliveryClient
+from provider_core.delivery_store import DeliveryFull
+from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import TerminalRecovery
 from provider_core.recovery import AttemptRecovery
 
 
@@ -127,7 +129,6 @@ class ProviderService:
         open_attempt,
         claims,
         retire_native,
-        terminal_recovery,
         current_announcement,
         policy,
         on_started,
@@ -142,10 +143,12 @@ class ProviderService:
             raise ValueError(
                 "Cannot configure NMRNet service: explicit policy, allocation factory, announcement supplier and lifecycle/diagnostic callbacks are required."
             )
-        if type(claims) is not AttemptClaims or type(terminal_recovery) is not TerminalRecovery:
-            raise ValueError("NMRNet service requires the shared Attempt claims and an explicit terminal recovery policy.")
+        if type(claims) is not AttemptClaims:
+            raise ValueError("NMRNet service requires the shared Attempt claims.")
         self.config, self.store, self.api = config, store, api
-        self._claims, self._retire_native, self._terminal_recovery = claims, retire_native, terminal_recovery
+        self._claims, self._retire_native = claims, retire_native
+        self.delivery = DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,
+                                       retirement_seconds=config.delivery.retirement_seconds)
         self._recovery_claims, self._recovery = (), None
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
@@ -157,7 +160,6 @@ class ProviderService:
         self.work_task = None
         self._hello_task = None
         self._settlement_task = None
-        self._maintenance_task = None
         self._expected_cancellations = set()
         self._failures = []
         self.last_failure = None
@@ -219,8 +221,10 @@ class ProviderService:
         await self._recover_retained()
         if self._stop.is_set():
             return False
-        await self._archive_completed()
-        await self._read_until_available(self._admission)
+        try:
+            await self._read_until_available(self._admission)
+        except DeliveryFull:
+            pass  # Announce the service; the paced work loop waits for relay capacity.
         if self._stop.is_set():
             return False
         await self._hello_until_available()
@@ -230,31 +234,25 @@ class ProviderService:
         return not self._stop.is_set()
 
     async def _recover_retained(self):
-        records = await read_terminal_recovery_inventory(
-            self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
-        )
-        if not records:
-            return
+        records = await self.store.inventory(owner=self)
         self._recovery_claims = self._claims.claim_records(records)
         await self._retire_native()
         for record, claim in zip(records, self._recovery_claims, strict=True):
             if self._stop.is_set():
                 break
-            if type(record) is TerminalPending:
-                self._recovery = AttemptRecovery(
-                    self.api, self.store, claim, terminal_recovery=self._terminal_recovery
-                )
-                try:
-                    outcome = await self._recovery.recover(record)
-                except asyncio.CancelledError as cause:
-                    if self._recovery.last_failure is not None:
-                        raise cause from self._recovery.last_failure
-                    raise
-                if type(outcome) is not TerminalConfirmed:
-                    raise AdmissionHeld(
-                        "Retained terminal recovery did not confirm the outcome. Preserve its disposition before admitting new work."
-                    )
-                self._recovery = None
+            self._recovery = AttemptRecovery(self.api, self.store, claim, delivery=self.delivery)
+            try:
+                outcome = await self._recovery.recover(record)
+                if type(outcome) is AcknowledgedAttempt:
+                    # Exact START replay produced a real admission, not permission
+                    # to reconstruct scientific execution after process restart.
+                    self._recovery = AttemptRecovery(self.api, self.store, claim, delivery=self.delivery)
+                    await self._recovery.recover(AcknowledgedCheckpoint(outcome.start, outcome.admission))
+            except asyncio.CancelledError as cause:
+                if self._recovery.last_failure is not None:
+                    raise cause from self._recovery.last_failure
+                raise
+            self._recovery = None
         self._release_recovery_claims()
 
     def _release_recovery_claims(self):
@@ -271,41 +269,20 @@ class ProviderService:
             self._recovery = None
         self._release_recovery_claims()
 
-    async def _archive_completed(self):
-        if self._stop.is_set():
-            return
-        self._maintenance_task = self._start_task(self._archive_release_trim())
-        stopped = asyncio.create_task(self._stop.wait())
-        try:
-            await asyncio.wait({self._maintenance_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
-            if self._maintenance_task.done():
-                self._maintenance_task.result()
-                self._maintenance_task = None
-        finally:
-            stopped.cancel()
-            await asyncio.gather(stopped, return_exceptions=True)
-
-    async def _archive_release_trim(self):
-        """One admitted batch finishes its ordered phases during shutdown.
-
-        Stop before the inventory gate admits nothing. After it, shutdown owns
-        this original task; cancellation must not strand the transient window.
-        """
-        archived = await archive_confirmed_history(
-            self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
-        )
-        if archived:
-            await self.store.trim_confirmed_history(owner=self)
-
     async def _admission(self):
-        await require_admission_ready(self.config, self.api, self.store, policy=self.policy.admission, owner=self)
+        return await require_admission_ready(self.config, self.api, self.store, delivery=self.delivery,
+                                             policy=self.policy.admission, owner=self)
 
     async def _select_after_admission(self):
         """Observe the complete live view before starting a fresh discovery walk."""
-        await self._admission()
+        try:
+            relay = await self._admission()
+        except DeliveryFull:
+            return None
         if self._stop.is_set():
             return None
-        return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self)
+        return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self,
+                                         excluded_jobs=frozenset(item["job_ref"] for item in relay["items"]))
 
     async def _read_until_available(self, operation):
         """Repeat only the supplied admission/read cycle, in its original task.
@@ -399,9 +376,6 @@ class ProviderService:
             if not self._snapshot().analysis_offerings:
                 await self._pause(self.policy.idle_seconds)
                 continue
-            # Reaching another cycle means the prior controller returned and
-            # released its claim. Archive outside every API read-retry boundary.
-            await self._archive_completed()
             pending = await self._read_until_available(self._select_after_admission)
             if self._stop.is_set():
                 return
@@ -480,14 +454,12 @@ class ProviderService:
                 failures.append(failure)
         self._record_task_failure(self.work_task, "Attempt work")
         self._record_task_failure(self._hello_task, "current Hello publication")
-        failure = await self._cleanup("confirmed-history maintenance", lambda: self._finish_maintenance(drain))
-        if failure is not None:
-            failures.append(failure)
-        if (self.work_task is None or self.work_task.done()) and self._maintenance_task is None:
+        if self.work_task is None or self.work_task.done():
             for operation, function in (
                 ("startup terminal recovery settlement", self._settle_recovery),
                 ("Attempt settlement", lambda: self._settle_controller(retry=retry_settlement)),
                 ("execution API retirement", self._retire_api),
+                ("delivery control retirement", self.delivery.retire),
                 ("preflight storage settlement", self._settle_store),
             ):
                 failure = await self._cleanup(operation, function)
@@ -503,19 +475,6 @@ class ProviderService:
             if isinstance(failure, asyncio.CancelledError):
                 raise failure
         return not failures
-
-    async def _finish_maintenance(self, drain):
-        original = self._maintenance_task
-        if original is None:
-            return
-        if drain:
-            await self._wait_task(original, self.policy.drain_seconds)
-        if not await self._wait_task(original, self.policy.settle_seconds):
-            raise ServiceRefused(
-                "Original confirmed-history maintenance is still pending; retain its task, native owner and storage dependencies before replacement."
-            )
-        self._record_task_failure(original, "confirmed-history maintenance")
-        self._maintenance_task = None
 
     async def _finish_work(self, drain):
         try:
