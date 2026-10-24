@@ -12,7 +12,7 @@ require_container()
 import hashlib
 import json
 
-from nmrnet_provider.config import ConfigurationRejected, read_startup_file
+from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.process import _declared_execution, _publish, _source_name
 from nmrnet_provider.startup_capture import _bind_path, _source_path
 
@@ -27,7 +27,12 @@ def capture_execution(source_root, destination, source_names, **identities):
     for name in names:
         _source_name(name)
         path = _source_path(source_root / name, source_root)
-        raw = read_startup_file(path, maximum_bytes=1024 * 1024, label="execution source")
+        # These are individual read-only source grants, not credential files.
+        # Ordinary checkout modes remain valid; capture the bytes actually read.
+        with path.open("rb") as source:
+            raw = source.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ConfigurationRejected("execution source exceeds its 1048576-byte ceiling.")
         sources[name] = {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
     execution = _declared_execution(dict(identities, runtime_identity_source="caller", tool_sources=sources))
     encoded = (json.dumps(execution, sort_keys=True) + "\n").encode()
