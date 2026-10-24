@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-24",
+  "source_revision": "8f952b2c122981b3934c20f4e2c46a5840ea0527",
+  "scope": "real released CPU inference through local signed Upload/API and the production seven-role Compose path; scripted interpretation",
+  "engine_version": "29.9.2",
+  "compose_version": "5.5.1",
+  "images": {
+    "controller": "sha256:aec83c6f527d48c7f87968795305ca524ba22dc62622687faa13563050c3279e",
+    "geometry": "sha256:4556b1d2427d0c6a783a0af40a1aba43ebfc11a6f1d0d9734d01091437cb6e30",
+    "prediction": "sha256:6a635601ab119aa0f06dc486f04d9468fb04fcbd5a8088077d6f0c5ec0440b99"
+  },
+  "references": {
+    "command": "make test/integration/provider/deployment/references",
+    "input": "../tests/fixtures/scientific_inputs/references.xyz",
+    "historical_input_manifest": "../tests/fixtures/scientific_inputs/references.manifest.json",
+    "historical_input_manifest_sha256": "d8762cf72e329f5d94374287ef5df704e3b29bdf1f449dba8d296cb6d027fa14",
+    "reference_packet": "reference-cpu-float32.json",
+    "reference_packet_sha256": "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae",
+    "production_packet": "prediction-cpu-float32.json",
+    "production_packet_sha256": "3054ace5fb17b824e114c65c25e24389eca7551e38a0aece7f347f5b98f5fa75",
+    "comparison": "exact binary64 values; no widened tolerance or regenerated expected outputs",
+    "shift_significant_digits": 17,
+    "precision_rationale": "The supported interpreter output setting preserves binary64 round trips for exact comparison with original unrounded packets. Product defaults are unchanged.",
+    "complete_predictions": 137,
+    "predictions_by_nucleus": {"H": 82, "C": 55},
+    "historical_positions": 64,
+    "result": "compose-runner/references/result.json",
+    "result_sha256": "1414d143550e4cf89768cf35beac8e5259acd7155a5adb2b2eb9e8d925335b05",
+    "completed_receipt": "compose-runner/references/completed-receipt.json",
+    "completed_receipt_sha256": "7e8e57a338d16cf1acb63f17c2fc60e953715f258c1f0f4b6e2b8d46daf7940d",
+    "peer_receipt": "compose-runner/references/peer-receipt.json",
+    "peer_receipt_sha256": "55d2d10b99b1d71d3114a2d32a29d012193b2f254873a7915880ff03ee0f0ab7"
+  },
+  "capacity": {
+    "command": "make test/integration/provider/deployment/capacity",
+    "input": "../tests/fixtures/scientific_inputs/capacity.xyz",
+    "historical_input_manifest": "../tests/fixtures/scientific_inputs/capacity.manifest.json",
+    "historical_input_manifest_sha256": "fa7b85f57855cc91e285363ce5e7332c93a15f70b27308cf5d8c2cc3291d6759",
+    "scope": "synthetic input/output capacity; no chemical accuracy claim",
+    "atoms_per_geometry": 128,
+    "predictions_by_nucleus": {"H": 128, "C": 128},
+    "checks": "every original atom/index/nucleus, coordinates, units, source record/line/hash and finite shifts",
+    "result": "compose-runner/capacity/result.json",
+    "result_sha256": "4d98bf2a258b2468185aaf0187020dc1326a744e04da7cfe6895cca02d5480fb",
+    "completed_receipt": "compose-runner/capacity/completed-receipt.json",
+    "completed_receipt_sha256": "b71eea680979f6ee43ed56aa066063975d1ca25c7d4611f4ab6c9a987e785dbf",
+    "peer_receipt": "compose-runner/capacity/peer-receipt.json",
+    "peer_receipt_sha256": "efbe86c880203d97d3e8adabaa4f9e1a4cecb0f932e6783a217f954b1cc3fdab"
+  },
+  "each_case_across_restart": {"upload_acquisitions": 1, "model_exchanges": 2, "attempt_starts": 1, "result_publications": 1},
+  "lifecycle_observations": "compose-runner/scientific-lifecycle-observations.json",
+  "lifecycle_observations_sha256": "faf867988b8a6129e69b31b6617b5f61b9700244dc515e68fb978f5d0977fef6",
+  "limits": [
+    "Historical fixture producer provenance is preserved separately from current execution provenance.",
+    "Local signed TLS and scripted interpretation do not qualify an external API, live model or GUI deployment.",
+    "Reference shutdown reported one cancelled periodic Hello with unconfirmed acceptance; physical service exit and scientific result publication remained separately observed.",
+    "Lost Engine replies, successive distinct Jobs in one production factory, named legacy cutover and legacy deletion remain outstanding."
+  ]
+}

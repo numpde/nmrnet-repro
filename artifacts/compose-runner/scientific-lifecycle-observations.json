@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-24",
+  "source_revision": "8f952b2c122981b3934c20f4e2c46a5840ea0527",
+  "source": "bounded Docker logs read after final shutdown through provider/deployment/logs, plus exact-ID stopped observations from the maintained down commands",
+  "scope": "reviewed lifecycle/resource fields; no transcript, credentials, raw inspect or general log archive",
+  "references": {
+    "provider_started_utc": ["2026-10-24T01:57:11.146Z", "2026-10-24T01:57:42.758Z"],
+    "provider_settled_utc": ["2026-10-24T01:57:34.239Z", "2026-10-24T01:57:55.092Z"],
+    "provider_exit_statuses": [0, 0],
+    "shutdown_observations": [{"kind": "periodic Hello", "acceptance": "unconfirmed", "cause": "request cancelled", "http_status": null}],
+    "api_proxy_observations": [{"operation": "forwarding", "cause_type": "BrokenPipeError", "errno": 32}],
+    "prediction": {
+      "child_started": [{"operation": "adee62a2405c48c3b3487347afebd646", "pid": 14}],
+      "child_retired": [{"operation": "adee62a2405c48c3b3487347afebd646", "returncode": -15, "reason": "owner_lost"}],
+      "cgroup_scope": "persistent_container_cumulative",
+      "cpu.max": "200000 100000", "memory.max": "4294967296", "memory.peak": "1856823296", "memory.swap.max": "0", "pids.max": "64"
+    },
+    "reader": {
+      "child_started": [{"operation": "4e4241ef25f24687a89293eca0c4659f", "pid": 14}],
+      "child_retired": [{"operation": "4e4241ef25f24687a89293eca0c4659f", "returncode": -15, "reason": "owner_lost"}],
+      "cgroup_scope": "persistent_container_cumulative",
+      "cpu.max": "200000 100000", "memory.max": "536870912", "memory.peak": "23089152", "memory.swap.max": "0", "pids.max": "64"
+    },
+    "smiles_child_starts": 0,
+    "proxy_ready_messages": {"api": 2, "interpreter": 2, "store": 2}
+  },
+  "capacity": {
+    "provider_started_utc": ["2026-10-24T01:59:01.338Z", "2026-10-24T01:59:24.567Z"],
+    "provider_settled_utc": ["2026-10-24T01:59:15.550Z", "2026-10-24T01:59:37.690Z"],
+    "provider_exit_statuses": [0, 0],
+    "prediction": {
+      "child_started": [{"operation": "c2ef564693b141fd81558e76fd0b2927", "pid": 14}],
+      "child_retired": [{"operation": "c2ef564693b141fd81558e76fd0b2927", "returncode": -15, "reason": "owner_lost"}],
+      "cgroup_scope": "persistent_container_cumulative",
+      "cpu.max": "200000 100000", "memory.max": "4294967296", "memory.peak": "1652494336", "memory.swap.max": "0", "pids.max": "64"
+    },
+    "reader": {
+      "child_started": [{"operation": "e101fafd9dcb4afaa1fc064fbc723f74", "pid": 14}],
+      "child_retired": [{"operation": "e101fafd9dcb4afaa1fc064fbc723f74", "returncode": -15, "reason": "owner_lost"}],
+      "cgroup_scope": "persistent_container_cumulative",
+      "cpu.max": "200000 100000", "memory.max": "536870912", "memory.peak": "23265280", "memory.swap.max": "0", "pids.max": "64"
+    },
+    "smiles_child_starts": 0,
+    "proxy_ready_messages": {"api": 2, "interpreter": 2, "store": 2}
+  },
+  "final_stops_each_case": [
+    {"role": "provider", "exit_code": 0, "oom_killed": false},
+    {"role": "prediction", "exit_code": 0, "oom_killed": false},
+    {"role": "reader", "exit_code": 0, "oom_killed": false},
+    {"role": "smiles", "exit_code": 0, "oom_killed": false},
+    {"role": "api", "exit_code": 143, "oom_killed": false},
+    {"role": "interpreter", "exit_code": 143, "oom_killed": false},
+    {"role": "store", "exit_code": 143, "oom_killed": false}
+  ],
+  "interpretation": "Child -15 records control-owner retirement after scientific replies. Physical exit, diagnostic delivery, periodic Hello acceptance and durable Attempt outcomes are distinct facts; startup readiness confirmed initial Hello on each process start."
+}
