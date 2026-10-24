@@ -1749,7 +1749,23 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       deployment tests passed. Independent review found no lost ownership or
       evidence obligation. Attempt state, immutable bundles, runtime leaves,
       containers and bounded Docker logs are outside this removal root.
-      Superseded-bundle and completed qualification cleanup remain separate work.</p>
+      Completed qualification cleanup remains separate work.</p>
+    <p><strong>Superseded input generations, 24 October 2026:</strong> successful
+      mutations now prune unreferenced generation directories through the existing
+      deployment owner. Its mutation lock and the existing query lock exclude
+      concurrent control/readers; unresolved query or mutation effects suppress
+      deletion. A fresh admitted Engine inventory retains bundles referenced by
+      stopped as well as running containers, alongside the validated current link.
+      Only canonical caller-owned generation directories with the expected private
+      modes are removed; abandoned unsealed generations are included. Unexpected
+      names, modes and symlinks are left alone. No new lifetime registry is added.</p>
+    <p>The tests-first pruning witness failed before implementation; all 36 focused
+      contained deployment checks now pass, including busy-query, pending-effect,
+      inventory-failure, stopped-reference and unsafe-candidate controls. Independent
+      ownership review found no issue. Cleanup errors report the deployment action
+      as completed while retaining original operation receipts. These are source
+      checks; actual pruning of retained local generations is recorded separately
+      when observed.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

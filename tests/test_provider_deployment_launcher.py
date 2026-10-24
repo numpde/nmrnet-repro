@@ -17,6 +17,53 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_bundle_pruning_keeps_current_stopped_and_uncertain_references(self):
+        for barrier in ("settled", "pending-query", "pending-mutation", "bad-inventory", "busy-query"):
+            with self.subTest(barrier=barrier), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                bundles = root / "bundles"
+                bundles.mkdir(mode=0o700)
+                for name in ("current", "stopped", "obsolete", "abandoned"):
+                    bundle = bundles / f"generation-{name}"
+                    bundle.mkdir(mode=0o700)
+                    (bundle / "config-copy").write_text("private input")
+                    bundle.chmod(0o500 if name != "abandoned" else 0o700)
+                outside = root / "attempts"
+                outside.mkdir()
+                (outside / "retained").write_text("durable work")
+                (bundles / "generation-link").symlink_to(outside)
+                (bundles / "unexpected-name").mkdir()
+                (bundles / "generation-unexpected-mode").mkdir(mode=0o755)
+                (root / "current").symlink_to("bundles/generation-current")
+                result = self.shell('''
+caller_uid=$(id -u) deployment_root=$2 operation_root=$2/operation/mutation
+operation_owner=mutation inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_recovery_observed=false
+mkdir -m 700 -- "$2/operation" "$operation_root" "$operation_root/effects"
+deployment_selected_bundle() { selected_bundle=$deployment_root/bundles/generation-current; }
+# The existing inventory owner has admitted the stopped container's original bundle.
+deployment_inventory() {
+    [[ $barrier != bad-inventory ]] || return 7
+    declare -gA deployment_bundles=([prediction]=generation-stopped)
+}
+barrier=$3
+if [[ $barrier == pending-query ]]; then
+    mkdir -m 700 -- "$2/operation/query" "$2/operation/query/effects"
+    : > "$2/operation/query/effects/unknown.intent"
+elif [[ $barrier == pending-mutation ]]; then : > "$operation_root/effects/unknown.intent"
+elif [[ $barrier == busy-query ]]; then exec 9< "$2/operation"; flock --nonblock 9; fi
+if deployment_prune_bundles; then [[ $barrier != bad-inventory ]]; else [[ $barrier == bad-inventory ]]; fi
+''', root, barrier)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue((bundles / "generation-current/config-copy").exists())
+                self.assertTrue((bundles / "generation-stopped/config-copy").exists())
+                for name in ("obsolete", "abandoned"):
+                    self.assertEqual((bundles / f"generation-{name}").exists(), barrier != "settled")
+                self.assertTrue((bundles / "generation-link").is_symlink())
+                self.assertTrue((bundles / "unexpected-name").is_dir())
+                self.assertTrue((bundles / "generation-unexpected-mode").is_dir())
+                self.assertEqual((outside / "retained").read_text(), "durable work")
+
     def test_success_removes_only_settled_command_scratch(self):
         for held in (False, True):
             with self.subTest(held=held), tempfile.TemporaryDirectory() as temporary:

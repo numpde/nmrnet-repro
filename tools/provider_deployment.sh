@@ -297,6 +297,43 @@ deployment_remove_operation() {
     rm -rf -- "$directory"
 }
 
+deployment_prune_bundles() {
+    # Mutation already owns the deployment lock. Also exclude queries, whose
+    # finite helpers may still be reading a superseded bundle. A held operation
+    # retains its original inputs until its existing recovery owner settles it.
+    local query_lock candidate name role mode
+    local -A keep=()
+    [[ $operation_owner == mutation && ${deployment_recovery_observed-false} != true ]] || return 0
+    [[ $inference_retirement_confirmed == true && $deployment_helper_retired == true ]] || return 2
+    exec {query_lock}< "$deployment_root/operation" || return $?
+    flock --nonblock "$query_lock" || return 0
+    deployment_effects_settled "$operation_root" || return 0
+    if [[ -e $deployment_root/operation/query || -L $deployment_root/operation/query ]]; then
+        deployment_effects_settled "$deployment_root/operation/query" || return 0
+    fi
+    [[ -L $deployment_root/current ]] || return 0
+    deployment_private_directory "$deployment_root/bundles" false || return $?
+    deployment_selected_bundle || return $?
+    keep[${selected_bundle##*/}]=true
+    # Fresh admission includes stopped containers: their next start still needs
+    # the original bundle. Never infer absence from a stale command snapshot.
+    deployment_inventory prune || return $?
+    for role in "${!deployment_bundles[@]}"; do keep[${deployment_bundles[$role]}]=true; done
+    for candidate in "$deployment_root/bundles/"generation-*; do
+        [[ -e $candidate || -L $candidate ]] || continue
+        name=${candidate##*/}
+        [[ $name =~ ^generation-[A-Za-z0-9_-]{1,64}$ && ! -v keep[$name] ]] || continue
+        [[ -d $candidate && ! -L $candidate && $(realpath -m -- "$candidate") == "$candidate" ]] || continue
+        mode=$(stat -c '%u:%a' -- "$candidate") || return $?
+        [[ $mode == "$caller_uid:500" || $mode == "$caller_uid:700" ]] || continue
+        # Only immutable input copies become writable. Stores, runtime leaves,
+        # lease inodes and flat credential inputs are outside bundles/.
+        find "$candidate" -type d -exec chmod u+rwx -- {} + || return $?
+        rm -rf -- "$candidate" || return $?
+    done
+    sync -f -- "$deployment_root/bundles"
+}
+
 deployment_effects_settled() {
     # A failed read/readiness command can leave every dispatched mutation known
     # complete. Its original receipts suffice; do not ask an operator to delete
@@ -1068,6 +1105,11 @@ deployment_main() {
     if [[ ${deployment_recovery_observed-false} == true ]]; then return 0; fi
     deployment_bootstrap
     deployment_dispatch
+    if deployment_prune_bundles; then :; else
+        local cleanup_status=$?
+        printf 'Deployment action completed; superseded input cleanup failed. Preserve original operation receipts: %s\n' "$operation_root" >&2
+        return "$cleanup_status"
+    fi
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
