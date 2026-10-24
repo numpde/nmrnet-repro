@@ -30,6 +30,7 @@ from provider_core.credential import CredentialRejected
 from provider_core.delivery_client import DeliveryRejected, DeliveryUnavailable
 from provider_core.delivery_ipc import DeliveryRequestRejected
 from provider_core.delivery_store import DeliveryConflict, DeliveryFull, DeliveryStorageFailed
+from provider_core.delivery_worker import DeliveryWorkerFailed
 from provider_core.execution import (
     ConditionRecoveryExpired,
     ExecutionFailed,
@@ -80,6 +81,7 @@ def owned_relationships(error):
         ConversationRetirementFailed,
         DeliveryUnavailable,
         DeliveryStorageFailed,
+        DeliveryWorkerFailed,
     ):
         yield "owned cause", error.cause
     if kind in (
@@ -91,6 +93,7 @@ def owned_relationships(error):
         UploadFailed,
         UploadInputRejected,
         UploadFileReadFailed,
+        DeliveryWorkerFailed,
     ):
         for cause in error.cleanup_failures:
             yield "independent cleanup", cause
@@ -103,7 +106,7 @@ def owned_relationships(error):
     if kind in (PublicationFailed, StartFailed):
         for cause in error.settlement_failures:
             yield "independent settlement", cause
-    if kind in (ExecutionFailed, PublicationFailed, StartFailed, RecoveryFailed):
+    if kind in (ExecutionFailed, PublicationFailed, StartFailed, RecoveryFailed, DeliveryWorkerFailed):
         yield "API failure", error.api_failure
     if kind is ExchangeFailed:
         yield "transport primary", error.primary
@@ -157,11 +160,14 @@ def owned_details(error):
         DeliveryConflict,
         DeliveryFull,
         DeliveryStorageFailed,
+        DeliveryWorkerFailed,
     ):
         return {}
     details = {"message": str(error)}
     if kind is DeliveryUnavailable:
         details["status"] = error.status
+    if kind is DeliveryWorkerFailed:
+        details["api_receipt_received"] = error.api_receipt_received
     if kind is LifecycleRejected:
         if error.returncode is not None:
             details["returncode"] = error.returncode
