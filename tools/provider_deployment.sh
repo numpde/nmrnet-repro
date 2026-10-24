@@ -617,8 +617,19 @@ deployment_finish() {
         if [[ -n ${deployment_primary_failure_receipt-} ]]; then printf 'Protected primary Engine cause: %s\n' "$deployment_primary_failure_receipt" >&2; fi
         if [[ -n ${deployment_additional_failure_receipt-} ]]; then printf 'Protected additional Engine cause: %s\n' "$deployment_additional_failure_receipt" >&2; fi
     elif [[ -n ${deployment_primary_failure_receipt-} || -n ${deployment_additional_failure_receipt-} ]]; then
-        # Successful settlement removes these temporary inspections. Retain the
-        # failed phase/status above, without sending the operator to dead paths.
+        # Settlement permits removal, but phase/status alone lose the actual
+        # cause. Deliver its bounded operator window first; a broken recipient
+        # leaves original receipts intact without undoing the completed action.
+        local receipt
+        for receipt in "${deployment_primary_failure_receipt-}" "${deployment_additional_failure_receipt-}"; do
+            [[ -n $receipt ]] || continue
+            if deployment_deliver_engine_cause "$receipt"; then :; else
+                status=$?
+                printf 'Deployment action completed; diagnostic delivery failed (status %s): %s Original operation receipts: %s\n' \
+                    "$status" "$inference_diagnostic" "$operation_root" >&2
+                exit "$status"
+            fi
+        done
         printf 'The requested deployment action completed after those probe failures.\n' >&2
     fi
     if [[ $status != 0 ]]; then
@@ -651,6 +662,18 @@ deployment_finish() {
         deployment_remove_operation "$operation_root" || status=$?
     fi
     exit "$status"
+}
+
+deployment_deliver_engine_cause() {
+    local receipt=$1 bytes
+    inference_diagnostic='Cannot deliver Engine cause: its receipt must be a caller-owned mode 0600 regular file smaller than 2 MiB.'
+    [[ -f $receipt && ! -L $receipt && $(stat -c '%u:%a' -- "$receipt") == "$caller_uid:600" ]] || return 2
+    bytes=$(stat -c '%s' -- "$receipt") || return $?
+    (( bytes < 2097152 )) || return 2
+    inference_diagnostic='The diagnostic recipient did not accept the Engine cause output.'
+    printf 'Protected recovered Engine cause (last 8192 of %s bytes):\n' "$bytes" >&2 || return $?
+    inference_native 'recovered Engine cause delivery' 10 stdio tail -c 8192 -- "$receipt" >&2 || return $?
+    printf '\n' >&2
 }
 
 deployment_next_actions() {
