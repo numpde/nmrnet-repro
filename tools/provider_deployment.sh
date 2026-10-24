@@ -4,6 +4,7 @@
 # Contract: docs/notes/021_compose_runner_architecture_20261023.html.
 
 source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_helper_grants.sh"
+source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_runtime_recovery.sh"
 
 deployment_refuse() {
     printf 'Cannot %s deployment %s: %s\n' "$deployment_action" "$deployment_name" "$1" >&2
@@ -300,46 +301,55 @@ deployment_effects_settled() {
     # complete. Its original receipts suffice; do not ask an operator to delete
     # them, replay work, or confuse command failure with an unresolved effect.
     # Missing/failed mutation replies still require observation and fencing.
-    local root=$1 intent phase budget receipts status helper identifier
-    local -a fields=()
+    local root=$1 intent
     [[ -d $root/effects && ! -L $root/effects && $(stat -c '%u:%a' -- "$root/effects") == "$caller_uid:700" ]] || return 2
     for intent in "$root/effects/"* "$root/effects/".[!.]* "$root/effects/"..?*; do
         [[ -e $intent || -L $intent ]] || continue
-        [[ -f $intent && ! -L $intent && $(stat -c '%u:%a' -- "$intent") == "$caller_uid:600" ]] \
-            && (( $(stat -c '%s' -- "$intent") < 65536 )) \
-            && cmp -s <(tail -c 1 -- "$intent") <(printf '\0') || return 2
-        mapfile -d '' -t fields < "$intent"
-        (( ${#fields[@]} >= 4 )) || return 2
-        phase=${fields[0]} budget=${fields[1]} receipts=${fields[2]}
-        [[ $phase =~ ^[A-Za-z0-9_-]+$ && $intent == "$root/effects/$phase.intent" \
-            && $receipts == "$root/"* && $(realpath -m -- "$receipts") == "$receipts" ]] || return 2
-        deployment_seconds "$budget" || return 2
-        if [[ $phase =~ ^(.+)-recovery-[0-9a-f]{32}-(stop|remove)$ ]]; then
-            helper=${BASH_REMATCH[1]}
-        elif [[ $phase =~ ^(.+)-(create|start|stop|remove)$ ]]; then
-            helper=${BASH_REMATCH[1]}
-        else helper=; fi
-        if [[ -n $helper ]]; then
-            status=$root/$helper/retired
-            if [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]]; then
-                IFS=' ' read -r status identifier < "$root/$helper/retired" || return 2
-                if [[ $status == retired && $identifier =~ ^[0-9a-f]{64}$ ]] \
-                    && cmp -s "$root/$helper/retired" <(printf 'retired %s\n' "$identifier"); then
-                    continue
-                fi
-            fi
-            # Successful helper create/start replies acknowledge those effects,
-            # not retirement of the finite helper or release of its grants.
-            return 2
-        fi
-        if [[ $phase =~ ^create-(api|interpreter|store|prediction|reader|smiles|provider)$ \
-            && -f $receipts/reconciled && ! -L $receipts/reconciled \
-            && $(stat -c '%u:%a' -- "$receipts/reconciled") == "$caller_uid:600" ]] \
-            && cmp -s "$receipts/reconciled" <(printf 'realized\n'); then continue; fi
-        status=$receipts/response.status
-        [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]] \
-            && cmp -s "$status" <(printf '0\n') || return 2
+        deployment_effect_settled "$root" "$intent" || return $?
     done
+}
+
+deployment_effect_settled() {
+    local root=$1 intent=$2 phase budget receipts status helper identifier
+    local -a fields=()
+    [[ -f $intent && ! -L $intent && $(stat -c '%u:%a' -- "$intent") == "$caller_uid:600" ]] \
+        && (( $(stat -c '%s' -- "$intent") < 65536 )) \
+        && cmp -s <(tail -c 1 -- "$intent") <(printf '\0') || return 2
+    mapfile -d '' -t fields < "$intent"
+    (( ${#fields[@]} >= 4 )) || return 2
+    phase=${fields[0]} budget=${fields[1]} receipts=${fields[2]}
+    [[ $phase =~ ^[A-Za-z0-9_-]+$ && $intent == "$root/effects/$phase.intent" \
+        && $receipts == "$root/"* && $(realpath -m -- "$receipts") == "$receipts" ]] || return 2
+    deployment_seconds "$budget" || return 2
+    if [[ $phase =~ ^(.+)-recovery-[0-9a-f]{32}-(stop|remove)$ ]]; then
+        helper=${BASH_REMATCH[1]}
+    elif [[ $phase =~ ^(.+)-(create|start|stop|remove)$ ]]; then
+        helper=${BASH_REMATCH[1]}
+    else helper=; fi
+    if [[ -n $helper ]]; then
+        status=$root/$helper/retired
+        if [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]]; then
+            IFS=' ' read -r status identifier < "$root/$helper/retired" || return 2
+            if [[ $status == retired && $identifier =~ ^[0-9a-f]{64}$ ]] \
+                && cmp -s "$root/$helper/retired" <(printf 'retired %s\n' "$identifier"); then
+                return 0
+            fi
+        fi
+        # Successful helper create/start replies acknowledge those effects,
+        # not retirement of the finite helper or release of its grants.
+        return 2
+    fi
+    if [[ $phase =~ ^create-(api|interpreter|store|prediction|reader|smiles|provider)$ \
+        && -f $receipts/reconciled && ! -L $receipts/reconciled \
+        && $(stat -c '%u:%a' -- "$receipts/reconciled") == "$caller_uid:600" ]] \
+        && cmp -s "$receipts/reconciled" <(printf 'realized\n'); then return 0; fi
+    if deployment_runtime_phase "$phase" \
+        && [[ -f $receipts/reconciled && ! -L $receipts/reconciled \
+            && $(stat -c '%u:%a' -- "$receipts/reconciled") == "$caller_uid:600" ]] \
+        && cmp -s "$receipts/reconciled" <(printf 'fenced\n'); then return 0; fi
+    status=$receipts/response.status
+    [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]] \
+        && cmp -s "$status" <(printf '0\n') || return 2
 }
 
 deployment_recover_helper_attempt() {
@@ -435,12 +445,10 @@ deployment_recover_helpers() {
 }
 
 deployment_recover_creates() {
-    local root=$1 intent role bundle original_bundle= digest receipt
+    local root=$1 intent role bundle original_bundle= digest= receipt
     local -a fields=()
     local -A pending=()
     [[ $root == "$operation_root" ]] || return 2
-    digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
-    deployment_project=nmrnet-${digest:0:20}
     for intent in "$root/effects/"create-*.intent; do
         [[ -e $intent || -L $intent ]] || continue
         [[ -f $intent && ! -L $intent && $(stat -c '%u:%a' -- "$intent") == "$caller_uid:600" ]] \
@@ -451,6 +459,10 @@ deployment_recover_creates() {
         role=${fields[0]#create-}
         [[ $role =~ ^(api|interpreter|store|prediction|reader|smiles|provider)$ \
             && $intent == "$root/effects/create-$role.intent" ]] || return 2
+        if [[ -z $digest ]]; then
+            digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
+            deployment_project=nmrnet-${digest:0:20}
+        fi
         receipt=$root/create-$role
         bundle=${fields[11]%/compose.json}
         [[ $bundle == "$deployment_root/bundles/${bundle##*/}" \
@@ -532,7 +544,9 @@ deployment_begin_operation() {
                 || deployment_effects_settled "$operation_root" \
                 || deployment_recover_helpers "$operation_root" \
                 || deployment_recover_creates "$operation_root" \
+                || deployment_recover_runtime "$operation_root" \
                 || { deployment_refuse 'the previous command has unresolved effects; preserve its current operation receipts before another mutation.'; return 2; }
+            if [[ ${deployment_recovery_observed-false} == true ]]; then return 0; fi
             deployment_remove_operation "$operation_root" || return $?
         fi
         mkdir -m 700 -- "$operation_root"
@@ -564,6 +578,8 @@ deployment_finish() {
     if [[ -n ${deployment_additional_failure_receipt-} ]]; then printf 'Protected additional Engine cause: %s\n' "$deployment_additional_failure_receipt" >&2; fi
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Original operation receipts: %s\n' "${operation_root-not-established}" >&2
+    elif [[ ${deployment_recovery_observed-false} == true ]]; then
+        printf 'Requested deployment state observed. Original late-request restrictions remain at %s.\n' "$operation_root"
     elif [[ $operation_owner == query ]]; then
         deployment_remove_operation "$operation_root" || status=$?
     else
@@ -613,7 +629,8 @@ deployment_capture_sources() {
     deployment_inference_inputs=sha256:${digest%% *}
     mapfile -t inference_selectors < "$capture_directory/declared-inputs"
     selectors=("${inference_selectors[@]}" "${geometry_image_inputs[@]}" "${provider_image_inputs[@]}"
-        artifacts/prediction-models.json tools/provider_deployment.sh tools/provider_deployment.py tools/deployment_helper_grants.sh)
+        artifacts/prediction-models.json tools/provider_deployment.sh tools/provider_deployment.py
+        tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh)
     changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${selectors[@]}") || return $?
     [[ -z $changes ]] || { deployment_refuse 'commit deployment/image inputs before freezing their execution provenance.'; return 2; }
     copy_git_blobs 'deployment execution sources' "$repository_root" "$repository_revision" \
@@ -790,8 +807,9 @@ deployment_down() {
         grace=${deployment_stop_seconds[$role]}
         deployment_seconds "$grace" || return 2
         deployment_runtime_effects=true
-        deployment_command "stop-$role" "$((grace + 5))" "$operation_root/stop-$role" true stop --time "$grace" "${deployment_ids[$role]}" || return $?
+        deployment_stop_role "$role" "$grace" || return $?
         deployment_stopped "$role" stop || return $?
+        if [[ ${deployment_runtime_fence-false} == true ]]; then deployment_fence_role "$role" || return $?; fi
     done
 }
 
@@ -801,14 +819,16 @@ deployment_up() {
     name=${selected_bundle##*/}
     for role in provider prediction reader smiles api interpreter store; do
         if [[ -v deployment_ids[$role] && ( ${deployment_running[$role]} == true || ${deployment_restarting[$role]} == true || ${deployment_pids[$role]} != 0 ) ]]; then
-            [[ ${deployment_bundles[$role]} == "$name" && ${deployment_running[$role]} == true && ${deployment_restarting[$role]} == false ]] \
+            [[ ${deployment_bundles[$role]} == "$name" \
+                && ( ( ${deployment_running[$role]} == true && ${deployment_restarting[$role]} == false ) \
+                    || ( ${deployment_resuming-false} == true && ${deployment_restarting[$role]} == true ) ) ]] \
                 || { deployment_refuse 'a different generation or restarting process still owns the stack; use down before reconfiguration.'; return 2; }
             running_count=$((running_count + 1))
         fi
     done
-    if (( running_count )); then deployment_plan_inputs false || return $?
+    if (( ${#deployment_ids[@]} )) || [[ ${deployment_resuming-false} == true ]]; then deployment_plan_inputs false || return $?
     else deployment_plan_inputs true || return $?; fi
-    if (( running_count )); then
+    if (( running_count )) && [[ ${deployment_resuming-false} != true || $running_count == 7 ]]; then
         (( running_count == 7 && ${#deployment_ids[@]} == 7 )) \
             || { deployment_refuse 'only part of the stack is running; preserve original owners and use down before restarting.'; return 2; }
         deployment_start_deadline=$((SECONDS + deployment_startup_seconds))
@@ -820,7 +840,7 @@ deployment_up() {
     for role in provider prediction reader smiles api interpreter store; do
         [[ -v deployment_ids[$role] ]] || continue
         if [[ ${deployment_bundles[$role]} != "$name" ]]; then
-            printf 'Replacing stopped %s container %s; its bounded Docker logs will be discarded.\n' "$role" "${deployment_ids[$role]}"
+            printf 'Replacing stopped %s container %s; its bounded Docker logs will be discarded.\n' "$role" "${deployment_ids[$role]}" || return $?
             deployment_runtime_effects=true
             deployment_command "replace-$role" 30 "$operation_root/replace-$role" true rm "${deployment_ids[$role]}" || return $?
         fi
@@ -843,7 +863,10 @@ deployment_up() {
     for role in api interpreter store prediction reader smiles provider; do
         [[ ${deployment_bundles[$role]} == "$name" ]] || return 2
         identifier=${deployment_ids[$role]}
-        deployment_command "start-$role" 30 "$operation_root/start-$role" true start "$identifier" || return $?
+        if [[ ${deployment_resuming-false} != true \
+            || ( ${deployment_running[$role]} != true && ${deployment_restarting[$role]} != true ) ]]; then
+            deployment_start_role "$role" || return $?
+        fi
         deployment_ready "$role" || return $?
     done
     deployment_inventory started || return $?
@@ -970,6 +993,8 @@ deployment_main() {
     source "$repository_root/tools/git_metadata.sh"
     docker_client_directory= deployment_diagnostic= deployment_primary_failure_receipt= deployment_additional_failure_receipt= pending_diagnostic= inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true
     deployment_runtime_effects=false
+    unset deployment_runtime_root deployment_runtime_prefix
+    deployment_resuming=false deployment_runtime_fence=false deployment_recovery_observed=false
     deployment_helper_retired=true
     operation_root= operation_owner=unestablished operation_established=false
     trap deployment_finish EXIT
@@ -980,6 +1005,7 @@ deployment_main() {
     # Main graph is installed below the finite command/helper owners. Its
     # mutation entry must retain one discoverable operation root before effects.
     deployment_begin_operation
+    if [[ ${deployment_recovery_observed-false} == true ]]; then return 0; fi
     deployment_bootstrap
     deployment_dispatch
 }

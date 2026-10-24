@@ -161,6 +161,8 @@ compose_witness_main() {
     source "$repository_root/tools/provider_image.sh"
     docker_client_directory= pending_diagnostic= inference_diagnostic= worker_retirement_diagnostic=
     inference_retirement_confirmed=true inference_cancellation_status=0
+    unset deployment_runtime_root deployment_runtime_prefix
+    deployment_resuming=false deployment_runtime_fence=false deployment_recovery_observed=false
     peer_id= deployment_installed=false peer_creation_attempted=false print_command=false
     scratch=$(mktemp -d /tmp/nmrnet-compose-XXXXXXXX)
     deployment=qualification-${scratch##*-}

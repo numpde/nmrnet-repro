@@ -9,11 +9,194 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from itertools import product
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_absent_old_target_settles_both_requests_without_controlling_its_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) deployment_root=$2 deployment_name=fixture deployment_action=down
+operation_root=$2/original operation_generation=cccccccccccccccccccccccccccccccc
+deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
+old=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+replacement=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+stop_phase=recover-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-stop-provider
+mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/start-provider" "$operation_root/$stop_phase"
+printf '%s\\0' start-provider 30 "$operation_root/start-provider" start "$old" > "$operation_root/effects/start-provider.intent"
+printf '%s\\0' "$stop_phase" 7 "$operation_root/$stop_phase" stop --time 2 "$old" > "$operation_root/effects/$stop_phase.intent"
+deployment_bootstrap() { deployment_existing_count=1; }
+deployment_inventory() { declare -gA deployment_ids=([provider]="$replacement") deployment_bundles=([provider]=generation-replacement); }
+reads=0
+deployment_command() {
+    [[ $4 == false && $5 == ps && ${!#} == "id=$old" ]] || return 91
+    reads=$((reads + 1)); mkdir -m 700 -- "$3"; : > "$3/response.stdout"
+}
+deployment_recover_runtime "$operation_root"
+[[ $reads == 1 && ${deployment_ids[provider]} == "$replacement" ]]
+cmp -s "$operation_root/start-provider/reconciled" <(printf 'fenced\\n')
+cmp -s "$operation_root/$stop_phase/reconciled" <(printf 'fenced\\n')
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_failed_log_loss_warning_preserves_the_stopped_containers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+identifier=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+declare -A deployment_ids=([provider]="$identifier") deployment_pending_ids=([start-provider]="$identifier")
+deployment_runtime_root=$2 deployment_runtime_prefix=recover-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-
+deployment_command() { : > "$deployment_runtime_root/remove-called"; }
+if deployment_fence_role provider > /dev/full; then exit 91; fi
+[[ ! -e $2/remove-called && ${deployment_ids[provider]} == "$identifier" ]]
+declare -A deployment_bundles=([provider]=generation-old) deployment_running=([provider]=false)
+declare -A deployment_restarting=([provider]=false) deployment_pids=([provider]=0)
+deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-new; }
+deployment_plan_inputs() { :; }
+deployment_runtime_directories() { :; }
+if deployment_up > /dev/full; then exit 92; fi
+[[ ! -e $2/remove-called && ${deployment_ids[provider]} == "$identifier" ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("write error", result.stderr)
+
+    def test_same_direction_stop_reuses_an_acknowledged_stop_but_never_a_snapshot_alone(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            engine = root / "engine.sh"
+            engine.write_text('''set -euo pipefail
+root=$1; shift
+identifier=${!#}
+printf '%s\\n' "$1" >> "$root/calls"
+case $1 in
+    stop) printf '%s\\n' "$identifier" ;;
+    inspect) printf '%s|exited|false|0|false|0|false\\n' "$identifier" ;;
+    *) exit 91 ;;
+esac
+''')
+            result = self.shell('''
+caller_uid=$(id -u) deployment_root=$2 deployment_name=fixture deployment_action=down
+operation_root=$2/original operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
+deployment_diagnostic= inference_diagnostic=
+mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/stop-provider"
+provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+printf '%s\\0' stop-provider 7 "$operation_root/stop-provider" stop --time 2 "$provider" > "$operation_root/effects/stop-provider.intent"
+engine=(bash "$3" "$2")
+inference_native() { shift 3; "$@"; }
+deployment_bootstrap() { deployment_existing_count=1; }
+deployment_inventory() {
+    declare -gA deployment_ids=([provider]="$provider") deployment_bundles=([provider]=generation-original)
+    declare -gA deployment_running=([provider]=false) deployment_restarting=([provider]=false)
+    declare -gA deployment_pids=([provider]=0) deployment_stop_seconds=([provider]=2)
+}
+deployment_recover_runtime "$operation_root"
+operation_generation=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+deployment_recover_runtime "$operation_root"
+[[ $deployment_recovery_observed == true && ! -e $operation_root/stop-provider/reconciled ]]
+effects=("$operation_root"/effects/*)
+[[ ${#effects[@]} == 2 ]]
+''', root, engine)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "calls").read_text().splitlines(), ["stop", "inspect", "inspect"])
+
+    def test_opposing_provider_request_is_fenced_before_any_dependency_teardown(self):
+        for kind, failure in product(("start", "stop"), ("none", "stop", "remove", "absence")):
+            with self.subTest(kind=kind, failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                engine = root / "engine.sh"
+                engine.write_text('''set -euo pipefail
+root=$1 failure=$2; shift 2
+identifier=${!#}
+printf '%s %s\\n' "$1" "$identifier" >> "$root/calls"
+case $1 in
+    stop) [[ $failure != stop ]] || exit 7; printf '%s\\n' "$identifier" ;;
+    inspect) printf '%s|exited|false|0|false|0|false\\n' "$identifier" ;;
+    rm) [[ $failure != remove ]] || exit 8; rm -- "$root/present-$identifier" ;;
+    ps) identifier=${identifier#id=}
+        if [[ -e $root/present-$identifier || $failure == absence ]]; then printf '%s\\n' "$identifier"; fi ;;
+    *) exit 91 ;;
+esac
+''')
+                result = self.shell('''
+caller_uid=$(id -u) caller_gid=$(id -g) repository_root=$1 deployment_root=$2
+deployment_name=fixture operation_root=$2/original kind=$5
+operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+deployment_helper_retired=true inference_retirement_confirmed=true inference_cancellation_status=0
+deployment_diagnostic= inference_diagnostic=
+mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/$kind-provider"
+provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+prediction=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+if [[ $kind == start ]]; then deployment_action=down budget=30 arguments=(start "$provider")
+else deployment_action=up budget=7 arguments=(stop --time 2 "$provider"); fi
+printf '%s\\0' "$kind-provider" "$budget" "$operation_root/$kind-provider" "${arguments[@]}" > "$operation_root/effects/$kind-provider.intent"
+: > "$2/present-$provider"; : > "$2/present-$prediction"
+engine=(bash "$3" "$2" "$4")
+inference_native() { shift 3; "$@"; }
+deployment_bootstrap() { deployment_existing_count=2; }
+deployment_inventory() {
+    declare -gA deployment_ids=([provider]="$provider" [prediction]="$prediction")
+    declare -gA deployment_bundles=([provider]=generation-original [prediction]=generation-original)
+    declare -gA deployment_running=([provider]=true [prediction]=true)
+    declare -gA deployment_restarting=([provider]=false [prediction]=false)
+    declare -gA deployment_pids=([provider]=1 [prediction]=2)
+    declare -gA deployment_stop_seconds=([provider]=2 [prediction]=2)
+}
+if deployment_recover_runtime "$operation_root"; then
+    [[ $4 == none && ! -e $2/present-$provider && -e $2/present-$prediction ]]
+    cmp -s "$operation_root/$kind-provider/reconciled" <(printf 'fenced\\n')
+else [[ $4 != none && ! -e $operation_root/$kind-provider/reconciled ]]; fi
+''', root, engine, failure, kind)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = (root / "calls").read_text().splitlines()
+                dependency = "stop " + "b" * 64
+                if failure == "none":
+                    self.assertLess(calls.index("rm " + "a" * 64), calls.index(dependency))
+                else:
+                    self.assertNotIn(dependency, calls)
+                self.assertFalse(any(call.startswith("start ") or call.startswith("create ") for call in calls))
+
+    def test_same_intent_startup_resumes_only_nonrunning_ids_and_retains_the_original_restriction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up repository_root=$1
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_begin_operation
+parent=$operation_root
+cp -- "$parent/intent" "$2/original-intent"
+provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+mkdir -m 700 -- "$parent/start-provider"
+printf '%s\\0' start-provider 30 "$parent/start-provider" start "$provider" > "$parent/effects/start-provider.intent"
+starts=0 observations=0
+deployment_bootstrap() { deployment_existing_count=7; }
+deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-original; }
+deployment_inventory() {
+    if [[ $1 == started ]]; then
+        for role in "${!deployment_ids[@]}"; do deployment_running[$role]=true; done
+        return 0
+    fi
+    declare -gA deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
+    for role in api interpreter store prediction reader smiles provider; do
+        deployment_ids[$role]=$role-id deployment_bundles[$role]=generation-original
+        deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
+    done
+    deployment_ids[provider]=$provider deployment_running[api]=true deployment_pids[api]=1
+}
+deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == false ]]; }
+deployment_runtime_directories() { :; }
+deployment_ready() { observations=$((observations + 1)); }
+deployment_command() {
+    [[ $1 == resume-*-start-* && $3 == "$parent/$1" && $4 == true && $5 == start && $6 != api-id ]] || return 91
+    starts=$((starts + 1))
+}
+deployment_begin_operation
+[[ $deployment_recovery_observed == true && $starts == 6 && $observations == 7 && ! -e $parent/complete ]]
+cmp -s "$parent/intent" "$2/original-intent"
+[[ -f $parent/effects/start-provider.intent && ! -e $parent/start-provider/reconciled ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_failed_recovery_witness_closes_its_local_lock_before_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.shell('''
@@ -316,7 +499,7 @@ for role in api interpreter store prediction reader smiles provider; do
     deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
 done
 deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-existing; }
-deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == true ]]; }
+deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == false ]]; }
 deployment_runtime_directories() { :; }
 deployment_ready() { :; }
 deployment_command() { [[ $1 == start-* ]] || return 92; printf '%s\\n' "$1"; }
@@ -503,6 +686,7 @@ inference_retirement_confirmed=true deployment_helper_retired=true
 deployment_begin_operation
 printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
 deployment_action=down
+deployment_bootstrap() { return 2; } # No target grants have been admitted in this refusal fixture.
 if deployment_begin_operation; then exit 91; fi
 [[ -f $operation_root/effects/start-provider.intent ]]
 ''', directory)
