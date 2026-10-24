@@ -14,6 +14,7 @@ from provider_core.container_guard import require_container
 require_container()
 
 from provider_core.api import ApiFailure
+from provider_core.api_config import ApiConfigurationRejected
 from provider_core.attempt_record import (
     AcknowledgedAttempt,
     TerminalConfirmed,
@@ -43,6 +44,7 @@ from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
 from provider_core.runner_protocol import LifecycleRejected, RetirementUnconfirmed
 from provider_core.starting import StartFailed, StartRefused
+from provider_core.startup_file import StartupFileRejected
 from provider_core.transport import ExchangeFailed, response_request_id
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected
 
@@ -82,6 +84,8 @@ def owned_relationships(error):
         DeliveryUnavailable,
         DeliveryStorageFailed,
         DeliveryWorkerFailed,
+        StartupFileRejected,
+        ApiConfigurationRejected,
     ):
         yield "owned cause", error.cause
     if kind in (
@@ -94,6 +98,7 @@ def owned_relationships(error):
         UploadInputRejected,
         UploadFileReadFailed,
         DeliveryWorkerFailed,
+        StartupFileRejected,
     ):
         for cause in error.cleanup_failures:
             yield "independent cleanup", cause
@@ -161,6 +166,8 @@ def owned_details(error):
         DeliveryFull,
         DeliveryStorageFailed,
         DeliveryWorkerFailed,
+        StartupFileRejected,
+        ApiConfigurationRejected,
     ):
         return {}
     details = {"message": str(error)}

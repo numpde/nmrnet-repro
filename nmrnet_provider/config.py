@@ -14,9 +14,6 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
-import os
-import ssl
-import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,16 +22,17 @@ import tomllib
 
 from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
-from provider_core.api import require_api_topology
+from provider_core.api_config import (
+    ApiConfigurationRejected, ApiSettings, HttpsSettings,
+    api_settings, https_settings, require_api_fields,
+)
 from provider_core.attempt_files import StoreLimits
 from provider_core.attempt_record import MAX_RECORD_BYTES, RecoveryScope
 from provider_core.attempt_store import require_store_settings
 from provider_core.chat import ChatEndpointSpec, require_chat_limits
 from provider_core.conversation import require_turn_limit
-from provider_core.credential import MAX_CREDENTIAL_BYTES, parse_provider_credential
 from provider_core.execution import require_execution_settings, require_observation_gap
-from provider_core.signing import SigningIdentity
-from provider_core.transport import HttpTransport, require_transport_settings
+from provider_core.startup_file import StartupFileRejected, read_startup_file as core_read_startup_file
 from provider_core.uploads import UploadLimits, require_store_origin
 
 if TYPE_CHECKING:
@@ -54,41 +52,6 @@ class ConfigurationRejected(ValueError):
         super().__init__(f"Cannot configure NMRNet provider: {message}")
         self.cause = cause
         self.cleanup_failures = tuple(cleanup_failures)
-
-
-@dataclass(frozen=True, slots=True, repr=False)
-class HttpsSettings:
-    trust: ssl.SSLContext
-    exchange_seconds: float
-    retirement_seconds: float
-    proxy_socket: str | None = None
-
-    def __post_init__(self):
-        require_transport_settings(
-            trust=self.trust,
-            exchange_seconds=self.exchange_seconds,
-            retirement_seconds=self.retirement_seconds,
-            proxy_socket=self.proxy_socket,
-        )
-
-    def new_transport(self):
-        """Give each runtime role a fresh, independently retired exchange owner."""
-        return HttpTransport(
-            trust=self.trust,
-            exchange_seconds=self.exchange_seconds,
-            retirement_seconds=self.retirement_seconds,
-            proxy_socket=self.proxy_socket,
-        )
-
-
-@dataclass(frozen=True, slots=True, repr=False)
-class ApiSettings:
-    identity: SigningIdentity
-    http: HttpsSettings
-    expected_topology: str
-
-    def __post_init__(self):
-        require_api_topology(self.expected_topology)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -301,107 +264,43 @@ def _path(value, label):
 
 
 def read_startup_file(path, *, maximum_bytes, label, secret=False):
-    """Read the admitted descriptor; trusted parent mounts remain host-owned.
-
-    O_NOFOLLOW protects the final component only. Read and close failures remain
-    separately inspectable, following provider_core.attempt_files' ownership.
-    """
-    path = _path(path, label)
+    """Keep NMRNet's startup context around the shared descriptor admission."""
     try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except OSError as cause:
+        return core_read_startup_file(path, maximum_bytes=maximum_bytes, label=label, secret=secret)
+    except StartupFileRejected as failure:
         raise ConfigurationRejected(
-            f"{label} could not be opened as a regular file without a final symlink.", cause=cause
+            str(failure), cause=failure.cause, cleanup_failures=failure.cleanup_failures,
         ) from None
-    content, primary, cleanup = None, None, None
-    try:
-        status = os.fstat(descriptor)
-        mode = stat.S_IMODE(status.st_mode)
-        if not stat.S_ISREG(status.st_mode) or status.st_size > maximum_bytes:
-            raise ConfigurationRejected(f"{label} must be a regular file within {maximum_bytes} bytes.")
-        if secret:
-            if status.st_uid != os.geteuid() or mode not in (0o400, 0o600):
-                raise ConfigurationRejected(f"{label} must belong to the container user with mode 0400 or 0600.")
-        elif status.st_uid not in (0, os.geteuid()) or mode & 0o022:
-            raise ConfigurationRejected(f"{label} must belong to root or the container user and forbid group/other writes.")
-        content = _read_contents(descriptor, status.st_size, maximum_bytes, label)
-    except BaseException as cause:
-        primary = cause
-    try:
-        os.close(descriptor)
-    except OSError as cause:
-        cleanup = cause
-    if primary is not None and not isinstance(primary, Exception):
-        if cleanup is not None:
-            raise primary from ConfigurationRejected(
-                f"{label} close also failed during interruption.", cause=primary.__cause__, cleanup_failures=(cleanup,)
+    except BaseException as interruption:
+        # Preserve the original interruption identity and earlier cause while
+        # translating only the shared owner's independent close evidence.
+        failure = interruption.__cause__
+        if type(failure) is StartupFileRejected:
+            raise interruption from ConfigurationRejected(
+                str(failure), cause=failure.cause, cleanup_failures=failure.cleanup_failures,
             )
-        raise primary
-    if primary is not None or cleanup is not None:
-        if isinstance(primary, ConfigurationRejected) and cleanup is None:
-            raise primary
-        raise ConfigurationRejected(
-            f"{label} could not be read and closed; no runtime resources were acquired.",
-            cause=primary,
-            cleanup_failures=() if cleanup is None else (cleanup,),
-        ) from None
-    return content
-
-
-def _read_contents(descriptor, expected_bytes, maximum_bytes, label):
-    content = bytearray()
-    while len(content) <= maximum_bytes:
-        part = os.read(descriptor, maximum_bytes + 1 - len(content))
-        if not part:
-            break
-        content.extend(part)
-    if len(content) != expected_bytes or len(content) > maximum_bytes:
-        raise ConfigurationRejected(f"{label} changed length during its bounded startup read.")
-    return bytes(content)
+        raise
 
 
 def _https(table, label, read_file):
-    # CPython v3.12.12 Lib/ssl.py::create_default_context honors SSLKEYLOGFILE;
-    # OpenSSL default roots honor SSL_CERT_FILE/DIR. Neither is a startup grant.
-    if any(name in os.environ for name in ("SSL_CERT_FILE", "SSL_CERT_DIR", "SSLKEYLOGFILE")):
-        raise ConfigurationRejected(
-            "remove ambient SSL_CERT_FILE, SSL_CERT_DIR and SSLKEYLOGFILE; configure each explicit ca_file instead."
-        )
-    if "ca_file" in table:
-        raw = read_file(table["ca_file"], maximum_bytes=1048576, label=label + " CA")
-        try:
-            # cadata replaces system roots and consumes these bytes, never a
-            # second pathname lookup after the descriptor has been admitted.
-            trust = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            trust.load_verify_locations(cadata=raw.decode("ascii"))
-        except (UnicodeError, ValueError, OSError) as cause:
-            raise ConfigurationRejected(f"{label} CA must contain PEM certificates within 1048576 bytes.", cause=cause) from None
-    else:
-        try:
-            trust = ssl.create_default_context()
-        except (OSError, ssl.SSLError) as cause:
-            raise ConfigurationRejected(f"{label} system TLS roots could not be loaded.", cause=cause) from None
-    return HttpsSettings(trust, table["exchange_seconds"], table["retirement_seconds"])
+    try:
+        return https_settings(table, label, read_file)
+    except ApiConfigurationRejected as failure:
+        raise ConfigurationRejected(str(failure), cause=failure.cause) from None
 
 
 def _api_fields(table):
-    _fields(
-        table,
-        {"origin", "profile", "topology", "provider_ref", "credential_file", "exchange_seconds", "retirement_seconds"},
-        "API",
-        {"ca_file"},
-    )
+    try:
+        require_api_fields(table)
+    except ApiConfigurationRejected as failure:
+        raise ConfigurationRejected(str(failure), cause=failure.cause) from None
 
 
 def _api(table, read_file):
-    _api_fields(table)
-    credential = parse_provider_credential(
-        read_file(table["credential_file"], maximum_bytes=MAX_CREDENTIAL_BYTES, label="API signing credential", secret=True)
-    )
-    if (credential.profile, credential.provider_ref) != (table["profile"], table["provider_ref"]):
-        raise ConfigurationRejected("API signing credential does not match the configured profile and provider.")
-    identity = SigningIdentity(table["origin"], credential.credential_ref, credential.private_key)
-    return ApiSettings(identity, _https(table, "API", read_file), table["topology"]), credential.provider_ref
+    try:
+        return api_settings(table, read_file)
+    except ApiConfigurationRejected as failure:
+        raise ConfigurationRejected(str(failure), cause=failure.cause) from None
 
 
 def _interpreter(table, read_file):

@@ -145,7 +145,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 return os.stat_result(values)
 
             with (
-                patch("nmrnet_provider.config.os.fstat", side_effect=wrong_owner),
+                patch("provider_core.startup_file.os.fstat", side_effect=wrong_owner),
                 self.assertRaisesRegex(ConfigurationRejected, "interpreter key must belong"),
             ):
                 load_provider_config(files.path)
@@ -166,7 +166,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
             def short_read(descriptor, count):
                 return real_read(descriptor, min(count, 17))
 
-            with patch("nmrnet_provider.config.os.read", side_effect=short_read):
+            with patch("provider_core.startup_file.os.read", side_effect=short_read):
                 load_provider_config(files.path)
             changed = False
 
@@ -179,7 +179,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 return real_read(descriptor, count)
 
             with (
-                patch("nmrnet_provider.config.os.read", side_effect=grow_before_read),
+                patch("provider_core.startup_file.os.read", side_effect=grow_before_read),
                 self.assertRaisesRegex(ConfigurationRejected, "changed length"),
             ):
                 load_provider_config(files.path)
@@ -195,7 +195,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 raise cleanup
 
             with (
-                patch("nmrnet_provider.config.os.close", side_effect=close_then_fail),
+                patch("provider_core.startup_file.os.close", side_effect=close_then_fail),
                 self.assertRaises(ConfigurationRejected) as caught,
             ):
                 load_provider_config(files.path)
@@ -216,8 +216,8 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 raise cleanup
 
             with (
-                patch("nmrnet_provider.config.os.read", side_effect=primary),
-                patch("nmrnet_provider.config.os.close", side_effect=close_then_fail),
+                patch("provider_core.startup_file.os.read", side_effect=primary),
+                patch("provider_core.startup_file.os.close", side_effect=close_then_fail),
                 self.assertRaises(KeyboardInterrupt) as caught,
             ):
                 load_provider_config(files.path)
@@ -327,8 +327,8 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 raise cleanup
 
             with (
-                patch("nmrnet_provider.config.os.read", side_effect=primary),
-                patch("nmrnet_provider.config.os.close", side_effect=close_then_fail),
+                patch("provider_core.startup_file.os.read", side_effect=primary),
+                patch("provider_core.startup_file.os.close", side_effect=close_then_fail),
                 self.assertRaises(ConfigurationRejected) as caught,
             ):
                 load_provider_config(files.path)
