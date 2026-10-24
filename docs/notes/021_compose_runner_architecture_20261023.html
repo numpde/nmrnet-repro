@@ -1874,6 +1874,22 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       must not become automatic scientific re-execution. This remains separate from
       START availability and from active-observation expiry; unattended recovery is
       not claimed complete here.</p>
+    <p><strong>Production prerequisites, 24 October 2026:</strong> the clean
+      deployment checkout was advanced to
+      <code>f8b25c0</code> through a 142,130-byte Git bundle. The existing explicitly
+      selected shared wheelhouse supplied offline builds; no dependency download
+      was needed. Controller, RDKit and inference builds completed. The existing
+      API-client image passed all 39 contained client checks. These establish
+      source/build/client prerequisites, not a running production deployment or
+      delivered production prediction. Actual retained-state admission and cutover
+      remain required.</p>
+    <p>A post-commit consumer scan found the removed START window still present in
+      <code>config/provider.toml.example</code>; it is now removed there too. Held-cleanup
+      guidance names the supported
+      <code>make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code> action and its
+      provider/native-runner containers, rather than the removed host worker owner.
+      Internal protected effect/retirement facts retain their existing field names.
+      These wording/example corrections do not claim another scientific run.</p>
     <p>Earlier documentation-only validation at source
       <code>c9f654856f8a7992525693afe51d492b9315c316</code>, 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker

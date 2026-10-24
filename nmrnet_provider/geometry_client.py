@@ -24,7 +24,7 @@ class GeometryClient(WorkerClient):
 
     Close on success, source rejection, cancellation or operational failure. A
     closed stream does not stop native parsing. Callers retain this client for
-    close observation and the separate host retirement owner before replacement.
+    the native operation's transport closure and supervisor retirement before replacement.
     """
 
     def __init__(self, reader, writer, *, allocation, operation_seconds):

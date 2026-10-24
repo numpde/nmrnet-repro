@@ -315,7 +315,7 @@ def _retired_prediction_observation(owner):
 
 
 async def run_provider(config, *, execution_identity, selected_artifacts, stop, diagnostics):
-    """Serve once; unresolved original owners stay alive for exact host retirement."""
+    """Keep unresolved owners alive until the deployment retires their containers."""
     store = transport = factory = service = None
     failures = []
     secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)

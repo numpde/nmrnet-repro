@@ -58,12 +58,14 @@ class DiagnosticOutputRefused(ValueError):
 
 
 class ProviderProcessFailed(RuntimeError):
-    """Process-owned failures and current need for enclosing host retirement."""
+    """Process-owned failures and current need for enclosing container retirement."""
 
     def __init__(self, failures, *, requires_host_retirement):
         # silent-defaults: allow-contract -- The operator's next action depends on whether original owners remain held or the process has released its dependencies.
         super().__init__(
-            "Provider cleanup remains held; preserve its process, workers and retained state for exact host retirement."
+            "Provider cleanup remains held; preserve retained state and diagnostics. "
+            "Stop the named deployment's provider and native-runner containers with "
+            "make provider/deployment/down DEPLOYMENT=<name> before replacement."
             if requires_host_retirement
             else "Provider stopped after failure; inspect its protected causes and retained work before restart."
         )
