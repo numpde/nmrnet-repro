@@ -30,12 +30,13 @@ MAX_CHECKPOINT_BYTES = MAX_PENDING_RECORD_BYTES + ATTEMPT_RESPONSE_BYTES + 16384
 SCHEMA = "provider_core.producer_checkpoint.v1"
 
 
-def checkpoint_volume_name(scope):
+# silent-defaults: allow-contract -- Production retains its existing shared volume names; a contained recipe may supply its admitted private project.
+def checkpoint_volume_name(scope, *, namespace="nmr-api-delivery"):
     """Keep producer control private to its original API/provider/lane/generation."""
     if type(scope) is not RecoveryScope:
         raise ValueError("Checkpoint volume naming requires the admitted recovery scope.")
     raw = json.dumps(asdict(scope), sort_keys=True, separators=(",", ":")).encode()
-    return "nmr-api-delivery-control-" + hashlib.sha256(raw).hexdigest()
+    return namespace + "-control-" + hashlib.sha256(raw).hexdigest()
 
 
 def _require_digest(value):

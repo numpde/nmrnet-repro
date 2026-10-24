@@ -4,7 +4,13 @@ set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
-[[ $# == 2 && $role =~ ^(provider|delivery)$ && $action =~ ^(install|up|down|status|logs|client-inputs|discard|held)$ ]] || exit 2
+delivery_project=nmr-api-delivery
+if [[ $# == 4 && $role == provider && $action == install && $3 == --delivery-project ]]; then
+    delivery_project=$4
+elif [[ $# != 2 ]]; then
+    exit 2
+fi
+[[ $role =~ ^(provider|delivery)$ && $action =~ ^(install|up|down|status|logs|client-inputs|discard|held)$ ]] || exit 2
 [[ $role == provider || $action != client-inputs ]] || exit 2
 [[ $role == delivery || ( $action != discard && $action != held ) ]] || exit 2
 caller_uid=$(id -u) caller_gid=$(id -g)
@@ -144,7 +150,7 @@ if [[ $action == install ]]; then
             --definition "$repository_root/config/deployments/$deployment_name/provider.toml" \
             --settings "$repository_root/config/deployments/$deployment_name/deployment.toml" \
             --secrets "$root" --bundle "$bundle" --models /source/artifacts/prediction-models.json \
-            --deployment "$deployment_name" --checkout "$repository_root" --uid "$caller_uid" --gid "$caller_gid" \
+            --deployment "$deployment_name" --delivery-project "$delivery_project" --checkout "$repository_root" --uid "$caller_uid" --gid "$caller_gid" \
             --prepared "$repository_root/.work/prepared" --image-id "$scientific_image" --geometry-image-id "$geometry_image" \
             --controller-image-id "$controller_image" --repository-revision "$revision" --upstream-revision "$upstream_revision"
     else
@@ -172,7 +178,9 @@ if [[ $action == install ]]; then
             --delivery-image "$delivery_image" --controller-image "$controller_image"
     fi
     [[ -f $bundle/compose.json && ! -L $bundle/compose.json ]] || exit 2
-    if [[ $role == provider ]]; then
+    if [[ $role == provider && $delivery_project != nmr-api-delivery ]]; then
+        printf 'Private delivery namespace: %s. Continue through the qualification caller; keep the host shared service unchanged.\n' "$delivery_project"
+    elif [[ $role == provider ]]; then
         find "$bundle" -type f -exec chmod 400 -- {} +
         find "$bundle" -mindepth 1 -type d -exec chmod 500 -- {} +
     else

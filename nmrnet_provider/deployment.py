@@ -76,7 +76,9 @@ def _disjoint(first, second):
         raise ConfigurationRejected("independent deployment grants overlap; keep store, frozen inputs and runtime leaves separate.")
 
 
-def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes):
+# silent-defaults: allow-contract -- The installed production relay namespace remains unchanged unless a contained recipe explicitly selects a private project.
+def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes,
+                   delivery_project="nmr-api-delivery"):
     """Return the seven fixed services without touching Engine or acquiring work.
 
     Role locks and directory privacy are admitted/created by the finite host owner.
@@ -84,6 +86,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     receives frozen credentials and the writable Attempt store. Native scratch and
     per-start process diagnostics are private tmpfs, never host log dump paths.
     """
+    if type(delivery_project) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", delivery_project) is None:
+        raise ConfigurationRejected("delivery project requires one explicit lowercase Compose project name of up to 63 characters.")
     if type(deployment) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", deployment) is None:
         raise ConfigurationRejected("deployment requires an explicit name of up to 48 letters, digits, underscores or hyphens.")
     if any(type(value) is not int or value < 1 for value in (uid, gid)):
@@ -113,12 +117,12 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     provider["depends_on"] = {role: {"condition": "service_started"} for role in ("prediction", "reader", "smiles", "api", "interpreter", "store")}
     provider["command"] = ["--config", str(bundle / "config/provider.toml"), "--execution", "/input/execution.json",
                            "--models", "/input/prediction-models.json", "--diagnostics", "/run"]
-    control_volume = checkpoint_volume_name(config.lifecycle.scope)
+    control_volume = checkpoint_volume_name(config.lifecycle.scope, namespace=delivery_project)
     provider["volumes"] = [_bind(bundle, bundle), _bind(bundle / "execution.json", "/input/execution.json"),
                            _bind(bundle / "prediction-models.json", "/input/prediction-models.json"),
                            {"type": "volume", "source": control_volume, "target": str(store), "read_only": False,
                             "volume": {"nocopy": True}}]
-    delivery_volume = delivery_volume_name(config.delivery.endpoint.api_origin, config.delivery.endpoint.provider_ref)
+    delivery_volume = delivery_volume_name(config.delivery.endpoint.api_origin, config.delivery.endpoint.provider_ref, namespace=delivery_project)
     provider["volumes"].append({"type": "volume", "source": delivery_volume,
                                 "target": str(config.delivery.endpoint.socket_path.parent), "read_only": True,
                                 "volume": {"nocopy": True}})

@@ -18,11 +18,11 @@ from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, _require_context, require_admission_ready, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_record import AcknowledgedAttempt
-from provider_core.delivery_client import DeliveryClient
+from provider_core.delivery_client import DeliveryClient, DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
 from provider_core.producer_checkpoint import AcknowledgedCheckpoint
 from provider_core.hello import AnalysisOffering
@@ -234,7 +234,13 @@ class ProviderService:
         return not self._stop.is_set()
 
     async def _recover_retained(self):
+        # Recovery precedes fresh admission and must use its same authority.
+        _require_context(self.config, self.api, self.policy.admission, self)
+        if self.store.scope != self.config.lifecycle.scope:
+            raise ValueError("Recovery checkpoint storage must use the configured provider scope.")
         records = await self.store.inventory(owner=self)
+        if self._stop.is_set():
+            return
         self._recovery_claims = self._claims.claim_records(records)
         await self._retire_native()
         for record, claim in zip(records, self._recovery_claims, strict=True):
@@ -299,12 +305,12 @@ class ProviderService:
         )
 
     async def _until_api_available(self, operation, *, api, permit_retry, kind):
-        """Pace only the two operation-owned permissions, after original I/O settles.
+        """Pace reviewed API availability and idle relay reads after I/O settles.
 
         The read caller repeats its whole view; Hello constructs current state.
         This owner never retains request bytes or authorizes another mutation.
         """
-        delay, outage = self.policy.idle_seconds, None
+        delay, outage, outage_kind = self.policy.idle_seconds, None, kind
         while not self._stop.is_set():
             previous_failure = api.last_failure
             try:
@@ -318,25 +324,32 @@ class ProviderService:
                     # its new interruption; Hello has its own uncertainty output.
                     raise cause from api.last_failure
                 raise
-            except ApiFailure as failure:
-                try:
-                    await api.retire(owner=self)
-                except (Exception, asyncio.CancelledError, BaseExceptionGroup):
-                    self._remember(f"API {kind} before failed transport retirement", failure)
+            except (ApiFailure, DeliveryUnavailable) as failure:
+                relay_read = isinstance(failure, DeliveryUnavailable)
+                if relay_read and (api is not self.api or kind != "read"):
                     raise
-                if not permit_retry(failure):
+                failure_kind = "delivery" if relay_read else kind
+                try:
+                    if relay_read:
+                        await self.delivery.retire()
+                    else:
+                        await api.retire(owner=self)
+                except (Exception, asyncio.CancelledError, BaseExceptionGroup):
+                    self._remember(f"API {failure_kind} before failed transport retirement", failure)
+                    raise
+                if not (self.delivery.can_retry(failure) if relay_read else permit_retry(failure)):
                     raise
                 if self._stop.is_set():
                     return None
-                outage = failure
+                outage, outage_kind = failure, failure_kind
                 wait = random.uniform(delay / 2, delay)
-                self._on_api_retry(kind, failure, wait)
+                self._on_api_retry(failure_kind, failure, wait)
                 if await self._pause(wait):
                     return None
                 delay = min(self.policy.api_backoff_max_seconds, delay * 2)
             else:
                 if outage is not None:
-                    self._on_api_recovered(kind, outage)
+                    self._on_api_recovered(outage_kind, outage)
                 return result
         return None
 

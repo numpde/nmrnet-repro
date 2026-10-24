@@ -5,6 +5,7 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+import errno
 import hashlib
 import re
 from dataclasses import dataclass
@@ -26,12 +27,13 @@ from provider_core.upload_response import require_job_ref
 MAX_IPC_RESPONSE_BYTES = 2097152
 
 
-def delivery_volume_name(api_origin, provider_ref):
+# silent-defaults: allow-contract -- Production retains its existing shared volume names; a contained recipe may supply its admitted private project.
+def delivery_volume_name(api_origin, provider_ref, *, namespace="nmr-api-delivery"):
     """Name the shared socket grant for this exact authenticated binding."""
     if _https_origin(api_origin)[0] != api_origin:
         raise ValueError("Delivery requires the configured canonical API origin.")
     require_provider_ref(provider_ref)
-    return "nmr-api-delivery-ipc-" + hashlib.sha256((api_origin + "\0" + provider_ref).encode()).hexdigest()
+    return namespace + "-ipc-" + hashlib.sha256((api_origin + "\0" + provider_ref).encode()).hexdigest()
 
 
 class DeliveryRejected(RuntimeError):
@@ -188,7 +190,7 @@ class DeliveryClient:
         return result
 
     def can_retry(self, failure):
-        """Only the unchanged local handoff may retry after its I/O settles."""
+        """Permit another local read or unchanged submission after owned I/O settles."""
         if failure is not self.last_failure or type(failure) is not DeliveryUnavailable or not self.retirement_confirmed:
             return False
         if failure.status == 503:
@@ -198,9 +200,18 @@ class DeliveryClient:
                 or isinstance(exchange.interruption, asyncio.CancelledError)):
             return False
         primary = exchange.primary
+        connect_cause = None
+        if type(primary) is httpcore.ConnectError:
+            # httpcore 1.0.9's pool clears the mapped Unix error's cause:
+            # https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/connection_pool.py#L248-L256
+            # The native error remains in __context__. An explicit cause wins:
+            # incidental missing-file context cannot override a TLS refusal.
+            connect_cause = primary.__cause__
+            if connect_cause is None:
+                connect_cause = primary.__context__
         return (
             _temporary_io_failure(primary, 8)
-            or (type(primary) is httpcore.ConnectError and isinstance(primary.__cause__, FileNotFoundError))
+            or (type(connect_cause) is FileNotFoundError and connect_cause.errno == errno.ENOENT)
             or (type(primary) is httpcore.RemoteProtocolError
                 and (exchange.response_head is None or exchange.response_head.status in (200, 503)))
         )

@@ -43,7 +43,7 @@ def _write(path, raw):
 
 
 def freeze_deployment(definition, settings, secrets, bundle, source_root, models,
-                      *, source_names, deployment, checkout, uid, gid, prepared, **identities):
+                      *, source_names, deployment, checkout, uid, gid, prepared, delivery_project="nmr-api-delivery", **identities):
     """Freeze admitted inputs into a fresh generation for Compose normalization.
 
     No API/model request, store opening or worker allocation occurs. Failed
@@ -156,7 +156,8 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     for name in ("inference.lock", "unicore-source.json"):
         _write(bundle / name, source_bytes(source_root / "requirements" / name, 1024 * 1024))
     plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
-                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=local["routes"])
+                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=local["routes"],
+                          delivery_project=delivery_project)
     external = any(route["mode"] == "external" for route in local["routes"].values())
     if external:
         resolvers = local.get("resolvers")
@@ -228,6 +229,7 @@ def main(arguments=None):
         freeze.add_argument("--" + name, type=Path, required=True)
     freeze.add_argument("--source", dest="source_names", action="append", required=True)
     freeze.add_argument("--deployment", required=True)
+    freeze.add_argument("--delivery-project", default="nmr-api-delivery")
     for name in ("uid", "gid"):
         freeze.add_argument("--" + name, type=int, required=True)
     for name in ("image-id", "geometry-image-id", "controller-image-id", "repository-revision", "upstream-revision"):

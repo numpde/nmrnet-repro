@@ -28,7 +28,6 @@ from tools.artifacts import fsync_directory
 from tools.provider_proxy import ServicePolicy
 
 PROJECT = "nmr-api-delivery"
-QUEUE = PROJECT + "-queue"
 CORE_PYTHON = "/opt/provider-core/environment/bin/python"
 
 
@@ -64,7 +63,7 @@ def _scalar(value):
     return json.dumps(value, allow_nan=False)
 
 
-def _api_proxy(original, plan, settings, *, key, image, uid, gid, labels, output, binding_directory, source_bundle):
+def _api_proxy(original, plan, settings, *, key, image, uid, gid, labels, output, binding_directory, source_bundle, project):
     proxy = copy.deepcopy(original)
     command = proxy.get("command")
     allowed = {"--mode", "--interface", "--socket", "--ready-file", "--status-directory", "--authority", "--address"}
@@ -89,7 +88,7 @@ def _api_proxy(original, plan, settings, *, key, image, uid, gid, labels, output
     route_root = output / "runtime" / key
     route_root.mkdir(mode=0o700)
     proxy.update(image=image, entrypoint=[CORE_PYTHON, "-I", "-B", "-m", "tools.provider_proxy"],
-                 user=f"{uid}:{gid}", labels=labels, container_name=PROJECT + "-api-" + key[:16],
+                 user=f"{uid}:{gid}", labels=labels, container_name=project + "-api-" + key[:16],
                  volumes=[_bind(route_root, "/route", readonly=False)])
     # Proxy modules and their status checker share the installed core environment.
     proxy["healthcheck"] = {"test": ["CMD", CORE_PYTHON, "-I", "-B", "-m", "provider_core.process_status",
@@ -129,7 +128,11 @@ def _api_proxy(original, plan, settings, *, key, image, uid, gid, labels, output
     return proxy, networks, route_root
 
 
-def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image):
+# silent-defaults: allow-contract -- Production keeps the existing host singleton; only the contained qualification caller selects a distinct literal project.
+def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image, *, project=PROJECT):
+    if type(project) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", project) is None:
+        raise DeliveryDeploymentRejected("Delivery project requires one explicit lowercase Compose project name of up to 63 characters.")
+    queue = project + "-queue"
     if (type(uid) is not int or type(gid) is not int or uid <= 0 or gid <= 0 or uid != os.geteuid()
             or any(re.fullmatch(r"sha256:[0-9a-f]{64}", image) is None for image in (delivery_image, controller_image))):
         raise DeliveryDeploymentRejected("Delivery freezing requires its installing nonzero UID/GID and two immutable image IDs.")
@@ -146,8 +149,8 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
     (output / "bindings").mkdir(mode=0o700)
     (output / "runtime").mkdir(mode=0o700)
     services, networks, volumes, bindings, roots, seen = {}, {}, {}, [], [], set()
-    volumes[QUEUE] = {"name": QUEUE}
-    roots.append({"volume": QUEUE, "target": "/volumes/queue", "mode": 0o700})
+    volumes[queue] = {"name": queue}
+    roots.append({"volume": queue, "target": "/volumes/queue", "mode": 0o700})
     for bundle in bundles:
         facts = bundle.lstat()
         if not stat.S_ISDIR(facts.st_mode) or facts.st_uid != uid or stat.S_IMODE(facts.st_mode) != 0o500:
@@ -170,8 +173,8 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
         if identity in seen:
             raise DeliveryDeploymentRejected("Two selected provider bundles claim the same delivery API/provider identity.")
         seen.add(identity)
-        ipc_volume = delivery_volume_name(*identity)
-        key = ipc_volume.removeprefix(PROJECT + "-ipc-")
+        ipc_volume = delivery_volume_name(*identity, namespace=project)
+        key = ipc_volume.removeprefix(project + "-ipc-")
         if re.fullmatch(r"[0-9a-f]{64}", key) is None:
             raise DeliveryDeploymentRejected("The shared delivery volume owner returned an unsupported binding identity.")
         directory = output / "bindings" / key
@@ -185,10 +188,10 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
             api["ca_file"] = f"/input/bindings/{key}/ca.pem"
         plan = read_document(read_startup_file(bundle / "compose.json", maximum_bytes=1048576,
                                                label="installed provider Compose recipe", secret=True).replace(b"$$", b"$"), 1048576)
-        labels = {"io.nmrnet-repro.delivery": PROJECT, "io.nmrnet-repro.delivery-binding": key}
+        labels = {"io.nmrnet-repro.delivery": project, "io.nmrnet-repro.delivery-binding": key}
         proxy, attached, route_root = _api_proxy(plan["services"]["api"], plan, settings, key=key,
             image=delivery_image, uid=uid, gid=gid, labels=labels, output=output,
-            binding_directory=directory, source_bundle=bundle)
+            binding_directory=directory, source_bundle=bundle, project=project)
         role = "api-" + key[:16]
         if role in services:
             raise DeliveryDeploymentRejected("Delivery proxy service identities collide; no ambiguous recipe was published.")
@@ -197,16 +200,16 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
         volumes[ipc_volume] = {"name": ipc_volume}
         roots.append({"volume": ipc_volume, "target": f"/volumes/ipc-{key}", "mode": 0o710})
         lifecycle = document["lifecycle"]
-        control = checkpoint_volume_name(RecoveryScope(*identity, lifecycle["consumer_id"], lifecycle["generation_id"]))
+        control = checkpoint_volume_name(RecoveryScope(*identity, lifecycle["consumer_id"], lifecycle["generation_id"]), namespace=project)
         volumes[control] = {"name": control}
-        roots.append({"volume": control, "target": "/volumes/control-" + control.removeprefix(PROJECT + "-control-"), "mode": 0o700})
+        roots.append({"volume": control, "target": "/volumes/control-" + control.removeprefix(project + "-control-"), "mode": 0o700})
         socket_leaf = Path(document["delivery"]["socket_path"]).name
         bindings.append((key, ipc_volume, route_root, api, socket_leaf))
     daemon = _service(delivery_image, CORE_PYTHON, "provider_core.delivery_main", uid=uid, gid=gid,
-                      labels={"io.nmrnet-repro.delivery": PROJECT}, stop_seconds=60)
-    daemon["container_name"] = PROJECT + "-daemon"
+                      labels={"io.nmrnet-repro.delivery": project}, stop_seconds=60)
+    daemon["container_name"] = project + "-daemon"
     daemon["command"] = ["--config", "/input/daemon.toml"]
-    daemon["volumes"] = [_bind(output, "/input"), _volume(QUEUE, "/state")]
+    daemon["volumes"] = [_bind(output, "/input"), _volume(queue, "/state")]
     text = ['schema_id = "provider-core.delivery.v1"', 'state_directory = "/state"',
             "request_seconds = 30", "retry_initial_seconds = 1", "retry_max_seconds = 30", "[limits]",
             "provider_items = 8", "provider_bytes = 16777216", f"total_items = {8 * len(bindings)}",
@@ -219,17 +222,17 @@ def prepare(provider_bundles, output, uid, gid, delivery_image, controller_image
     services["delivery"] = daemon
     initializer = _service(controller_image, "/opt/provider/environment/bin/python",
         "nmrnet_provider.delivery_deployment", uid=0, gid=0,
-        labels={"io.nmrnet-repro.delivery": PROJECT}, stop_seconds=10)
+        labels={"io.nmrnet-repro.delivery": project}, stop_seconds=10)
     initialize_command = ["initialize", "--uid", str(uid), "--gid", str(gid)]
     for root in roots:
-        kind = "queue" if root["volume"] == QUEUE else "ipc" if root["mode"] == 0o710 else "control"
+        kind = "queue" if root["volume"] == queue else "ipc" if root["mode"] == 0o710 else "control"
         initialize_command += ["--" + kind, root["target"]]
-    initializer.update(container_name=PROJECT + "-init", restart="no", cap_add=["CHOWN"],
+    initializer.update(container_name=project + "-init", restart="no", cap_add=["CHOWN"],
         command=initialize_command, volumes=[_volume(root["volume"], root["target"]) for root in roots])
     services["init"] = initializer
     daemon["depends_on"] = {"init": {"condition": "service_completed_successfully"}}
     _write(output / "daemon.toml", ("\n".join(text) + "\n").encode())
-    _write(output / "compose.json", compose_bytes({"name": PROJECT, "services": services, "networks": networks, "volumes": volumes}))
+    _write(output / "compose.json", compose_bytes({"name": project, "services": services, "networks": networks, "volumes": volumes}))
     for directory in (output / "bindings", *(output / "bindings").iterdir(), output / "runtime", output):
         fsync_directory(directory)
 
@@ -261,6 +264,7 @@ def main():
     prepare_parser = commands.add_parser("prepare")
     prepare_parser.add_argument("--provider-bundle", type=Path, action="append", required=True)
     prepare_parser.add_argument("--output", type=Path, required=True)
+    prepare_parser.add_argument("--project", default=PROJECT)
     for name in ("uid", "gid"):
         prepare_parser.add_argument("--" + name, type=int, required=True)
     for name in ("delivery-image", "controller-image"):
@@ -273,7 +277,7 @@ def main():
     initializer.add_argument("--control", type=Path, action="append", required=True)
     options = parser.parse_args()
     if options.command == "prepare":
-        prepare(options.provider_bundle, options.output, options.uid, options.gid, options.delivery_image, options.controller_image)
+        prepare(options.provider_bundle, options.output, options.uid, options.gid, options.delivery_image, options.controller_image, project=options.project)
     else:
         initialize(options.uid, options.gid, options.queue, options.ipc, options.control)
 
