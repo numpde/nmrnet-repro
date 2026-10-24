@@ -96,6 +96,7 @@ deployment_action=status
 deployment_begin_operation
 [[ $operation_root == "$deployment_root/operation/query" ]]
 [[ -f $deployment_root/operation/mutation/intent && -f $operation_root/intent ]]
+printf '%s\\0' pending-create 30 "$operation_root/pending/create" create > "$operation_root/effects/pending-create.intent"
 ''', root)
                 self.assertEqual(query.returncode, 0, query.stderr)
                 again = self.shell(base + 'deployment_action=status\ndeployment_begin_operation\n', root)
@@ -117,7 +118,54 @@ deployment_begin_operation
                 self.assertNotIn("Docker", result.stderr)
             self.assertFalse(sentinel.exists())
 
+    def test_known_completed_effects_allow_recovery_without_deleting_receipts_by_hand(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_begin_operation
+first_generation=$operation_generation
+mkdir -m 700 -- "$operation_root/start-provider"
+printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
+printf '0\\n' > "$operation_root/start-provider/response.status"
+deployment_begin_operation
+[[ $operation_generation != "$first_generation" && ! -e $operation_root/start-provider ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_missing_mutation_reply_remains_held_even_when_next_action_is_down(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_begin_operation
+printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
+deployment_action=down
+if deployment_begin_operation; then exit 91; fi
+[[ -f $operation_root/effects/start-provider.intent ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("unresolved effects", result.stderr)
+
+    def test_acknowledged_helper_create_and_start_do_not_establish_retirement(self):
+        for started in (False, True):
+            with self.subTest(started=started), tempfile.TemporaryDirectory() as directory:
+                result = self.shell('''
+caller_uid=$(id -u) deployment_name=fixture deployment_root=$2 deployment_action=up
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_begin_operation
+for phase in $3; do
+    mkdir -p -m 700 -- "$operation_root/inspection/$phase"
+    printf '%s\\0' "inspection-$phase" 30 "$operation_root/inspection/$phase" "$phase" > "$operation_root/effects/inspection-$phase.intent"
+    printf '0\\n' > "$operation_root/inspection/$phase/response.status"
+done
+if deployment_begin_operation; then exit 91; fi
+[[ -f $operation_root/effects/inspection-create.intent ]]
+''', directory, "create start" if started else "create")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("unresolved effects", result.stderr)
+
     def shell(self, program, *arguments):
-        return subprocess.run(["bash", "-euo", "pipefail", "-c", 'source "$1/tools/provider_deployment.sh"\n' + program,
+        return subprocess.run(["bash", "-euo", "pipefail", "-c", 'umask 077\nsource "$1/tools/provider_deployment.sh"\n' + program,
                                "bash", str(ROOT), *(str(value) for value in arguments)],
                               capture_output=True, text=True, timeout=5)

@@ -262,6 +262,45 @@ deployment_remove_operation() {
     rm -rf -- "$directory"
 }
 
+deployment_effects_settled() {
+    # A failed read/readiness command can leave every dispatched mutation known
+    # complete. Its original receipts suffice; do not ask an operator to delete
+    # them, replay work, or confuse command failure with an unresolved effect.
+    # Missing/failed mutation replies still require observation and fencing.
+    local root=$1 intent phase budget receipts status helper identifier
+    local -a fields=()
+    [[ -d $root/effects && ! -L $root/effects && $(stat -c '%u:%a' -- "$root/effects") == "$caller_uid:700" ]] || return 2
+    for intent in "$root/effects/"* "$root/effects/".[!.]* "$root/effects/"..?*; do
+        [[ -e $intent || -L $intent ]] || continue
+        [[ -f $intent && ! -L $intent && $(stat -c '%u:%a' -- "$intent") == "$caller_uid:600" ]] \
+            && (( $(stat -c '%s' -- "$intent") < 65536 )) \
+            && cmp -s <(tail -c 1 -- "$intent") <(printf '\0') || return 2
+        mapfile -d '' -t fields < "$intent"
+        (( ${#fields[@]} >= 4 )) || return 2
+        phase=${fields[0]} budget=${fields[1]} receipts=${fields[2]}
+        [[ $phase =~ ^[A-Za-z0-9_-]+$ && $intent == "$root/effects/$phase.intent" \
+            && $receipts == "$root/"* && $(realpath -m -- "$receipts") == "$receipts" ]] || return 2
+        deployment_seconds "$budget" || return 2
+        if [[ $phase =~ ^(.+)-(create|start|stop|remove)$ ]]; then
+            helper=${BASH_REMATCH[1]}
+            status=$root/$helper/retired
+            if [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]]; then
+                IFS=' ' read -r status identifier < "$root/$helper/retired" || return 2
+                if [[ $status == retired && $identifier =~ ^[0-9a-f]{64}$ ]] \
+                    && cmp -s "$root/$helper/retired" <(printf 'retired %s\n' "$identifier"); then
+                    continue
+                fi
+            fi
+            # Successful helper create/start replies acknowledge those effects,
+            # not retirement of the finite helper or release of its grants.
+            return 2
+        fi
+        status=$receipts/response.status
+        [[ -f $status && ! -L $status && $(stat -c '%u:%a' -- "$status") == "$caller_uid:600" ]] \
+            && cmp -s "$status" <(printf '0\n') || return 2
+    done
+}
+
 deployment_begin_operation() {
     local uuid
     IFS= read -r uuid < /proc/sys/kernel/random/uuid
@@ -283,8 +322,16 @@ deployment_begin_operation() {
             exec {deployment_query_lock}< "$operation_root"
             flock --nonblock "$deployment_query_lock" || return 2
         elif [[ -e $operation_root/intent || -L $operation_root/intent ]]; then
-            deployment_refuse 'the previous query has unresolved helper effects in operation/query; settle that original owner before another query.'
-            return 2
+            if deployment_effects_settled "$operation_root"; then
+                deployment_remove_operation "$operation_root" || return $?
+                mkdir -m 700 -- "$operation_root"
+                exec {deployment_query_lock}<&-
+                exec {deployment_query_lock}< "$operation_root"
+                flock --nonblock "$deployment_query_lock" || return 2
+            else
+                deployment_refuse 'the previous query has unresolved helper effects in operation/query; preserve the original receipts for recovery.'
+                return 2
+            fi
         fi
     else
         operation_owner=mutation
@@ -293,6 +340,7 @@ deployment_begin_operation() {
             [[ -d $operation_root && ! -L $operation_root && -f $operation_root/complete && ! -L $operation_root/complete \
                 && $(stat -c '%u:%a' -- "$operation_root/complete") == "$caller_uid:600" ]] \
                 && cmp -s "$operation_root/complete" <(printf 'complete\n') \
+                || deployment_effects_settled "$operation_root" \
                 || { deployment_refuse 'the previous command has unresolved effects; preserve its current operation receipts before another mutation.'; return 2; }
             deployment_remove_operation "$operation_root" || return $?
         fi
