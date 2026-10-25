@@ -34,7 +34,8 @@
 (<code>peaks_from_mol</code>) in your API/GUI client. Supply coordinates or request
 their generation from SMILES using one of the three forms below. Add
 <a href="#output-settings">result settings</a> to the same submission instructions.</p>
-<h3 id="paste-coordinates">Paste one geometry</h3>
+<h3 id="molecular-input">Geometry and SMILES input</h3>
+<h4 id="paste-coordinates">1. Paste one geometry</h4>
 <p>Paste one atom per line as <code>element x y z</code>, separated by whitespace,
 with no column header or blank lines between atoms. State the coordinate unit:
 <code>angstrom</code>, <code>nm</code> or <code>bohr</code>. For example:</p>
@@ -62,7 +63,7 @@ Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270
 geometry optimization or addition of missing hydrogens is performed. Include
 the H coordinates for which you want proton shifts; see
 <a href="#hydrogens-preserve-supplied-structures-expand-only-generated-ones">hydrogen coverage</a>.</p>
-<h3 id="attach-structures">Attach structures</h3>
+<h4 id="attach-structures">2. Attach structures</h4>
 <p>Attach a coordinate table, plain XYZ, V2000 MOL/SDF, PDB, MOL2 or
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/tests/fixtures/preparation/normative/atom_order.json">coordinate JSON</a>
 file. MOL/SDF must be marked <code>3D</code>; 2D drawings are rejected.
@@ -103,7 +104,7 @@ Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/530292720f85cf250e
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/mol.py#L25">V2000 3D requirement</a>;
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/pdb.py#L116">PDB alternate locations</a>;
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/upload_archive.py">archive selection</a>.</p>
-<h3 id="generate-from-smiles">Generate coordinates from SMILES</h3>
+<h4 id="generate-from-smiles">3. Generate coordinates from SMILES</h4>
 <p>Supply one plain SMILES string and an explicit conformer count. For example:</p>
 <pre><code>SMILES: CCl
 Generate 3 conformers and predict 1H and 13C shifts for each.</code></pre>
