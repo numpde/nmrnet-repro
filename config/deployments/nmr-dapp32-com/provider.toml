@@ -62,9 +62,9 @@ observation_gap_seconds = 60
 display_name = "NMRNet++"
 description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"
 offering_description = """
-**Per-atom ¹H/¹³C chemical shifts (ppm)** from 3D geometry. [Inputs, settings and scientific limits](https://numpde.github.io/nmrnet-repro/)
+Per-atom ¹H/¹³C chemical shifts (ppm) from 3D geometry. [Inputs, settings and scientific limits](https://numpde.github.io/nmrnet-repro/)
 
-Choose **one**:
+Choose one:
 
 - Paste one geometry with units.
 - Attach a structure file; specify units and which structures to use.
