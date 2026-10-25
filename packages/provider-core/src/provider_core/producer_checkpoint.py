@@ -189,7 +189,8 @@ def _acknowledged(document, scope):
     _fields(document, {"kind", "start", "admission"})
     if document["kind"] != "acknowledged":
         raise ValueError("Cannot restore producer checkpoint: expected acknowledgement metadata.")
-    start = _decode_pending(json.dumps(document["start"]).encode(), scope=scope)
+    # Match the START encoder: separator whitespace must not consume its budget.
+    start = _decode_pending(json.dumps(document["start"], separators=(",", ":")).encode(), scope=scope)
     admission = read_start(json.dumps(document["admission"]).encode(), job_ref=start.input.job_ref,
                            analysis_kind_ref=start.analysis_kind_ref, provider_ref=start.scope.provider_ref)
     return AcknowledgedCheckpoint(start, admission)
@@ -224,7 +225,7 @@ def decode_checkpoint(raw, *, scope):
     kind = state.get("kind")
     if kind == "start_pending":
         _fields(state, {"kind", "start"})
-        return _decode_pending(json.dumps(state["start"]).encode(), scope=scope)
+        return _decode_pending(json.dumps(state["start"], separators=(",", ":")).encode(), scope=scope)
     if kind in ("acknowledged", "entered"):
         return _active(state, scope)
     if kind == "terminal_selected":

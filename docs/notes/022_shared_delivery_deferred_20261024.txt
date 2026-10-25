@@ -450,3 +450,18 @@ explicitly deferred unless a concrete finding requires them. Existing separate
 recipe/Engine proofs own Docker mount isolation; these CLI tests do not add that
 claim. Producer-IPC lost acknowledgements remain separately covered, not joined
 into a new all-faults scenario. Live deployments are unchanged by this slice.
+
+Leftover-code pass: actual START-envelope boundary repair
+
+Moving the maximum-START control from the retired full-record format to the
+current checkpoint owner exposed a real restore bug. A valid65536-byte START
+was encoded compactly, but producer_checkpoint reconstructed it with default
+JSON separator whitespace before applying the same65536-byte bound. Both the
+pending and acknowledged restore paths now use the START encoder's compact
+separators. No limits or fixture sizes increased. The existing maximum case now
+round-trips pending, acknowledged and entered checkpoints at that exact boundary.
+Original full core discovery427 failed on this single error; repaired discovery
+passes (final428 includes the preserved ProtectedEvidence refusal control).
+  /tmp/nmrnet-legacy-core-unit.log
+  /tmp/nmrnet-legacy-core-unit-fixed.log
+  /tmp/nmrnet-legacy-core-unit-final.log

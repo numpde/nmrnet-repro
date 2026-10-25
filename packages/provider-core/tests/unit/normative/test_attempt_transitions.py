@@ -7,29 +7,32 @@ from pathlib import Path
 
 from provider_core.attempt_record import (
     MAX_PENDING_RECORD_BYTES,
-    MAX_RECORD_BYTES,
     LocalExecutionPhase,
     acknowledge_start,
-    decode_record,
-    encode_record,
+    _encode_pending,
     mark_execution_entered,
 )
 from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
-from provider_core.producer_checkpoint import EvidenceDigest
+from provider_core.producer_checkpoint import (
+    MAX_CHECKPOINT_BYTES, AcknowledgedCheckpoint, EnteredCheckpoint, EvidenceDigest, decode_checkpoint, encode_checkpoint,
+)
 from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 
 
 class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_maximum_pending_record_remains_encodable_after_acknowledgement_and_entry(self):
+    async def test_maximum_start_fits_compact_acknowledgement_and_entry(self):
         pending = record()
-        growth = MAX_PENDING_RECORD_BYTES - len(encode_record(pending))
+        growth = MAX_PENDING_RECORD_BYTES - len(_encode_pending(pending))
         large_scope = replace(scope(), api_origin=scope().api_origin + "a" * growth)
         pending = replace(pending, scope=large_scope)
-        self.assertEqual(len(encode_record(pending)), MAX_PENDING_RECORD_BYTES)
-        entered = mark_execution_entered(acknowledge_start(pending, admission()), PREPARED_IDENTITY)
-        raw = encode_record(entered)
-        self.assertLessEqual(len(raw), MAX_RECORD_BYTES)
-        self.assertEqual(decode_record(raw, scope=large_scope), entered)
+        self.assertEqual(len(_encode_pending(pending)), MAX_PENDING_RECORD_BYTES)
+        acknowledged = AcknowledgedCheckpoint(pending, admission())
+        entered = EnteredCheckpoint(acknowledged, EvidenceDigest.from_evidence(PREPARED_IDENTITY))
+        for checkpoint in (pending, acknowledged, entered):
+            with self.subTest(state=type(checkpoint).__name__):
+                raw = encode_checkpoint(checkpoint)
+                self.assertLessEqual(len(raw), MAX_CHECKPOINT_BYTES)
+                self.assertEqual(decode_checkpoint(raw, scope=large_scope), checkpoint)
 
     async def test_acknowledgement_and_execution_entry_survive_reopen(self):
         pending = record()
@@ -65,9 +68,12 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_terminal_start_replay_is_retained_without_local_execution(self):
         for state in ("succeeded", "failed", "expired"):
-            acknowledged = acknowledge_start(record(), admission(state=state, replayed=True))
-            restored = decode_record(encode_record(acknowledged), scope=scope())
+            live = acknowledge_start(record(), admission(state=state, replayed=True))
+            acknowledged = AcknowledgedCheckpoint(live.start, live.admission)
+            restored = decode_checkpoint(encode_checkpoint(acknowledged), scope=scope())
             self.assertEqual(restored.admission.state, state)
-            self.assertEqual(restored.local_phase, LocalExecutionPhase.NOT_ENTERED)
+            self.assertIs(live.local_phase, LocalExecutionPhase.NOT_ENTERED)
             with self.assertRaises(ValueError):
-                mark_execution_entered(restored, PREPARED_IDENTITY)
+                mark_execution_entered(live, PREPARED_IDENTITY)
+            with self.assertRaises(ValueError):
+                EnteredCheckpoint(restored, EvidenceDigest.from_evidence(PREPARED_IDENTITY))
