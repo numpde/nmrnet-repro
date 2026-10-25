@@ -1,309 +1,290 @@
 #!/usr/bin/env bash
-# One opt-in local transaction through the final production Compose commands.
-# TLS/signature and molecular fixtures stay in their existing Python owners.
-# This finite caller owns only its disposable peer and qualification grants.
+# Opt-in qualification uses the production recipe owners in a private project.
+# The local signed peers own fixture data; no host delivery singleton is changed.
+
+qualification_delivery_prepare() {
+    local provider_private=$1 output=$2 project=$3 controller_image=$4 bundle helper_uuid
+    [[ $project == nmrnet-qualification-* ]] || {
+        printf '%s\n' 'Qualification requires its own delivery project; the host singleton is not a test fixture.' >&2
+        return 2
+    }
+    qualification_delivery_root=$output qualification_delivery_project=$project
+    qualification_delivery_prepared=false qualification_delivery_started=false qualification_delivery_helper=
+    bundle=$(realpath -e -- "$provider_private/current") || return $?
+    source "$repository_root/tools/delivery_image.sh"
+    require_delivery_image || return $?
+    qualification_delivery_image=$delivery_image_id
+    mkdir -m 700 -- "$output" || return $?
+    IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
+    qualification_delivery_helper=$project-config-${helper_uuid//-/}
+    inference_native 'freeze private qualification delivery' 120 stdio "${engine[@]}" run --rm --pull never \
+        --name "$qualification_delivery_helper" --init --network none --read-only \
+        --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
+        --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
+        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=0700,uid=$(id -u),gid=$(id -g)" \
+        --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
+        --mount "type=bind,src=$bundle,dst=$bundle,readonly" --mount "type=bind,src=$output,dst=$output" \
+        --entrypoint /opt/provider/environment/bin/python "$controller_image" -I -B \
+        -m nmrnet_provider.delivery_deployment prepare --provider-bundle "$bundle" --output "$output" \
+        --uid "$(id -u)" --gid "$(id -g)" --delivery-image "$delivery_image_id" \
+        --controller-image "$controller_image" --project "$project" || return $?
+    qualification_delivery_helper=
+    qualification_delivery_prepared=true
+}
+
+qualification_delivery_compose() {
+    local seconds=$1
+    shift
+    inference_native 'private qualification delivery Compose' "$seconds" stdio "${engine[@]}" compose \
+        --env-file /dev/null --project-directory "$qualification_delivery_root" \
+        --project-name "$qualification_delivery_project" --file "$qualification_delivery_root/compose.json" "$@"
+}
+
+qualification_delivery_up() {
+    # An interrupted up may already have created containers.
+    qualification_delivery_started=true
+    qualification_delivery_compose 180 up --detach --no-build --pull never --wait --wait-timeout 120
+}
+
+qualification_delivery_down() {
+    [[ ${qualification_delivery_prepared-false} == true ]] || return 0
+    qualification_delivery_compose 120 down --timeout 60 || return $?
+    qualification_delivery_started=false
+}
+
+qualification_delivery_empty() {
+    # The daemon must be stopped for the existing operator's exclusive queue lock.
+    # The idle-recovery case may keep its producer alive; deleting volumes also
+    # requires stopped producers and independent API-success evidence.
+    local helper_uuid
+    IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
+    qualification_delivery_helper=$qualification_delivery_project-inspect-${helper_uuid//-/}
+    inference_native 'inspect stopped private delivery metadata' 30 stdio "${engine[@]}" run --rm --pull never \
+        --name "$qualification_delivery_helper" --init --network none --read-only --user "$(id -u):$(id -g)" \
+        --cap-drop ALL --security-opt no-new-privileges:true --cpus 1 --memory 256m --memory-swap 256m --pids-limit 32 \
+        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=16m,mode=0700,uid=$(id -u),gid=$(id -g)" \
+        --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
+        --mount "type=bind,src=$qualification_delivery_root/daemon.toml,dst=/input/daemon.toml,readonly" \
+        --mount "type=volume,src=$qualification_delivery_project-queue,dst=/state,volume-nocopy" \
+        --entrypoint /opt/provider-core/environment/bin/python "$qualification_delivery_image" -I -B -c '
+import contextlib, io, json, runpy, sys, tomllib
+from pathlib import Path
+configuration = tomllib.loads(Path("/input/daemon.toml").read_text())
+outstanding = 0
+for binding in configuration["bindings"]:
+    api = binding["api"]
+    sys.argv = ["held", "--config", "/input/daemon.toml",
+                "--api-origin", api["origin"], "--provider-ref", api["provider_ref"], "--list-held"]
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        runpy.run_module("provider_core.delivery_discard", run_name="__main__")
+    print(output.getvalue(), end="")
+    outstanding += json.loads(output.getvalue())["outstanding_items"]
+if outstanding:
+    print("Private delivery still owns outcomes; its volumes must remain.", file=sys.stderr)
+    raise SystemExit(2)
+' || return $?
+    qualification_delivery_helper=
+}
+
+qualification_delivery_remove() {
+    # The caller has confirmed its API witness, native retirement and empty queue.
+    qualification_delivery_compose 120 down --timeout 60 --volumes || return $?
+    qualification_delivery_prepared=false
+}
+
+qualification_delivery_retire_helper() {
+    [[ -n ${qualification_delivery_helper-} ]] || return 0
+    inference_native 'retire private delivery helper' 15 stdio \
+        "${engine[@]}" rm --force "$qualification_delivery_helper" || return $?
+    qualification_delivery_helper=
+}
 
 compose_witness_wait() {
-    local path=$1 seconds=$2 deadline=$((SECONDS + $2))
+    local path=$1 deadline=$((SECONDS + $2))
     while [[ ! -f $path || -L $path ]]; do
-        if (( SECONDS >= deadline )); then
-            printf 'Compose qualification did not receive %s within %ss. Inspect bounded Docker logs; no Job was resubmitted.\n' "${path##*/}" "$seconds" >&2
+        (( SECONDS < deadline )) || {
+            printf 'Compose qualification did not receive %s within %ss; no Job was resubmitted.\n' "${path##*/}" "$2" >&2
             return 2
-        fi
+        }
         sleep 0.1
     done
 }
 
+compose_witness_role() {
+    local identifier
+    identifier=$(inference_native 'locate private qualification role' 10 stdio "${engine[@]}" ps --all --no-trunc --quiet \
+        --filter "label=io.nmrnet-repro.deployment=$deployment" --filter "label=com.docker.compose.service=$1") || return $?
+    [[ $identifier =~ ^[0-9a-f]{64}$ ]] || {
+        printf 'Qualification role %s is absent or ambiguous.\n' "$1" >&2
+        return 2
+    }
+    printf '%s\n' "$identifier"
+}
+
+compose_witness_provider() {
+    NMRNET_DEPLOYMENT_INPUT=$deployment bash "$repository_root/tools/provider_deployment.sh" "$@"
+}
+
+compose_witness_provider_compose() {
+    local seconds=$1
+    shift
+    inference_native 'private provider qualification Compose' "$seconds" stdio "${engine[@]}" compose \
+        --env-file /dev/null --project-directory "$repository_root" --file "$private/current/compose.json" "$@"
+}
+
 compose_witness_native_events() {
-    local stage=$1 role identifier path event operation value reason deadline=$((SECONDS + 15))
+    local stage=$1 role identifier projection event operation value reason deadline=$((SECONDS + 15))
     local -A starts=() retirements=()
-    mkdir -m 700 -- "$scratch/$stage" || return $?
-    if [[ $stage == before-restart ]]; then
-        inference_native 'observe uninterrupted provider process' 5 stdio "${engine[@]}" ps --all --no-trunc --quiet \
-            --filter "label=io.nmrnet-repro.deployment=$deployment" --filter 'label=com.docker.compose.service=provider' \
-            > "$scratch/$stage/provider.id" || return $?
-        IFS= read -r identifier < "$scratch/$stage/provider.id" || return 2
-        [[ $identifier =~ ^[0-9a-f]{64}$ ]] \
-            && cmp -s "$scratch/$stage/provider.id" <(printf '%s\n' "$identifier") || return 2
-        inference_native 'observe provider restart count' 5 stdio "${engine[@]}" inspect --type container \
-            --format '{{.Id}}|{{.RestartCount}}|{{.State.Running}}|{{.State.Restarting}}' "$identifier" \
-            > "$scratch/$stage/provider.process" || return $?
-        cmp -s "$scratch/$stage/provider.process" <(printf '%s|0|true|false\n' "$identifier") || return 2
-    fi
     for role in prediction reader smiles; do
-        identifier=
-        inference_native 'observe qualification native role' 5 stdio "${engine[@]}" ps --all --no-trunc --quiet \
-            --filter "label=io.nmrnet-repro.deployment=$deployment" --filter "label=com.docker.compose.service=$role" \
-            > "$scratch/$stage/$role.id" || return $?
-        IFS= read -r identifier < "$scratch/$stage/$role.id" || return 2
-        [[ $identifier =~ ^[0-9a-f]{64}$ ]] \
-            && cmp -s "$scratch/$stage/$role.id" <(printf '%s\n' "$identifier") || return 2
-        path=$scratch/$stage/$role.events
+        identifier=$(compose_witness_role "$role") || return $?
         while true; do
-            inference_native 'observe bounded native lifecycle fields' 5 stdio \
-                bash "$capture/tools/compose_runner_events.sh" "$identifier" "${engine[@]}" > "$path" || return $?
+            projection=$(inference_native 'observe bounded native lifecycle fields' 10 stdio \
+                bash "$capture/tools/compose_runner_events.sh" "$identifier" "${engine[@]}") || return $?
             starts=() retirements=()
             while IFS=$'\t' read -r event operation value reason; do
+                [[ -n $event ]] || continue
                 case $event in
                     started) [[ ! -v starts[$operation] ]] || return 2; starts[$operation]=$value ;;
                     retired) [[ ! -v retirements[$operation] ]] || return 2; retirements[$operation]=$reason ;;
                     *) return 2 ;;
                 esac
-            done < "$path"
+            done <<< "$projection"
             if [[ $role == smiles ]]; then [[ ${#starts[@]} == 0 && ${#retirements[@]} == 0 ]] || return 2; break; fi
             (( ${#starts[@]} <= 2 && ${#retirements[@]} <= 2 )) || return 2
             if (( ${#starts[@]} == 2 && ${#retirements[@]} == 2 )); then
                 for operation in "${!starts[@]}"; do [[ -v retirements[$operation] ]] || return 2; done
                 break
             fi
-            (( SECONDS < deadline )) || { printf '%s did not expose two fresh retired children within the qualification allowance.\n' "$role" >&2; return 2; }
+            (( SECONDS < deadline )) || {
+                printf '%s did not expose two retired children within the qualification allowance.\n' "$role" >&2
+                return 2
+            }
             sleep 0.1
         done
-        if [[ $stage == after-restart ]]; then
-            cmp -s "$path" "$scratch/before-restart/$role.events" \
-                && cmp -s "$scratch/$stage/$role.id" "$scratch/before-restart/$role.id" || return 2
+        if [[ $stage == before-restart ]]; then
+            native_ids[$role]=$identifier native_events[$role]=$projection
+        else
+            [[ $identifier == "${native_ids[$role]}" && $projection == "${native_events[$role]}" ]] || return 2
         fi
     done
-}
-
-compose_witness_recovery() {
-    local lock status=0
-    exec {lock}< "$private" || return $?
-    if flock --nonblock "$lock"; then
-        if compose_witness_recovery_effects; then :; else status=$?; fi
-    else status=$?; fi
-    if (( status != 0 )) && [[ ${inference_retirement_confirmed-false} == true \
-        && -d $private/operation/mutation && ! -L $private/operation/mutation ]]; then
-        if ! cp -a -- "$private/operation/mutation" "$scratch/recovery-failed-receipts"; then
-            qualification_cleanup_held=true
-        fi
-    fi
-    # Releasing the finite caller's lock does not settle Engine effects. The
-    # original operation receipts remain the next command's recovery barrier.
-    exec {lock}<&- || return $?
-    return "$status"
-}
-
-compose_witness_recovery_effects() {
-    source "$repository_root/tools/provider_deployment.sh"
-    local caller_uid=$(id -u) caller_gid=$(id -g) digest identifier
-    local deployment_name=$deployment deployment_action=up deployment_root=$private
-    local operation_root= operation_owner=unestablished operation_established=false
-    local deployment_helper_retired=true deployment_diagnostic=
-    local deployment_primary_failure_receipt= deployment_additional_failure_receipt=
-    local -a original_engine=("${engine[@]}")
-    deployment_begin_operation || return $?
-    deployment_selected_bundle || return $?
-    deployment_load_bootstrap "$selected_bundle" || return $?
-    digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum) || return $?
-    deployment_project=nmrnet-${digest:0:20}
-    deployment_plan_inputs true || return $?
-    deployment_runtime_directories || return $?
-    deployment_create_arguments "$selected_bundle" api
-    engine=(bash "$capture/tools/compose_reply_loss.sh" "${original_engine[@]}")
-    if deployment_command create-api 60 "$operation_root/create-api" true "${deployment_role_create_arguments[@]}"; then
-        engine=("${original_engine[@]}")
-        printf 'Create-reply loss was not exercised.\n' >&2
-        return 2
-    fi
-    engine=("${original_engine[@]}")
-    cmp -s "$operation_root/create-api/response.status" <(printf '7\n') \
-        && [[ ! -s $operation_root/create-api/response.stdout ]] || return 2
-    deployment_recover_creates "$operation_root" || return $?
-    [[ ${#deployment_ids[@]} == 1 && ${deployment_states[api]} == created \
-        && ${deployment_running[api]} == false && ${deployment_pids[api]} == 0 ]] || return 2
-    identifier=${deployment_ids[api]}
-    cp -a -- "$operation_root" "$scratch/lost-create-receipts" || return $?
-    # Exercise the public command owner's next-operation admission. Its recovery
-    # proof, retained above, must allow progress without another runtime create.
-    deployment_begin_operation || return $?
-    deployment_inventory recovered || return $?
-    [[ ${#deployment_ids[@]} == 1 && ${deployment_ids[api]} == "$identifier" \
-        && ${deployment_states[api]} == created && ${deployment_running[api]} == false ]] || return 2
-    printf 'Lost create reply recovered original API container %s without starting it.\n' "$identifier"
-    compose_witness_late_requests "$identifier"
-}
-
-compose_witness_late_requests() {
-    local old_identifier=$1 replacement_identifier kind budget grace=${deployment_stop_seconds[api]}
-    local -a arguments=()
-    for kind in start stop; do
-        if [[ $kind == start ]]; then budget=30; arguments=(start "$old_identifier")
-        else budget=$((grace + 5)); arguments=(stop --time "$grace" "$old_identifier"); fi
-        engine=(bash "$capture/tools/compose_reply_loss.sh" "${original_engine[@]}")
-        if deployment_command "$kind-api" "$budget" "$operation_root/$kind-api" true "${arguments[@]}"; then
-            engine=("${original_engine[@]}")
-            printf 'Engine %s reply loss was not exercised.\n' "$kind" >&2
-            return 2
-        fi
-        engine=("${original_engine[@]}")
-        [[ $deployment_command_status == 7 && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
-    done
-    deployment_action=down
-    deployment_recover_runtime "$operation_root" || return $?
-    [[ ! -v deployment_ids[api] ]] || return 2
-    cp -a -- "$operation_root" "$scratch/late-request-receipts" || return $?
-    deployment_action=up
-    deployment_begin_operation || return $?
-    deployment_create_arguments "$selected_bundle" api
-    deployment_command create-api 60 "$operation_root/create-api" true "${deployment_role_create_arguments[@]}" || return $?
-    deployment_inventory replacement || return $?
-    [[ ${#deployment_ids[@]} == 1 && ${deployment_ids[api]} != "$old_identifier" ]] || return 2
-    replacement_identifier=${deployment_ids[api]}
-    deployment_plan_inputs false || return $?
-    deployment_start_role api || return $?
-    deployment_start_deadline=$((SECONDS + deployment_startup_seconds))
-    deployment_ready api || return $?
-    compose_witness_old_id_rejected "$old_identifier" "$grace" || return $?
-    deployment_process_status api replacement-survived 5 || return $?
-    [[ ( $deployment_process_phase == ready || $deployment_process_phase == working ) && $deployment_process_age -le 30000 ]] || return 2
-    printf 'Late start/stop of old API ID %s were rejected; replacement %s remains ready. No Job or model call was issued.\n' "$old_identifier" "$replacement_identifier"
-    compose_witness_resume_startup "$replacement_identifier"
-}
-
-compose_witness_resume_startup() {
-    local identifier=$1 role phase=resume-$operation_generation-start-api
-    for role in interpreter store prediction reader smiles provider; do
-        deployment_create_arguments "$selected_bundle" "$role"
-        deployment_command "create-$role" 60 "$operation_root/create-$role" true "${deployment_role_create_arguments[@]}" || return $?
-    done
-    engine=(bash "$capture/tools/compose_reply_loss.sh" "${original_engine[@]}")
-    if deployment_command "$phase" 30 "$operation_root/$phase" true start "$identifier"; then
-        engine=("${original_engine[@]}")
-        printf 'Interrupted startup reply loss was not exercised.\n' >&2
-        return 2
-    fi
-    engine=("${original_engine[@]}")
-    [[ $deployment_command_status == 7 && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
-    cp -- "$operation_root/intent" "$scratch/resumed-original.intent" || return $?
-    deployment_begin_operation || return $?
-    [[ $deployment_recovery_observed == true && ${#deployment_ids[@]} == 7 && ${deployment_ids[api]} == "$identifier" \
-        && ! -e $operation_root/complete && ! -e $operation_root/$phase/reconciled ]] || return 2
-    cmp -s "$operation_root/intent" "$scratch/resumed-original.intent" || return $?
-    compose_witness_reader_crash || return $?
-    cp -a -- "$operation_root" "$scratch/resumed-startup-receipts" || return $?
-    printf 'Startup recovery confirmed all seven roles ready; the original late-start restriction remains retained.\n'
 }
 
 compose_witness_reader_crash() {
-    local identifier=${deployment_ids[reader]} image=${deployment_images[reader]} operation observed count budget
-    local deployment_start_deadline
-    local probe_seconds=15
-    local probe_source
-    local -a grants=() arguments=()
-    deployment_command crash-container 10 "$operation_root/crash-container" false inspect --type container "$identifier" || return $?
-    deployment_command crash-image 10 "$operation_root/crash-image" false image inspect "$image" || return $?
-    mkdir -m 700 -- "$scratch/crash-admission" "$scratch/reader-crash" || return $?
-    grants=(--mount "type=bind,src=$selected_bundle/compose.json,dst=/plan/compose.json,readonly"
-        --mount "type=bind,src=$operation_root/crash-container/response.stdout,dst=/evidence/container.json,readonly"
-        --mount "type=bind,src=$operation_root/crash-image/response.stdout,dst=/evidence/image.json,readonly"
-        --mount "type=bind,src=$scratch/crash-admission,dst=/output")
-    arguments=(--plan /plan/compose.json --inspection /evidence/container.json --images /evidence/image.json
-        --checkout "$repository_root" --deployment "$deployment_name" --container-id "$identifier" --output /output/receipt.json)
-    local deployment_tool_source=$capture/tests/integration/provider_runtime/runner_crash_admission.py
-    deployment_helper crash-admission grants arguments || return $?
-    deployment_command crash-before 10 "$operation_root/crash-before" false inspect --type container \
-        --format '{{.Id}}|{{.RestartCount}}' "$identifier" || return $?
-    cmp -s "$operation_root/crash-before/response.stdout" <(printf '%s|0\n' "$identifier") || return 2
-    deployment_start_deadline=$((SECONDS + 60))
+    local identifier before after operation program budget status=0 deadline=$((SECONDS + 60))
+    identifier=$(compose_witness_role reader) || return $?
+    before=$(inference_native 'observe reader before controlled crash' 10 stdio "${engine[@]}" inspect \
+        --format '{{.RestartCount}}' "$identifier") || return $?
+    [[ $before == 0 ]] || return 2
     : > "$peer_data/reader-crash-start"
     compose_witness_wait "$peer_data/reader-crash-operation" 15 || return $?
     IFS= read -r operation < "$peer_data/reader-crash-operation" || return 2
-    [[ $operation =~ ^[0-9a-f]{32}$ ]] \
-        && cmp -s "$peer_data/reader-crash-operation" <(printf '%s\n' "$operation") || return 2
-    probe_source=$(< "$capture/tests/integration/provider_runtime/runner_crash_probe.py")
-    # Killing init's main child may kill this exec probe as well. Its exit code
-    # cannot establish old-child retirement; the external pidfd observer does.
-    (( deployment_start_deadline - SECONDS >= probe_seconds + 5 )) || return 2
-    compose_witness_crash_execute "$identifier" "$operation" "$probe_source" "$probe_seconds" || return $?
-    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
-    if (( budget > 15 )); then budget=15; fi
+    [[ $operation =~ ^[0-9a-f]{32}$ ]] || return 2
+    program=$(< "$capture/tests/integration/provider_runtime/runner_crash_probe.py")
+    # Killing the supervisor may also kill this exec. The peer's original pidfd,
+    # not the exec exit status or a broken socket, establishes old-child exit.
+    inference_native 'controlled reader supervisor crash' 20 stdio "${engine[@]}" exec "$identifier" \
+        /opt/rdkit/environment/bin/python -I -B -c "$program" "$operation" 15 || status=$?
+    [[ $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
+    if (( status != 0 )); then printf 'Controlled crash exec exited %s; awaiting the independent old-child observer.\n' "$status" >&2; fi
+    budget=$((deadline - SECONDS)); (( budget > 0 )) || return 2
     compose_witness_wait "$peer_data/reader-old-child-exited.json" "$budget" || return $?
-    deployment_ready reader || return $?
-    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
-    if (( budget > 5 )); then budget=5; fi
-    deployment_command crash-restarted "$budget" "$operation_root/crash-restarted" false inspect --type container \
-        --format '{{.Id}}|{{.RestartCount}}' "$identifier" || return $?
-    IFS='|' read -r observed count < "$operation_root/crash-restarted/response.stdout" || return 2
-    [[ $observed == "$identifier" && $count =~ ^[1-9][0-9]*$ ]] \
-        && cmp -s "$operation_root/crash-restarted/response.stdout" <(printf '%s|%s\n' "$identifier" "$count") || return 2
-    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
-    if (( budget > 5 )); then budget=5; fi
-    deployment_command crash-fresh-root "$budget" "$operation_root/crash-fresh-root" false exec "$identifier" \
-        /opt/rdkit/environment/bin/python -I -B -c 'import os; assert not os.listdir("/scratch"), "Restarted reader retained old scratch"; print("fresh-root")' || return $?
-    cmp -s "$operation_root/crash-fresh-root/response.stdout" <(printf 'fresh-root\n') || return 2
-    printf 'fresh-root\n' > "$peer_data/reader-fresh-root.pending" || return $?
-    mv -- "$peer_data/reader-fresh-root.pending" "$peer_data/reader-fresh-root" || return $?
-    budget=$((deployment_start_deadline - SECONDS)); (( budget > 0 )) || return 2
-    if (( budget > 15 )); then budget=15; fi
-    compose_witness_wait "$peer_data/reader-crash-receipt.json" "$budget" || return $?
-    printf 'Reader supervisor crash retired its stopped child; Engine restarted the same container with fresh scratch and a new session.\n'
+    budget=$((deadline - SECONDS)); (( budget > 0 )) || return 2
+    inference_native 'wait for restarted qualification roles' "$budget" stdio \
+        env NMRNET_DEPLOYMENT_INPUT="$deployment" bash "$repository_root/tools/provider_deployment.sh" up || return $?
+    after=$(inference_native 'observe reader after controlled crash' 10 stdio "${engine[@]}" inspect \
+        --format '{{.RestartCount}}' "$identifier") || return $?
+    [[ $after =~ ^[1-9][0-9]*$ ]] || return 2
+    inference_native 'inspect restarted reader scratch' 10 stdio "${engine[@]}" exec "$identifier" \
+        /opt/rdkit/environment/bin/python -I -B -c \
+        'import os; assert not os.listdir("/scratch"), "Restarted reader retained old scratch"; print("fresh-root")' || return $?
+    printf 'fresh-root\n' > "$peer_data/reader-fresh-root.pending"
+    mv -- "$peer_data/reader-fresh-root.pending" "$peer_data/reader-fresh-root"
+    budget=$((deadline - SECONDS)); (( budget > 0 )) || return 2
+    compose_witness_wait "$peer_data/reader-crash-receipt.json" "$budget"
 }
 
-compose_witness_crash_execute() {
-    local identifier=$1 operation=$2 program=$3 probe_seconds=$4
-    local operation_root=$scratch/reader-crash
-    mkdir -m 700 -- "$operation_root/effects" || return $?
-    # This probe's own window plus the existing five-second Engine response margin.
-    if deployment_command supervisor-crash "$((probe_seconds + 5))" "$operation_root/exec" true exec "$identifier" \
-        /opt/rdkit/environment/bin/python -I -B -c "$program" "$operation" "$probe_seconds"; then :
-    else
-        [[ $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
-        printf 'Supervisor crash exec returned client status %s; protected probe cause: %s. Child exit is checked independently.\n' \
-            "$deployment_command_status" "$operation_root/exec/response.stderr" >&2
-    fi
-}
-
-compose_witness_old_id_rejected() {
-    local identifier=$1 grace=$2 kind budget
-    local operation_root=$scratch/late-old-id
-    local -a arguments=()
-    mkdir -m 700 -- "$operation_root" "$operation_root/effects" || return $?
-    for kind in start stop; do
-        if [[ $kind == start ]]; then budget=30; arguments=(start "$identifier")
-        else budget=$((grace + 5)); arguments=(stop --time "$grace" "$identifier"); fi
-        if deployment_command "$kind-api" "$budget" "$operation_root/$kind-api" true "${arguments[@]}"; then
-            printf 'Late %s unexpectedly accepted an old ID after its confirmed removal.\n' "$kind" >&2
-            return 2
+compose_witness_notice() {
+    local identifier=$1 event=$2 since=$3 logs deadline=$((SECONDS + 30))
+    local needle="\"event\":\"$event\""
+    while (( SECONDS < deadline )); do
+        logs=$(inference_native 'read bounded qualification recovery notices' 10 stdio \
+            "${engine[@]}" logs --since "$since" --tail 80 "$identifier" 2>&1) || return $?
+        if [[ $logs == *"$needle"* ]]; then
+            printf '%s\n' "$logs"
+            return 0
         fi
-        [[ $deployment_command_status == 1 && $inference_retirement_confirmed == true && $inference_cancellation_status == 0 ]] || return 2
+        sleep 0.1
     done
+    printf 'Qualification did not observe %s within its diagnostic window; inspect Docker logs.\n' "$event" >&2
+    return 2
+}
+
+compose_witness_relay_restart() {
+    local identifier before after queue_before queue_after since
+    identifier=$(compose_witness_role provider) || return $?
+    before=$(inference_native 'observe idle provider before relay restart' 10 stdio "${engine[@]}" inspect \
+        --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier") || return $?
+    queue_before=$(inference_native 'observe private queue file before restart' 10 stdio "${engine[@]}" exec \
+        "$qualification_delivery_project-daemon" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
+    since=$(date -u +'%Y-%m-%dT%H:%M:%S.%NZ')
+    qualification_delivery_down || return $?
+    qualification_delivery_empty || return $?
+    compose_witness_notice "$identifier" api_delivery_retry "$since" || return $?
+    qualification_delivery_up || return $?
+    compose_witness_notice "$identifier" api_delivery_recovered "$since" || return $?
+    compose_witness_provider up || return $?
+    after=$(inference_native 'observe idle provider after relay restart' 10 stdio "${engine[@]}" inspect \
+        --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier") || return $?
+    [[ $before == "$after" && $after == *'|0|true' ]] || {
+        printf '%s\n' 'The private provider restarted during idle relay recovery.' >&2
+        return 2
+    }
+    queue_after=$(inference_native 'observe private queue file after restart' 10 stdio "${engine[@]}" exec \
+        "$qualification_delivery_project-daemon" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
+    [[ $queue_before == "$queue_after" ]] || {
+        printf '%s\n' 'The private queue file identity changed across delivery restart.' >&2
+        return 2
+    }
+    printf '%s\n' 'Private relay restarted with an empty retained queue; the idle provider process stayed unchanged.'
 }
 
 compose_witness_finish() {
     local status=$? cleanup=0
     trap - EXIT
-    if [[ ${qualification_cleanup_held-false} == true ]]; then
-        printf 'Qualification retains its original receipts and containers because failed-control evidence could not be preserved: %s\n' "$scratch" >&2
-        exit 2
-    fi
     if [[ $inference_retirement_confirmed != true ]]; then
-        printf 'Qualification retains its original receipts and containers because the local Engine client has not retired: %s\n' "$scratch" >&2
+        printf 'Qualification retains its private peer/configuration because the original Engine client has not retired: %s\n' "$scratch" >&2
         exit 2
     fi
     if [[ $deployment_installed == true ]]; then
-        if make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment"; then :
-        else
-            printf 'Compose qualification retains its local peer and deployment receipts because physical shutdown is not confirmed. Peer ID: %s\n' "$peer_id" >&2
+        compose_witness_provider down || {
+            printf 'Private deployment shutdown is unconfirmed; its peer and delivery dependencies remain: %s\n' "$scratch" >&2
             exit 2
+        }
+    fi
+    if [[ ${qualification_delivery_prepared-false} == true ]]; then
+        qualification_delivery_down || {
+            printf 'Private delivery shutdown is unconfirmed; its fixture peer remains: %s\n' "$scratch" >&2
+            exit 2
+        }
+        if (( status == 0 )); then
+            if qualification_delivery_empty; then qualification_delivery_remove || cleanup=$?
+            else cleanup=$?; fi
         fi
     fi
-    if [[ -n $peer_id && $inference_retirement_confirmed == true ]]; then
+    qualification_delivery_retire_helper || cleanup=$?
+    if [[ -n $peer_id ]]; then
         if (( status != 0 )); then
-            if ! inference_native 'failed Compose qualification peer diagnostics' 10 stdio \
-                "${engine[@]}" logs --tail 80 "$peer_id"; then
-                printf 'Peer diagnostics were not delivered; its container and original receipts remain retained: %s\n' "$peer_id" >&2
-                exit 2
-            fi
+            inference_native 'failed qualification peer diagnostics' 10 stdio "${engine[@]}" logs --tail 80 "$peer_id" || cleanup=$?
         fi
         worker_container_retire "$peer_id" "$scratch/peer" "${engine[@]}" || cleanup=$?
         pending_diagnostic+=$worker_retirement_diagnostic
     elif [[ $peer_creation_attempted == true ]]; then
-        printf 'Peer creation has no admitted cleanup handle. Preserve original create receipts: %s\n' "$scratch/peer" >&2
+        printf 'Peer creation has no admitted cleanup handle; preserve its original qualification evidence: %s\n' "$scratch/peer" >&2
         cleanup=2
     fi
     if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || cleanup=$?; fi
-    if [[ -n $pending_diagnostic ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
+    [[ -z $pending_diagnostic ]] || printf '%s\n' "$pending_diagnostic" >&2
     if (( status == 0 && cleanup != 0 )); then status=$cleanup; fi
     printf 'Compose qualification evidence: %s\n' "$scratch"
     exit "$status"
@@ -323,37 +304,36 @@ compose_witness_main() {
     source "$repository_root/tools/provider_image.sh"
     docker_client_directory= pending_diagnostic= inference_diagnostic= worker_retirement_diagnostic=
     inference_retirement_confirmed=true inference_cancellation_status=0
-    qualification_cleanup_held=false
-    unset deployment_runtime_root deployment_runtime_prefix
-    deployment_resuming=false deployment_runtime_fence=false deployment_recovery_observed=false
     peer_id= deployment_installed=false peer_creation_attempted=false print_command=false
+    qualification_delivery_prepared=false qualification_delivery_started=false qualification_delivery_helper=
     scratch=$(mktemp -d /tmp/nmrnet-compose-XXXXXXXX)
     deployment=qualification-${scratch##*-}
     public=$repository_root/config/deployments/$deployment
     private=$repository_root/secrets/deployments/$deployment
+    local digest
+    digest=$(printf '%s' "$scratch" | sha256sum)
+    local delivery_project=nmrnet-qualification-${digest:0:24}
     mkdir -p -m 700 -- "$public" "$private"
     peer_data=$scratch/data
     mkdir -m 700 -- "$scratch/peer" "$peer_data"
     local -a crash_grants=()
+    declare -gA native_ids=() native_events=()
     if [[ $scientific_case == recovery ]]; then
         mkdir -m 700 -- "$private/runtime" "$private/runtime/reader" || return $?
-        # The controlled client needs one fixture socket in this role's leaf.
-        # It receives no host requests, receipts, store or other runtime leaf.
         crash_grants=(--mount "type=bind,src=$private/runtime/reader,dst=/reader-witness")
     fi
     trap compose_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
     docker_client_prepare run || { pending_diagnostic+=$docker_client_diagnostic; return 2; }
-    require_provider_image
+    require_provider_image || return $?
     local capture=$scratch/source revision
     revision=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}') || return $?
     printf '%s\n' "$revision" > "$scratch/source-revision"
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
         tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/runner_crash_probe.py \
-        tests/integration/provider_runtime/runner_crash_admission.py tests/integration/provider_core packages/provider-core/tests \
-        tools/compose_runner_events.sh tools/compose_reply_loss.sh \
+        tests/integration/provider_core packages/provider-core/tests tools/compose_runner_events.sh \
         tests/fixtures/preparation/expected.json tests/fixtures/preparation/smiles.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0
@@ -364,8 +344,7 @@ compose_witness_main() {
         --cap-drop ALL --security-opt no-new-privileges:true --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
         --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=128m,mode=0700,uid=$(id -u),gid=$(id -g)" \
-        --mount "type=bind,src=$peer_data,dst=$peer_data" \
-        "${crash_grants[@]}" \
+        --mount "type=bind,src=$peer_data,dst=$peer_data" "${crash_grants[@]}" \
         --mount "type=bind,src=$capture/packages/provider-core/tests,dst=/fixture/core-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_core,dst=/fixture/binding-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer.py,dst=/fixture/compose_peer.py,readonly" \
@@ -387,32 +366,31 @@ compose_witness_main() {
         cp -- "$peer_data/configuration/$input" "$private/$input" || return $?
         chmod 600 -- "$private/$input" || return $?
     done
-    make --no-print-directory -C "$repository_root" provider/deployment/install DEPLOYMENT="$deployment" || return $?
+    compose_witness_provider install --delivery-project "$delivery_project" || return $?
     deployment_installed=true
+    qualification_delivery_prepare "$private" "$scratch/delivery" "$delivery_project" "$provider_image_id" || return $?
+    qualification_delivery_up || return $?
+    compose_witness_provider up || return $?
     if [[ $scientific_case == recovery ]]; then
-        compose_witness_recovery || return $?
-        make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
-        cmp -s "$private/operation/mutation/intent" "$scratch/resumed-original.intent" \
-            && [[ ! -e $private/operation/mutation/complete ]] || return 2
-        make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
-        deployment_installed=false
-        : > "$peer_data/done"
-        compose_witness_wait "$peer_data/receipt.json" 15 || return $?
-        worker_retirement_command wait "$scratch/peer" "${engine[@]}" wait "$peer_id" || return $?
-        cmp -s "$scratch/peer/wait.stdout" <(printf '0\n') || return 2
-        return 0
+        compose_witness_relay_restart || return $?
+        compose_witness_reader_crash || return $?
+    else
+        compose_witness_wait "$peer_data/completed.json" 180 || return $?
     fi
-    make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
-    compose_witness_wait "$peer_data/completed.json" 180 || return $?
-    if [[ $scientific_case == successive ]]; then compose_witness_native_events before-restart || return $?; fi
-    make --no-print-directory -C "$repository_root" provider/deployment/status DEPLOYMENT="$deployment" || return $?
-    make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
-    make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
-    # Repeated up is observe-only, and a restart cannot rediscover completed work.
-    make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
-    make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
+    compose_witness_provider status || return $?
+    if [[ $scientific_case == successive ]]; then
+        # Restart only the producer: this case explicitly measures warm native reuse.
+        compose_witness_native_events before-restart || return $?
+        compose_witness_provider_compose 120 restart --timeout 60 provider || return $?
+        compose_witness_provider up || return $?
+        compose_witness_native_events after-restart || return $?
+    else
+        compose_witness_provider down || return $?
+        compose_witness_provider up || return $?
+    fi
+    compose_witness_provider up || return $?
+    compose_witness_provider down || return $?
     deployment_installed=false
-    if [[ $scientific_case == successive ]]; then compose_witness_native_events after-restart || return $?; fi
     : > "$peer_data/done"
     compose_witness_wait "$peer_data/receipt.json" 15 || return $?
     worker_retirement_command wait "$scratch/peer" "${engine[@]}" wait "$peer_id" || return $?

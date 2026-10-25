@@ -2,10 +2,11 @@
 
 The sequence exercised at NMRNet 5629cb031b54afefbfff2a34d81602c6bc2b19ae,
 tests/integration/provider_core/test_live_worker.py::LiveWorkerTests.run_lifecycle, becomes runtime composition
-here. Scientific preparation, durable effects and retirement retain
-their existing owners. Optional START/terminal recovery repeats only the exact
-durable command, before science or after its retirement; this owner never reruns
-a session.
+here. Scientific preparation, durable entry and retirement retain their existing
+owners. Optional START recovery repeats the exact durable command before preparation.
+The executor transfers an approved outcome to the scoped relay independently of
+native retirement; this controller clears its checkpoint only after both complete.
+This owner never reruns a session or publishes directly to the API.
 """
 
 from provider_core.container_guard import require_container
@@ -88,12 +89,12 @@ class AttemptController:
     it with the caller. A held controller never starts or publishes fresh work.
 
     `operation` retains the actual core owner for protected diagnosis and explicit
-    executor outcome retention. Settlement observes outstanding work and requests
-    session retirement when needed. It cannot start scientific execution after a
-    late admission or publish a late scientific outcome.
+    executor disposition. Settlement observes outstanding work, including an already
+    approved handoff, and requests session retirement when needed. It cannot start
+    science after a late admission or select a late scientific outcome for delivery.
     """
 
-    # silent-defaults: allow-contract -- Consumers select recovery and unconfirmed-phase handling before session handoff; defaults keep fail-stop reads, progress and mutations.
+    # silent-defaults: allow-contract -- Optional policies keep fail-stop observation, phase progress, conditions and START unless selected; delivery retry settings and its observer are always explicit.
     def __init__(
         self,
         api,
@@ -145,7 +146,7 @@ class AttemptController:
 
     @property
     def operation(self):
-        """Return the retained start, execution, publication or session owner.
+        """Return the retained start, execution or session owner.
 
         The object remains available for diagnosis after settlement; its presence
         does not mean work is still running or that the claim is still borrowed.
@@ -306,8 +307,8 @@ class AttemptController:
         if isinstance(self._operation, AttemptExecutor) and self._operation.retirement_confirmed:
             return
         await retire_session(self.session)
-        # Only this owner's pre-execution cleanup is recorded here. Execution's
-        # confirmation stays with its executor; publication can only follow it.
+        # Record only this controller's cleanup confirmation. Execution retains
+        # its own confirmation; an approved handoff can finish independently.
         self._retired_by_controller = True
 
     async def _settle_operation(self):

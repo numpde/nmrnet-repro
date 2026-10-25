@@ -1,92 +1,149 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Test organization — NMRNet++</title><meta name="original-source-path" content="packages/provider-core/tests/README.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="3d1c01d1ada7ab19160ba299310d890332d16609e3513f31179878a4443b9625"><link rel="stylesheet" href="../site.css"></head>
-<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="test-organization">Test organization</h1>
-<p>Unit normative tests state required input/identity behavior; adversarial tests
-challenge substitutions, parser limits and privacy. Contract tests inspect the
-installed wheel, forbidden dependencies, container guard and empty selections.
-Repository tests/integration/provider_core consumes installed core through the
-NMRNet preparation adapter; it is not shipped with reusable package tests.</p>
-<p>Run make test/unit/provider-core (or /normative or /adversarial),
-make test/contract/provider-core, and make test/integration/provider-core.
-Use make test/unit/provider-core/credential for API-issued artifact admission and
-the shared signing-reference boundary, without running unrelated core tests.
-<code>make test/unit/provider-core/admission</code> selects storage preflight and the affected
-store tests. It checks unchanged records, confirmed-record saturation, filesystem
-headroom and interrupted original I/O. This observes storage capacity; it does not
-reserve disk blocks, retire records, allocate native work or prove model capacity.
-<code>make test/unit/provider-core/hello</code> checks complete announcements, Unicode/byte
-bounds, empty offerings and receipt/failure admission. The structured
-integration/hello/{normative,adversarial} tests run through
-<code>make test/integration/provider-core/hello</code>: signed local TLS using an admitted
-API-shaped credential, lost acknowledgement, caller-chosen replacement and
-cancellation/socket cleanup. This lane exposes no consumer sources and proves
-neither a deployed directory nor scientific readiness.
-<code>make test/unit/provider-core/transport</code> selects the maintained normative/adversarial
-exchange tests. The structured integration/transport/adversarial TLS witness runs
-through <code>make test/integration/provider-core/transport</code>, without consumer grants.
-It checks received status/raw header evidence after truncated or stalled bodies;
-failed I/O still yields no complete response. Controlled unit ports separately
-prove evidence remains available during cancellation-resistant cleanup, the same
-failure receives late observations, and foreign callers cannot release ownership.
-<code>make test/unit/provider-core/api</code> selects response-environment/correlation and
-affected start/progress/outcome/Upload/publication tests. Existing verified-refusal
-and durable-hold assertions stay intact; their replies now carry complete API
-metadata. <code>make test/integration/provider-core/api</code> runs structured API TLS cases
-for foreign environment, malformed body, truncation and timeout. Successful signed
-receipt behavior is also exercised by the Hello lane; configured consumer binding
-is tested by the separate runtime lane. API fixtures provide environment headers;
-model/store peers remain generic, and explicit adversarial headers are not repaired.
-Every target builds/installs offline in separate temporary environments and runs
-outside the source checkout. Only the consumer integration lane exposes consumer
-sources. <code>make test/integration/provider-core/chat</code> selects the package's
-integration/chat/{normative,adversarial} tests, including actual loopback TLS,
-without granting access to consumer sources. These tests also join aggregate
-integration discovery. Conversation tests cover shared budgets, correction,
-fallback without repeating tool effects, private failure retention and retirement
-races. <code>make test/integration/provider-core/interpreter</code> tests the NMRNet chooser
-through local HTTPS and all three actual input/session/result paths, with recording
-native/model ports. This does not qualify an external model or native science.
-The contract suite checks the installed chat and conversation modules'
-independence from repository packages and its own container guard.
-<code>make test/integration/provider-core/config</code> selects the NMRNet startup tests:
-closed TOML, API-shaped credentials, descriptor permissions and cleanup,
-CA bytes used by the real HTTPS carrier, and refusal before network or worker work.
-<code>make test/integration/provider-core/runtime</code> joins configured NMRNet assembly to
-signed local discovery, model/source peers and recording scientific allocations;
-it checks all input routes, retained-work refusal, cancellation and cleanup gates.
-These are synthetic protocol and local preparation tests, not live API/GUI proof.
-<code>make test/integration/provider-core/admission</code> checks the consumer's preflight,
-complete-empty live inventory and fresh server-ordered selection. Local TLS plus
-the existing assembly/controller proves selected source/key preservation, not
-host allocation ordering. Recording scientific ports already exist in that fixture;
-the separate service lane below checks that the coordinator calls this gate before
-its allocation factory.
-Cursor cycles, continuing pages at the bound, malformed responses, retained work
-and cross-kind remote Attempts hold admission without creating a new start.
-<code>make test/integration/provider-core/service</code> selects the structured NMRNet
-coordinator tests. Unlike the assembly-only fixture, it creates the recording
-scientific worker inside the trusted factory after service admission/discovery.
-It exercises actual core/controllers and local signed TLS: current independent
-Hello, stop/drain/cancellation, late factory adoption, real setup-store I/O,
-held controller settlement, independent failures and exact lost-completion records.
-These are local ordering/ownership proofs, not host engine provisioning, native
-capacity or external/deployed delivery. Reviewed admission/discovery read failures retry from a fresh complete view; Hello recovery builds the latest complete announcement after each wait. Active Attempt failures and holds stop the service. These loops do not repeat science or other mutations. Confirmed-history maintenance has its own admission policy.
-The service lane also observes an attributed model-input report at the signed TLS
-failure recipient, after durable retention and complete recording-worker retirement.
-It checks full protected evidence and the operational-error path's original cause,
-execution-entered record and absence of a terminal submission. This does not prove
-native fault handling, GUI rendering or operator diagnostic delivery.
-<code>make test/integration/provider-core/native-factory</code> checks native setup ownership,
- cancellation and interrupted setup settlement. <code>make test/integration/provider-core/runner</code>
- checks actual native connections, cancellation and lost-control retirement.
- <code>make test/integration/provider-core/lifecycle</code> checks supplied-format correction,
- source correspondence and pure reference/capacity fixtures.
- The maintained <code>make test/integration/provider/deployment</code> and its
- <code>references</code>, <code>smiles</code>, <code>capacity</code>, <code>successive</code> and
- <code>recovery</code> subtargets check the installed serial runners and production factory in Compose.
- RDKit and released NMRNet CPU inference run in the scientific cases; interpreter replies
- are scripted and signed API peers are local. External API delivery is separate, and GUI
- behavior is outside this repository's system under test. Their exact scientific and recovery
- scopes are in the <a href="../provider.html">operator reference</a>.
-Use make test/repository/provider-core for the focused guard, source inventory,
-Make and cache conventions. It shares the maintained repository-check launcher.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Choose focused provider-core checks and distinguish protocol, binding, native-science and deployed-API evidence.">
+  <title>Provider-core tests — NMRNet++</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> ·
+    <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> ·
+    <a href="../notes/index.html">Design records</a>
+  </nav>
+  <main id="main">
+    <h1 id="test-organization">Provider-core tests</h1>
+    <p>Choose the smallest maintained command that exercises the behavior you
+      changed. A protocol test, native calculation and deployed API Job establish
+      different facts. Reuse existing numerical evidence when the model and
+      scientific path have not changed.</p>
+
+    <h2 id="layout">Test layout and isolation</h2>
+    <p>The reusable package tests live in
+      <code>packages/provider-core/tests</code>. Unit tests exercise contracts and
+      controlled failure boundaries; contract tests inspect the installed wheel
+      and pinned API artifacts; integration tests join real local transports,
+      SQLite storage and process owners. Normative tests state required behavior;
+      adversarial tests challenge identity substitution, limits, privacy and
+      interruption. Tests of a failure must preserve its actual effect and
+      uncertainty, rather than merely expect an exception.</p>
+    <p>NMRNet binding tests live separately under
+      <code>tests/integration/provider_core</code>. They consume the installed core
+      together with the binding's source. Both test groups run through Docker-backed
+      Make commands and isolated installed environments. Package tests do not
+      acquire consumer source imports. Tests are excluded from the runtime wheel.</p>
+
+    <h2 id="focused-core">Focused package checks</h2>
+    <table>
+      <thead><tr><th>Command</th><th>Behavior exercised</th></tr></thead>
+      <tbody>
+        <tr><td><code>make test/unit/provider-core/credential</code></td>
+          <td>API-issued credential admission and signing identity.</td></tr>
+        <tr><td><code>make test/unit/provider-core/transport</code><br>
+          <code>make test/integration/provider-core/transport</code></td>
+          <td>Bounded HTTP, original exchange ownership, late evidence and retirement.
+            Local TLS peers do not establish deployed API behavior.</td></tr>
+        <tr><td><code>make test/unit/provider-core/api</code><br>
+          <code>make test/integration/provider-core/api</code></td>
+          <td>API response identity, topology, correlation, wire contracts and
+            operation-specific effect/retry decisions.</td></tr>
+        <tr><td><code>make test/unit/provider-core/hello</code><br>
+          <code>make test/integration/provider-core/hello</code></td>
+          <td>Complete directory announcements, matching acceptance and uncertain
+            replies. Hello acceptance does not establish scientific readiness.</td></tr>
+        <tr><td><code>make test/unit/provider-core/admission</code></td>
+          <td>Non-consuming compact control inventory, original read ownership,
+            checkpoint metadata capacity and outstanding delivery item/byte limits.
+            This lane has no file archive, history expiry or full-result reservation.</td></tr>
+        <tr><td><code>make test/unit/provider-core/checkpoints</code></td>
+          <td>Compact producer decisions, scoped conditional transitions,
+            metadata limits and settlement of original disk operations.</td></tr>
+        <tr><td><code>make test/unit/provider-core/delivery</code><br>
+          <code>make test/integration/provider-core/delivery</code></td>
+          <td>Exact queued bytes, capacity, handoff independent of cleanup,
+            scoped IPC, publication receipts, payload deletion and protected
+            diagnostics. Held-item disposition must preserve pending rows and
+            other bindings.</td></tr>
+        <tr><td><code>make test/unit/provider-core/starting</code><br>
+          <code>make test/integration/provider-core/starting</code></td>
+          <td>Retention before START, actual admission and unchanged request
+            replay without scientific execution.</td></tr>
+        <tr><td><code>make test/unit/provider-core/recovery</code><br>
+          <code>make test/integration/provider-core/recovery</code></td>
+          <td>Lifecycle reconciliation and original ownership across interruption.
+            A recovered checkpoint cannot recreate a live scientific handle.</td></tr>
+        <tr><td><code>make test/unit/provider-core/diagnostics</code></td>
+          <td>Protected owner facts and causal relationships, without public
+            disclosure of scientific or credential payloads.</td></tr>
+        <tr><td><code>make test/contract/provider-core</code></td>
+          <td>Installed-package boundaries, container guard and the
+            <a href="fixtures.html">pinned API bundle</a>, including signing vectors.
+            A fixture hash identifies content; it does not authenticate a live server.</td></tr>
+      </tbody>
+    </table>
+    <p><code>make test/unit/provider-core</code>,
+      <code>make test/unit/provider-core/normative</code>,
+      <code>make test/unit/provider-core/adversarial</code> and
+      <code>make test/integration/provider-core</code> select broader groups.
+      Run them when the change justifies that scope, rather than repeatedly
+      running every group while editing one boundary.</p>
+
+    <h2 id="binding-checks">NMRNet binding checks</h2>
+    <table>
+      <thead><tr><th>Command suffix after <code>make test/integration/provider-core/</code></th>
+        <th>Behavior exercised</th></tr></thead>
+      <tbody>
+        <tr><td><code>config</code></td><td>Startup TOML, credential/file grants and
+          configured API trust before scientific allocation.</td></tr>
+        <tr><td><code>interpreter</code></td><td>Input selection and correction through
+          local model/source peers. These are not external-model or native-science tests.</td></tr>
+        <tr><td><code>admission</code></td><td>Complete scoped checkpoint, relay and API
+          observations before selecting fresh work; no scientific replay from missing state.</td></tr>
+        <tr><td><code>service</code></td><td>Admission before allocation, independent
+          Hello, stop/drain/settlement and paced availability recovery.
+          Recording scientific sessions establish ordering, not numerical capacity.</td></tr>
+        <tr><td><code>runtime</code></td><td>Configured API, interpreter, preparation
+          and lifecycle assembly with controlled peers.</td></tr>
+        <tr><td><code>compose</code></td><td>Actual deployment configuration and
+          declared container grants. Removed Engine-inspection checker behavior
+          is not a supported test subject.</td></tr>
+        <tr><td><code>native-factory</code>, <code>runner</code></td><td>Setup ownership,
+          native connections, interruption and original worker retirement.</td></tr>
+        <tr><td><code>lifecycle</code></td><td>Supplied-format handling, source
+          correspondence and scientific reference/capacity fixtures.</td></tr>
+      </tbody>
+    </table>
+    <p>Use <code>make test/unit/provider/api-client</code> for the qualification
+      client's readback behavior, including fresh GET signing after a verified
+      replay-window refusal. This checks the client without creating a Job.
+      <code>make test/repository/provider-core</code> checks repository-owned
+      package, guard, source-inventory and Make conventions.</p>
+
+    <h2 id="scientific-and-live-evidence">Scientific and deployed API evidence</h2>
+    <p>The opt-in <code>make test/integration/provider/deployment</code> commands
+      exercise installed serial runners and the production factory in Compose.
+      Scientific cases use RDKit and released NMRNet inference; model/API peers
+      can be scripted and local. Read the
+      <a href="../provider.html">operator guide</a> for each command's actual
+      inputs, resource needs and proof boundary before starting it.</p>
+    <p>A real API qualification creates a persistent Job and runs science.
+      When a Job already exists and only result readback failed, use the maintained
+      paired <code>JOB_RECEIPT</code> and <code>JOB_IDENTITY</code> readback mode for that same Job. Do not create another
+      Job or repeat a model run to repair observation or delivery.
+      GUI rendering is outside this repository's system under test.</p>
+    <p>The <a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery-deployed">deployment record</a>
+      identifies the actual source, images, Job and result bytes behind the
+      shared-delivery witness. The
+      <a href="../notes/022_shared_delivery_deferred_20261024.txt">follow-up record</a>
+      distinguishes resolved work from deferred qualification. A command listed
+      here describes its intended test boundary; dated run results establish
+      which revision passed. No single green lane qualifies every interruption,
+      workload or multi-provider deployment.</p>
+  </main>
+  <footer><p><a href="index.html">Provider-core reference</a> ·
+    <a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
+</body>
+</html>

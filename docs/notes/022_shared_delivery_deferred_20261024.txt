@@ -9,6 +9,15 @@ imperfections and most additional testing here for later. These entries are
 not release gates. Result ownership, scientific correctness and basic operation
 remain part of the implementation.
 
+Follow-up status, 25 October 2026 (local date)
+
+The user subsequently authorized closing the five concrete follow-ups:
+supported test commands/retired consumers, the observed authentication refusal,
+idle relay recovery, SDK guidance, and native SQLite diagnostics. Historical
+findings below remain evidence; this status and the qualification update at the
+end supersede their original deferral where a repair is proved. Broader load,
+UID/engine and failure-timing matrices remain deferred.
+
 User direction, 24 October 2026
 
 "No need, just a clean cut."
@@ -175,3 +184,69 @@ not in this deferred list.
     The original Job then passed GET-only readback using JOB_RECEIPT at54fc49f;
     no Job/model/scientific operation was repeated. Retain both receiving logs;
     the cause of the authentication-window refusal was not established here.
+
+Qualification update
+
+1 / Native SQLite diagnostics: resolved in e4c0d76. The protected renderer emits
+native sqlite_errorcode and sqlite_errorname, including extended codes, without
+SQL, filenames or exception text. Real in-memory SQLite failures prove preserved
+identity and privacy; manually raised errors do not invent missing metadata.
+Reference: https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Error .
+
+15 / Authentication refusal and historical readback: resolved in deefb3f and
+0561b52f. This was a concurrent replay-retention watermark race, not an old
+signature. The API raises ReplayAdmissionExpired when the original authenticated_at
+is at or before pruned_through. The correlated retention event at
+2026-10-24T21:59:13.873432427Z advanced the watermark to 21:59:13.849834Z while
+request029 ran from 21:59:13.800162Z to 21:59:13.897247Z. No API clock, watermark
+or nonce protection was changed. Sources inspected at API
+86121d6cf0a3a17c02863577e8b37024fd69516b:
+  nmr_api/security/persistence/adapters.py:181-186;
+  nmr_api/security/problems.py:826-835;
+  notes/066_replay_ledger_watermark_retention_20260726.txt:21-81.
+Exact runtime source was the API container's /workspace/nmr_api bind.
+Original retention observation:
+  docker logs --timestamps --since 2026-10-24T21:59:10Z
+    --until 2026-10-24T21:59:16Z nmr-api-v1-dev-local-replay-ledger-retention-1
+
+The qualification client now refreshes only GET signatures for the exact
+authenticated-environment authentication_window_closed refusal, at most three
+times under its existing process deadline. Other authentication failures and
+mutations are not retried. Every received refusal remains in protected evidence.
+The maintained client lane passes 44 tests, including real Bash coordinator
+checks for original-versus-current identity selection and paired-input refusal.
+
+An actual four-GET readback of original Job
+job:600cf7f2d7dcbf201a5069e92d963a588a021aa719a4b8ab84ab5615920f284f
+passed with paired JOB_RECEIPT and JOB_IDENTITY, without DEPLOYMENT or a current
+producer lookup. Original prediction image was
+sha256:ef6f180af7722b1e899de89de242f6eab4f64356d1f2e5987dcc7635c94b3919;
+current image at that proof was
+sha256:3cb21ad27b269f403ead6514b105e369453dddfb2e03ec72aab611bfea43ecee.
+Original identity bytes and oracle stayed unchanged. Result SHA-256 remained
+d9794208571eb728be539136a3527c6d7890c6d97d5c57c68582022f590d55d3.
+Protected evidence:
+  .work/qualification/shared-delivery-readback-original-context-0561b52
+No new Job, model call or scientific run was made for this repair.
+
+8 / Idle relay recovery: implemented in a639ac4; deployed proof follows the final
+image refresh. The existing idle read loop retires its original DeliveryClient,
+requires that owner's retry permission, waits with capped/stop-responsive backoff,
+then rereads a complete admission view. Startup checks context before observations
+and honors stop after an original inventory read before any new native effects.
+The installed real-Unix receiving controls prove missing socket recovery, stop,
+permanent refusal and failed-original-retirement handling; the complete supported
+service lane passes 57 tests. The native missing-file error was retained in
+ConnectError.__context__, not __cause__: locked httpcore1.0.9 maps it in
+_backends/anyio.py:125-143 and _exceptions.py:8-14, then its connection pool clears
+the explicit cause at _async/connection_pool.py:248-256. The exact native ENOENT
+grant preserves explicit TLS/permission causes and unsettled-I/O refusals.
+  https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/connection_pool.py#L248-L256
+  /tmp/nmrnet-idle-delivery-four-proof.log
+The initial failure-graph observation was tool stdout, not a retained logfile.
+
+Additional preserved-error repair: d3c6e78 gives session retirement sole ownership
+of its cancellation evidence, including cancellation of its original wait. Outer
+cleanup loops no longer append that same observation again. Exact parent/child
+cause and original-task controls pass in the complete 104-case prepared lane;
+no generic error deduplication or new lifetime registry was introduced.

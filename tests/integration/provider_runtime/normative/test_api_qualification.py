@@ -101,7 +101,13 @@ provider_host_command() {
 
 DEPLOYMENT = r'''#!/usr/bin/env bash
 set -eu
-[[ $# == 1 && $1 =~ ^(install|up|down)$ ]]
+[[ $1 =~ ^(install|up|down)$ ]]
+if [[ $1 == install ]]; then
+    [[ $# == 3 && $2 == --delivery-project && $3 == nmrnet-qualification-* ]]
+    printf '%s\n' "$3" > "$TEST_RECORDS/delivery-project"
+else
+    [[ $# == 1 ]]
+fi
 [[ $NMRNET_DEPLOYMENT_INPUT =~ ^qualification-api-[A-Za-z0-9]{8}$ ]]
 printf '%s|%s\n' "$1" "$NMRNET_DEPLOYMENT_INPUT" >> "$TEST_RECORDS/deployments"
 printf '%s\n' "$1" >> "$TEST_RECORDS/events"
@@ -115,7 +121,51 @@ for file in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
 done
 [[ $(stat -c '%a' "$private") == 700 && ! -e $private/extra-canary ]]
 if [[ ${TEST_FAIL-} == "$1" ]]; then exit 7; fi
+if [[ $1 == install ]]; then
+    mkdir "$private/generation-fixture"
+    ln -s generation-fixture "$private/current"
+fi
 if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
+'''
+
+# The actual private-delivery shell owner runs against this finite Engine.
+# It records Docker grants; it does not run Compose, SQLite or scientific work.
+DELIVERY_ENGINE = r'''#!/usr/bin/env bash
+set -eu
+arguments=("$@")
+case $1 in
+run)
+    name= output=
+    for ((i=0; i<$#; i++)); do
+        if [[ ${arguments[i]} == --name ]]; then name=${arguments[i+1]}; fi
+        if [[ ${arguments[i]} == --output ]]; then output=${arguments[i+1]}; fi
+    done
+    [[ $name == "$(cat "$TEST_RECORDS/delivery-project")"-* ]]
+    printf '%s\0' "$@" > "$TEST_RECORDS/$name.argv"
+    if [[ -n $output ]]; then
+        printf '{}\n' > "$output/compose.json"
+        printf 'fixture\n' > "$output/daemon.toml"
+        printf 'delivery-prepare\n' >> "$TEST_RECORDS/events"
+    else
+        printf 'delivery-empty\n' >> "$TEST_RECORDS/events"
+        [[ ${TEST_FAIL-} != inspection ]] || exit 7
+        printf '%s\n' '{"outstanding_items":0}'
+    fi
+    ;;
+compose)
+    [[ $2 == --env-file && $3 == /dev/null && $4 == --project-directory ]]
+    [[ $6 == --project-name && $7 == "$(cat "$TEST_RECORDS/delivery-project")" ]]
+    [[ $8 == --file && $9 == "$5/compose.json" ]]
+    operation=${10}
+    if [[ ${*: -1} == --volumes ]]; then operation=remove; fi
+    printf 'delivery-%s\n' "$operation" >> "$TEST_RECORDS/events"
+    ;;
+rm)
+    [[ $2 == --force && $3 == "$(cat "$TEST_RECORDS/delivery-project")"-* ]]
+    printf 'delivery-retire-helper\n' >> "$TEST_RECORDS/events"
+    ;;
+*) exit 96 ;;
+esac
 '''
 
 
@@ -338,6 +388,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
             ("failed-install", (180, 240, 260)),
             ("failed-up", (180, 240, 260)),
             ("failed-down", (180, 240, 260)),
+            ("failed-inspection", (180, 240, 260)),
         ):
             with self.subTest(mode=profile), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -352,17 +403,28 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 (repository / "tools/provider.sh").write_text(OWNER)
                 (repository / "tools/provider_deployment.sh").write_text(DEPLOYMENT)
                 shutil.copyfile("/fixture/operator_guidance.sh", repository / "tools/operator_guidance.sh")
+                shutil.copyfile("/workspace/tools/compose_qualification.sh", repository / "tools/compose_qualification.sh")
+                (repository / "tools/record-engine.sh").write_text(DELIVERY_ENGINE)
                 (repository / "config/deployments").mkdir(parents=True)
                 (repository / "tools/docker_client.sh").write_text(
-                    "docker_client_prepare() { :; }\ndocker_client_cleanup() { :; }\n"
+                    'docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh"); }\n'
+                    "docker_client_cleanup() { :; }\n"
                 )
                 for name in (
                     "Makefile",
                     "config/provider.toml.example",
                     "tools/inference_native.sh",
                     "tools/worker_retirement.sh",
-                    "tools/deployment_helper_grants.sh",
-                    "tools/deployment_runtime_recovery.sh",
+                    "tools/compose_deployment.sh",
+                    "tools/delivery_deployment.sh",
+                    "tools/core_image.sh",
+                    "tools/geometry_image.sh",
+                    "tools/git_inputs.sh",
+                    "tools/git_metadata.sh",
+                    "containers/inference/image-inputs.txt",
+                    "requirements/inference.lock",
+                    "requirements/unicore-source.json",
+                    "artifacts/prediction-models.json",
                     "tools/provider_deployment.py",
                     "tests/integration/provider_runtime/model_peer.py",
                     "tests/integration/provider_runtime/stage_api_config.py",
@@ -392,6 +454,12 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.touch()
                 image = "sha256:" + "a" * 64
+                (repository / "tools/delivery_image.sh").write_text(
+                    f"require_delivery_image() {{ delivery_image_id={image}; }}\n"
+                )
+                (repository / "tools/inference_native.sh").write_text(
+                    'inference_native() { shift 3; "$@"; }\n'
+                )
                 image_record = repository / ".work/provider/image-id"
                 image_record.parent.mkdir(parents=True)
                 image_record.write_text(image + "\n")
@@ -443,10 +511,20 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 result = subprocess.run(
                     ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
+                expected_status = 2 if failed == "inspection" else 7 if failed else 0
+                self.assertEqual(result.returncode, expected_status, result.stderr)
                 calls = [row.split("|") for row in (records / "deployments").read_text().splitlines()]
                 if failed:
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("qualified;", result.stdout)
+                    if failed == "inspection":
+                        self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
+                        events = (records / "events").read_text().splitlines()
+                        self.assertLess(events.index("delivery-empty"), events.index("delivery-retire-helper"))
+                        self.assertLess(events.index("delivery-retire-helper"), len(events) - 1 - events[::-1].index("delivery-up"))
+                        self.assertNotIn("delivery-remove", events)
+                        self.assertIn("Any queued outcome remains owned there", result.stderr)
+                        continue
                     if failed == "down":
                         self.assertEqual([row[0] for row in calls], ["install", "up", "down", "down"])
                         self.assertEqual((records / "creates").read_text().count("client|"), 1)
@@ -468,8 +546,21 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(calls[0][1], deployment_names)
                 deployment_names.add(calls[0][1])
                 events = (records / "events").read_text().splitlines()
+                self.assertLess(events.index("install"), events.index("delivery-prepare"))
+                self.assertLess(events.index("delivery-prepare"), events.index("delivery-up"))
+                self.assertLess(events.index("delivery-up"), events.index("up"))
                 self.assertLess(events.index("up"), events.index("create-client"))
                 self.assertLess(events.index("client"), events.index("down"))
+                self.assertLess(events.index("down"), events.index("delivery-down"))
+                self.assertLess(events.index("delivery-down"), events.index("delivery-empty"))
+                self.assertLess(events.index("delivery-empty"), events.index("delivery-remove"))
+                project = (records / "delivery-project").read_text().strip()
+                for role in ("config", "inspect"):
+                    argv = next(records.glob(f"{project}-{role}-*.argv")).read_text().split("\0")[:-1]
+                    self.assertEqual(argv[argv.index("--network") + 1], "none")
+                    self.assertIn("--read-only", argv)
+                    self.assertEqual(argv[argv.index("--name") + 1].split(f"-{role}-")[0], project)
+                    self.assertNotIn("/var/run/docker.sock", " ".join(argv))
                 if mode == "scripted-pasted":
                     self.assertLess(events.index("down"), events.index("signal-peer"))
                     self.assertLess(events.index("signal-peer"), events.index("peer"))

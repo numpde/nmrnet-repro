@@ -330,10 +330,14 @@ budget; actual turns, corrections and routes stay in the retained result. Use a
 fresh private <code>OUTPUT</code>, including an ignored qualification leaf if desired.
 Failed or uncertain submissions are retained and never resubmitted automatically.</p>
 <p>If the Job was created but client readback stopped, supply
-<code>JOB_RECEIPT=/absolute/path/to/original/client/created.json</code> to the same
-<code>existing-pasted</code> target, keeping the original selectors and choosing
-a fresh <code>OUTPUT</code>. This mode performs GET requests for that original
-Job only: it does not create, select or open another Job, or repeat prediction.</p>
+<code>JOB_RECEIPT=/absolute/path/to/original/client/created.json</code> and
+<code>JOB_IDENTITY=/absolute/path/to/original/source/identity.json</code> to the same
+<code>existing-pasted</code> target, with a fresh <code>OUTPUT</code> and the original
+client, project, network and oracle selectors. <code>DEPLOYMENT</code> is unnecessary
+in this mode. Expected execution comes from that original capture, so readback
+still works after redeployment or producer shutdown. It performs GET requests for
+that original Job only; it does not create, select or open another Job, or repeat
+prediction. The received result cannot supply its own expected image identity.</p>
 <ul>
 <li><code>make provider/qualify/api/pasted</code> uses the isolated scripted model peer.</li>
 <li><code>make provider/qualify/api/real-pasted</code> uses one explicitly selected real endpoint.</li>

@@ -178,9 +178,7 @@ if [[ $action == install ]]; then
             --delivery-image "$delivery_image" --controller-image "$controller_image"
     fi
     [[ -f $bundle/compose.json && ! -L $bundle/compose.json ]] || exit 2
-    if [[ $role == provider && $delivery_project != nmr-api-delivery ]]; then
-        printf 'Private delivery namespace: %s. Continue through the qualification caller; keep the host shared service unchanged.\n' "$delivery_project"
-    elif [[ $role == provider ]]; then
+    if [[ $role == provider ]]; then
         find "$bundle" -type f -exec chmod 400 -- {} +
         find "$bundle" -mindepth 1 -type d -exec chmod 500 -- {} +
     else
@@ -193,7 +191,9 @@ if [[ $action == install ]]; then
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
-    if [[ $role == provider ]]; then
+    if [[ $role == provider && $delivery_project != nmr-api-delivery ]]; then
+        printf 'Private delivery namespace: %s. Continue through the qualification caller; keep the host shared service unchanged.\n' "$delivery_project"
+    elif [[ $role == provider ]]; then
         printf 'Next: make delivery/deployment/install DEPLOYMENTS=%q\n' "$deployment_name"
         printf 'Then: make delivery/deployment/up\n'
         printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
@@ -261,3 +261,4 @@ case $action in
     discard) printf 'Next: make delivery/deployment/up\n' ;;
     held) printf 'Next: reconcile any held item before discard; otherwise make delivery/deployment/up\n' ;;
 esac
+exit "$?"

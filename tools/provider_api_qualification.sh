@@ -26,9 +26,29 @@ api_witness_wait() {
 
 
 api_witness_stop_deployment() {
-    [[ ${api_deployment_active-false} == true ]] || return 0
-    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
-    api_deployment_active=false
+    local invocation_status=${1-0}
+    if [[ ${api_deployment_active-false} == true ]]; then
+        NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
+        api_deployment_active=false
+    fi
+    if [[ ${qualification_delivery_started-false} == true ]]; then
+        if (( invocation_status != 0 )); then
+            printf 'Private delivery project %s was retained; inspect status/logs using %s/compose.json. Any queued outcome remains owned there. Do not repeat the Job.\n' \
+                "$qualification_delivery_project" "$qualification_delivery_root" >&2
+            return 0
+        fi
+        qualification_delivery_down || return $?
+        if qualification_delivery_empty; then
+            qualification_delivery_remove || return $?
+        else
+            # The client readback passed, but another retained obligation may
+            # remain. Restore its original publisher rather than discard it.
+            qualification_delivery_retire_helper || return $?
+            qualification_delivery_up || return $?
+            printf 'Private delivery still owns outcomes; retain project %s and its configuration.\n' "$qualification_delivery_project" >&2
+            return 2
+        fi
+    fi
 }
 
 api_witness_finish() {
@@ -47,7 +67,7 @@ api_witness_finish() {
         else
             for role in client stage selection; do provider_host_remove "$role" || cleanup=2; done
             if [[ ! -v provider_host_ids[client] && ! -v provider_host_ids[stage] && ! -v provider_host_ids[selection] ]] \
-                && api_witness_stop_deployment; then provider_host_remove peer || cleanup=2
+                && api_witness_stop_deployment "$status"; then provider_host_remove peer || cleanup=2
             else cleanup=2; fi
         fi
     fi
@@ -55,6 +75,9 @@ api_witness_finish() {
     if [[ $inference_retirement_confirmed != true ]]; then
         printf 'Qualification still owns an unretired local client at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
+    fi
+    if [[ -n ${qualification_delivery_helper-} ]]; then
+        qualification_delivery_retire_helper || cleanup=2
     fi
     if [[ ${api_deployment_active-false} == true || ${#provider_host_ids[@]} != 0 ]]; then
         printf 'Qualification stopped with unresolved deployment/helper obligations. Containers and original receipts remain at %q; their dependencies were retained.\n' "$provider_host_root" >&2 || :
@@ -70,6 +93,8 @@ api_witness_finish() {
     if [[ $status == 0 ]]; then
         if [[ ${api_witness_mode-} == real-ambiguity ]]; then
             printf 'Selected-model interpreter probe and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
+        elif [[ ${api_witness_mode-} == existing-pasted && -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+            printf 'Original Job readback and client retirement passed; no new prediction. Private evidence: %s\n' "$provider_host_root"
         else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
     fi
     exit "$status"
@@ -363,8 +388,11 @@ api_witness_main() {
         source "$repository_root/tools/git_metadata.sh"
         local revision
         local -a inputs=(Makefile tools/provider_api_qualification.sh tools/provider.sh tools/provider_logging.sh
-            tools/provider_deployment.sh tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh tools/provider_deployment.py tools/operator_guidance.sh
+            tools/provider_deployment.sh tools/compose_deployment.sh tools/provider_deployment.py tools/operator_guidance.sh
+            tools/compose_qualification.sh tools/delivery_deployment.sh tools/delivery_image.sh tools/core_image.sh tools/geometry_image.sh
             tools/provider_image.sh tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh tools/git_inputs.sh tools/git_metadata.sh
+            containers/inference/image-inputs.txt requirements/inference.lock requirements/unicore-source.json
+            artifacts/prediction-models.json
             tools/bound_http_proxy.py tools/provider_proxy.py tools/container_guard.py
             tests/integration/provider_runtime/stage_api_config.py
             tests/integration/provider_runtime/api_prediction.py
@@ -389,7 +417,10 @@ api_witness_main() {
     else sha256sum -- "$repository_root/Makefile" "$repository_root/config/provider.toml.example" "$repository_root/tools/provider_api_qualification.sh" \
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
-        "$repository_root/tools/"{provider_deployment.sh,deployment_helper_grants.sh,deployment_runtime_recovery.sh,provider_deployment.py,operator_guidance.sh} \
+        "$repository_root/tools/"{provider_deployment.sh,compose_deployment.sh,provider_deployment.py,operator_guidance.sh} \
+        "$repository_root/tools/"{compose_qualification.sh,delivery_deployment.sh,delivery_image.sh,core_image.sh,geometry_image.sh,provider_image.sh,git_inputs.sh,git_metadata.sh} \
+        "$repository_root/containers/inference/image-inputs.txt" "$repository_root/requirements/"{inference.lock,unicore-source.json} \
+        "$repository_root/artifacts/prediction-models.json" \
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/fakes/"{tls_peer,conversation,credential}.py \
@@ -401,6 +432,7 @@ api_witness_main() {
     docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
     declare -gA provider_host_ids=()
     api_witness_mode=$mode api_deployment_active=false provider_host_stop_requested=false
+    qualification_delivery_prepared=false qualification_delivery_started=false qualification_delivery_helper=
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -504,7 +536,16 @@ api_witness_main() {
             chmod 600 -- "$private/$input" || return $?
         fi
     done
-    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" install || return $?
+    # Reuse the ordinary recipe owners in a private qualification namespace.
+    # This must not replace the host's live shared-delivery configuration.
+    source "$repository_root/tools/compose_qualification.sh"
+    local delivery_digest delivery_project
+    delivery_digest=$(printf '%s' "$provider_host_root" | sha256sum)
+    delivery_project=nmrnet-qualification-${delivery_digest:0:24}
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" install \
+        --delivery-project "$delivery_project" || return $?
+    qualification_delivery_prepare "$private" "$provider_host_root/deployment/delivery" "$delivery_project" "$controller_image" || return $?
+    qualification_delivery_up || return $?
     # Up can dispatch effects before returning failure. Its original receipts
     # must settle through down before the model peer's route can be withdrawn.
     api_deployment_active=true

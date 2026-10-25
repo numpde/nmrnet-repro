@@ -1,20 +1,17 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider-core package — NMRNet++</title><meta name="original-source-path" content="packages/provider-core/README.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="6a4845638fae50bf1886d330ac24738d493fcb5de2ee76d19a9cc0a1ba1594d4"><link rel="stylesheet" href="../site.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider-core package — NMRNet++</title><meta name="description" content="Provider-core integration reference: signed NMR API operations, compact producer checkpoints, shared result delivery and recovery without scientific replay."><link rel="stylesheet" href="../site.css"></head>
 <body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="provider-core">Provider-core package</h1>
-<p><strong>Lifecycle reference update pending:</strong> the detailed storage and
-publication sections below describe the earlier file-backed implementation.
-For current checkpoint and shared-delivery ownership, use the
-<a href="../provider.html#result-delivery-and-storage">operator guide</a> and
-<a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery">note 021</a>.
-The detailed reference port is explicitly tracked in
-<a href="../notes/022_shared_delivery_deferred_20261024.txt">note 022</a>.</p>
-<p><code>provider-core</code> is the locally maintained, independently installed NMR
-API provider package. It owns signing, transport, Upload access, durable Attempt
-lifecycle and shared diagnostic facts. Scientific interpretation and execution
-remain consumer-owned. The <a href="../notes/017_provider_core_plan_20261018.html">dated
-package record</a> preserves its implementation decisions and qualification limits.</p>
+<p>This reference is for developers integrating an NMR API provider.
+<code>provider-core</code> supplies signed API operations, Upload access, compact
+producer checkpoints, shared durable result delivery and protected diagnostics.
+The provider binding owns scientific interpretation, execution, acceptance and
+native cleanup. To run NMRNet, use the <a href="../provider.html">operator guide</a>.
+The <a href="../notes/017_provider_core_plan_20261018.html">dated package record</a>
+and <a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery">shared-delivery record</a>
+preserve design rationale and qualification evidence.</p>
 <nav aria-label="Package reference">
-  <a href="#requirements">Requirements</a> · <a href="tests.html">Tests</a> ·
+  <a href="#requirements">Requirements</a> · <a href="#producer-checkpoints">Checkpoints</a> ·
+  <a href="#shared-delivery">Result delivery</a> · <a href="#attempt-recovery">Recovery</a> · <a href="tests.html">Tests</a> ·
   <a href="fixtures.html">Contract fixtures</a> · <a href="../provider.html">NMRNet operation</a>
 </nav>
 <h2 id="credential-admission">Credential admission</h2>
@@ -43,6 +40,7 @@ dependencies, installed by default:</p>
 <li><code>http-sf==1.2.1</code></li>
 <li><code>httpx==0.28.1</code></li>
 <li><code>httpcore==1.0.9</code></li>
+<li><code>h11==0.16.0</code></li>
 </ul>
 <p>Use the <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core.lock">complete hash-locked runtime closure</a>
 for this repository's contained installation. The build uses
@@ -70,17 +68,24 @@ report can identify the affected Job and Attempt even when preparation fails
 before scientific work starts. Its projection exposes only those two references;
 the acknowledgement is private context, not proof of dispatch or a terminal
 receipt. Failures before an Attempt is acknowledged do not acquire an invented ID.</p>
-<p>NMRNet consumes these functions in its existing <code>process_reports.py</code> reporter.
-That reporter still owns the one mixed causal graph, ordinary Python chains and
-groups, cycle/display bounds, credential redaction before bounds, scientific
-summaries and recipient sinks. Core adds no graph walker, formatter, journal or
-public disclosure policy. <code>make test/unit/provider-core/diagnostics</code> checks the
-shared owner facts; <code>make test/integration/provider-core/process</code> checks actual
-protected diagnostic delivery through NMRNet. In the running service, stdout and
-stderr go to bounded Docker logs; there is no parallel diagnostic-file export.
+<p><code>provider_core.diagnostics.failure_evidence(error, secrets=...)</code>
+renders a bounded causal graph, including ordinary Python causes, contexts and
+exception groups. It redacts known credentials before bounding text and exposes
+only reviewed owner facts for arbitrary exceptions. NMRNet supplies its
+scientific projections through <code>process_reports.py</code>; the generic delivery
+service uses the core renderer directly. Public disclosure policy remains with
+the binding.</p>
+<p>SQLite failures include native <code>sqlite_errorcode</code> and bounded
+<code>sqlite_errorname</code> when supplied by SQLite. These identify the engine
+failure without exporting SQL, arbitrary exception text or scientific payloads.
+See the <a href="https://github.com/numpde/nmrnet-repro/blob/e4c0d76/packages/provider-core/src/provider_core/diagnostics.py">protected renderer</a>.
+<code>make test/unit/provider-core/diagnostics</code> checks shared owner facts;
+<code>make test/integration/provider-core/process</code> exercises NMRNet's
+protected diagnostic delivery. In the running service, stdout and stderr go to
+bounded Docker logs; there is no parallel diagnostic-file export.
 <a href="../provider.html#routine-logs-and-private-diagnostics">Operator diagnostics</a>
-explains access and retention. API result/failure delivery and diagnostic-history
-retention are separate claims; their dated evidence is in
+explains access and retention. Diagnostic output does not establish API result
+delivery; their dated evidence is in
 <a href="../notes/003_nmr_api_provider_20261018.html#R53">003's API delivery record</a>
 and the <a href="../notes/019_runtime_logging_20261023.html">logging decision</a>.</p>
 <h2 id="directory-announcements">Directory announcements</h2>
@@ -120,7 +125,7 @@ and capped backoff. Deadline expiry starts scientific retirement independently o
 read cleanup. The original observation waiter stays owned until settlement, which
 cannot accept its late response as permission to resume science. A completed result
 still requires a fresh allowed observation before terminal selection. Expiry keeps
-the existing suppressed-evidence path and does not itself authorize publication or
+the suppressed-disposition path and does not itself authorize publication or
 another Job. <code>ObservationGapExpired</code> distinguishes a read that started from waiting
 for exchange access and projects the same window's late-arriving cause. NMRNet's
 production factory requires enabled recovery before allocating workers; its
@@ -298,10 +303,21 @@ current exchange-owned failure after transport retirement is confirmed. Reviewed
 timeouts/native connection failures and HTTP 502/503/504 can qualify. A proxy may
 return HTML or omit API metadata during an outage: permission to repeat the read
 does not admit that body, establish transience or verify a Problem. Explicit
-wrong/duplicate topology, authentication rejection, malformed success, TLS/protocol
-defects and unknown I/O causes do not qualify. Hello and other mutations never
+wrong/duplicate topology, other authentication rejections, malformed success,
+TLS/protocol defects and unknown I/O causes do not qualify. Verified
+<code>authentication_window_closed</code> or <code>signature_expired</code>
+refusals can permit fresh signing after settlement. Hello and other mutations never
 qualify. Composition still owns paced backoff, stop handling and useful diagnostics;
 the predicate sends nothing and does not repeat an operation automatically.</p>
+<p><code>can_refresh_signature(failure)</code> admits only those exact correlated
+no-effect timing refusals from this client's current settled exchange. The API's
+replay-retention watermark can advance during authentication, closing the
+request's original replay epoch even when its signature was freshly created.
+This differs from signature expiry. The caller still needs its operation's own
+retry permission and must sign again; this predicate alone never authorizes a
+mutation or a scientific rerun. Sources:
+<a href="https://github.com/numpde/nmr-api-v1/blob/86121d6cf0a3a17c02863577e8b37024fd69516b/nmr_api/security/persistence/adapters.py#L181-L186">replay admission barrier</a> and
+<a href="https://github.com/numpde/nmr-api-v1/blob/86121d6cf0a3a17c02863577e8b37024fd69516b/nmr_api/security/problems.py#L826-L841">timing-refusal meanings</a>.</p>
 <p>This boundary follows
 <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/http.py#L290-L377">SECS's response admission</a>.
 Authority: the pinned API's
@@ -359,8 +375,8 @@ request correlation when available, and a reviewed problem code when verified.
 Original response and cause remain private
 for authorized diagnostics. Unknown server text is retained there, not displayed.
 Cancellation remains <code>CancelledError</code>; <code>ProviderAPI.last_failure</code> retains its
-operation context and transport evidence. Downstream recipient projections remain
-unfinished composition work.</p>
+operation context and transport evidence. The protected diagnostic renderer and
+binding reporter carry those facts to their operator recipients.</p>
 <p>Wire and diagnostic rationale: the API's exact
 <a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py">Job-input route</a>,
 <a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/security/analysis_kind_refs.py">catalog-key grammar</a>,
@@ -487,16 +503,17 @@ Attempt and Job states, checking both identities against the caller's retained
 obligation. <code>AttemptObservation</code> preserves those states independently: an
 in-progress Attempt can belong to a closed or cancelled Job. This observation
 does not say whether scientific execution began or whether particular result or
-failure bytes committed. The lifecycle owner must retain execution history;
-publication recovery must resend the exact retained terminal operation.</p>
+failure bytes committed. Compact producer checkpoints retain lifecycle decisions;
+after durable handoff, the separate delivery service retains and publishes the
+exact selected terminal request.</p>
 <p>The pinned <a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py">Attempt read route</a>
 and <a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json">response schema</a>
 define these limits. Attempt and Upload responses share bounded JSON decoding
 and safe <code>ResponseRejected</code> diagnostics; their schema checks stay separate.
 The signed read is implemented and locally tested over TLS. <code>AttemptRecovery</code>
-and <code>AttemptController</code> below consume it; NMRNet's current composition and explicit
-recovery entrypoints are described in <a href="../provider.html">the provider guide</a>.
-Deployed qualification remains separate.</p>
+and <code>AttemptController</code> below consume it. NMRNet's
+<a href="../provider.html">operator guide</a> explains result delivery and
+reconciliation limits; dated deployed evidence is separate from these wire checks.</p>
 <p><code>attempt_request.start_body(job_ref, provider_attempt_key)</code> builds a start request
 from an explicit key. The lifecycle owner must persist these bytes before calling
 <code>ProviderAPI.start_attempt(body, job_ref=..., analysis_kind_ref=..., provider_ref=...)</code>.
@@ -542,12 +559,14 @@ The two refusal meanings come from their explicit
 <a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/errors.py">operation error contracts</a>,
 which are more specific than the shared HTTP effect table. Local TLS tests cover
 the PUT body/digest and cancellation closure; <code>AttemptExecutor</code> below owns lifecycle
-ordering. Deployed workflow qualification remains unfinished.</p>
+ordering. Dated deployed workflow evidence is recorded in
+<a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery-deployed">note 021</a>.</p>
 <p><code>complete_body(attempt_ref, result_schema_id, result_bytes)</code> and
 <code>fail_body(attempt_ref, failure_code, failure_message)</code> in <code>attempt_request</code> build
-terminal requests for durable retention. The lifecycle owner must record the chosen
-operation and exact body before calling <code>ProviderAPI.complete_attempt(body,
-execution_attempt_ref=...)</code> or <code>fail_attempt(...)</code>. An uncertain completion must not
+terminal requests. The producer records its selected operation and body digest
+before handoff; the delivery service durably queues the exact body before calling
+<code>ProviderAPI.complete_attempt(body, execution_attempt_ref=...)</code> or
+<code>fail_attempt(...)</code>. An uncertain completion must not
 be replaced with failure, another result, or a fresh scientific run.</p>
 <p>Result bytes are opaque, nonempty and limited to 786432 bytes. Core requires
 canonical base64 in retained completion requests, but imposes no UTF-8, JSON or
@@ -588,469 +607,340 @@ and <a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5
 The consumer/lane identity prevents accidental cross-lane restore; generation
 identity prevents implicit adoption by changed scientific code. These checks are
 neither authentication nor a lock. The codec does not persist data, reserve disk
-space, dispatch requests or authorize scientific recovery. Composition must supply
-a budget covering full future terminal records and their required evidence, beyond
-these smaller pending-start records. Headroom checks do not physically reserve
-space. Terminal record states and their protected evidence are described below.</p>
-<p><code>AttemptStore</code> now retains pending starts in a precreated, private directory. It
-uses a local exclusive file lock, bounded inventory, exclusive staging, file sync
-and directory sync. An identical admission returns the retained record; different
-facts under the same key are refused. The capacity policy accounts for full future
-records and staging, but available-space checks cannot reserve blocks against
-unrelated writers. Composition must supply the eventual full-record size budget.
-<code>await store.admission_inventory(owner=caller)</code> observes those same slot/headroom
-requirements for one fresh start and returns the existing records. Use it before
-requesting fresh native allocation; keep retained-obligation/recovery decisions
-with the consumer. Confirmed records occupy slots until explicitly archived. Preflight changes no
-records, reserves no capacity and grants no execution authority; <code>admit</code> rechecks
-the actual storage boundary. Interrupted preflight I/O remains with its original
-owner until settled. <code>make test/unit/provider-core/admission</code> checks this boundary
-and the directly affected store behavior.</p>
-<p><code>await store.archive_confirmed(record, owner=caller)</code> preserves an exact
-<code>TerminalConfirmed</code> record's original bytes in private history before removing its
-active entry and syncing the active directory. It releases an active storage slot,
-not a lifecycle claim or native worker. Composition must settle those original
-owners first. Unconfirmed records cannot be archived. An interrupted wait retains
-the original filesystem operation under its caller, through the same <code>settle</code>
-gate. Partial/conflicting copies hold storage; an identical completed copy can
-finish an explicit archive after restart, without allocating a second copy.</p>
-<p>History is under <code>history-&lt;scope digest&gt;/&lt;attempt-key digest&gt;.json</code> in the store
-root; <code>history_directory_name(scope)</code> and <code>record_name(record)</code> define those
-names. The portable record still contains the original Job/Attempt identities,
-commands, receipts and protected evidence. <code>records()</code> and recovery inspection
-report <strong>active obligations only</strong>; they do not list or audit every historical
-file. Active duplicates and attempted reuse of an archived key inspect that
-specific history file through the original private-file admission. A history-only
-root remains bound to its original scope.</p>
-<p><code>StoreLimits</code> requires keyword <code>confirmed_history_records</code>, a positive integer
-without a default; 64 is an example policy. <code>maximum_records</code> bounds active slots.
-Open admits at most history plus active-slot capacity for stopped inspection;
-<code>require_confirmed_history_capacity()</code> and fresh admission require history within
-its steady window. Existing excess history is not automatically migrated.
-<code>trim_confirmed_history(owner=caller)</code> requires no active records, validates the
-whole bounded history one original record at a time, and expires the oldest
-complete records by <code>(receipt.committed_at, canonical filename)</code>. The newest
-retained files keep their exact bytes. Successful expiry syncs the history
-directory; partial failure retains observed removals, an uncertain target and
-sync state with its original cause. The existing I/O owner handles cancellation;
-do not replace an interrupted trim with another deletion operation.</p>
-<p>Composition must await its original native-release acknowledgement before trim.
-NMRNet admits archive/release/trim as one maintenance task: stop prevents a new
-batch, while shutdown drains an already admitted batch and holds dependencies
-if it cannot settle. The store adds no native authority or automatic restart.
-For history H, active slots A and record budget R, the logical peak is
-<code>(H + A + 1) * R</code>, including a full staging/archive copy, before filesystem
-metadata and reserve. Free-space checks reserve no physical blocks. Expired raw
-scientific and diagnostic evidence is no longer available locally; the API owns
-its published result. Copy evidence needing longer retention outside store history
-before expiry; no record-selection exemption exists within the window. Independent
-copies and qualification capsules outside the store are unaffected.</p>
-<p>Consumers must explicitly request archival after settling lifecycle/native
-owners. A full active store refuses fresh admission. See the
-<a href="../provider.html#result-delivery-and-storage">current delivery and storage procedure</a>.</p>
-<p>The async store owns one filesystem operation at a time. Cancellation or timeout
-ends the wait, not the write: <code>settle()</code> observes the original operation, while new
-work and closure remain blocked. Failed publication preserves staging and any
-installed record, blocks reuse, and distinguishes visibility from durability.
-Unknown or incomplete staging entries prevent reopening until explicitly reconciled.
-A failed descriptor close requires enclosing-process retirement even if other
-descriptors close successfully. Safe errors retain original and cleanup causes for
-protected diagnostics.</p>
-<p>This ordering follows
-<a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal_store.py">NMRPeak's journal storage</a>
-(<code>admit</code>, <code>_replace_record</code>, <code>_require_recovery_space</code>), while preserving its
-suppressed cleanup errors. The lock excludes cooperating processes using the same
-directory inode; it does not coordinate hosts or protect a replaced directory path.
-Storage admission alone grants no API or scientific execution authority.</p>
-<p><code>AcknowledgedAttempt</code> retains the original <code>StartPending</code>, the server's admitted
-start response and a separate local execution phase. A terminal start replay can
-be retained but cannot enter execution. <code>acknowledge_start</code> and
-<code>mark_execution_entered</code> construct forward transitions; <code>AttemptStore.replace</code>
-requires the exact currently retained record before staging and syncing its
-replacement. Stale, skipped, repeated and backward transitions are refused. Failed
-replacement preserves the original or the installed replacement and blocks reuse
-until its outcome is reconciled. The record-size and minimum capacity bounds now
-include the acknowledgement envelope; pending starts retain their 65536-byte limit.</p>
-<p>Execution entry records the boundary before computation may run; it does not prove
-that computation ran. Preparation remains an in-memory, session-owned handle.
-Successful <code>AnalysisSession.prepare</code> returns a <code>PreparedAnalysis</code> instance carrying
-binding-owned <code>ProtectedEvidence</code> for the exact selected input. Core durably retains
-that identity with execution entry before passing the same instance to <code>execute</code>.
-The binding owns its meaning and omission of source text and secrets. Missing
-identity or an unconfirmed write prevents dispatch. The evidence limit is reused;
-storage capacity reserves both this identity and independent terminal evidence.
-Identity-bearing acknowledgements encode as v2. Historical v1 records keep their
-original byte limit and encoding, with no invented candidate identity.
-Restored <code>NOT_ENTERED</code> is not proof that such a handle exists, and restored
-<code>EXECUTION_ENTERED</code> cannot authorize another entry. <code>AttemptExecutor</code> owns fresh
-observations and prepared-handle use; the shared claim registry excludes duplicate
-owners. Publication replay is implemented below. Generation replacement and
-deployed recovery qualification remain composition work; NMRNet supplies explicit
-retained-work recovery through <a href="../provider.html">the provider entrypoints</a>.</p>
-<p>The transition boundary follows
-<a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py">NMRPeak's journal transitions</a>
-(<code>bind_started_attempt</code>, <code>mark_execution_entered</code>) and its
-<a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py">live prepared execution ownership</a>
-(<code>PreparedForExecution</code>). Retaining terminal start acknowledgements additionally
-preserves what the server reported without inventing local execution history.
-Fault tests exercise replacement and directory-sync failure; a separate process
-exits without cleanup after durable entry and the next owner reads that entry.
-This proves local process-restart retention, not power-loss survival or a complete
-scientific recovery workflow.</p>
-<p><code>TerminalPending</code> retains the original acknowledged Attempt, a COMPLETE or FAIL
-operation, its exact request bytes, and required <code>ProtectedEvidence</code>. Evidence has
-a binding-owned schema and 1–262144 immutable bytes. Core preserves it privately;
-the binding owns its meaning, necessary causal and retirement observations, and
-removal of secrets. Oversized evidence is refused, never truncated. Its size ceiling
-follows <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_diagnostic.py">NMRPeak's diagnostic envelope</a>;
-its old-history trimming policy is deliberately not adopted for required evidence.
-<a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/execution.py">SECS's execution owner</a>
-grounds retention of required failure reports before terminal publication.</p>
-<p><code>TerminalConfirmed</code> adds a receipt validated against the exact retained request.
-<code>TerminalHeld</code> preserves an expired, opposite-outcome or replay-mismatch conflict
-for that operation, with optional request correlation. These records cannot change
-the original choice or evidence, return to active/pending state, or delete an
-obligation. The conflict vocabulary follows the pinned
-<a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_outcome.py">API outcome service</a>.</p>
-<p><code>TerminalReadRequired</code> retains the exact command after a consumer chooses to stop
-resending on HTTP 404/409. <code>TerminalStateObserved</code> adds an identity-bound state
-read; <code>TerminalReadNotVisible</code> records a verified <code>resource_not_found</code> read, which
-may also mean the provider cannot access that Attempt. Neither proves that the
-original command was accepted. All three remain unresolved and block fresh
-admission. This follows <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/execution.py#L187-L245">SECS's read-only reconciliation</a>.
-Choose <code>TerminalRefusalPolicy.READ_STATE</code> on <code>AttemptController</code> (or the direct
-<code>TerminalPublisher</code>) to retain this obligation for terminal HTTP 404/409 responses
-that do not establish an operation-valid <code>TerminalHeld</code>. The default
-<code>RETAIN_PENDING</code> preserves NMRNet's existing explicit exact-request replay policy;
-other HTTP statuses and transport failures without a 404/409 head are unchanged.
-An explicit <code>AttemptRecovery.recover</code> on <code>TerminalReadRequired</code> performs one GET
-and durably retains its observation. It never reconstructs a terminal receipt.
-Recovery can take the same policy when publishing a still-pending command.
-The publisher's <code>last_failure</code> retains the original protected send failure even
-when it successfully returns a durable read-required disposition. Outstanding
-transport cleanup still raises that failure and holds ownership. This evidence
-must reach the consumer's diagnostic sink before discarding the publisher;
-the small durable record does not preserve a full diagnostic history.</p>
-<p>The capacity/read ceiling includes a maximum 2 MiB retained completion request
-(including legal whitespace), base64 expansion, protected evidence, the original
-start/admission and receipt. Installed storage tests retain and reopen maximum
-completion/failure requests with maximum evidence and schema text. Receipt and
-hold state preserve execution history and all required evidence. Neither state
-proves worker retirement or permits resource reuse. These are durable record
-semantics; the binding owns worker stop confirmation. NMRNet's explicit recovery
-composition is described in <a href="../provider.html">the provider guide</a>.</p>
-<p><code>TerminalPublisher</code> sends one exact terminal request only after observing its
-matching durable record. It retains a matching receipt or reviewed conflict before
-returning success. A lost reply leaves the original pending request available for
-an explicit later resend; settlement itself never resends. Confirmed and held
-records cannot be published again. The installed integration test exercises reply
-loss over verified TLS, storage close/reopen, exact resend and durable confirmation.</p>
-<p><code>AttemptClaims</code> excludes simultaneous local owners of the same API/provider/Attempt
-across lanes and generations, following
-<a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/provider_attempt_recovery.py">Magnet's ownership registry</a>.
-Composition must share one registry. This is event-loop-local exclusion, not a
-distributed lease. Publication pins its claim while its storage or network work
-remains unresolved; owner tags prevent settlement from consuming another caller's
-storage result or cancelling another exchange. Publication never releases the
-lifecycle claim or establishes worker retirement.</p>
-<p><code>PublicationFailed</code> exposes safe context and retains protected primary evidence,
-ordered settlement failures and any confirmed outcome not yet durably recorded.
-Cancellation still propagates. Failed receipt retention requires reconciliation;
-it cannot silently become a replacement outcome or permission to rerun science.</p>
-<p><code>AttemptStarter.start()</code> retains the pending request before sending it once;
-<code>resume()</code> requires that exact pending record to exist under the current API,
-provider, lane and generation. Neither method reconstructs request bytes or retries
-implicitly. Both return only after retaining the validated acknowledgement, including
-terminal start replays, with local execution still <code>NOT_ENTERED</code>.</p>
-<p>Acquire <code>AttemptClaims.claim_start(pending)</code> before either call. The start claim
-excludes the provider attempt key across Jobs, lanes and generations, matching the
-<a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_start.py#L396-L412">API's provider-wide key constraint</a>.
-The starter adds the received remote Attempt reference to that same claim without
-releasing the key. A conflicting owner preserves the received acknowledgement and
-blocks handoff; it never steals the existing claim. The caller keeps both identities
-until explicit release.</p>
-<p>This ordering follows <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L442-L508">NMRPeak's durable admission</a>,
-<a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L648-L695">start acknowledgement</a>,
-and <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1636-L1664">generation-sensitive recovery</a>.
-A cancelled wait retains its original I/O. <code>settle()</code> observes it without sending:
-settled initial retention returns no acknowledgement; settled acknowledgement
-persistence returns that exact record. Failed persistence or reference binding
-keeps protected admission evidence and pins ownership for explicit reconciliation.
-No acknowledgement, including successful replay, recreates a prepared handle or
-permits science to run. <code>AttemptRecovery</code> below handles later retained records;
-the finite controller connects NMRNet's real-worker path. NMRNet's runtime,
-continuous service and explicit recovery commands are implemented; see
-<a href="../provider.html">the provider guide</a> and
-<a href="../notes/017_provider_core_plan_20261018.html">the current 017 audit</a> for local
-qualification and remaining limits. This package reference covers the shared
-runtime; <a href="../notes/003_nmr_api_provider_20261018.html">003's completion
-record</a> separately establishes its bounded local/API qualification and names
-the deployment claims outside that scope.</p>
-<p><code>AttemptExecutor</code> connects an acknowledged Attempt to an <code>AnalysisSession</code> supplied
-by the binding. It checks current server state and exact Job input, confirms preparing
-progress, and obtains a live prepared handle. Before invoking that handle, it confirms
-running progress, durably records execution entry, then reads server state again.
-This follows <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1130-L1240">NMRPeak's execution ordering</a>.
-The read is a snapshot; it cannot prevent a later server cancellation.</p>
-<p>An explicit <code>on_unconfirmed_phase_progress</code> observer opts into continuing after
-reviewed failure to deliver a fixed <code>preparing</code> or <code>running</code> label. Core first
-retires the original PUT and checks its exact Attempt route and failure evidence.
-The bounded synchronous observer receives <code>(acknowledged, phase, failure)</code> and
-must retain protected delivery uncertainty. Core then requires a fresh allowed
-lifecycle observation before dependent work. No progress PUT is resent, and that
-read cannot confirm progress acceptance. <code>None</code>, the default, keeps fail-stop
-phase reporting. The controller forwards the same observer to its executor.
-The API authority and exact failure rules are documented at
-<code>ProviderAPI.can_defer_phase_progress</code>; this grants no condition-report deferral.</p>
-<p>Both session methods require the keyword <code>report_condition</code>:
-<code>prepare(acknowledged, instructions, *, report_condition)</code> and
-<code>execute(prepared, *, report_condition)</code>. The binding supplies reviewed public
-codes to <code>await report_condition(code)</code> or clears the condition with <code>None</code>.
-Core binds the callable to its Attempt and phase, serializes reporting with API
-polls, and returns from the await only after accepting the acknowledgement.
-Propagate reporting errors before dependent work. A failed report blocks the next
-phase or publication even if the binding catches it; a callable retained after
-its phase ends cannot update progress. This port grants no scientific dispatch or
-publication authority and preserves the explicit phase-delivery policy, durable
-entry and fresh observation order above. These local contracts do not establish that
-SECS, Magnet or NMRPeak has adopted the port.</p>
-<p><code>ConditionRecovery(window_seconds, backoff_max_seconds, on_retry, on_recovered)</code>
-opts into bounded retries of one sequential awaited condition. Pass it through
-the controller or executor's <code>condition_recovery</code>; <code>None</code> keeps fail-stop behavior.
-Composition must own the only progress writer for this Attempt. In-process claims
-and journal locks do not fence a different process reporting with the same authority.
-The API's <code>latest_progress</code> rule cannot establish currentness by reading an Attempt.</p>
-<p>After a reviewed send failure, core retires and classifies the original PUT under
-the exchange lock, then releases that lock during jittered backoff. The existing
-monitor remains the sole lifecycle reader and can stop the same session task.
-Only the still-active pending phase/code is resent, with fresh signing. Return
-requires a matching progress receipt; equal stored facts can return their original
-timestamp, so recovery establishes neither a new heartbeat nor scientific work.
-Overlapping calls poison the condition capability, including receipt acceptance.</p>
-<p>The retry-admission window begins at the first send failure and includes original
-retirement, notices, lock waiting and pacing. No new PUT begins after it expires;
-already admitted bounded I/O retains its original owner. Protected observers receive
-<code>(acknowledged, phase, condition_code, failure, seconds)</code> before retry and the same
-arguments without <code>seconds</code> after matching acknowledgement. The latter receives
-the first outage. First/latest failed condition sends and an actually received
-receipt survive through <code>ExecutionFailed</code> if recovery or its observer fails.
-<code>ConditionRecoveryExpired</code> remains operational; catching it cannot promote returned
-science into a publishable result. Existing suppressed-outcome retention applies.</p>
-<p>The executor retains the observed outcome before encoding it, writes terminal bytes
-and protected evidence before publication, and asks the session to confirm retirement.
-A failed write or retirement preserves the primary cause and any unretained outcome.
-<code>settle()</code> observes original I/O and attempts outstanding cleanup; it never resumes
-preparation or science. A known storage refusal carries no uncertain write effect;
-an unretained scientific outcome still independently prevents ownership release.
-The caller retains the lifecycle claim for subsequent publication or reconciliation.</p>
-<p>The binding must supply bounded asynchronous session operations and actual worker
-retirement evidence. The current integration test composes the real signed TLS client,
-store, starter, executor and publisher with a recording scientific session. It proves
-ordering and retention. The separately selected repository
- <code>test/integration/provider/deployment</code> lanes connect the production factory and
- installed serial runners to local signed API peers and scripted interpretation. Their
- numerical and retirement checks have distinct scopes; see the
- <a href="../provider.html">operator reference</a>. External API delivery is separate;
- GUI behavior is outside this repository's system under test.</p>
-<p>While preparation or execution runs, the executor observes server state at the
-explicit <code>poll_seconds</code> interval and reads again before accepting a successful
-return. This follows <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1287-L1340">NMRPeak's generation observation</a>,
-extended here to preparation. Polls are sequential and use the API's existing
-exchange deadline. Session I/O requires a separate transport; it cannot compete
-with observation on the executor's single-exchange API connection.</p>
-<p>The same observation continues while the execution-entry record is being written.
-A stop or failed poll retires the prepared session without waiting for disk work
-to finish. The async entry observer and the original filesystem operation remain
-separate owned obligations: cancelling the wait does not cancel or resubmit the
-write. Settlement observes the entry waiter before settling storage; unresolved
-work keeps the claim held. Even if persistence finishes during a poll, a stop
-prevents execution; a later disk error remains secondary evidence. Successful
-persistence still requires the existing fresh state read before science.</p>
-<p>This monitoring applies to execution-entry persistence. Terminal/suppressed-evidence
-retention keeps its existing semantics. An already submitted terminal write may
-finish as <code>TerminalPending</code>; cancellation cannot revoke it or silently convert it
-to suppression. Terminal-write responsiveness and any durable suppression policy
-for that boundary remain open work.</p>
-<p>On stop, failed observation or caller cancellation, the executor requests task
-cancellation once and attempts session retirement. <code>task_settle_seconds</code> bounds
-observation of the original Python task; a timeout does not cancel it again.
-It also bounds observation of the cancelled entry waiter, independently of the
-store's own original-I/O deadline and settlement contract.
-Task completion and worker retirement are separate requirements. A result arriving
-during observation or cleanup remains protected evidence, even when acceptance
-fails. Such an unretained result keeps the claim held for reconciliation and is
-not automatically published. Neither timing option replaces the session's aggregate
-preparation/execution deadlines.</p>
-<p>After the original task and API/storage I/O settle,
-<code>retain_suppressed_outcome()</code> explicitly starts one durable write of an already
-returned, admitted <code>AnalysisSuccess</code> or <code>AnalysisFailure</code>. It does not rerun science
-or send an outcome. <code>SuppressedOutcome</code> keeps the exact candidate bytes, scientific
-evidence and a closed suppression category: server stop, failed observation or
-caller cancellation. The claim stays held while evidence is unretained or worker
-retirement remains unconfirmed. Cancellation of retention leaves its original write
-for <code>settle()</code> to observe; settlement never submits a replacement write.</p>
-<p>Suppression is absorbing. Recovery returns the unchanged record without a request;
-publication refuses both the record and its nested candidate because that candidate
-is not the current durable pending-publication record. This preserves bounded
-scientific evidence and the suppression category across restart. The full original
-acceptance exception remains in memory for protected diagnostics. Arbitrary binding
-exception graphs, unencodable outcomes and uncertain earlier writes need separate
-reconciliation; they are not silently converted to this disposition.</p>
-<p><code>AttemptRecovery</code> handles one selected durable record without recreating scientific
-work. Open storage under its explicit retained scope, read the selected inventory,
-and reserve it with <code>AttemptClaims.claim_records(records)</code> before dispatching any
-replay. Reservation checks every start-key and known remote-identity conflict before
-installing any claim. <code>claim_record(record)</code> is the single-record convenience form.
-Each recovery action rechecks the selected record against current storage.</p>
+space, dispatch requests or authorize scientific recovery. The checkpoint store
+bounds producer metadata; the separate delivery queue bounds outstanding terminal
+bodies. Their roles and transitions are described below.</p>
+<h2 id="producer-checkpoints">Producer checkpoints</h2>
+<p><code>producer_checkpoint</code> represents decisions that the producer must
+remember across interruption. The producer stores small control records, not
+scientific result bodies or a transcript archive. These records describe what
+was admitted, entered, selected, handed off or suppressed; they do not recreate
+a live analysis session.</p>
 <table>
-<thead>
-<tr>
-<th>Retained record</th>
-<th>Recovery action</th>
-</tr>
-</thead>
+<thead><tr><th>Checkpoint</th><th>Retained fact</th><th>What it does not establish</th></tr></thead>
 <tbody>
-<tr>
-<td><code>StartPending</code></td>
-<td>Replay the exact start through <code>AttemptStarter.resume</code></td>
-</tr>
-<tr>
-<td><code>AcknowledgedAttempt</code></td>
-<td>Return the retained record and identity-bound server observation</td>
-</tr>
-<tr>
-<td><code>TerminalPending</code></td>
-<td>Publish the exact retained outcome through <code>TerminalPublisher</code></td>
-</tr>
-<tr>
-<td><code>TerminalReadRequired</code></td>
-<td>One identity-bound GET, then retain observed state or a verified not-visible response</td>
-</tr>
-<tr>
-<td><code>TerminalConfirmed</code>, <code>TerminalHeld</code>, <code>TerminalStateObserved</code> or <code>TerminalReadNotVisible</code></td>
-<td>Return the unchanged record without an API request</td>
-</tr>
-<tr>
-<td><code>SuppressedOutcome</code></td>
-<td>Return unchanged; its candidate cannot be published or executed</td>
-</tr>
+<tr><td><code>StartPending</code></td><td>Scoped input facts and the exact original
+START body and provider attempt key.</td><td>API acceptance or permission to run science.</td></tr>
+<tr><td><code>AcknowledgedCheckpoint</code></td><td>The original START and its
+received API admission.</td><td>A restored live execution handle.</td></tr>
+<tr><td><code>EnteredCheckpoint</code></td><td>The acknowledgement and
+<code>EvidenceDigest</code> of the prepared identity: schema, SHA-256 and byte length.</td>
+<td>The prepared payload or a reusable analysis session.</td></tr>
+<tr><td><code>TerminalSelectedCheckpoint</code></td><td>The chosen
+<code>TerminalOperation</code>, terminal-body SHA-256 and byte length, recorded
+before the first enqueue attempt.</td><td>Durable relay acceptance or API publication.</td></tr>
+<tr><td><code>DeliveryAcceptedCheckpoint</code></td><td>Positive durable handoff
+of that exact selection to the relay.</td><td>An API receipt or native cleanup.</td></tr>
+<tr><td><code>SuppressedCheckpoint</code></td><td>The disposition explaining
+why an acknowledged or entered candidate was not selected.</td>
+<td>Publication authority; the candidate body is not retained in this record.</td></tr>
 </tbody>
 </table>
-<p>This distinction follows <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py#L534-L579">NMRPeak's restart decisions</a>.
-Core deliberately leaves preparation resumption, interrupted-result policy and
-record disposition to the consumer; it never synthesizes a failure or deletes a
-retained obligation. Terminal replay uses the existing publisher's receipt/conflict
-handling rather than duplicating the sibling's restart planner.</p>
-<p>State-read errors keep the read-only obligation unchanged. If its subsequent
-storage write fails or its wait is interrupted, recovery retains the observed
-record and claim until the original write settles or storage is explicitly
-reconciled. <code>settle()</code> neither retries the GET/write nor appends a new failure
-merely because an unresolved disposition was polled again. Installed tests and
-the stopped NMRNet CLI exercise these records over the existing signed local TLS
-route; this does not qualify a migrated SECS deployment. Run the focused owner
-tests with <code>make test/unit/provider-core/recovery</code> and the stopped receiving lane
-with <code>make test/integration/provider-core/recovery</code>.</p>
-<p>Keep the recovery object for <code>settle()</code> after interruption: it observes the original
-operation under its original owner and never sends again. Delegated failures retain
-the starter/publisher's diagnostics; readback failures preserve their own primary,
-API and cleanup evidence. Successful recovery leaves the lifecycle claim with the
-caller. An active readback or replay receipt does not authorize science or prove
-worker retirement. Composition must exclude the previous controller's mutation
-authority and confirm old worker/grant cleanup before resource reuse; a reopened
-store or newly constructed claim registry alone cannot establish either fact.</p>
-<p><code>make test/integration/provider-core</code> includes three source-grounded Magnet outcome
-fixtures: exact source/model-input/product-byte preservation, binding-certified
-pre-entry unavailability with an explicit same-request retry, and indeterminate
-prediction whose saved execution entry prevents replay after reopening storage.
-The fixture adapts Magnet's
-<a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_contract.py#L77-L94">outcome meanings</a>
-to binding exceptions and existing durable phases. It models the required future
-split in <a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py#L182-L283">G01's current processor</a>.
-Its synthetic payloads and scripted retirement establish neither G01 scientific
-validity nor current processor compatibility, real worker stop, readiness ordering
-or migration. Those and the SECS/NMRPeak contracts remain separate qualification.</p>
-<p>The same lane runs four scripted subprocess cases: success after durable execution
-entry, preparation rejection before entry, cancellation during generation, and
-output-channel closure while the exact child remains alive. The last case holds
-the Attempt claim through failed retirement and explicit process cleanup; only
-settling the original executor releases it. Exit/reaping and owned-pipe cleanup
-are observed separately from cancellation or EOF. Tests use a fixed authored
-peer, synchronization replies and bounded cleanup, with no scientific workload.</p>
-<p>This distinction follows
-<a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/runner_session.py#L395-L443">NMRPeak's channel retirement</a>
-and <a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/worker.py#L251-L295">SECS's supervisor-owned stop confirmation</a>.
-The cases qualify the reusable session boundary only. They do not qualify either
-sibling's current protocol, scientific admission, process tree, grant cleanup or
-warm reuse, and do not replace the required sibling adoption tests.</p>
-<p>Every <code>AttemptExecutor</code> caller must choose <code>allowed_job_states</code>, an immutable,
-nonempty <code>frozenset</code> drawn from <code>open</code> and <code>closed</code>. Existing NMRNet
-callers choose <code>frozenset({"open"})</code>. A consumer that continues an existing Attempt
-after Job closure can explicitly choose <code>frozenset({"open", "closed"})</code>, following
-<a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/analysis_run.py#L260-L265">SECS's policy</a>.
-Terminal Attempts and cancelled Jobs always stop work. The selection
-applies to every observation, including preparation, persistence and execution,
-and the final observation before accepting a returned result. It grants no new
-start or publication authority. Failed observations still stop execution; SECS's
-separate temporary-outage policy remains an adoption obligation.</p>
-<p><code>AttemptController(api, store, claims, session, allowed_job_states=...,
-poll_seconds=..., task_settle_seconds=...)</code> owns one explicitly selected Attempt.
-After validating configuration it accepts the scientific session, including
-cleanup before a start succeeds. <code>run(pending)</code> joins the existing start,
-execution and publication owners and returns their durable record. An already
-terminal start replay retires the allocated session and returns its acknowledgement
-with no scientific execution. Existing unresolved records require explicit
-recovery; confirmed records remain subject to ordinary store capacity.</p>
-<p>Retain the controller when an operation fails or is cancelled. <code>settle()</code> observes
-the original operation and confirms cleanup; a late acknowledgement cannot enter
-science and a late result cannot initiate publication. Its read-only <code>operation</code>
-exposes the retained core owner for diagnosis and explicit executor outcome
-retention. <code>last_failure</code> keeps the original cause and later cleanup failures.
-Recovery and scheduling stay explicit. The controller releases its private claim
-only after obligations settle and the session's cleanup is confirmed, and accepts
-no second run. API/store lifetime remains with the caller.</p>
-<p>For automatic START recovery, explicitly supply
-<code>controller.StartRecovery(backoff_max_seconds, on_retry,
-on_recovered)</code> as <code>start_recovery</code>; <code>None</code> retains fail-stop admission. After
-original I/O settles, <code>ProviderAPI.can_replay_start</code> permits the same starter's
-<code>resume</code> with the exact durable Job/key/body. The pinned START contract permits
-reviewed availability, HTTP500 and an unverified pre-head protocol response.
-It does not permit a new key, a scientific rerun, or another send after a received
-acknowledgement could not be saved. Authentication/topology faults, malformed
-success, cancellation and cleanup/storage failures stop automatic recovery.</p>
-<p>Reviewed availability retries continue with capped jittered backoff until
-resolution or cancellation. Exchanges and original-I/O settlement remain bounded.
-Retry observers
-receive the original <code>StartPending</code> and protected failure; recovery observers
-receive the durable <code>AcknowledgedAttempt</code> and first failure. A terminal START
-replay retires the session without entering science. NMRNet acquires its initial
-prediction child only after acknowledged START and successful input preparation.
-Its foreground process supplies the configured API backoff cap and protected
-Job/Attempt notices; direct assembly fixtures can still
-select explicit stopped recovery.</p>
-<p>For exact terminal recovery, explicitly supply
-<code>controller.TerminalRecovery(backoff_max_seconds, on_retry,
-on_recovered)</code> as <code>terminal_recovery</code>; <code>None</code> retains fail-stop publication.
-The same publisher rereads the unchanged durable terminal command before every
-send, after scientific retirement. It settles the original exchange before
-consulting <code>ProviderAPI.can_replay_terminal</code>. Reviewed availability, terminal
-HTTP500 and an unverified pre-head protocol response can qualify under the pinned
-terminal replay contract. Authentication/topology faults, malformed received
-receipts, explicit conflicts, cancellation, cleanup failures and receipt-storage
-failures do not qualify. No START, progress or scientific execution is repeated.</p>
-<p>After scientific retirement, reviewed terminal retries remain paced until resolution
-or cancellation. Availability waits do not expire the exact durable command; every
-storage/HTTPS/settlement operation retains its finite bound. First and latest failures
-stay at their existing owners without accumulating retry history. Protected synchronous
-observers receive the actual acknowledgement and API failure; retry also reports its
-planned wait. NMRNet supplies this policy using the configured API backoff cap and
-Attempt notices. Its native factory refuses disabled recovery; direct core callers may still select
-<code>None</code> for explicit stopped recovery. A signed local TLS witness loses Job 2's
-receipt, confirms its unchanged replay, and completes Job 3 with one scientific
-invocation per Job. This uses recording scientific ports, not released NMRNet or
-an external model/API deployment.</p>
-<p>NMRNet's installed TLS and released-worker tests now consume this runtime owner.
-The <a href="https://github.com/numpde/nmrnet-repro/blob/main/artifacts/provider-controller-cpu-float32.json">controller qualification evidence</a>
-records one actual scientific invocation and completion, host-confirmed container
-retirement and grant cleanup, and a reopened terminal confirmation. Its 81 source
-hashes identify the executed implementation. This local API peer does not establish
-deployed API/GUI behavior, scientific accuracy or maximum workload capacity.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>
+<p><code>EvidenceDigest.from_evidence(evidence)</code> hashes the actual binding-owned
+<code>ProtectedEvidence</code>. <code>encode_checkpoint(checkpoint)</code> and
+<code>decode_checkpoint(raw, scope=...)</code> encode bounded control metadata and
+require the expected <code>RecoveryScope</code>. Scope binds the API origin,
+provider, consumer lane and generation. A digest identifies bytes; it does not
+establish their scientific meaning or recreate the bytes after loss.</p>
+<p>Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/producer_checkpoint.py">checkpoint types and codec</a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/attempt_record.py">START and live admission types</a>.</p>
+
+<h3 id="checkpoint-storage">Checkpoint storage and original-operation settlement</h3>
+<p>Construct <code>checkpoint_store.CheckpointStore(root, scope=...,
+limits=CheckpointLimits(maximum_records=..., maximum_bytes=...),
+operation_seconds=...)</code> with a precreated, caller-owned mode 0700 directory,
+then <code>await store.open()</code>. The store owns a private SQLite database and
+exclusive process lock. Limits bound the number of records and their aggregate
+encoded metadata bytes; an individual checkpoint also has a codec ceiling.
+Inventory checks those bounds before decoding retained records.</p>
+<p><code>retain_start</code>, <code>acknowledge_start</code>,
+<code>mark_entered</code>, <code>select_terminal</code>,
+<code>accept_delivery</code> and <code>suppress</code> perform the corresponding
+forward transitions. Replacement requires the exact current checkpoint.
+A successful COMPLETE selection requires a retained execution-entry checkpoint.
+The selection is persisted before enqueue so a lost reply cannot authorize
+choosing a different outcome.</p>
+<p>The database uses a single serialized worker, SQLite DELETE journalling,
+<code>synchronous=EXTRA</code> and <code>secure_delete=ON</code>. Database and lock
+files are mode 0600. A failed SQLite operation retains its original cause.
+The enclosing deployment owns disk availability and the persistent volume;
+the store does not promise replication or survival of host-disk loss.</p>
+<p>Async methods accept <code>owner=caller</code>. A timeout or cancellation ends
+the wait, not the original disk operation. Keep the same store and owner:
+<code>await store.settle(owner=caller)</code> observes that operation and returns
+<code>SettledCheckpoint(operation, value)</code>. Do not issue replacement work,
+close the database or create another writer to work around an unresolved
+operation. <code>await store.close()</code> requires original I/O to have settled.</p>
+<p>Clearing control metadata also requires caller-confirmed native cleanup.
+<code>clear_after_cleanup(accepted)</code> accepts a matching
+<code>DeliveryAcceptedCheckpoint</code>;
+<code>clear_terminal_start_after_cleanup(acknowledged)</code> accepts a terminal
+START admission; <code>clear_observed_after_cleanup(checkpoint, observation)</code>
+requires the matching Job and Attempt in a terminal API observation.
+These are different facts: observing a terminal Attempt does not prove that a
+particular candidate result was accepted. The store checks control identity;
+the binding remains responsible for proving native cleanup.</p>
+<p>Source:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/checkpoint_store.py">CheckpointStore and its conditional transactions</a>.
+There is no producer result-file archive, completed-history window, history
+trimming command or disk-reservation policy.</p>
+
+<h2 id="shared-delivery">Shared result delivery</h2>
+<p>The producer decides whether a result or scientific failure is suitable for
+publication. It encodes that decision once as a
+<code>delivery_store.DeliveryOutcome(api_origin, provider_ref, job_ref,
+execution_attempt_ref, operation, body)</code>. The body is immutable
+<code>bytes</code>; operation is <code>TerminalOperation.COMPLETE</code> or
+<code>TerminalOperation.FAIL</code>. The relay checks the terminal request's
+wire contract, not its scientific validity.</p>
+<p><code>delivery_client.DeliveryClient(endpoint, exchange_seconds=...,
+retirement_seconds=...)</code> uses a configured <code>DeliveryEndpoint</code>
+over a Unix socket. <code>await delivery.submit(outcome)</code> returns only after
+the service commits the exact request to its queue. Its acknowledgement binds
+API origin, provider, Job, Attempt, operation and body SHA-256. The producer can
+then release its in-memory body. This acknowledgement establishes durable
+relay ownership, not API publication.</p>
+<p>Socket access is scoped to one configured API/provider binding. Signing
+credentials, API trust and destination belong to the service's frozen
+configuration; a submitted body cannot select another server or credential.
+The producer has no access to the queue volume. Its socket supports submission
+and metadata reads, without an operator deletion route.</p>
+<p><code>await delivery.pending()</code> returns that binding's outstanding
+metadata, item/byte allowance and publisher status.
+<code>await delivery.status(attempt_ref)</code> returns the selected Attempt's
+metadata or <code>None</code>. Neither method returns scientific bodies.
+An absent row does not prove API acceptance, and a running publisher does not
+prove remote availability. After a failed exchange, settle the original client
+with <code>await delivery.retire()</code> before consulting
+<code>delivery.can_retry(failure)</code> or issuing another handoff.</p>
+<p><code>DeliveryQueue</code> owns the private, bounded SQLite queue in a Docker
+volume. Per-provider and total item/byte limits include held rows. Identical
+outstanding submissions return the same acknowledgement; a different body for
+the same binding and Attempt is refused. <code>DeliveryFull</code> means that
+enqueue was refused: retain the existing selected outcome, apply backpressure
+and stop admitting new computation. It is not permission to rerun science.</p>
+<p>Each binding's <code>DeliveryWorker</code> signs fresh requests around the
+unchanged terminal body. It waits with capped jittered backoff only when the
+existing API owner permits exact replay after original I/O retirement. It
+removes the queued payload only after a verified matching API receipt.
+A receipt followed by failed local deletion remains distinct from failed API
+publication; retain both facts for reconciliation.</p>
+<p>A reviewed item conflict is held for operator reconciliation and continues
+to count against capacity. Other pending items can proceed. Authentication,
+routing or unknown failures can instead pause the affected binding; another
+binding has its own delivery worker. The daemon emits protected events through
+ordinary stderr logging, with Docker responsible for bounded retention and
+process restart. It has no scientific runner or Docker Engine access.</p>
+<p>Operators explicitly stop shared delivery before inspecting or discarding a
+held payload under the queue's existing exclusive lock. Listing shows the
+selected binding's held identities and reasons without body export. Discard
+requires its API origin, provider, Attempt and body SHA-256 and deletes only a
+matching held row. It establishes neither API acceptance nor remote Attempt
+resolution. See the
+<a href="../provider.html#held-delivery">maintained operator commands</a>.</p>
+<p>Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/a639ac4/packages/provider-core/src/provider_core/delivery_client.py">client and socket contract</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_store.py">queue and capacity</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_ipc.py">submission and metadata routes</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_worker.py">API delivery worker</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_config.py">frozen binding admission</a>, and
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_discard.py">offline held-item disposition</a>.</p>
+
+<h2 id="attempt-ownership">Local ownership claims</h2>
+<p>Share one <code>ownership.AttemptClaims()</code> across lanes and recovery
+callers on the same event loop. <code>claim_start(pending)</code> reserves the
+scoped provider attempt key. START admission binds the received Attempt identity
+to the same claim without releasing the original key.
+<code>claim_record(checkpoint)</code> or <code>claim_records(checkpoints)</code>
+reserves every known identity in a selected checkpoint inventory before recovery
+dispatch. Batch refusal leaves the registry unchanged.</p>
+<p>An active claim has one operation borrower. <code>begin(owner)</code>,
+<code>finish(owner)</code> and <code>release()</code> enforce that lifetime.
+Do not release a claim while its original operation is unresolved.
+Claims prevent overlapping local owners; they do not prove worker exit, API
+state or permission to repeat scientific execution. The checkpoint store's
+process lock and the event-loop claim registry protect different boundaries.</p>
+<p>Source:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/ownership.py">AttemptClaims</a>.</p>
+
+<h2 id="scientific-session">Scientific session contract</h2>
+<p>The binding implements <code>analysis.AnalysisSession</code>.
+<code>prepare(acknowledged, instructions, report_condition=...)</code> returns
+a <code>PreparedAnalysis</code> or a binding-classified
+<code>AnalysisFailure</code>. <code>execute(prepared, report_condition=...)</code>
+returns <code>AnalysisSuccess</code> or <code>AnalysisFailure</code>.
+<code>retire()</code> confirms retirement of the session's owned work.
+The session defines actual input preparation, model invocation, numerical
+acceptance, result formatting and native-process cleanup.</p>
+<p><code>PreparedAnalysis(identity)</code> is the session-owned in-memory handle,
+carrying a <code>ProtectedEvidence</code> candidate identity. The session accepts
+that instance by object identity while its live worker allocation remains owned.
+The executor persists only the identity's digest before scientific entry. A
+restored digest cannot recreate the handle. The binding must enforce its lifetime
+and one-shot consumption; core does not make a generic object replayable.</p>
+<p><code>AnalysisSuccess(result_schema_id, content, evidence)</code> contains
+the approved result bytes and protected binding evidence.
+<code>AnalysisFailure(code, message, evidence)</code> is an explicitly classified
+scientific failure suitable for publication. An unexpected exception, timeout,
+failed cleanup or transport outage is not automatically an
+<code>AnalysisFailure</code>. Public explanations must be chosen by the binding;
+protected evidence and exception text are not automatically public results.</p>
+<p>Bindings can use the shared
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/runner.py">runner protocol</a>
+to carry one bounded worker operation. Closing a channel or receiving a protocol
+reply does not itself establish native process exit. Deployment-specific
+supervision must confirm termination, reaping and scratch cleanup before reuse.
+The
+<a href="../notes/021_compose_runner_architecture_20261023.html#lifetimes">runner lifetime record</a>
+describes NMRNet's persistent-container and per-operation-child design.</p>
+<p>Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/analysis.py">analysis contracts</a> and
+<a href="../provider.html">NMRNet's binding and operation</a>.</p>
+
+<h2 id="attempt-execution">Admission, execution and handoff</h2>
+<p><code>starting.AttemptStarter(api, store, claim).start(pending)</code>
+retains the original START before sending it, binds the received Attempt
+identity into the claim and stores its admission before returning the actual
+live <code>AcknowledgedAttempt</code>. <code>resume(pending)</code> requires the
+identical already-retained START. A late or terminal admission never starts
+science by itself. Keep a failed starter and its protected received admission
+until original API/storage operations have settled.</p>
+<p><code>execution.AttemptExecutor</code> accepts one live, not-entered,
+in-progress acknowledgement in the configured scope. The caller supplies
+<code>api</code>, <code>store</code>, <code>claim</code>, <code>session</code>,
+<code>delivery</code>, allowed Job states, poll/settlement times and explicit
+delivery retry settings and observer. In order, the executor observes an active
+Job/Attempt, reads verified input, reports preparing, prepares the session,
+reports running, durably records the entry digest, obtains a fresh active
+observation, executes once, then obtains the final acceptance observation.</p>
+<p>Once the binding returns an approved outcome and the required fresh
+observation accepts it, native retirement and delivery handoff proceed
+independently. Handoff first persists the terminal selection digest, then
+submits the exact body. Queue backpressure or a temporary local transport
+failure retries that same selected body under its existing owner; it does not
+repeat preparation or science. A native cleanup failure blocks reuse, but
+does not veto an already approved handoff. Successful handoff and confirmed
+cleanup allow compact producer control to be cleared.</p>
+<p>Retain the executor after interruption or failure.
+<code>await executor.settle()</code> observes its original preparation,
+execution, storage, API, handoff and retirement operations; it does not create
+another analysis. Explicit caller cancellation can stop future handoff attempts.
+Original task/transport/disk ownership remains until settlement, including
+failures independent of the cancellation.</p>
+<p>If a candidate is no longer publishable, the caller explicitly invokes
+<code>retain_suppressed_disposition()</code> after original work and I/O settle.
+This applies to a server stop, failed observation or caller cancellation; it
+retains a <code>SuppressedCheckpoint</code> disposition rather than its scientific body.
+A late outcome is not converted into an alternate failure or published merely
+because an observation is missing. If the producer dies before durable
+handoff, a result held only in memory can be lost. Missing metadata, an absent
+queue row or an active API Attempt cannot authorize scientific replay.</p>
+<p><code>ExecutionFailed</code> retains the affected acknowledgement, original
+cause, protected in-memory outcome when still owned, API evidence and independent
+cleanup failures. Positive delivery acceptance, metadata-write success and native
+retirement remain separate facts in diagnostics. A failure after durable handoff
+does not retract relay ownership.</p>
+<p>Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/starting.py">START owner</a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/d3c6e78/packages/provider-core/src/provider_core/execution.py">executor and handoff ordering</a>.</p>
+
+<h3 id="lifecycle-retry-policies">Operation-specific recovery policies</h3>
+<p><code>ObservationRecovery(gap_seconds, backoff_max_seconds, on_retry,
+on_recovered)</code> permits bounded active-Attempt reads after settled
+transport failures. Its deadline includes exchange-lock waiting, I/O,
+retirement and backoff. Expiry stops scientific continuation; a late response
+cannot restore permission to run.</p>
+<p><code>ConditionRecovery(window_seconds, backoff_max_seconds, on_retry,
+on_recovered)</code> retries only the awaited current phase/condition snapshot
+after the API owner grants that route-specific permission. A matching receipt
+acknowledges those facts; it does not constitute a new heartbeat or scientific
+work. Phase-only progress retains its separately configured
+<code>on_unconfirmed_phase_progress</code> policy.
+Neither policy grants START, result, capability or scientific replay.</p>
+<p><code>controller.StartRecovery(backoff_max_seconds, on_retry,
+on_recovered)</code> permits paced exact START recovery before science.
+There is no aggregate outage expiry that discards a retained START.
+Every exchange and settlement remains individually bounded. The callbacks
+receive the protected original failure and known pending Job or actual
+received admission. Callback output must not invent an Attempt identity before
+one has been received.</p>
+<p>These policies are explicit constructor inputs; <code>None</code> retains the
+respective fail-stop behavior for core callers. Delivery has its own unchanged-body
+retry owner and bounds. Keep retry and recovered notices synchronous and bounded;
+they report recovery, without deciding scientific acceptance.</p>
+
+<h2 id="attempt-recovery">Stopped Attempt reconciliation</h2>
+<p><code>recovery.AttemptRecovery(api, store, claim, delivery=...)</code>
+reconciles one selected checkpoint. Before calling it, composition must settle
+old API/storage operations, confirm native cleanup and reserve the checkpoint's
+known identities with the shared claim registry. The recovery object verifies
+scope and rereads the exact current checkpoint; it does not manufacture cleanup
+proof from a new store or claim registry.</p>
+<table>
+<thead><tr><th>Retained state</th><th>Reconciliation</th></tr></thead>
+<tbody>
+<tr><td><code>StartPending</code></td><td>Replay the exact retained START through
+<code>AttemptStarter.resume</code>. Preserve its key and newly received admission;
+recovery does not call preparation or execution.</td></tr>
+<tr><td>Terminal START admission</td><td>Clear the matching terminal-admission
+checkpoint after caller-confirmed cleanup.</td></tr>
+<tr><td><code>TerminalSelectedCheckpoint</code> with a matching relay row</td>
+<td>Match Job, Attempt, operation, SHA-256 and byte length; record the relay handoff
+and clear producer control after cleanup. Do not resubmit a different body.</td></tr>
+<tr><td><code>DeliveryAcceptedCheckpoint</code></td><td>Clear compact producer
+control after cleanup. The relay still owns any outstanding publication.</td></tr>
+<tr><td><code>TerminalSelectedCheckpoint</code> with a conflicting relay row</td>
+<td>Refuse recovery before any API read; preserve both identities for reconciliation.</td></tr>
+<tr><td>Other acknowledged, entered, suppressed state, or selected state with no relay row</td>
+<td>Read the exact Attempt from the API. A terminal observation can close lifecycle
+uncertainty and clear the checkpoint after cleanup; an in-progress Attempt
+without verified handoff remains held for reconciliation.</td></tr>
+</tbody>
+</table>
+<p><code>recover(checkpoint)</code> returns the recovered admission, accepted
+control or an <code>ObservedAttempt(record, observation)</code>, according to the
+case above. A terminal observation proves lifecycle state, not acceptance of a
+particular candidate. Keep a failed recovery owner for <code>settle()</code>:
+settlement retires original API and relay I/O and observes the original
+checkpoint operation, without starting another request or analysis.</p>
+<p>The caller still owns the claim after recovery. Release it only when the
+actual operation borrower has finished and native cleanup is confirmed.
+No recovered in-progress API admission or missing queue item is evidence that
+previous science never ran.</p>
+<p>Source:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/recovery.py">AttemptRecovery</a>.</p>
+
+<h2 id="attempt-controller">Composing one complete Attempt</h2>
+<p><code>controller.AttemptController(api, store, claims, session,
+delivery=..., on_delivery_retry=..., delivery_retry_initial_seconds=...,
+delivery_retry_max_seconds=..., allowed_job_states=..., poll_seconds=...,
+task_settle_seconds=...)</code> composes START and execution for one session.
+Optional <code>start_recovery</code>, <code>observation_recovery</code>,
+<code>condition_recovery</code> and <code>on_unconfirmed_phase_progress</code>
+retain their separate policies. Composition owns the API, open checkpoint
+store and shared claim registry.</p>
+<p>The constructor validates its configuration before accepting session
+ownership. After acceptance, the controller owns retirement even if START
+fails or returns a terminal replay. <code>run(pending)</code> claims that exact
+START, obtains a durable admission and delegates an eligible live Attempt to
+the executor. An old terminal admission cannot cause a new model invocation.</p>
+<p>A failed controller retains its actual current child in
+<code>controller.operation</code>. Keep the controller and call
+<code>settle()</code> to observe original work and finish retirement.
+<code>ControllerFailed</code> preserves primary and independent cleanup causes.
+Settlement neither reruns science nor creates an alternate terminal outcome;
+an already selected handoff remains owned by the executor.</p>
+<p>Source:
+<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/controller.py">AttemptController</a>.
+The
+<a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery">shared-delivery record</a>
+separates deployed evidence from source-level and installed-package checks.
+The
+<a href="../notes/022_shared_delivery_deferred_20261024.txt">follow-up record</a>
+tracks remaining qualification and refinements; a healthy container alone does
+not establish scientific correctness or every failure-recovery scenario.</p>
+</main>
+<footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
+</body>
+</html>
