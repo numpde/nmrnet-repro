@@ -59,7 +59,18 @@ observation_gap_seconds = 60
 [service]
 display_name = "NMRNet++"
 description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"
-offering_description = "Predict per-atom 1H and 13C chemical shifts (ppm) with NMRNet++. Provide 3D coordinates with units, select structures from an attached structure file, or give SMILES with a conformer count.\n\nEach geometry is predicted separately; conformers are not averaged. Supplied structures keep atom order; H shifts require supplied H coordinates, and missing H atoms are not added. SMILES preparation generates coordinates and makes implicit hydrogens explicit. Atom numbering starts at 0; mappings identify input atoms and added hydrogens.\n\nRequest verbosity: low for shifts and atom mapping; medium (default) also returns the coordinates used for prediction; max adds a record of the software files used for reproducibility checks. All levels retain warnings and scientific limitations.\n\nShifts default to 4 significant digits; request 1-17. Extra digits do not imply greater accuracy. Verbosity and rounding leave prediction settings unchanged.\n\nScientific guide: https://numpde.github.io/nmrnet-repro/"
+offering_description = """
+**Per-atom ¹H/¹³C chemical shifts (ppm)** from 3D geometry. [Inputs, settings and scientific limits](https://numpde.github.io/nmrnet-repro/)
+
+Choose **one**:
+
+- Paste one geometry with units.
+- Attach a structure file; specify units and which structures to use.
+- Supply SMILES and a conformer count (1–128).
+
+Supplied structures receive shifts for the H/C atoms present. Missing H is not added and can affect those shifts. SMILES preparation adds H and generates coordinates.
+
+Maximum 128 atoms per geometry, including H. Each geometry is predicted separately; conformers are not averaged. The selected models have no solvent or temperature input."""
 page_size = 100
 maximum_pages = 10
 idle_seconds = 2
