@@ -16,6 +16,7 @@
 <nav aria-label="Scientific guide sections">
   <ul>
     <li><a href="#inputs">Inputs</a></li>
+    <li><a href="#output-settings">Request settings</a></li>
     <li><a href="#the-calculation">Calculation</a></li>
     <li><a href="#applicability-and-experimental-comparison">Applicability</a></li>
     <li><a href="#supplied-coordinates-and-units">Coordinates and units</a></li>
@@ -23,7 +24,6 @@
     <li><a href="#generated-conformers">Conformers</a></li>
     <li><a href="#input-interpretation-and-format-coverage">Input formats and interpretation</a></li>
     <li><a href="#reading-a-result-chloromethane">Example result</a></li>
-    <li><a href="#output-settings">Result detail and digits</a></li>
     <li><a href="#what-the-retained-numerical-evidence-establishes">Evidence</a></li>
     <li><a href="#published-accuracy-and-the-five-checkpoint-ensemble">Published accuracy</a></li>
     <li><a href="#sources-and-provenance">Sources</a></li>
@@ -32,7 +32,8 @@
 <h2 id="inputs">Inputs</h2>
 <p id="using-the-provider">Select NMRNet++ for molecular-to-shift analysis
 (<code>peaks_from_mol</code>) in your API/GUI client. Supply coordinates or request
-their generation from SMILES using one of the three forms below.</p>
+their generation from SMILES using one of the three forms below. Add
+<a href="#output-settings">result settings</a> to the same submission instructions.</p>
 <h3 id="paste-coordinates">Paste one geometry</h3>
 <p>Paste one atom per line as <code>element x y z</code>, separated by whitespace,
 with no column header or blank lines between atoms. State the coordinate unit:
@@ -116,6 +117,40 @@ size. See <a href="#the-calculation">calculation limits</a> and
 <a href="#output-settings">result detail and digits</a>.
 Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_inference/predict.py">prediction admission</a>;
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/smiles.py#L68">conformer-count bounds</a>.</p>
+<h3 id="output-settings">Request settings</h3>
+<p>Write verbosity and significant-digit preferences in your client's submission
+instructions, alongside any input form. The defaults are <strong>medium verbosity and 4 significant digits</strong>.
+For example:</p>
+<pre><code>SMILES: CCl
+Generate 3 conformers and predict 1H and 13C shifts for each.
+Return low verbosity and 3 significant digits.</code></pre>
+<div class="table-scroll" role="region" aria-label="Result verbosity" tabindex="0"><table>
+<thead><tr><th scope="col">Verbosity</th><th scope="col">Returned detail</th><th scope="col">Use</th></tr></thead>
+<tbody>
+<tr><td><code>low</code></td><td>All shifts and ordered atoms; mappings back to supplied atoms and parents of added hydrogens; records identifying the selected models and software environment, how inputs were selected, warnings and scientific limitations</td><td>Read and identify predicted shifts</td></tr>
+<tr><td><code>medium</code> (default)</td><td>Everything in low, plus prepared angstrom coordinates and coordinates rounded to the model's float32 precision</td><td>Inspect the numeric geometry used for prediction</td></tr>
+<tr><td><code>max</code></td><td>Everything in medium, plus names, sizes and hashes of individual software source files</td><td>Check which software files were used</td></tr>
+</tbody></table></div>
+<p>Low omits coordinates for both supplied and generated structures. Select medium
+or max when you need the geometry record; a completed low result cannot be upgraded.</p>
+<p>Choose <strong>1–17 significant digits</strong> independently of verbosity.
+This rounds chemical shifts only; coordinates and conformer generation are unchanged.
+Numeric JSON does not preserve written trailing zeros. Extra digits do not imply
+greater accuracy.</p>
+<p>Other input choices are the <a href="#supplied-coordinates-and-units">coordinate unit</a>,
+<a href="#attach-structures">file, record selection and order, and PDB alternate-location label</a>,
+and the <a href="#generate-from-smiles">SMILES conformer count</a>.
+The selected models have no solvent or temperature parameter; conformer-generation
+settings such as the random seed are fixed by the provider. See
+<a href="#applicability-and-experimental-comparison">experimental conditions</a>
+and <a href="#generated-conformers">generation method</a>.</p>
+<p>Before prediction, the provider checks whether the chosen result detail fits
+the API's size limit. If it does not, request lower verbosity or fewer geometries.
+Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/530292720f85cf250ede5fff4e7c4cd62d2d9587/nmrnet_provider/prepared_input.py"><code>OutputSettings</code>, defaults and ranges</a>;
+<a href="https://github.com/numpde/nmrnet-repro/blob/530292720f85cf250ede5fff4e7c4cd62d2d9587/nmrnet_provider/interpreter.py">request settings and tools</a>;
+<a href="https://github.com/numpde/nmrnet-repro/blob/530292720f85cf250ede5fff4e7c4cd62d2d9587/nmrnet_provider/result.py">result projection and capacity</a>;
+<a href="notes/020_output_verbosity_20261023.html">design and qualification</a>.
+<a href="provider.html#provider-startup-configuration">Operator limits</a> also apply.</p>
 <h2 id="the-calculation">The calculation</h2>
 <p>NMRNet++ extends a 3D neural predictor with semi-supervised training: atom-assigned examples teach individual shifts, while unassigned literature spectra teach matching between predicted and observed shift sets. The published architecture uses an SE(3)-equivariant Transformer with an atom-level regression head. This repository loads released weights; it does not retrain them. The submission interpreter is a separate language model that selects preparation operations. Sources: <a href="https://arxiv.org/html/2601.18524v1#S3.SS2">paper v1, Sections 3.2–3.3</a>, <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_inference/release.py">released-weight loader</a>, and <a href="https://github.com/numpde/nmrnet-repro/blob/530292720f85cf250ede5fff4e7c4cd62d2d9587/nmrnet_provider/interpreter.py">input interpreter</a>.</p>
 <p>The scientific input is an ordered list of element symbols and three-dimensional coordinates. The selected released H and C models predict chemical shifts in ppm for the corresponding atoms. Other admitted elements remain part of the geometric context. The calculation does not take bond orders, charge, isotope, solvent or temperature as separate prediction features. The exact request fields are <code>coordinate_unit</code>, <code>atoms</code> and <code>coordinates</code>. Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_inference/predict.py">request admission and prediction</a>, <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_inference/model.py">model tensor construction</a>, and <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/result.py">result contract, <code>SCIENTIFIC_LIMITS</code> and <code>GENERATED_LIMITS</code></a>.</p>
@@ -231,18 +266,8 @@ and <a href="notes/003_nmr_api_provider_20261018.html#R21">R21, Job
 <code>job:f4b3e820d658200c22cebcef9d2e2c60bee36e4c5edc7a05868d1465857b8c3c</code></a>.</p>
 <p>Cl at index 1 remains in the geometry but receives no shift. The displayed digits identify the recorded numerical outputs; they do not express experimental precision. Per-atom H entries are not grouped into equivalent resonances, and the predictor does not compute rotational/exchange averaging or a spectrum. Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_inference/predict.py"><code>_prediction_result</code></a>, <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/result.py">scientific result limits</a>.</p>
 <p>Follow the cited fixture and receipt to inspect this example. The <a href="reproduction.html#run-the-reference">reproduction reference</a> explains how to repeat the bounded release calculation; the <a href="provider.html">operator reference</a> describes API execution and diagnostics.</p>
-<h2 id="output-settings">Choose result detail and significant digits</h2>
-<p>Request these choices in your submission instructions, for example: “Return low verbosity and 3 significant digits.” The defaults are <strong>medium verbosity and 4 significant digits</strong>. Verbosity controls which supporting fields accompany every H/C prediction:</p>
-<div class="table-scroll" role="region" aria-label="Result verbosity" tabindex="0"><table>
-<thead><tr><th scope="col">Verbosity</th><th scope="col">Returned detail</th><th scope="col">Use</th></tr></thead>
-<tbody>
-<tr><td><code>low</code></td><td>All shifts and ordered atoms; mappings back to supplied atoms and parents of added hydrogens; records identifying the selected models and software environment, how inputs were selected, warnings and scientific limitations</td><td>Read and identify predicted shifts</td></tr>
-<tr><td><code>medium</code> (default)</td><td>Everything in low, plus prepared angstrom coordinates and their admitted float32 representation</td><td>Inspect the exact numeric geometry supplied to prediction</td></tr>
-<tr><td><code>max</code></td><td>Everything in medium, plus names, sizes and hashes of individual software source files</td><td>Check which software files were used</td></tr>
-</tbody></table></div>
-<p>Low omits coordinates for both supplied and generated structures. Its hashes and atom mappings cannot reconstruct those coordinates from the result alone. Select medium or max when you need that geometry record; a completed low result has no detail-upgrade operation.</p>
-<p>Choose 1–17 significant digits independently of verbosity. This rounds <strong>chemical shifts only</strong>; it does not round coordinates or change prediction settings. Numeric JSON does not preserve written trailing zeros. Extra digits do not imply greater accuracy: the chloromethane example above retains the digits from its historical numerical receipt. Current results use schema <code>nmrnet.coordinate_shifts.result.v2</code>; historical results keep their original schema and bytes.</p>
-<p>These settings do not change conformer generation or selected prediction models. Before prediction, the provider checks whether the chosen result detail will fit the API's size limit. If it does not, request lower verbosity or fewer geometries; this does not bypass the <a href="provider.html#provider-startup-configuration">other execution and evidence limits described for operators</a>. Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/prepared_input.py"><code>OutputSettings</code>, defaults and validation</a>; <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/interpreter.py">interpreter tool contract</a>; <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/result.py"><code>_public_envelope</code>, capacity reservation and <code>ResultPlan.finish</code></a>; <a href="notes/020_output_verbosity_20261023.html">decision and focused qualification</a>.</p>
+<p>Results use schema <code>nmrnet.coordinate_shifts.result.v2</code>; historical
+results keep their original schema and bytes.</p>
 <h2 id="what-the-retained-numerical-evidence-establishes">What the retained numerical evidence establishes</h2>
 <div class="table-scroll" role="region" aria-label="Scientific reference table" tabindex="0"><table>
 <thead><tr><th scope="col">Evidence</th><th scope="col">Observed comparison</th><th scope="col">Interpretation</th></tr></thead>
