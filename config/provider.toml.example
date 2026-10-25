@@ -59,17 +59,17 @@ observation_gap_seconds = 60
 display_name = "NMRNet++"
 description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"
 offering_description = """
-Per-atom ¹H/¹³C chemical shifts (ppm) from 3D geometry. [Inputs, settings and scientific limits](https://numpde.github.io/nmrnet-repro/)
+Predicted per-atom ¹H/¹³C chemical shifts (ppm) from 3D coordinates. [Inputs, settings and scientific limits](https://numpde.github.io/nmrnet-repro/)
 
 Choose one:
 
-- Paste one geometry with units.
-- Attach a structure file; specify units and which structures to use.
-- Supply SMILES and a conformer count (1–128).
+- Paste element symbols and Cartesian coordinates for one geometry, with units.
+- Attach a 3D coordinate file; specify units and which structures to use.
+- Supply SMILES and request 1–128 conformers.
 
-Supplied structures receive shifts for the H/C atoms present. Missing H is not added and can affect those shifts. SMILES preparation adds H and generates coordinates.
+Supplied geometries return shifts only for H/C atoms with explicit coordinates. Missing H is not added and can alter remaining H/C shifts. SMILES must specify the intended protonation state; preparation adds its H and generates coordinates.
 
-Maximum 128 atoms per geometry, including H. Each geometry is predicted separately; conformers are not averaged. The selected models have no solvent or temperature input."""
+Limit: 128 atoms per geometry, including H added from SMILES. Each geometry gets separate shifts; conformers are not averaged. No solvent or temperature input is supported; this does not imply gas-phase conditions."""
 page_size = 100
 maximum_pages = 10
 idle_seconds = 2
