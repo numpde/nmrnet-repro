@@ -334,6 +334,25 @@ class NativeClientTests(unittest.TestCase):
         self.assertIsNotNone(match, msg=result.stderr)
         shutil.rmtree(Path(match.group(1)).parent)
 
+    def test_shared_native_failure_names_the_selected_build_operation(self):
+        helper = Path("tools/inference_native.sh").resolve()
+        result = subprocess.run(
+            ["bash", "-c",
+             'source "$1"; inference_native "delivery image build" 5 discard '
+             'bash -c "printf BUILD_CAUSE >&2; exit 7"; '
+             'status=$?; printf "%s" "$inference_diagnostic" >&2; exit "$status"',
+             "bash", str(helper)],
+            text=True, capture_output=True, timeout=10, check=False,
+        )
+        self.assertEqual(result.returncode, 7, result.stderr)
+        match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", result.stderr)
+        self.assertIsNotNone(match, result.stderr)
+        evidence = Path(match.group(1))
+        self.addCleanup(shutil.rmtree, evidence.parent)
+        self.assertIn("Cannot complete delivery image build:", result.stderr)
+        self.assertNotIn("Cannot complete inference", result.stderr)
+        self.assertIn("BUILD_CAUSE", evidence.read_text())
+
     def test_cancellation_preserves_signal_status_and_retires_owned_descendant(self):
         helper = Path("tools/inference_native.sh").resolve()
         for signum in (signal.SIGINT, signal.SIGTERM):

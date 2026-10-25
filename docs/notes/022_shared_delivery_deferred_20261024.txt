@@ -382,3 +382,16 @@ held=[], outstanding_items=0. Engine inspection found no containers referencing
 its three exact queue/IPC/control volumes; all three were then removed explicitly.
 No production volume or payload was accessed or removed. This supersedes the
 intentional failed-fixture retention described above. U13/U14/A05/A10 reviewed.
+
+2 / Shared build-error wording: resolved at the existing native renderer in
+ tools/inference_native.sh. Caller-owned operation names identify delivery or
+controller builds; the shared helper no longer adds an incorrect "inference"
+prefix, and cleanup refers to the native client. Internal variable names,
+operation reasons, native/cancellation statuses, retained output and budgets are
+unchanged. Receiving regression first failed on the old wording, then passed
+with the original native exit7 and BUILD_CAUSE retained in capped evidence.
+Contained wheelhouse lane52 and image command lane15 pass:
+  /tmp/nmrnet-shared-build-wording-{red,green}.log
+  /tmp/nmrnet-shared-image-context.log
+Independent U17/U23/A03/A05 review found no additional issue. These checks do
+not claim the entire test_inference_native signal matrix was rerun.

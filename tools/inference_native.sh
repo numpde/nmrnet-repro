@@ -75,7 +75,7 @@ native_client() {
     esac
     if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX 2>/dev/null); then :; else
         status=$?
-        printf -v inference_diagnostic '%sCannot complete inference %s: private evidence directory creation failed (status %s).\n' "$inference_diagnostic" "$operation" "$status"
+        printf -v inference_diagnostic '%sCannot complete %s: private evidence directory creation failed (status %s).\n' "$inference_diagnostic" "$operation" "$status"
         return "$status"
     fi
     if [[ $result != stdio ]]; then
@@ -84,7 +84,7 @@ native_client() {
         if { mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
             && exec {capture_guard}<> "$scratch/output"; } 2>/dev/null; then :; else
             status=$?
-            printf -v inference_diagnostic '%sCannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$inference_diagnostic" "$operation" "$status" "$scratch"
+            printf -v inference_diagnostic '%sCannot complete %s: private output setup failed (status %s); retained directory %q.\n' "$inference_diagnostic" "$operation" "$status" "$scratch"
             return "$status"
         fi
     fi
@@ -256,7 +256,7 @@ native_client() {
                         else
                             status=1
                             reason='native controller signal forwarding could not be confirmed'
-                            printf -v inference_diagnostic '%sCannot complete inference %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
+                            printf -v inference_diagnostic '%sCannot complete %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
                             retired=false
                             break
                         fi
@@ -399,36 +399,36 @@ native_client() {
         # Joining does not erase a control failure's cause. Canonical native
         # completion and actual cancellation keep their existing stream contract.
         if [[ $status != 0 && $cancelled == 0 ]] && ! "$completion_observed"; then
-            printf -v inference_diagnostic '%sCannot complete inference %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
+            printf -v inference_diagnostic '%sCannot complete %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
         fi
         if rm -rf -- "$scratch" 2>/dev/null; then :; else
             removal_status=$?
             if [[ $status == 0 ]]; then status=$removal_status; fi
-            printf -v inference_diagnostic '%sCannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' \
+            printf -v inference_diagnostic '%sCannot confirm native client evidence directory removal; attempted path %q (status %s).\n' \
                 "$inference_diagnostic" "$scratch" "$removal_status"
         fi
     elif [[ $status != 0 ]]; then
         if "$retired"; then
             if rm -f -- "$scratch/output" "$scratch"/status* 2>/dev/null; then :; else
-                printf -v inference_diagnostic '%sCannot remove inference client control files; retained directory %q.\n' "$inference_diagnostic" "$scratch"
+                printf -v inference_diagnostic '%sCannot remove native client control files; retained directory %q.\n' "$inference_diagnostic" "$scratch"
             fi
         else
-            printf -v inference_diagnostic '%sCannot confirm inference client retirement; retained directory %q.\n' "$inference_diagnostic" "$scratch"
+            printf -v inference_diagnostic '%sCannot confirm native client retirement; retained directory %q.\n' "$inference_diagnostic" "$scratch"
         fi
         if [[ $result == stdio ]]; then
-            printf -v inference_diagnostic '%sCannot complete inference %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
+            printf -v inference_diagnostic '%sCannot complete %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
         else
-            printf -v inference_diagnostic '%sCannot complete inference %s: %s; private capped output retained at %q.\n' \
+            printf -v inference_diagnostic '%sCannot complete %s: %s; private capped output retained at %q.\n' \
                 "$inference_diagnostic" "$operation" "$reason" "$scratch/command.log"
         fi
     elif rm -rf -- "$scratch" 2>/dev/null; then :; else
         status=$?
-        printf -v inference_diagnostic '%sCannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' "$inference_diagnostic" "$scratch" "$status"
+        printf -v inference_diagnostic '%sCannot confirm native client evidence directory removal; attempted path %q (status %s).\n' "$inference_diagnostic" "$scratch" "$status"
     fi
     if [[ $cancelled != 0 && $status != "$cancelled" ]]; then
         status=$cancelled
         if [[ $result != stdio ]]; then
-            printf -v inference_diagnostic '%sCannot complete inference %s: native client was interrupted during cleanup (status %s).\n' "$inference_diagnostic" "$operation" "$status"
+            printf -v inference_diagnostic '%sCannot complete %s: native client was interrupted during cleanup (status %s).\n' "$inference_diagnostic" "$operation" "$status"
         fi
     fi
     trap - HUP INT TERM USR1

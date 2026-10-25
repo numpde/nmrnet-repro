@@ -782,7 +782,7 @@ class CapturedNativeTests(unittest.TestCase):
             self.assertEqual("false\n", (self.root / "retired").read_text())
             self.assertTrue(sentinel.exists())
             self.assertFalse((self.root / "next").exists())
-            self.assertIn("Cannot confirm inference client retirement", stderr)
+            self.assertIn("Cannot confirm native client retirement", stderr)
             self.assertTrue(Path("/proc", str(observed["descendant"])).exists())
         finally:
             for identifier in (observed["pid"], observed["descendant"], drain):
@@ -1102,7 +1102,7 @@ class CapturedNativeTests(unittest.TestCase):
         self.helper.write_text(source)
         result = self.run_native(additions={"NATIVE_CORRUPT_READY": "1", "NATIVE_DRAIN": str(receipt)})
         self.assertEqual(1, result.returncode, msg=result.stderr)
-        self.assertIn("Cannot confirm inference client retirement", result.stderr)
+        self.assertIn("Cannot confirm native client retirement", result.stderr)
         self.assertFalse(self.observation.exists())
         observed = json.loads(self.control.read_text())
         self.assertTrue(Path(observed["directory"]).is_dir())
@@ -1189,10 +1189,10 @@ class CapturedNativeTests(unittest.TestCase):
                     result = self.run_native(additions={"NATIVE_STATUS": native_status, "NATIVE_CLEANUP_FAILURE": effect})
                     self.assertEqual(expected, result.returncode, msg=result.stderr)
                     if native_status == "0":
-                        self.assertIn("Cannot confirm inference client evidence directory removal; attempted path", result.stderr)
+                        self.assertIn("Cannot confirm native client evidence directory removal; attempted path", result.stderr)
                         self.assertNotIn("retained", result.stderr)
                     else:
-                        self.assertIn("Cannot remove inference client", result.stderr)
+                        self.assertIn("Cannot remove native client", result.stderr)
                     scratch = Path(json.loads(self.control.read_text())["directory"])
                     self.assertEqual(effect == "1" or native_status == "7", scratch.exists())
                     self.assert_client_retired()
@@ -1576,7 +1576,7 @@ class StdioNativeTests(unittest.TestCase):
                         self.assertFalse(Path(json.loads(self.control.read_text())["directory"]).exists())
                         scratch = json.loads(self.control.read_text())["directory"]
                         self.assertEqual(
-                            f"Cannot confirm inference client evidence directory removal; attempted path {scratch} (status 23).\n",
+                            f"Cannot confirm native client evidence directory removal; attempted path {scratch} (status 23).\n",
                             diagnostic.read_text(),
                         )
                     finally:
@@ -1654,7 +1654,7 @@ class StdioNativeTests(unittest.TestCase):
                     payload = diagnostic.read_text()
                     self.retain_cleanup(payload)
                     self.assertEqual(
-                        f"Cannot confirm inference client evidence directory removal; attempted path {scratch} (status 23).\n",
+                        f"Cannot confirm native client evidence directory removal; attempted path {scratch} (status 23).\n",
                         payload,
                     )
                     self.assertNotIn("retained", payload)
@@ -1683,7 +1683,7 @@ class StdioNativeTests(unittest.TestCase):
                     self.assertFalse(Path(json.loads(self.control.read_text())["directory"]).exists())
                     scratch = json.loads(self.control.read_text())["directory"]
                     self.assertEqual(
-                        f"Cannot confirm inference client evidence directory removal; attempted path {scratch} (status 23).\n".encode(),
+                        f"Cannot confirm native client evidence directory removal; attempted path {scratch} (status 23).\n".encode(),
                         result.stderr,
                     )
                 self.assert_retired(json.loads(self.control.read_text())["anchor"])
