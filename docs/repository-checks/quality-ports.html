@@ -158,8 +158,8 @@ adaptations and qualified applicability decisions are recorded in
 <tr>
 <td>API <code>repository_checks/test_runtime_policy_posture.py</code></td>
 <td>same basename</td>
-<td style="text-align: right;">8</td>
-<td>Direct uppercase module bindings including conditional bindings, exact single-binding escape, declaration/local/class negatives, assigned-value privacy, exact historical API migration grammar and negatives; local production scan</td>
+<td style="text-align: right;">5</td>
+<td>Direct uppercase module bindings including conditional bindings, exact single-binding escape, declaration/local/class negatives, assigned-value privacy; local production scan. Donor-only Django migration exemption removed because no such source enters the local inventory.</td>
 </tr>
 <tr>
 <td>API <code>repository_checks/test_error_transparency_posture.py</code></td>
@@ -258,9 +258,10 @@ an additional detector fixture proves the three continued defaults are all
 reported, including continued instructions crossing blank/comment lines without
 losing later tokens or the first physical line. The source changed-Make-default fixture receives its original
 allowance only inside patch.dict during that fixture, never in repository scans.</p>
-<p>The historical migration exemption remains limited to the source's exact
-<code>nmr_api/.../migrations/NUMBER_NAME.py</code> grammar. It cannot exempt local tools,
-checks, or nmrnet_inference modules. CommandError detection retains its exact
+<p>The donor's historical Django migration exemption and its three dedicated
+fixtures were removed: no <code>nmr_api</code> source enters this repository's inventory.
+The local production scan, detector, escape and diagnostic privacy checks remain.
+CommandError detection retains its exact
 default Django CLI projection assumption; it was not broadened to arbitrary
 exception classes.</p>
 <h2 id="make-and-tree-assertion-mappings">Make and tree assertion mappings</h2>

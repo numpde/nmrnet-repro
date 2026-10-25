@@ -1,5 +1,5 @@
 # Port source: https://github.com/numpde/nmr-api-v1/blob/dbd81a81ee92bd04d3223f4389a26891181cc0cd/repository_checks/test_runtime_policy_posture.py
-# Original detector fixtures and repository assertions retained; source roots alone are local.
+# Detector/privacy/escape assertions retained; local roots have no Django migrations to exempt.
 """Flag module-scope uppercase direct-name value assignments for review."""
 
 from __future__ import annotations
@@ -87,18 +87,7 @@ def _has_escape(binding: ast.Assign | ast.AnnAssign, source_lines: list[str]) ->
     return len(indentation) == binding.col_offset and preceding_line.strip() == _ESCAPE
 
 
-def _is_historical_migration(path: Path) -> bool:
-    """Recognize only numbered Django migrations in an NMR API app."""
-
-    if len(path.parts) < 4 or path.parts[0] != "nmr_api" or path.parent.name != "migrations" or path.suffix != ".py":
-        return False
-    sequence, separator, name = path.stem.partition("_")
-    return separator == "_" and sequence.isascii() and sequence.isdigit() and name.isidentifier()
-
-
 def _findings(path: Path, source: str) -> list[_Finding]:
-    if _is_historical_migration(path):
-        return []
     tree = ast.parse(source, filename=str(path))
     source_lines = source.splitlines()
     return [
@@ -197,34 +186,6 @@ class RuntimePolicyPostureTests(unittest.TestCase):
                     [finding.name for finding in _findings(Path("example.py"), source)],
                 )
 
-    def test_historical_migration_path_grammar(self) -> None:
-        accepted = (
-            Path("nmr_api/example/migrations/0001_initial.py"),
-            Path("nmr_api/security/persistence/migrations/0007_action.py"),
-            Path("nmr_api/example/migrations/10000_followup.py"),
-        )
-        rejected = (
-            Path("nmr_api/example/migrations/runtime.py"),
-            Path("nmr_api/example/migrations/0001.py"),
-            Path("nmr_api/example/migrations/0001_.py"),
-            Path("nmr_api/example/migrations/00a1_initial.py"),
-            # Deliberately non-ASCII digits: isdigit alone would accept them.
-            Path("nmr_api/example/migrations/\u0660\u0660\u0660\u0661_initial.py"),
-            Path("nmr_api/example/migrations/0001_-.py"),
-            Path("nmr_api/example/migrations/0001_initial.txt"),
-            Path("nmr_api/example/migrations/0001_initial.py.bak"),
-            Path("nmr_api/example/migrations/archive/0001_initial.py"),
-            Path("nmr_api/example/not-migrations/0001_initial.py"),
-            Path("repository_checks/migrations/0001_initial.py"),
-        )
-
-        for path in accepted:
-            with self.subTest(path=path):
-                self.assertTrue(_is_historical_migration(path), msg=str(path))
-        for path in rejected:
-            with self.subTest(path=path):
-                self.assertFalse(_is_historical_migration(path), msg=str(path))
-
     def test_diagnostic_does_not_disclose_assigned_values(self) -> None:
         finding = _findings(
             Path("example.py"),
@@ -232,27 +193,6 @@ class RuntimePolicyPostureTests(unittest.TestCase):
         )[0]
 
         self.assertNotIn("fixture-secret", finding.diagnostic())
-
-    def test_detector_ignores_historical_migrations(self) -> None:
-        self.assertEqual(
-            [],
-            _findings(
-                Path("nmr_api/example/migrations/0001_initial.py"),
-                "RUNTIME_CAPACITY = 4\n",
-            ),
-        )
-
-    def test_migration_exemption_does_not_hide_nonmigration_python(self) -> None:
-        self.assertEqual(
-            ["RUNTIME_CAPACITY"],
-            [
-                finding.name
-                for finding in _findings(
-                    Path("nmr_api/example/migrations/runtime.py"),
-                    "RUNTIME_CAPACITY = 4\n",
-                )
-            ],
-        )
 
     def test_report_module_scope_uppercase_direct_name_value_assignments(
         self,
