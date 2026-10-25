@@ -112,6 +112,17 @@ if [[ $action == install ]]; then
         for runtime_role in prediction reader smiles route-api route-interpreter route-store; do
             private_directory "$root/runtime/$runtime_role"
         done
+        # The runner borrows a stable lock inode across container replacement.
+        # Create it only for a fresh native directory; never truncate or replace it.
+        for runtime_role in prediction reader smiles; do
+            lease=$root/runtime/$runtime_role/.owner-session.lock
+            if [[ ! -e $lease && ! -L $lease ]]; then
+                ( set -o noclobber; : > "$lease" ) \
+                    || { refuse 'cannot create the native lifetime lock exclusively.'; exit 2; }
+            fi
+            [[ -f $lease && ! -L $lease && $(stat -c '%u:%a' -- "$lease") == "$caller_uid:600" ]] \
+                || { refuse 'native lifetime locks must be caller-owned mode 0600 regular files.'; exit 2; }
+        done
         image_record inference; scientific_image=$selected_image
         image_record preparation; geometry_image=$selected_image
         source "$repository_root/tools/git_metadata.sh"

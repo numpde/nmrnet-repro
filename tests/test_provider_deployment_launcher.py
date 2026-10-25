@@ -213,6 +213,32 @@ esac
         self.assertTrue(self.bundle.exists())
         self.assertFalse(any(call[0] in ('inspect', 'create', 'start') for call in self.calls()))
 
+    def test_native_lifetime_locks_are_created_private_and_keep_their_inode(self):
+        result = self.run_command('install')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        locks = [self.provider / 'runtime' / role / '.owner-session.lock'
+                 for role in ('prediction', 'reader', 'smiles')]
+        before = [path.stat().st_ino for path in locks]
+        for path in locks:
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.stat().st_uid, os.getuid())
+        result = self.run_command('install')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([path.stat().st_ino for path in locks], before)
+
+    def test_native_lifetime_lock_symlink_is_refused_before_freeze(self):
+        (self.provider / 'runtime').mkdir(mode=0o700)
+        directory = self.provider / 'runtime' / 'reader'
+        directory.mkdir(mode=0o700)
+        target = self.root / 'unrelated'
+        target.write_text('keep original bytes')
+        (directory / '.owner-session.lock').symlink_to(target)
+        result = self.run_command('install')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('native lifetime locks', result.stderr)
+        self.assertEqual(target.read_text(), 'keep original bytes')
+        self.assertFalse(any(call[0] == 'run' for call in self.calls()))
+
     def test_private_qualification_project_is_passed_only_to_provider_freezer(self):
         result = self.run_command('install', extra=('--delivery-project', 'fixture-private'))
         self.assertEqual(result.returncode, 0, result.stderr)
