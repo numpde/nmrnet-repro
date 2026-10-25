@@ -243,14 +243,22 @@ effect() {
     fi
 }
 qualification_delivery_down() { effect down; }
-qualification_delivery_empty() { effect inspection; }
+qualification_delivery_empty() {
+    effect inspection || return $?
+    if [[ $TEST_PHASE == helper || $TEST_PHASE == restore ]]; then
+        inference_diagnostic='queue still owns outcomes'
+        return 2
+    fi
+}
 qualification_delivery_remove() { effect remove; }
-qualification_delivery_retire_helper() { printf 'forbidden helper retirement\n'; }
-qualification_delivery_up() { printf 'forbidden publisher restart\n'; }
+qualification_delivery_retire_helper() { effect helper; }
+qualification_delivery_up() { effect restore; }
 api_witness_stop_deployment 0
 '''
         for phase, effects in (("down", ["down"]), ("inspection", ["down", "inspection"]),
-                               ("remove", ["down", "inspection", "remove"])):
+                               ("remove", ["down", "inspection", "remove"]),
+                               ("helper", ["down", "inspection", "helper"]),
+                               ("restore", ["down", "inspection", "helper", "restore"])):
             with self.subTest(phase=phase):
                 result = subprocess.run(["bash", "-c", script], env=dict(os.environ, TEST_PHASE=phase),
                                         capture_output=True, text=True, timeout=3)

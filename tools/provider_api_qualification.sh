@@ -53,8 +53,16 @@ api_witness_stop_deployment() {
             [[ $inference_retirement_confirmed == true ]] || return 2
             # The client readback passed, but another retained obligation may
             # remain. Restore its original publisher rather than discard it.
-            qualification_delivery_retire_helper || return $?
-            qualification_delivery_up || return $?
+            qualification_delivery_retire_helper || {
+                local failure=$?
+                [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
+                return "$failure"
+            }
+            qualification_delivery_up || {
+                local failure=$?
+                [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
+                return "$failure"
+            }
             printf 'Private delivery still owns outcomes; retain project %s and its configuration.\n' "$qualification_delivery_project" >&2
             return 2
         fi
