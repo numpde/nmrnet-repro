@@ -367,3 +367,18 @@ followed by api_read_recovered in the original controller process. Evidence:
   Docker logs for nmrnet-0afe8dc0042e806a879f-provider-generation-D7JHQLEe
 Local generation-6Mu12zYz remains healthy. Both hosts use the image IDs above.
 No new scientific Job, model call or inference was needed for this correction.
+
+Supervisor backlog, 25 October 2026: residue closure
+
+Removed unused tools/deployment_helper_grants.sh (333 lines) and
+ tools/deployment_runtime_recovery.sh (186 lines). Source/caller searches and
+independent containment review found no active consumers; historical artifact
+source manifests remain historical evidence, unchanged. No replacement layer.
+The failed lAa5hJbO fixture's exact Compose ownership identified private project
+nmrnet-qualification-c58a8cb23bc3fdb30d72ea11. The installed delivery_discard
+owner, run offline in delivery image e09f0285 with original daemon.toml and only
+its queue mounted, reported provider:example / https://127.0.0.1:43385:
+held=[], outstanding_items=0. Engine inspection found no containers referencing
+its three exact queue/IPC/control volumes; all three were then removed explicitly.
+No production volume or payload was accessed or removed. This supersedes the
+intentional failed-fixture retention described above. U13/U14/A05/A10 reviewed.
