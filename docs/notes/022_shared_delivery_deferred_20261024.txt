@@ -395,3 +395,58 @@ Contained wheelhouse lane52 and image command lane15 pass:
   /tmp/nmrnet-shared-image-context.log
 Independent U17/U23/A03/A05 review found no additional issue. These checks do
 not claim the entire test_inference_native signal matrix was rerun.
+
+Installed delivery backlog qualification, 25 October 2026
+
+Maintained command (contained, installed wheel, local signed TLS peers only):
+  make test/integration/provider-core/delivery
+    WHEELHOUSE=/home/ra/Downloads/wheelhouse
+Result: 30 tests pass in3.979s; /tmp/nmrnet-installed-queue-recovery-first.log.
+New source witnesses in packages/provider-core/tests/integration/delivery/
+ normative/test_delivery_process.py:
+  test_lost_api_ack_then_actual_daemon_restart_replays_one_queued_outcome
+  test_two_bindings_isolate_grants_and_publish_while_one_api_is_unavailable
+They reuse existing delivery_main, DeliveryConfigFiles, TLS/UnixProxy peers,
+credential/signature fixtures, actual IPC clients and the original-child reaper.
+No new runtime hook, harness, schema, recovery registry or service mode.
+
+The first witness hands off one synthetic COMPLETE containing fixed result
+bytes. The peer records its effect before losing the API acknowledgement.
+After delivery_retry, SIGKILL terminates the original installed daemon; its
+actual process handle is awaited. Queue reopen finds the identical pending
+outcome. A second daemon starts from unchanged configuration and the same queue,
+without another producer submit. It sends identical bytes with a fresh signature,
+receives a matching replayed receipt, and deletes the row. The scripted peer
+records exactly one effect for two received requests. Final SIGTERM settles the
+second process. This is real local process/queue/transport recovery; the peer's
+effect counter is not proof of deployed API transaction semantics or science.
+
+The second witness configures TWO bindings in ONE installed daemon, with distinct
+keys, origins and sockets. A valid correlated503 keeps A pending while B receives
+its matching receipt and its row disappears. Every received signature is checked
+against that binding's actual key. B's scope submitted through A's socket is
+refused by the IPC server with both inventories/API calls unchanged. Restoring
+A's peer permits automatic delivery in the same daemon, without producer replay
+or manual repair; scripted accepted effects are A1/B1. Private payload markers
+are absent from retained notices. These are synthetic FAIL outcomes, not inferred
+scientific results. No real API Job, model call, input acquisition or prediction.
+
+U/A review of these bounded changes:
+  U01-U06, A02/A04/A06-A08: scientific implementation, numerical fixtures,
+    units, reference pins and expected outputs unchanged; no new accuracy claim.
+  U07/U11/U25/U26, A01/A09: actual installed CLI/IPC/TLS/SQLite receiving
+    boundaries; focused lanes only, no inference from health to scientific proof.
+  U08-U10/U13/U14: enqueue and API receipts distinguished; exact pending bytes,
+    scoped keys/IPC, original process cleanup and finite waits retain ownership.
+  U12/U15-U18/U20-U22, A05: existing Make lane and owners; literal selectors
+    unchanged; no parallel schema/framework or compatibility; note records scope.
+  U19/U23/U24, A03/A10: concise rationale/evidence in place, safe diagnostic
+    causes retained, no payload dumps or obsolete helper retention.
+  U27/A11: abrupt-death recovery and independent progress are behavioral proofs,
+    not merely safe stopping or transparent reporting.
+Independent containment and receiving-boundary reviews found no material issue.
+Wider load/soak, UID/engine combinations and failure-timing matrices remain
+explicitly deferred unless a concrete finding requires them. Existing separate
+recipe/Engine proofs own Docker mount isolation; these CLI tests do not add that
+claim. Producer-IPC lost acknowledgements remain separately covered, not joined
+into a new all-faults scenario. Live deployments are unchanged by this slice.
