@@ -1030,3 +1030,50 @@ per host because core diagnostics changed. Deployment preserves existing binding
 volumes, credentials, model data and independently selected runtime routes. The
 intermittent production DNS issue remains separately reported and is not addressed
 by changing configuration during this release. Record final rollout evidence below.
+
+
+QA release completed, 25 October 2026
+------------------------------------
+Code revision: 536c9ebd3cc17d3a6c9236fb516bef3e4da83abc, pushed to main.
+All four runtime images rebuilt offline on each host using its existing selected
+shared wheelhouse. Old services remained online until those builds completed.
+Maintained down/install/up commands preserved the original queue/control/IPC
+volumes, sole binding on each host, credentials, private configuration and routes.
+Private configuration/key fingerprints matched before/after replacement; no
+fingerprint or key value is published here. Both hosts had 0 producer checkpoints
+and 0 outstanding delivery entries before and after rollout. No volume was removed.
+
+Local generation: wKYUCO5u; production generation: XQ0CAaOQ. All seven roles per
+host are healthy, restart_count=0 and OOMKilled=false; shared delivery is running with a
+healthy API proxy. Installed-code smoke checks on both hosts confirm the
+UploadFailed.response separation, safe HTTP status/request-ID rendering without
+private body/header leakage, and the generated-fragment scientific limitation.
+The synthetic smoke loads no model and creates no Job.
+
+Signed USER GET /v1/providers returned HTTP 200 on both hosts, with the exact
+unchanged 821-character offering and exact provider description. Offering SHA-256:
+40b5e04428d517583f1cfca4e291b5f3b38c287d74ef5a0e29cd10e22ecd721d.
+Accepted Hello after each new container start:
+  local: 2026-10-25T20:20:03.208746Z
+  production: 2026-10-25T20:20:24.777938Z
+GitHub Pages reported status built for 536c9eb at 2026-10-25T20:17:55Z, publishing
+the revised scientific guide. These observations prove installed code, health,
+state preservation and API-visible registration; they are not new prediction,
+accuracy, end-to-end Job or outage-recovery qualification.
+
+Actual image identities (each sha256):
+  local controller: 1fef0207376ca74609f0e3b8ca3a774250b93e6559fc0d8ea374b90f3d376601
+  local geometry: ac0341a910612eab99a4954706e8c2c03f3efdde750fff245ee15cb790c79ec2
+  local prediction: 56717406c4f2ef06b80dcbcdaf9af8a09a514e2110301290bf3a8c967201bd70
+  local delivery: b10d8a3b5be580c9b849f67a42d0518309704c6bac55f0ea41e7d1d8a407c262
+  production controller: 3cce1bcb94b06fa4041c0f32112e6b718f96882f56142943926e678c9c9119d1
+  production geometry: 21163a955f816da887b5839a62f8368e8cf10b094ce94efdde4cee1f7a6d1dbf
+  production prediction: 16a244bd0f1cf4e1ed55183a56cc8c7d2ceb6e0278d319797ffc9a65d0dac279
+  production delivery: 5b688885c0112f103c0508cdc8fe50f6f2638a207131025d724630394dbfe5e4
+Build logs per host: /tmp/nmrnet-qa-{controller,geometry,prediction,delivery}-build.log.
+Rollout logs: local /tmp/nmrnet-qa-local-rollout.log;
+production /tmp/nmrnet-qa-rollout.log.
+The underlying intermittent production DNS issue remains unresolved. No resolver,
+interface, network policy, Job, model, GUI or dependency-acquisition change was
+made. The four QA fixes are now deployed; earlier pending-status paragraphs are
+historical audit observations, superseded by this release record.
