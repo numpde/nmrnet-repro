@@ -31,10 +31,10 @@
 </nav>
 <h2 id="inputs">Inputs</h2>
 <p id="using-the-provider">Select NMRNet++ for molecular-to-shift analysis
-(<code>peaks_from_mol</code>) in your API/GUI client. Supply coordinates or request
-their generation from SMILES using one of the three forms below. Add
-<a href="#output-settings">result settings</a> to the same submission instructions.</p>
+(<code>peaks_from_mol</code>) in your API/GUI client.</p>
 <h3 id="molecular-input">Geometry and SMILES input</h3>
+<p>Choose <strong>one</strong> input method per request: paste coordinates,
+attach a structure file, or supply SMILES to generate coordinates.</p>
 <h4 id="paste-coordinates">1. Paste one geometry</h4>
 <p>Paste one atom per line as <code>element x y z</code>, separated by whitespace,
 with no column header or blank lines between atoms. State the coordinate unit:
@@ -120,7 +120,8 @@ Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/smiles.py#L68">conformer-count bounds</a>.</p>
 <h3 id="output-settings">Request settings</h3>
 <p>Write verbosity and significant-digit preferences in your client's submission
-instructions, alongside any input form. The defaults are <strong>medium verbosity and 4 significant digits</strong>.
+instructions, alongside your chosen molecular input. These settings apply to all
+three input methods. The defaults are <strong>medium verbosity and 4 significant digits</strong>.
 For example:</p>
 <pre><code>SMILES: CCl
 Generate 3 conformers and predict 1H and 13C shifts for each.
