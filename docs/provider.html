@@ -164,6 +164,13 @@ the native owner.</p>
 hosts used by those routes. They preserve the configured HTTPS origin and port
 for TLS and signing and never fall back to DNS. A host-gateway name is not an
 address: inspect the actual host publication and supply its literal address.
+Setup downloads and deployment traffic have separate, explicit interface choices.
+Use <code>WLAN_INTERFACE</code> for acquisition commands, and each route's
+<code>interface</code> in <code>deployment.toml</code> for running services.
+They may select the same interface or different ones; neither setting supplies
+the other, and deployment does not select the host's default route automatically.
+See the <a href="https://github.com/numpde/nmrnet-repro/blob/4d14863/tools/compose_deployment.sh">deployment launcher</a>
+and <a href="https://github.com/numpde/nmrnet-repro/blob/4d14863/config/deployment.toml.example">route settings example</a>.
 Every route requires an explicit <code>interface</code>; only <code>external</code>
 requires top-level <code>resolvers</code>. External routes may use a different
 interface from the mapped host publication. This follows Magnet's host-gateway

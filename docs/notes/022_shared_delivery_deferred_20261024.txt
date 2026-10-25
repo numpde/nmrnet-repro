@@ -349,6 +349,11 @@ Inspected user directions selected Wi-Fi for weights/download (23 October,
 The user corrected that interpretation. Existing deployment authorization
 therefore covered correcting the agent's route assumption without another
 approval or an automatic runtime fallback.
+The explicit end-state rule is two independent choices: setup/acquisition uses
+an explicitly selected interface; deployment also uses explicitly selected
+interfaces. They may be the same or different. The mistake was conflating those
+choices, not requiring interface binding. Runtime must not inherit WLAN_INTERFACE
+or select a default-route fallback; the wired choice above is explicit config.
 
 Final remote route correction, 25 October 07:38UTC: all three external routes
 (api, interpreter, store) explicitly select the active default-route interface
