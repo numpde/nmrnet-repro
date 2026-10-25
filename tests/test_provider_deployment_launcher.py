@@ -323,10 +323,3 @@ esac
             self.assertEqual(result.stdout, f'started\t{operation}\t14\nretired\t{operation}\t-15\towner_lost\n')
             self.assertNotIn('PRIVATE', result.stdout)
             self.assertIn('PRIVATE_APPLICATION_OUTPUT', result.stderr)
-
-    def test_reply_loss_only_withholds_a_successful_original_command_reply(self):
-        for status in (0, 9):
-            result = subprocess.run(['bash', str(ROOT/'tools/compose_reply_loss.sh'), 'bash', '-c', f"printf withheld; printf 'actual Engine cause' >&2; exit {status}"], capture_output=True, text=True, timeout=3)
-            self.assertEqual(result.returncode, 7 if status == 0 else status)
-            self.assertEqual(result.stdout, '')
-            self.assertIn('actual Engine cause', result.stderr)

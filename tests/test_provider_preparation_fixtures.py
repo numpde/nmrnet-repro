@@ -1,7 +1,7 @@
 """Exercise the authored preparation corpus through the existing pure XYZ owner.
 
-Native reader and embedding expectations live beside the data until their
-isolated worker exists; these tests do not qualify RDKit or batch publication.
+Native reader and embedding fixtures have separate worker checks; this
+pure-reader test does not qualify RDKit or batch publication.
 """
 
 from tools.container_guard import require_container
@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.xyz import prepare_pasted_xyz, prepare_xyz
+from nmrnet_provider.xyz import prepare_xyz
 
 FIXTURES = Path(__file__).parent / "fixtures" / "preparation"
 
@@ -62,7 +62,7 @@ class PreparationFixtureNormativeTests(unittest.TestCase):
         for filename, unit, distance in (("scale_nm.xyz", "nm", 1.25), ("scale_bohr.xyz", "bohr", 1.058354421088)):
             with self.subTest(unit=unit):
                 source = (FIXTURES / "normative" / filename).read_bytes()
-                prepared = prepare_pasted_xyz(source, source_unit=unit)
+                prepared, = prepare_xyz(source, source_unit=unit, selection="all")
                 request = json.loads(prepared.request_bytes)
                 self.assertEqual(["C", "H"], request["atoms"])
                 self.assertEqual("angstrom", request["coordinate_unit"])
@@ -87,11 +87,6 @@ class PreparationFixtureAdversarialTests(unittest.TestCase):
                 prepare_xyz(source, source_unit="angstrom", selection=selection)
             self.assertNotIn("PRIVATE_COORDINATE_CANARY", str(failure.exception))
 
-    def test_pasted_xyz_rejects_multiple_frames(self):
-        source = (FIXTURES / "normative" / "mixed_records.xyz").read_bytes()
-        with self.assertRaisesRegex(InputRejected, "one XYZ frame"):
-            prepare_pasted_xyz(source, source_unit="angstrom")
-
     def test_extended_xyz_requires_a_separate_supported_reader(self):
         source = (FIXTURES / "adversarial" / "extended.xyz").read_bytes()
         with self.assertRaisesRegex(InputRejected, "extended XYZ"):
@@ -101,4 +96,4 @@ class PreparationFixtureAdversarialTests(unittest.TestCase):
         source = (FIXTURES / "normative" / "scale_nm.xyz").read_bytes()
         for unit in ("", "unspecified"):
             with self.subTest(unit=unit), self.assertRaisesRegex(InputRejected, "source unit"):
-                prepare_pasted_xyz(source, source_unit=unit)
+                prepare_xyz(source, source_unit=unit, selection="all")

@@ -21,13 +21,15 @@ from types import SimpleNamespace
 # Workers keep controller dependencies out of their fixed native budget so the
 # deliberate prediction allocation, rather than import startup, triggers OOM.
 if sys.argv[1:] == ["controller"]:
+    from nmrnet_provider.input_geometry import prepare_json
+    from nmrnet_provider.prepared_input import PreparedJobInput
     from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
     from nmrnet_provider.process_reports import failure_evidence
     from nmrnet_provider.session import NMRNetSession
     from provider_core.attempt_record import RecoveryScope, StartPending, acknowledge_start
     from provider_core.attempt_request import start_body
     from provider_core.attempt_response import AttemptAdmission
-    from provider_core.controller import StartRecovery, TerminalRecovery
+    from provider_core.controller import StartRecovery
     from provider_core.execution import ConditionRecovery, ObservationRecovery
     from provider_core.job_input import FeedInputFacts, VerifiedJobInput
 
@@ -44,6 +46,20 @@ def write(path, value):
 
 def oom_kills():
     return int(dict(line.split() for line in Path("/sys/fs/cgroup/memory.events").read_text().splitlines())["oom_kill"])
+
+
+class FixedJsonPreparation:
+    """Supply only this probe's fixed scientific request; no interpreter effects."""
+
+    interpreter_diagnostics = None
+
+    async def prepare(self, instructions):
+        if instructions.specification_bytes != RAW:
+            raise AssertionError("Synthetic OOM preparation received changed scientific input")
+        return PreparedJobInput((prepare_json(RAW),), "direct_coordinate_json")
+
+    async def retire(self):
+        pass
 
 
 class SyntheticPrediction:
@@ -119,10 +135,10 @@ async def controller():
         observation_recovery=ObservationRecovery(1, 1, unexpected, unexpected),
         condition_recovery=ConditionRecovery(1, 1, unexpected, unexpected),
         start_recovery=StartRecovery(1, unexpected, unexpected),
-        terminal_recovery=TerminalRecovery(1, unexpected, unexpected),
+        on_delivery_retry=unexpected,
         on_unconfirmed_phase_progress=unexpected,
         on_prediction_retry=unexpected,
-        on_native_notice=unexpected,
+        on_operator_notice=unexpected,
     )
     facts = FeedInputFacts(
         "job:oom-proof", "nmr.job.specification.text.v1", "sha256:" + hashlib.sha256(RAW).hexdigest(), len(RAW)
@@ -172,6 +188,7 @@ async def controller():
         allocate_prediction=allocate,
         execution_identity={"fixture": "synthetic OOM"},
         selected_artifacts=ARTIFACTS,
+        input_preparation=FixedJsonPreparation(),
         on_prediction_retry=notice,
     )
     try:

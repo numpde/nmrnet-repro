@@ -628,7 +628,7 @@ case "$1" in
                     command+=(--pattern test_nmrnet_interpreter.py test_nmrnet_interpreter_preparation.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/output ]]; then
-                    command+=(--pattern test_nmrnet_input.py test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
+                    command+=(--pattern test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/native-factory ]]; then
                     command+=(--pattern test_nmrnet_native_factory.py)
@@ -723,6 +723,20 @@ case "$1" in
                 require_source_directory packages/provider-core/src/provider_core
                 # Source-unit tests see the real package initializer and its pure
                 # vocabulary; installed-package/runtime proof uses separate lanes.
+                unit_image=$image
+                if [[ "$1" == test/unit/provider ]]; then
+                    # This aggregate includes image/Make fixtures that require Git.
+                    checker_image
+                    unit_image=$checker_image_id
+                    if [[ ! -f $repository_root/Makefile || -L $repository_root/Makefile \
+                        || ! -f $repository_root/requirements/provider-core-build.lock \
+                        || -L $repository_root/requirements/provider-core-build.lock ]]; then
+                        printf -v pending_diagnostic '%s\n' 'Cannot run provider unit checks: Makefile and the provider-core build lock must be regular files without symlinks.'
+                        exit 2
+                    fi
+                    command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
+                        --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
+                fi
                 unit_tests=(discover -s tests)
                 if [[ "$1" == test/unit/provider/deployment ]]; then
                     unit_tests=(-v tests.test_provider_deployment_launcher
@@ -738,7 +752,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
                     --mount "type=bind,src=$repository_root/packages/provider-core/src/provider_core,dst=/workspace/provider_core,readonly"
                     --env PROVIDER_CORE_IN_CONTAINER=1
-                    "$image" python3 -B -m unittest "${unit_tests[@]}")
+                    "$unit_image" python3 -B -m unittest "${unit_tests[@]}")
                 if [[ "$1" == test ]]; then
                     command+=(-v)
                 elif [[ "$1" == test/unit/smiles-protocol ]]; then

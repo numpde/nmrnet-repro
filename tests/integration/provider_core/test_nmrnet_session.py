@@ -23,9 +23,10 @@ from tests.fakes.execution import unexpected_condition
 from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.job_input import facts, response
 from tests.fakes.api import api
+from tests.integration.nmrnet.session_ports import CoordinateJsonPreparation
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
-from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
 from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
@@ -39,6 +40,7 @@ from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, Entere
 from provider_core.controller import AttemptController
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
+from provider_core.result_verbosity import ResultVerbosity
 from provider_core.transport import HttpTransport
 
 RAW = b'{"atoms":["H"],"coordinates":[[0,0,0]],"coordinate_unit":"angstrom"}'
@@ -119,6 +121,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.instructions = verify_job_input(response(RAW), feed=facts(RAW))
 
     def make_session(self, preparation=None):
+        if preparation is None:
+            preparation = CoordinateJsonPreparation()
         self.allocate_prediction = AsyncMock(return_value=(self.worker, self.host, self.worker.runtime))
         return NMRNetSession(
             allocate_prediction=self.allocate_prediction,
@@ -307,7 +311,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.worker.events.count("execute"), 1)
 
     async def test_low_output_does_not_bypass_private_identity_capacity_or_start_prediction(self):
-        raw = json.dumps(json.loads(RAW) | {"output": {"verbosity": "low"}}).encode()
+        raw = RAW
         verified = verify_job_input(response(raw), feed=facts(raw))
         acknowledged = acknowledge_start(replace(record(), input=facts(raw)), admission())
         manifest = {f"tools/module_{index}.py": {"sha256": "a" * 64, "size": index} for index in range(MAX_EVIDENCE_BYTES // 80)}
@@ -315,6 +319,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             allocate_prediction=AsyncMock(return_value=(self.worker, self.host, self.worker.runtime)),
             execution_identity={"image_id": "fixture", "tool_sources": manifest},
             selected_artifacts=self.worker.artifacts,
+            input_preparation=CoordinateJsonPreparation(output=OutputSettings(verbosity=ResultVerbosity.LOW)),
         )
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await self.session.prepare(acknowledged, verified, report_condition=unexpected_condition)

@@ -17,7 +17,7 @@ from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.native_session import NativeOperation
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.worker_client import PredictionExecutionFailed
-from provider_core.controller import StartRecovery, TerminalRecovery
+from provider_core.controller import StartRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.runner import RunningSupervisor
@@ -89,7 +89,7 @@ class RunnerPredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, Mock(), Mock()),
-                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+                on_delivery_retry=Mock(),
                 on_prediction_retry=Mock(), on_operator_notice=Mock(), on_unconfirmed_phase_progress=Mock(),
             )
             notice = Mock()

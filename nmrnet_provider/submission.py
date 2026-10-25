@@ -4,17 +4,9 @@ from tools.container_guard import require_container
 
 require_container()
 
-import hashlib
-import json
-from dataclasses import replace
-
-from nmrnet_inference.predict import REQUEST_FIELDS, decode_request_document
 from nmrnet_provider.geometry_protocol import require_read_options
-from nmrnet_provider.input_geometry import InputRejected, decode_source, prepare_json
+from nmrnet_provider.input_geometry import InputRejected, decode_source
 from nmrnet_provider.prepared_input import (
-    DEFAULT_OUTPUT,
-    OutputSettings,
-    PreparedJobInput,
     SelectedPastedSource,
     SelectedSmilesSource,
 )
@@ -58,31 +50,3 @@ def select_job_pasted(verified, *, source_text, source_format, source_unit):
         selection = "all"
     require_read_options(source_format, source_unit, selection)
     return SelectedPastedSource(verified.job_ref, verified.identity.input_fingerprint, source_format, source_unit, source)
-
-
-def prepare_direct_job(verified):
-    """Prepare explicit coordinate JSON after the caller admits the Attempt.
-
-    This is the direct-input binding, not an input classifier or interpreter.
-    The optional output fragment uses the same owner as interpreter preparation.
-    Source identity covers all verified bytes, including output preferences;
-    request identity covers only the derived scientific bytes. No native field
-    is added. PredictionSession later checks dictionary and model input limits.
-    """
-    if type(verified) is not VerifiedJobInput:
-        raise TypeError("Direct Job preparation requires verified original instructions.")
-    source = verified.specification_bytes
-    try:
-        document = decode_request_document(source)
-        if not set(document) <= {*REQUEST_FIELDS, "output"}:
-            raise ValueError("Direct input allows only coordinate_unit, atoms, coordinates and output.")
-        output = DEFAULT_OUTPUT
-        scientific_source = source
-        if "output" in document:
-            output = OutputSettings.from_json(document.pop("output"))
-            scientific_source = json.dumps(document, separators=(",", ":")).encode("utf-8")
-    except ValueError as cause:
-        raise InputRejected(str(cause)) from None
-    geometry = prepare_json(scientific_source)
-    geometry = replace(geometry, source_sha256=hashlib.sha256(source).hexdigest())
-    return PreparedJobInput((geometry,), "direct_coordinate_json", output=output)

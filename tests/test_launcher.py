@@ -133,7 +133,7 @@ class LauncherTests(unittest.TestCase):
             environment["FAKE_RUN_STATUS"] = str(run_status)
         return checkout, environment
 
-    def test_provider_lane_selects_only_provider_input_tests_without_extra_authority(self):
+    def test_provider_lane_keeps_aggregate_offline_with_required_public_inputs(self):
         result = self.command("test/unit/provider")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
@@ -141,7 +141,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--read-only", arguments)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
-        self.assertEqual(4, len(mounts))
+        self.assertEqual(7, len(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("docker.sock", " ".join(mounts))
 

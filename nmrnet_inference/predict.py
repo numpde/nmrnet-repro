@@ -1,15 +1,13 @@
 """Parse coordinate requests and admit their unit against the prediction model.
 
-The input identity and parsed request come from the same bytes. The model unit
-remains unset until evidence qualifies it, so prediction tensor composition
-fails closed in that state.
+The parsed request retains its supplied coordinate unit. Each selected head must
+have a qualified model unit before prediction tensor composition can proceed.
 """
 
 from tools.container_guard import require_container
 
 require_container()
 
-import hashlib
 import json
 import math
 import re
@@ -49,27 +47,6 @@ def require_model_coordinate_unit(request_unit, element):
         raise CoordinateUnitMismatch(
             f"Cannot prepare NMRNet++ {element} prediction: coordinate_unit does not match the qualified model unit."
         )
-
-
-def read_request_bytes(source):
-    """Read at most the byte limit plus one and identify the accepted bytes."""
-    content = bytearray()
-    while len(content) <= MAX_INPUT_BYTES:
-        remaining = MAX_INPUT_BYTES + 1 - len(content)
-        if remaining == 0:
-            break
-        chunk = source.read(remaining)
-        if chunk is None:
-            raise BlockingIOError("Cannot read prediction input: the source is not ready.")
-        if chunk == b"":
-            break
-        content.extend(chunk)
-
-    raw = bytes(content)
-    if len(raw) > MAX_INPUT_BYTES:
-        raise ValueError("Cannot read prediction input: request exceeds the 1 MiB byte limit.")
-    identity = {"size_bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
-    return raw, identity
 
 
 def _unique_object(pairs):
@@ -112,11 +89,7 @@ def _float32_coordinate(value, atom_index, axis_index):
 
 
 def decode_request_document(raw):
-    """Decode bounded JSON without duplicate keys, before either boundary selects fields.
-
-    The provider may separate its output settings from coordinate input. Native
-    request admission still owns the unchanged scientific field set below.
-    """
+    """Decode bounded scientific JSON without duplicate keys before field admission."""
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
     if len(raw) > MAX_INPUT_BYTES:

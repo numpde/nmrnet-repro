@@ -38,16 +38,6 @@ class OperatorInputTests(unittest.TestCase):
             self.assertIn("Missing explicit ambiguity qualification selector: INTERPRETER_CONFIG", result.stderr)
             self.assertFalse(fixture.calls())
 
-    def test_stopped_recovery_requires_explicit_startup_selectors_before_engine_effects(self):
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = LauncherFixture(Path(directory))
-            for target in ("provider/recovery/inspect", "provider/recovery/run"):
-                with self.subTest(target=target):
-                    result = fixture.make(target, additions={"CONFIG": "/ambient/provider.toml"})
-                    self.assertEqual(result.returncode, 2, result.stderr)
-                    self.assertIn("Stopped recovery requires explicit CONFIG", result.stderr)
-                    self.assertFalse(fixture.calls())
-
     def test_api_qualification_requires_explicit_selectors_before_engine_or_job_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
@@ -203,20 +193,10 @@ class OperatorInputTests(unittest.TestCase):
                 "ATOL",
                 "RTOL",
                 "RUN_ID",
-                "CONFIG",
-                "SOURCE_ROOT",
-                "INSTALLATION_ROOT",
-                "MAXIMUM_STARTUP_BYTES",
-                "HOST_DRAIN_SECONDS",
-                "RECORD_SHA256",
-                "API_ROUTE",
                 "LOCAL_NETWORK",
                 "LOCAL_INTERFACE",
-                "LOCAL_PEERS",
                 "EXTERNAL_INTERFACE",
                 "RESOLVERS",
-                "MAPPED_INTERFACE",
-                "MAPPED_ADDRESSES",
                 "API_ORIGIN",
                 "TOPOLOGY",
                 "PROJECT_REF",
@@ -249,20 +229,10 @@ class OperatorInputTests(unittest.TestCase):
                 "ATOL": "0",
                 "RTOL": "0.001",
                 "RUN_ID": "fixture-run",
-                "CONFIG": "/private/input/provider.toml",
-                "SOURCE_ROOT": "/private/input",
-                "INSTALLATION_ROOT": "/private/run",
-                "MAXIMUM_STARTUP_BYTES": "2097152",
-                "HOST_DRAIN_SECONDS": "90",
-                "RECORD_SHA256": "a" * 64,
-                "API_ROUTE": "local",
                 "LOCAL_NETWORK": "fixture-internal",
                 "LOCAL_INTERFACE": "eth0",
-                "LOCAL_PEERS": "api.example=" + "a" * 64,
                 "EXTERNAL_INTERFACE": "fixture0",
                 "RESOLVERS": "192.0.2.53 198.51.100.53",
-                "MAPPED_INTERFACE": "lo",
-                "MAPPED_ADDRESSES": "nmr.localhost=172.17.0.1",
                 "API_ORIGIN": "https://api.example:9443",
                 "TOPOLOGY": "dev-local",
                 "PROJECT_REF": "project:fixture",

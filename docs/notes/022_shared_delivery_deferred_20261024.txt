@@ -604,3 +604,68 @@ failure short-circuit and cooperative cancellation. Whole supported operator-inp
 lane31 passes: /tmp/nmrnet-second-operator-inputs-fixed.log. Acquisition and
 explicit deployment interfaces remain independent. Operator guidance now names
 all four images and current readiness/log behavior.
+
+Second broader reachability pass (baseline e52b59e)
+
+Removed only caller-proven detached graphs:
+- NMRNetSession's optional None-to-direct-Job-JSON binding and submission wrapper.
+  Session now requires an explicit preparation owner. Production assemble_attempt
+  already supplies InputPreparation; scientific session tests inject a small local
+  CoordinateJsonPreparation fixture using unchanged prepare_json/OutputSettings.
+  The synthetic OOM probe has its own fixed-RAW preparation port, with no test
+  module imported by production. Wrapper-only input tests were retired; current
+  uploaded JSON, direct_coordinate_json result support, parser/unit/source-order,
+  output tiers, native handle identity and no-effects controls remain.
+- predict.read_request_bytes (old standalone stream path; no supported CLI) and
+  xyz.prepare_pasted_xyz. Scientific fixture calls use prepare_xyz directly.
+  The existing pasted owner reads all XYZ frames and rejects multiplicity; it
+  was already correct and was not changed. The actual parser retains exact-limit/
+  over-limit admission and float32/order proofs. Real request-digest tests remain.
+- Uncalled require_delivery_inputs, tests-only require_provider_inputs wrapper,
+  and compose_reply_loss.sh plus its self-test. Its sole label-control test now
+  invokes actual require_core_inputs. Fixed-kind image dispatch remains.
+- Ten dead Make captures and corresponding raw unexports: API_ROUTE, CONFIG,
+  HOST_DRAIN_SECONDS, INSTALLATION_ROOT, LOCAL_PEERS, MAPPED_ADDRESSES,
+  MAPPED_INTERFACE, MAXIMUM_STARTUP_BYTES, RECORD_SHA256, SOURCE_ROOT. Every
+  indirect alias loop was checked; all supported literal/origin/override/unexport
+  controls remain. INTERPRETER_CONFIG is a distinct live selector and remains.
+
+The supported operator fixture still copied removed provider_recovery.sh; its
+copy and the obsolete stopped-recovery-target test were retired. No adapter or
+selector narrowing was used. The provider aggregate's current image/Make tests
+required the existing Git-capable checker and read-only Makefile/build-lock
+inputs. Its full pattern is unchanged. Deleted geometry/retirement probe imports
+had hidden the live geometry-worker module: removed only old stall-marker tests,
+ported independent PDB-B/MOL2 expected-coordinate checks to actual prepared_reply,
+and retained cross-record refusal and all current wire/process tests. No expected
+fixture, model byte, numerical algorithm, coordinate unit or tolerance changed.
+The synthetic OOM and native-factory fixtures also still named TerminalRecovery;
+they now use the actual delivery observer and preserve allocation/role-transfer/
+primary+cleanup controls. Runtime code was not changed to satisfy retired APIs.
+
+Retained with explicit reason: read_upload_file is a documented reusable SDK
+immutable-file boundary, with child/consumer proofs; lack of an NMRNet caller
+alone is not evidence it is dead. Core/transport/public streaming contracts and
+all scientific/readback/failure packets remain. Only the three wholly empty,
+unreferenced .work/provider-deployments/operation.{Otu0Ma88,ZfcwfUVM,cLZOlz5W}
+trees and empty parent were removed. Prepared models remain mounted by production;
+image records, original failure receipts and qualification packets were kept.
+Active guidance now describes current status readiness, bounded Docker logs and
+explicit setup/deployment selections; historical notes remain dated history.
+
+Affected contained results before final source freeze:
+  provider aggregate267: /tmp/nmrnet-second-provider-with-log-refusal.log
+  prediction input45: /tmp/nmrnet-second-prediction-input.log
+  operator inputs31: /tmp/nmrnet-second-operator-inputs-fixed.log
+  image owners15 / deployment24: /tmp/nmrnet-second-{image-owners,deployment}.log
+  session/core integration48: /tmp/nmrnet-second-session-preparation.log
+  configured runtime16: /tmp/nmrnet-second-runtime.log
+  pasted7 / Upload39: /tmp/nmrnet-second-{pasted-owner,upload-owner}.log
+  runner15 / native factory14: /tmp/nmrnet-second-{runner-current,native-factory}.log
+  source/repository49 / docs3: /tmp/nmrnet-second-{repo-source,docs}.log
+Independent source/caller/scientific/authority U/A reviews found no remaining
+signal after these corrections. Scientific algorithms and fixture data remain
+unchanged; isolated input, original-handle retirement, identity and public versus
+protected evidence obligations stay at their current owners. No compatibility
+layer, general validation framework, extra role registry or new scientific run.
+Final synthetic-probe and deployed-image evidence follows after image refresh.

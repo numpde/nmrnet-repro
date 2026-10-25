@@ -11,7 +11,7 @@ from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, NativeSetupFailed
 from tests.integration.nmrnet.retirement_ports import retire_worker_channel
-from provider_core.controller import StartRecovery, TerminalRecovery
+from provider_core.controller import StartRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
@@ -89,7 +89,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=None,
                 start_recovery=StartRecovery(1, Mock(), Mock()),
-                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+                on_delivery_retry=Mock(),
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
@@ -112,7 +112,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, Mock(), Mock()),
-                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+                on_delivery_retry=Mock(),
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=None,
@@ -138,14 +138,14 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
-                terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+                on_delivery_retry=Mock(),
             )
         allocation.assert_not_called()
 
-    async def test_missing_terminal_recovery_is_refused_before_native_allocation(self):
+    async def test_missing_delivery_retry_observer_is_refused_before_native_allocation(self):
         with (
             patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
-            self.assertRaisesRegex(ValueError, "terminal recovery"),
+            self.assertRaisesRegex(ValueError, "delivery retry observer"),
         ):
             NativeAttemptFactory(
                 config=object(),
@@ -161,7 +161,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
-                terminal_recovery=None,
+                on_delivery_retry=None,
             )
         allocation.assert_not_called()
 
@@ -216,7 +216,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             on_prediction_retry=Mock(),
             on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
-            terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+            on_delivery_retry=Mock(),
         )
 
     def allocation(self):
@@ -288,7 +288,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             on_prediction_retry=Mock(),
             on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
-            terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+            on_delivery_retry=Mock(),
         )
 
         async def opened(_role, *, job_ref):

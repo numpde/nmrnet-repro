@@ -82,11 +82,3 @@ def prepare_xyz(source, *, source_unit, selection):
             raise InputRejected(f"Cannot prepare XYZ record {record}: {error}") from None
         prepared.append(geometry)
     return tuple(prepared)
-
-
-def prepare_pasted_xyz(source, *, source_unit):
-    """Read exactly one XYZ frame; no conformer relationship is inferred."""
-    _, frames = _frames(source)
-    if len(frames) != 1:
-        raise InputRejected("Cannot read pasted XYZ: provide exactly one XYZ frame; this reader does not accept multiple frames.")
-    return prepare_xyz(source, source_unit=source_unit, selection=(1,))[0]

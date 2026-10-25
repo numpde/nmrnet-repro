@@ -6,7 +6,6 @@ require_container()
 
 import hashlib
 import importlib.metadata
-import io
 import json
 import os
 import subprocess
@@ -31,42 +30,6 @@ def encoded_request(**changes):
     }
     request.update(changes)
     return json.dumps(request, separators=(",", ":")).encode()
-
-
-class GrowingInput(io.BytesIO):
-    def __init__(self, initial, appended):
-        self.available = bytearray(initial)
-        self.appended = appended
-        self.calls = 0
-        self.requested = []
-        self.consumed = 0
-
-    def read(self, size=-1):
-        self.calls += 1
-        self.requested.append(size)
-        if self.calls == 2:
-            self.available.extend(self.appended)
-        read_size = min(size, 7 if self.calls == 2 else len(self.available))
-        chunk = bytes(self.available[:read_size])
-        del self.available[:read_size]
-        self.consumed += len(chunk)
-        return chunk
-
-
-class FailingInput:
-    def __init__(self):
-        self.calls = 0
-
-    def read(self, _size):
-        self.calls += 1
-        if self.calls == 1:
-            return b"{"
-        raise OSError("injected input read failure")
-
-
-class TemporarilyUnavailableInput:
-    def read(self, _size):
-        return None
 
 
 class PredictionDictionary:
@@ -173,47 +136,21 @@ class PredictionInputTests(unittest.TestCase):
             ):
                 prediction_model.compose_net_input(request, object(), "H")
 
-    def test_valid_request_identity_and_parsed_coordinates_share_exact_bytes(self):
+    def test_valid_request_preserves_atom_order_and_float32_coordinates(self):
         raw = encoded_request()
-        retained, identity = predict.read_request_bytes(io.BytesIO(raw))
         with mock.patch.dict(
             predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
         ):
-            parsed = self.parse(retained)
-        self.assertEqual(raw, retained)
-        self.assertEqual({"size_bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}, identity)
+            parsed = self.parse(raw)
         self.assertEqual(["C", "H"], parsed["atoms"])
         self.assertEqual(1.090000033378601, parsed["coordinates"][1][0])
 
-    def test_input_larger_than_limit_is_rejected_after_only_one_extra_byte(self):
-        source = io.BytesIO(b"x" * (predict.MAX_INPUT_BYTES + 100))
+    def test_parser_accepts_exact_byte_limit_and_refuses_one_more_byte(self):
+        raw = encoded_request()
+        at_limit = raw + b" " * (predict.MAX_INPUT_BYTES - len(raw))
+        self.assertEqual(self.parse(raw), self.parse(at_limit))
         with self.assertRaisesRegex(ValueError, "1 MiB byte limit"):
-            predict.read_request_bytes(source)
-        self.assertEqual(predict.MAX_INPUT_BYTES + 1, source.tell())
-
-    def test_input_exactly_at_limit_is_accepted_and_identified(self):
-        source = io.BytesIO(b"x" * predict.MAX_INPUT_BYTES)
-        raw, identity = predict.read_request_bytes(source)
-        self.assertEqual(predict.MAX_INPUT_BYTES, len(raw))
-        self.assertEqual(predict.MAX_INPUT_BYTES, identity["size_bytes"])
-        self.assertEqual(hashlib.sha256(raw).hexdigest(), identity["sha256"])
-
-    def test_input_that_grows_while_being_read_stops_at_limit_plus_one(self):
-        initial = b" " * 3
-        source = GrowingInput(initial, b"x" * (predict.MAX_INPUT_BYTES + 10))
-        with self.assertRaisesRegex(ValueError, "1 MiB byte limit"):
-            predict.read_request_bytes(source)
-        self.assertEqual(predict.MAX_INPUT_BYTES + 1, source.consumed)
-        self.assertTrue(all(0 < size <= predict.MAX_INPUT_BYTES + 1 for size in source.requested))
-        self.assertGreater(source.calls, 2)
-
-    def test_read_failure_remains_an_operational_error(self):
-        with self.assertRaisesRegex(OSError, "injected input read failure"):
-            predict.read_request_bytes(FailingInput())
-
-    def test_temporary_unavailability_is_not_treated_as_end_of_input(self):
-        with self.assertRaisesRegex(BlockingIOError, "source is not ready"):
-            predict.read_request_bytes(TemporarilyUnavailableInput())
+            self.parse(at_limit + b" ")
 
     def test_bad_json_and_duplicate_keys_are_rejected_without_echoing_input(self):
         for raw in (b"not-json", b'{"coordinate_unit":"angstrom","atoms":["C"],"atoms":["H"],"coordinates":[[0,0,0]]}'):

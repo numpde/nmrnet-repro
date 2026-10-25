@@ -93,7 +93,7 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 record = directory / "image-id"
                 previous = b"prior immutable image evidence\n"
                 record.write_bytes(previous)
-                stub = 'container_native() { inference_result="sha256:wrong-label"; return 0; }; require_provider_inputs "sha256:example" "sha256:expected"'
+                stub = 'container_native() { inference_result="sha256:wrong-label"; return 0; }; require_core_inputs provider controller "sha256:example" "sha256:expected"'
                 if failure == "base":
                     stub = 'container_native() { printf "local-base-inspection-only\\n"; return 42; }; build_provider_image'
                 result = subprocess.run(

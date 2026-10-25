@@ -11,14 +11,12 @@ import io
 import json
 import multiprocessing
 import socket
-import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from tests.integration.provider_worker import retirement_probe
 from tests.test_provider_worker import RecordingConnection
 
 from nmrnet_provider.geometry_client import GeometryClient
@@ -32,73 +30,39 @@ from nmrnet_provider.xyz import prepare_xyz
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 ALLOCATION = "geometry-test"
 
-# The host launcher mounts this shared helper as /workspace/probe.py. Import
-# that same helper here without mounting or importing an engine client.
-with patch.dict(sys.modules, {"probe": retirement_probe}):
-    from tests.integration.provider_worker import geometry_probe
-
-
-class NativeStallQualificationTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        self.case = geometry_probe.GeometryInput(b"supplied MOL bytes", "mol", None)
-
-    async def test_native_timeout_cannot_wait_for_a_late_stall_marker(self):
-        client = Mock(read=AsyncMock(side_effect=TimeoutError))
-        with (
-            patch.object(Path, "read_bytes", side_effect=FileNotFoundError),
-            patch.object(geometry_probe, "wait_for", return_value=(ALLOCATION + "\n").encode()) as waiter,
-            self.assertRaisesRegex(RuntimeError, "stall"),
-        ):
-            await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
-        waiter.assert_not_called()
-
-    async def test_native_timeout_requires_an_existing_allocation_matched_marker(self):
-        for marker, accepted in (((ALLOCATION + "\n").encode(), True), (b"other-allocation\n", False)):
-            with self.subTest(accepted=accepted):
-                client = Mock(read=AsyncMock(side_effect=TimeoutError))
-                with (
-                    patch.object(Path, "read_bytes", return_value=marker),
-                    patch.object(geometry_probe, "wait_for", side_effect=AssertionError("Late marker wait is forbidden.")),
-                ):
-                    if accepted:
-                        self.assertEqual(
-                            (), await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
-                        )
-                    else:
-                        with self.assertRaisesRegex(RuntimeError, "stall"):
-                            await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
-
-
 class PDBContainerExpectationTests(unittest.TestCase):
-    def test_pdb_container_probe_uses_independent_b_alternate_coordinates_and_serials(self):
+    def test_pdb_reply_preserves_independent_b_coordinates_and_serials(self):
         source = (FIXTURES / "normative/alternate_locations.pdb").read_bytes()
         options = {"source_format": "pdb", "source_unit": "angstrom", "selection": (1,)}
         records = read_source(source_request(source, **options, alternate_location="B"))
         geometries = prepared_reply(
             {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))}, source, **options
         )
-        case = geometry_probe.GeometryInput(source, "pdb", (1,), "B")
-        expected = (FIXTURES / "expected.json").read_bytes()
-        with patch.object(Path, "read_bytes", return_value=expected):
-            geometry_probe.check_geometries(geometries, case)
+        expected = json.loads((FIXTURES / "expected.json").read_bytes())["native_files"]["normative/alternate_locations.pdb"]["selection_B"]
+        geometry, = geometries
+        request = json.loads(geometry.request_bytes)
+        self.assertEqual(request["atoms"], expected["atoms"])
+        self.assertEqual(request["coordinates"], expected["coordinates_angstrom"])
+        self.assertEqual(list(geometry.source_positions), expected["source_atom_ids"])
 
 
 class MOL2ContainerExpectationTests(unittest.TestCase):
-    def test_mol2_container_probe_uses_different_selected_geometries_in_requested_order(self):
+    def test_mol2_reply_keeps_selected_order_and_refuses_cross_record_atoms(self):
         source = (FIXTURES / "normative/mixed_records.mol2").read_bytes()
         options = {"source_format": "mol2", "source_unit": "angstrom", "selection": (2, 1)}
         records = read_source(source_request(source, **options))
         geometries = prepared_reply(
             {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))}, source, **options
         )
-        case = geometry_probe.GeometryInput(source, "mol2", (2, 1))
-        expected = (FIXTURES / "expected.json").read_bytes()
-        with patch.object(Path, "read_bytes", return_value=expected):
-            geometry_probe.check_geometries(geometries, case)
-            with self.assertRaisesRegex(RuntimeError, "geometry or source correspondence"):
-                geometry_probe.check_geometries(
-                    (replace(geometries[0], request_bytes=geometries[1].request_bytes), geometries[1]), case
-                )
+        expected = json.loads((FIXTURES / "expected.json").read_bytes())["geometries"]
+        self.assertEqual(tuple(geometry.source_record_number for geometry in geometries), (2, 1))
+        for geometry, name in zip(geometries, ("water", "chloromethane"), strict=True):
+            request = json.loads(geometry.request_bytes)
+            self.assertEqual(request["atoms"], expected[name]["atoms"])
+            self.assertEqual(request["coordinates"], expected[name]["coordinates_angstrom"])
+        records[0]["request_base64"] = records[1]["request_base64"]
+        with self.assertRaisesRegex(WorkerProtocolError, "source position"):
+            prepared_reply({"kind": "geometries", "allocation": ALLOCATION, "records": records}, source, **options)
 
 
 class NativeGeometryProtocolTests(unittest.TestCase):

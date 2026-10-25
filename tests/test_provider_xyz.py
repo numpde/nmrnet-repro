@@ -46,12 +46,6 @@ class XYZPreparationTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(input_geometry.InputRejected):
                 xyz.prepare_xyz(source, source_unit="nm", selection="all")
 
-    def test_plaintext_xyz_must_contain_exactly_one_frame(self):
-        with self.assertRaisesRegex(input_geometry.InputRejected, "one XYZ frame"):
-            xyz.prepare_pasted_xyz(TWO_FRAMES, source_unit="nm")
-        prepared = xyz.prepare_pasted_xyz(b"1\ncomment\nC 0 0 0\n", source_unit="angstrom")
-        self.assertEqual(1, prepared.source_record_number)
-
     def test_bad_selected_record_names_its_original_number_and_never_returns_partial(self):
         source = TWO_FRAMES.replace(b"Cl 0 0 0", b"Cl private-bad-number 0 0")
         with self.assertRaisesRegex(input_geometry.InputRejected, "record 2") as caught:

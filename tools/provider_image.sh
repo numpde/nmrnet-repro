@@ -46,7 +46,3 @@ require_provider_image() {
     require_core_image provider controller provider_image_inputs
     provider_image_id=$core_image_id
 }
-
-require_provider_inputs() {
-    require_core_inputs provider controller "$@"
-}

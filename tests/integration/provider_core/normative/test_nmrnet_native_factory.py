@@ -10,7 +10,7 @@ from tests.fakes.attempt_store import record
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.smiles import GenerationSettings
-from provider_core.controller import StartRecovery, TerminalRecovery
+from provider_core.controller import StartRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
@@ -33,7 +33,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             on_prediction_retry=Mock(),
             on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
-            terminal_recovery=TerminalRecovery(1, Mock(), Mock()),
+            on_delivery_retry=Mock(),
         )
         ports = []
 
@@ -50,6 +50,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
 
         async def assembled(**arguments):
             self.assertIs(arguments["start_recovery"], factory.start_recovery)
+            self.assertIs(arguments["on_delivery_retry"], factory.on_delivery_retry)
             self.assertIs(arguments["condition_recovery"], factory.condition_recovery)
             self.assertIs(arguments["on_prediction_retry"], factory.on_prediction_retry)
             self.assertEqual(arguments["allocate_prediction"].keywords, {"job_ref": "job:example"})

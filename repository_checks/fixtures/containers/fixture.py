@@ -89,7 +89,6 @@ class LauncherFixture:
             "package_inputs.sh",
             "baseline.sh",
             "provider.sh",
-            "provider_recovery.sh",
             "provider_api_qualification.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)

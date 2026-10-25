@@ -289,8 +289,6 @@ unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport WHEELHOUSE
 override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin WHEELHOUSE)),$(value WHEELHOUSE))
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
-unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES HOST_DRAIN_SECONDS
-unexport RECORD_SHA256
 unexport LOG_LEVEL
 unexport DEPLOYMENT
 unexport DEPLOYMENTS
@@ -306,7 +304,7 @@ override export NMRNET_BODY_SHA256_INPUT := $(if $(filter command line,$(origin 
 override export NMRNET_JOB_RECEIPT_INPUT := $(if $(filter command line,$(origin JOB_RECEIPT)),$(value JOB_RECEIPT))
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
-unexport API_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
+unexport LOCAL_NETWORK LOCAL_INTERFACE EXTERNAL_INTERFACE RESOLVERS
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
@@ -317,20 +315,10 @@ override export NMRNET_LABEL_ATOL_INPUT := $(if $(filter command line,$(origin L
 override export NMRNET_ATOL_INPUT := $(if $(filter command line,$(origin ATOL)),$(value ATOL))
 override export NMRNET_RTOL_INPUT := $(if $(filter command line,$(origin RTOL)),$(value RTOL))
 override export NMRNET_RUN_ID_INPUT := $(if $(filter command line,$(origin RUN_ID)),$(value RUN_ID))
-override export NMRNET_CONFIG_INPUT := $(if $(filter command line,$(origin CONFIG)),$(value CONFIG))
-override export NMRNET_SOURCE_ROOT_INPUT := $(if $(filter command line,$(origin SOURCE_ROOT)),$(value SOURCE_ROOT))
-override export NMRNET_INSTALLATION_ROOT_INPUT := $(if $(filter command line,$(origin INSTALLATION_ROOT)),$(value INSTALLATION_ROOT))
-override export NMRNET_MAXIMUM_STARTUP_BYTES_INPUT := $(if $(filter command line,$(origin MAXIMUM_STARTUP_BYTES)),$(value MAXIMUM_STARTUP_BYTES))
-override export NMRNET_HOST_DRAIN_SECONDS_INPUT := $(if $(filter command line,$(origin HOST_DRAIN_SECONDS)),$(value HOST_DRAIN_SECONDS))
-override export NMRNET_RECORD_SHA256_INPUT := $(if $(filter command line,$(origin RECORD_SHA256)),$(value RECORD_SHA256))
-override export NMRNET_API_ROUTE_INPUT := $(if $(filter command line,$(origin API_ROUTE)),$(value API_ROUTE))
 override export NMRNET_LOCAL_NETWORK_INPUT := $(if $(filter command line,$(origin LOCAL_NETWORK)),$(value LOCAL_NETWORK))
 override export NMRNET_LOCAL_INTERFACE_INPUT := $(if $(filter command line,$(origin LOCAL_INTERFACE)),$(value LOCAL_INTERFACE))
-override export NMRNET_LOCAL_PEERS_INPUT := $(if $(filter command line,$(origin LOCAL_PEERS)),$(value LOCAL_PEERS))
 override export NMRNET_EXTERNAL_INTERFACE_INPUT := $(if $(filter command line,$(origin EXTERNAL_INTERFACE)),$(value EXTERNAL_INTERFACE))
 override export NMRNET_RESOLVERS_INPUT := $(if $(filter command line,$(origin RESOLVERS)),$(value RESOLVERS))
-override export NMRNET_MAPPED_INTERFACE_INPUT := $(if $(filter command line,$(origin MAPPED_INTERFACE)),$(value MAPPED_INTERFACE))
-override export NMRNET_MAPPED_ADDRESSES_INPUT := $(if $(filter command line,$(origin MAPPED_ADDRESSES)),$(value MAPPED_ADDRESSES))
 override export NMRNET_API_ORIGIN_INPUT := $(if $(filter command line,$(origin API_ORIGIN)),$(value API_ORIGIN))
 override export NMRNET_TOPOLOGY_INPUT := $(if $(filter command line,$(origin TOPOLOGY)),$(value TOPOLOGY))
 override export NMRNET_PROJECT_REF_INPUT := $(if $(filter command line,$(origin PROJECT_REF)),$(value PROJECT_REF))

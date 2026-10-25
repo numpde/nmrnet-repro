@@ -27,7 +27,3 @@ require_delivery_image() {
     require_core_image delivery delivery delivery_image_inputs
     delivery_image_id=$core_image_id
 }
-
-require_delivery_inputs() {
-    require_core_inputs delivery delivery "$@"
-}

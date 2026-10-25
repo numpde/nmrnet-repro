@@ -3,8 +3,7 @@
 The protocol owner is provider_core.analysis.AnalysisSession. Core owns current
 server observations, execution entry, durable terminal choice and publication.
 This binding owns the scientific handle, result admission and worker cleanup.
-An injected preparation owner handles interpreted sources and their cleanup.
-Without one, direct JSON admission preserves the original input bytes.
+The required preparation owner supplies admitted sources and owns their cleanup.
 """
 
 from tools.container_guard import require_container
@@ -25,7 +24,6 @@ from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
-from nmrnet_provider.submission import prepare_direct_job
 from nmrnet_provider.worker_client import PredictionExecutionFailed, WorkerExchangeTimedOut
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
@@ -196,7 +194,7 @@ class NMRNetSession:
         allocate_prediction,
         execution_identity,
         selected_artifacts,
-        input_preparation=None,
+        input_preparation,
         on_prediction_retry=None,
     ):
         if not callable(allocate_prediction):
@@ -235,10 +233,7 @@ class NMRNetSession:
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
         self._acknowledged = acknowledged
         try:
-            if self._input_preparation is None:
-                prepared = prepare_direct_job(instructions)
-            else:
-                prepared = await self._input_preparation.prepare(instructions)
+            prepared = await self._input_preparation.prepare(instructions)
         except (
             InputRejected,
             ConformerShortfall,
@@ -260,8 +255,7 @@ class NMRNetSession:
             input_fingerprint=instructions.identity.input_fingerprint,
             **self._facts,
         )
-        # silent-defaults: allow-contract -- Direct coordinate input has no interpreter; endpoint diagnostics belong only to the interpreted input owner.
-        diagnostics = None if self._input_preparation is None else self._input_preparation.interpreter_diagnostics
+        diagnostics = self._input_preparation.interpreter_diagnostics
         handle = PreparedAnalysis(_prepared_identity(plan, prepared, diagnostics))
         reservation = _scientific_evidence_document(plan.scientific_evidence_reservation(), json.loads(handle.identity.content))
         try:
@@ -284,7 +278,7 @@ class NMRNetSession:
         self._phase = _Phase.FINISHED
         document = {"input_fingerprint": instructions.identity.input_fingerprint}
         try:
-            if self._input_preparation is not None and self._input_preparation.interpreter_diagnostics is not None:
+            if self._input_preparation.interpreter_diagnostics is not None:
                 document["interpreter_diagnostics"] = json.loads(self._input_preparation.interpreter_diagnostics)
             if type(cause) is InputWorkerCallLimit:
                 code = "input_worker_call_limit"
@@ -410,11 +404,10 @@ class NMRNetSession:
         self._phase = _Phase.RETIRING
         self._prepared = None
         failures = []
-        if self._input_preparation is not None:
-            try:
-                await self._input_preparation.retire()
-            except (Exception, asyncio.CancelledError) as cause:
-                failures.append(("input_retirement", cause))
+        try:
+            await self._input_preparation.retire()
+        except (Exception, asyncio.CancelledError) as cause:
+            failures.append(("input_retirement", cause))
         worker, retirement = self._worker, self._retirement
         if retirement is not None:
             failures.extend(await retirement.retire_channel(worker))
