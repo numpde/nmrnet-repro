@@ -12,7 +12,7 @@ from tools.provider_deployment import main
 
 class DeploymentRefusalTests(unittest.TestCase):
     def test_unsafe_secret_and_invalid_route_or_dns_never_produce_a_compose_plan(self):
-        for failure in ("permissions", "escape", "missing", "interface", "resolvers", "legacy-profile"):
+        for failure in ("permissions", "escape", "missing", "interface", "resolvers", "legacy-profile", "host-store"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 arguments, files = deployment_inputs(Path(directory))
                 if failure == "permissions":
@@ -29,6 +29,8 @@ class DeploymentRefusalTests(unittest.TestCase):
                         raw = raw.replace('interface = "eth0"', 'interface = ""')
                     elif failure == "resolvers":
                         raw = raw.replace("192.0.2.53", "127.0.0.53")
+                    elif failure == "host-store":
+                        raw = 'store_root = "/obsolete/host/store"\n' + raw
                     else:
                         raw = 'service_env = "legacy.env"\n' + raw
                     settings.write_text(raw)

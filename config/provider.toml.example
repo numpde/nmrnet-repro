@@ -1,6 +1,6 @@
 schema_id = "nmrnet.provider.runtime_config.v1"
 
-# Copy outside the checkout; replace identities and private paths before use.
+# Copy to config/deployments/<name>/provider.toml; keep credentials in secrets/deployments/<name>/.
 [api]
 origin = "https://nmr.localhost:10443"
 profile = "dev-local"

@@ -79,6 +79,10 @@ class DeploymentBundleTests(unittest.TestCase):
             self.assertEqual(identity["prediction_image_id"], arguments["image_id"])
             self.assertEqual(identity["bundle"], arguments["bundle"].name)
             self.assertEqual(identity["provider_ref"], "provider:example")
+            plan = json.loads((arguments["bundle"] / "compose.json").read_bytes())
+            checkpoint_mount = next(mount for mount in plan["services"]["provider"]["volumes"]
+                                    if mount["type"] == "volume" and not mount["read_only"])
+            self.assertEqual(checkpoint_mount["target"], "/srv/nmrnet/attempts")
             self.assertNotIn(files.key.read_text().strip(), raw)
             self.assertNotIn("key_file", raw)
             self.assertNotIn("credential", raw)
@@ -89,7 +93,7 @@ class DeploymentBundleTests(unittest.TestCase):
                                   client_root=Path(directory) / "client")
                 with self.assertRaisesRegex(ValueError, "overlap"):
                     client_inputs(bundle=arguments["bundle"], prediction_image_id=arguments["image_id"],
-                                  client_root=Path(directory) / "attempts/client")
+                                  client_root=arguments["bundle"] / "client")
             self.assertEqual(rejected.getvalue(), "")
 
     def test_refresh_preserves_old_generation_and_exact_actual_source_and_secret_inputs(self):

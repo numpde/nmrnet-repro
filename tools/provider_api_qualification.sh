@@ -37,10 +37,20 @@ api_witness_stop_deployment() {
                 "$qualification_delivery_project" "$qualification_delivery_root" >&2
             return 0
         fi
-        qualification_delivery_down || return $?
+        qualification_delivery_down || {
+            local failure=$?
+            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
+            return "$failure"
+        }
         if qualification_delivery_empty; then
-            qualification_delivery_remove || return $?
+            qualification_delivery_remove || {
+                local failure=$?
+                [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
+                return "$failure"
+            }
         else
+            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
+            [[ $inference_retirement_confirmed == true ]] || return 2
             # The client readback passed, but another retained obligation may
             # remain. Restore its original publisher rather than discard it.
             qualification_delivery_retire_helper || return $?
@@ -54,6 +64,7 @@ api_witness_stop_deployment() {
 api_witness_finish() {
     local status=$? role cleanup=0
     trap - EXIT
+    [[ -z ${inference_diagnostic-} ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
     if [[ $inference_retirement_confirmed == true ]]; then
         if [[ ${api_witness_mode-} == real-ambiguity ]]; then
             for role in probe admission selection; do
@@ -72,12 +83,13 @@ api_witness_finish() {
         fi
     fi
     if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || cleanup=2; fi
+    if [[ -n ${qualification_delivery_helper-} && $inference_retirement_confirmed == true ]]; then
+        qualification_delivery_retire_helper || cleanup=2
+        [[ -z ${inference_diagnostic-} ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
+    fi
     if [[ $inference_retirement_confirmed != true ]]; then
         printf 'Qualification still owns an unretired local client at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
-    fi
-    if [[ -n ${qualification_delivery_helper-} ]]; then
-        qualification_delivery_retire_helper || cleanup=2
     fi
     if [[ ${api_deployment_active-false} == true || ${#provider_host_ids[@]} != 0 ]]; then
         printf 'Qualification stopped with unresolved deployment/helper obligations. Containers and original receipts remain at %q; their dependencies were retained.\n' "$provider_host_root" >&2 || :

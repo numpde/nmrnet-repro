@@ -66,7 +66,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
                      interpreter_interface, interpreter_network, interpreter_address, resolvers):
     """Translate this admitted fixture into the production named-deployment inputs.
 
-    Keep the original API-issued key bytes and existing Attempt store. Only the
+    Keep the original API-issued key bytes. Only the
     fixture's known file paths change; the deployment owner admits route/grant
     semantics before it can start anything or the client can submit its one Job.
     """
@@ -98,7 +98,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
         interpreter["addresses"] = [model_host + "=" + interpreter_address]
     elif interpreter_route != "external":
         raise ValueError("Qualification interpretation requires an explicit local, mapped or external route")
-    lines = ["store_root = " + json.dumps(str(root / "state")), "maximum_startup_bytes = 2097152"]
+    lines = ["maximum_startup_bytes = 2097152"]
     if interpreter_route == "external":
         lines.append("resolvers = " + json.dumps(resolvers))
     for role, route in (("api", mapped), ("interpreter", interpreter), ("store", mapped)):

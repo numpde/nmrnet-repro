@@ -37,9 +37,15 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
 ''')
         (tools / 'inference_native.sh').write_text('''inference_native() {
     local operation=$1 seconds=$2 result=$3 status=0; shift 3
+    inference_diagnostic=
     printf '%s|%s|%s\\n' "$operation" "$seconds" "$result" >> "$repository_root/budgets"
     "$@" || status=$?
     inference_retirement_confirmed=${TEST_RETIRED-true}
+    if [[ $status != 0 ]]; then
+        if [[ $operation == 'retire deployment configuration helper' ]]; then
+            inference_diagnostic=${TEST_CLEANUP_DIAGNOSTIC-}
+        else inference_diagnostic=${TEST_PRIMARY_DIAGNOSTIC-}; fi
+    fi
     return "$status"
 }
 ''')
@@ -270,6 +276,26 @@ esac
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RM_STATUS': '9'})
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertEqual(self.calls()[-1][0], 'rm')
+
+    def test_helper_cleanup_preserves_primary_and_separate_cleanup_diagnostics(self):
+        for cleanup_status in ('0', '9'):
+            with self.subTest(cleanup_status=cleanup_status):
+                before = len(self.calls())
+                result = self.run_command('install', changes={
+                    'TEST_RUN_STATUS': '7', 'TEST_RM_STATUS': cleanup_status,
+                    'TEST_PRIMARY_DIAGNOSTIC': 'original native client diagnostic',
+                    'TEST_CLEANUP_DIAGNOSTIC': 'separate retirement diagnostic',
+                })
+                self.assertEqual(result.returncode, 7, result.stderr)
+                self.assertEqual(result.stderr.count('original native client diagnostic'), 1)
+                self.assertEqual(result.stderr.count('separate retirement diagnostic'), int(cleanup_status != '0'))
+                self.assertIn('actual helper cause', result.stderr)
+                calls = self.calls()[before:]
+                runs = [call for call in calls if call[0] == 'run']
+                self.assertEqual(len(runs), 1)
+                name = runs[0][runs[0].index('--name') + 1]
+                self.assertEqual(calls[-1], ['rm', '--force', name])
+                self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
 
     def test_client_inputs_uses_selected_prediction_image_and_readonly_bundle(self):
         output = Path(self.temporary.name) / 'client'

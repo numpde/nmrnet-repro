@@ -385,8 +385,10 @@ prediction. The received result cannot supply its own expected image identity.</
   receipt; its expected hash remains pinned in the fixture client. It is never
   regenerated from this run's predictions.</li>
 <li><code>OUTPUT</code>: a fresh absolute private directory outside the checkout, separate
-  from all credential/trust inputs. It retains configuration, durable Attempt
-  state and protected receipts; inspect them before any new mutation after failure.</li>
+  from all credential/trust inputs. It retains configuration and protected receipts.
+  Producer checkpoints and outstanding terminal bodies remain in the recipe's named
+  Docker volumes. Preserve both the directory and those volumes; inspect them before
+  any new mutation after failure.</li>
 </ul>
 <p>The scripted target additionally requires <code>LOCAL_NETWORK</code> and <code>LOCAL_INTERFACE</code>
 for its peer's observed internal network. The real targets instead require:</p>

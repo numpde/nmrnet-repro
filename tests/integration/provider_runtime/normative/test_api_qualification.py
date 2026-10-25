@@ -9,10 +9,12 @@ from tools.container_guard import require_container
 require_container()
 
 import os
+import signal
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -170,6 +172,135 @@ esac
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
+    def test_compose_cleanup_never_dispatches_after_a_client_fails_to_retire(self):
+        for phase in ("inspection", "helper", "logs"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                script = r'''
+source /workspace/tools/compose_qualification.sh
+scratch=$TEST_ROOT
+deployment_installed=false
+qualification_delivery_prepared=false
+qualification_delivery_helper=
+qualification_delivery_project=nmrnet-qualification-fixture
+qualification_delivery_root=$TEST_ROOT
+qualification_delivery_image=fixture-image
+peer_id=original-peer
+peer_creation_attempted=true
+pending_diagnostic=
+worker_retirement_diagnostic=
+inference_diagnostic='original operation diagnostic'
+inference_retirement_confirmed=true
+engine=(recorded-engine)
+qualification_delivery_down() { :; }
+worker_container_retire() { : > "$TEST_ROOT/forbidden-retirement"; }
+docker_client_cleanup() { : > "$TEST_ROOT/forbidden-cleanup"; }
+inference_native() {
+    printf '%s\n' "$1" >> "$TEST_ROOT/calls"
+    inference_retirement_confirmed=false
+    inference_diagnostic='original cleanup client diagnostic'
+    return 7
+}
+sleep() { : > "$TEST_ROOT/held"; command sleep "$@"; }
+case $TEST_PHASE in
+    inspection) qualification_delivery_prepared=true ;;
+    helper) qualification_delivery_helper=original-helper ;;
+    logs) (exit 7) ;;
+esac
+compose_witness_finish
+'''
+                process = subprocess.Popen(["bash", "-c", script],
+                    env=dict(os.environ, TEST_ROOT=str(root), TEST_PHASE=phase),
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                try:
+                    deadline = time.monotonic() + 2
+                    while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertIsNone(process.poll(), "finish released the original local owner")
+                    self.assertTrue((root / "held").exists())
+                    self.assertEqual(len((root / "calls").read_text().splitlines()), 1)
+                    self.assertFalse((root / "forbidden-retirement").exists())
+                    self.assertFalse((root / "forbidden-cleanup").exists())
+                finally:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    _stdout, stderr = process.communicate(timeout=3)
+                self.assertIn("original operation diagnostic", stderr)
+                self.assertIn("original cleanup client diagnostic", stderr)
+
+    def test_api_delivery_cleanup_preserves_failed_client_before_restore(self):
+        script = r'''
+source /fixture/provider_api_qualification.sh
+api_deployment_active=false
+qualification_delivery_started=true
+inference_retirement_confirmed=true
+effect() {
+    printf '%s\n' "$1"
+    if [[ $1 == "$TEST_PHASE" ]]; then
+        inference_retirement_confirmed=false
+        inference_diagnostic='original cleanup diagnostic'
+        return 7
+    fi
+}
+qualification_delivery_down() { effect down; }
+qualification_delivery_empty() { effect inspection; }
+qualification_delivery_remove() { effect remove; }
+qualification_delivery_retire_helper() { printf 'forbidden helper retirement\n'; }
+qualification_delivery_up() { printf 'forbidden publisher restart\n'; }
+api_witness_stop_deployment 0
+'''
+        for phase, effects in (("down", ["down"]), ("inspection", ["down", "inspection"]),
+                               ("remove", ["down", "inspection", "remove"])):
+            with self.subTest(phase=phase):
+                result = subprocess.run(["bash", "-c", script], env=dict(os.environ, TEST_PHASE=phase),
+                                        capture_output=True, text=True, timeout=3)
+                self.assertEqual(result.returncode, 2 if phase == "inspection" else 7, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), effects)
+                self.assertIn("original cleanup diagnostic", result.stderr)
+
+    def test_final_delivery_helper_retirement_holds_original_host_before_client_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = r'''
+source /fixture/provider_api_qualification.sh
+source /workspace/tools/compose_qualification.sh
+provider_host_root=$TEST_ROOT
+provider_host_diagnostic=
+declare -A provider_host_ids=()
+inference_retirement_confirmed=true
+qualification_delivery_helper=original-helper
+engine=(recorded-engine)
+provider_host_remove() { :; }
+api_witness_stop_deployment() { :; }
+inference_native() {
+    printf '%s\n' "$*" >> "$TEST_ROOT/removal"
+    inference_retirement_confirmed=false
+    return 7
+}
+docker_client_cleanup() { : > "$TEST_ROOT/forbidden-cleanup"; }
+sleep() {
+    printf '%s\n' "$qualification_delivery_helper" > "$TEST_ROOT/held"
+    command sleep "$@"
+}
+api_witness_finish
+'''
+            process = subprocess.Popen(["bash", "-c", script], env=dict(os.environ, TEST_ROOT=str(root)),
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                       start_new_session=True)
+            try:
+                deadline = time.monotonic() + 2
+                while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertIsNone(process.poll(), "finish exited with an unretired original client")
+                self.assertEqual((root / "held").read_text(), "original-helper\n")
+                self.assertFalse((root / "forbidden-cleanup").exists())
+                self.assertEqual((root / "removal").read_text().splitlines(), [
+                    "retire private delivery helper 15 stdio recorded-engine rm --force original-helper"])
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGTERM)
+                process.communicate(timeout=3)
+
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
         for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:

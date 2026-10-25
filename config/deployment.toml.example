@@ -1,6 +1,5 @@
 # Private machine settings: copy to config/deployments/<name>/deployment.toml.
-# The public provider definition uses logical paths; this file owns host storage.
-store_root = "/srv/nmrnet/attempts"
+# Routes and startup input limits are machine-specific; checkpoints use named Docker volumes.
 maximum_startup_bytes = 2097152
 # Use actual interface and resolver values; there is no ambient-route fallback.
 resolvers = ["YOUR_IPV4_RESOLVER"]

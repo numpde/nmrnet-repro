@@ -151,7 +151,7 @@ def require_generated_result(result, fixture):
             "scope": "authored graph, source/parent identities, finite coordinates and shifts; no accuracy claim"}
 
 
-async def serve(root, store_root, seconds, case):
+async def serve(root, seconds, case):
     # Match provider_core_tests' installed-consumer fixture layout. These are
     # explicit read-only qualification inputs; production images import no tests.
     fixture = Path("/tmp/compose-peer")
@@ -336,7 +336,7 @@ async def serve(root, store_root, seconds, case):
         routes = "\n".join(f'[routes.{role}]\nmode = "mapped"\ninterface = "lo"\naddresses = ["127.0.0.1=127.0.0.1"]\n'
                            for role in ("api", "interpreter", "store"))
         (root / "deployment.toml").write_text(
-            f'store_root = {json.dumps(str(store_root))}\nmaximum_startup_bytes = 4194304\n' + routes)
+            'maximum_startup_bytes = 4194304\n' + routes)
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin})
         crash = None
         while not (root / "done").exists():
@@ -360,11 +360,10 @@ async def serve(root, store_root, seconds, case):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--store-root", type=Path, required=True)
     parser.add_argument("--seconds", type=float, required=True)
     parser.add_argument("--case", choices=("pasted", "smiles", "references", "capacity", "successive", "recovery"), required=True)
     options = parser.parse_args()
-    asyncio.run(serve(options.root, options.store_root, options.seconds, options.case))
+    asyncio.run(serve(options.root, options.seconds, options.case))
 
 
 if __name__ == "__main__":

@@ -252,39 +252,57 @@ compose_witness_relay_restart() {
 compose_witness_finish() {
     local status=$? cleanup=0
     trap - EXIT
+    [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
+    [[ -z $pending_diagnostic ]] || printf '%s\n' "$pending_diagnostic" >&2 || cleanup=2
+    pending_diagnostic=
     if [[ $inference_retirement_confirmed != true ]]; then
         printf 'Qualification retains its private peer/configuration because the original Engine client has not retired: %s\n' "$scratch" >&2
-        exit 2
+        while :; do sleep 1 || :; done
     fi
     if [[ $deployment_installed == true ]]; then
         compose_witness_provider down || {
+            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
             printf 'Private deployment shutdown is unconfirmed; its peer and delivery dependencies remain: %s\n' "$scratch" >&2
+            if [[ $inference_retirement_confirmed != true ]]; then while :; do sleep 1 || :; done; fi
             exit 2
         }
     fi
     if [[ ${qualification_delivery_prepared-false} == true ]]; then
         qualification_delivery_down || {
+            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
             printf 'Private delivery shutdown is unconfirmed; its fixture peer remains: %s\n' "$scratch" >&2
+            if [[ $inference_retirement_confirmed != true ]]; then while :; do sleep 1 || :; done; fi
             exit 2
         }
         if (( status == 0 )); then
             if qualification_delivery_empty; then qualification_delivery_remove || cleanup=$?
             else cleanup=$?; fi
         fi
+        [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
     fi
-    qualification_delivery_retire_helper || cleanup=$?
-    if [[ -n $peer_id ]]; then
+    if [[ -n ${qualification_delivery_helper-} && $inference_retirement_confirmed == true ]]; then
+        qualification_delivery_retire_helper || cleanup=$?
+        [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
+    fi
+    if [[ -n $peer_id && $inference_retirement_confirmed == true ]]; then
         if (( status != 0 )); then
             inference_native 'failed qualification peer diagnostics' 10 stdio "${engine[@]}" logs --tail 80 "$peer_id" || cleanup=$?
+            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
         fi
-        worker_container_retire "$peer_id" "$scratch/peer" "${engine[@]}" || cleanup=$?
-        pending_diagnostic+=$worker_retirement_diagnostic
-    elif [[ $peer_creation_attempted == true ]]; then
+        if [[ $inference_retirement_confirmed == true ]]; then
+            worker_container_retire "$peer_id" "$scratch/peer" "${engine[@]}" || cleanup=$?
+            pending_diagnostic+=$worker_retirement_diagnostic
+        fi
+    elif [[ -z $peer_id && $peer_creation_attempted == true ]]; then
         printf 'Peer creation has no admitted cleanup handle; preserve its original qualification evidence: %s\n' "$scratch/peer" >&2
         cleanup=2
     fi
-    if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || cleanup=$?; fi
     [[ -z $pending_diagnostic ]] || printf '%s\n' "$pending_diagnostic" >&2
+    if [[ $inference_retirement_confirmed != true ]]; then
+        printf 'Qualification still owns an unretired local client; retain this host process and its original evidence: %s\n' "$scratch" >&2 || :
+        while :; do sleep 1 || :; done
+    fi
+    docker_client_cleanup || cleanup=$?
     if (( status == 0 && cleanup != 0 )); then status=$cleanup; fi
     printf 'Compose qualification evidence: %s\n' "$scratch"
     exit "$status"
@@ -354,7 +372,7 @@ compose_witness_main() {
         --mount "type=bind,src=$capture/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly" \
         --mount "type=bind,src=$capture/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly" \
         --entrypoint /opt/provider/environment/bin/python "$provider_image_id" -I -B /fixture/compose_peer.py \
-        --root "$peer_data" --store-root "$scratch/attempts" --seconds 420 --case "$scientific_case" || create_status=$?
+        --root "$peer_data" --seconds 420 --case "$scientific_case" || create_status=$?
     pending_diagnostic+=$worker_retirement_diagnostic
     worker_container_created "$scratch/peer" || { pending_diagnostic+=$worker_retirement_diagnostic; return 2; }
     peer_id=$worker_created_id

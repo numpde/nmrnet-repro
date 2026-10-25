@@ -3,8 +3,8 @@
 Layout and bundle ownership follow magnet-deploy 0619d9ffd92a4326758b442c532aa09496161098,
 scripts/provider-deployment.sh::stage_deployment_input_bundle. NMRNet's existing
 startup owner accepts one private source root. Rebase only declared input paths
-and the machine-owned Attempt store into that runtime configuration; preserve
-the reviewed public definition and admit the result through existing owners.
+into that runtime configuration; preserve the reviewed public definition and
+admit the result through existing owners.
 """
 
 from tools.container_guard import require_container
@@ -61,11 +61,10 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         local = tomllib.loads(local_raw.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise ConfigurationRejected("deployment.toml must contain valid UTF-8 TOML.") from None
-    if not {"store_root", "maximum_startup_bytes", "routes"} <= set(local) or set(local) - {
-        "store_root", "maximum_startup_bytes", "routes", "resolvers"
+    if not {"maximum_startup_bytes", "routes"} <= set(local) or set(local) - {
+        "maximum_startup_bytes", "routes", "resolvers"
     }:
-        raise ConfigurationRejected("deployment.toml requires store_root, maximum_startup_bytes and routes; only external routing accepts resolvers.")
-    store = _bind_path(local["store_root"])
+        raise ConfigurationRejected("deployment.toml requires maximum_startup_bytes and routes; only external routing accepts resolvers.")
     maximum = local["maximum_startup_bytes"]
     if type(maximum) is not int or maximum < 1:
         raise ConfigurationRejected("deployment maximum_startup_bytes must be a positive integer.")
@@ -94,7 +93,7 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     admitted = _read_provider_config(definition, retain)
     if Path(admitted.lifecycle.store_root) != Path("/srv/nmrnet/attempts"):
         raise ConfigurationRejected(
-            "the public deployment store_root must be /srv/nmrnet/attempts; set its host location in deployment.toml."
+            "the public deployment store_root must be /srv/nmrnet/attempts, the producer checkpoint volume's container path."
         )
     # Render only the path-bearing scalar lines. The parsed-document comparison
     # below prevents accidental edits to scientific policy or other settings.
@@ -105,19 +104,15 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     for table in (document["api"], document["uploads"], *document["interpreter"]["endpoints"]):
         if "ca_file" in table:
             table["ca_file"] = str(bundle / "secrets" / Path(table["ca_file"]).name)
-    document["lifecycle"]["store_root"] = str(store)
     lines = []
     for source_line in raw.decode("utf-8").splitlines():
         rendered = source_line
-        match = re.match(r"\s*(credential_file|key_file|ca_file|store_root)\s*=", source_line)
+        match = re.match(r"\s*(credential_file|key_file|ca_file)\s*=", source_line)
         if match:
-            if match[1] == "store_root":
-                value = str(store)
-            else:
-                # The public definition was admitted above; only flat input
-                # names may cross this path boundary, regardless of TOML quotes.
-                scalar = tomllib.loads(source_line)[match[1]]
-                value = str(bundle / "secrets" / Path(scalar).name)
+            # The public definition was admitted above; only flat input
+            # names may cross this path boundary, regardless of TOML quotes.
+            scalar = tomllib.loads(source_line)[match[1]]
+            value = str(bundle / "secrets" / Path(scalar).name)
             rendered = match[1] + " = " + json.dumps(value)
         lines.append(rendered)
     frozen = ("\n".join(lines) + "\n").encode()
@@ -134,8 +129,6 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         return read_startup_file(_source_path(value, bundle), **limits)
 
     config = _read_provider_config(path, read_frozen)
-    if store.is_relative_to(bundle) or bundle.is_relative_to(store):
-        raise ConfigurationRejected("the deployment Attempt store must remain separate from its frozen input bundle.")
     capture_execution(source_root, bundle, source_names, **identities)
     # Repository declarations arrive as individual read-only source grants.
     # Checkout write modes are unrelated to the frozen config/secret policy.
@@ -204,8 +197,7 @@ def client_inputs(*, bundle, prediction_image_id, client_root):
         return read_startup_file(path, **limits)
 
     admitted = _read_provider_config(configuration, read_file)
-    for protected in (bundle.parent.parent, Path(admitted.lifecycle.store_root)):
-        _disjoint(client_root, protected)
+    _disjoint(client_root, bundle.parent.parent)
     identity = {
         "origin": admitted.api.identity.origin, "authority": admitted.api.identity.authority,
         "profile": tomllib.loads(raw.decode())["api"]["profile"],

@@ -46,7 +46,7 @@ def deployment_inputs(root):
         str(files.root).encode(), b"/srv/nmrnet/input"))
     settings = root / "config/deployments/web/deployment.toml"
     settings.parent.mkdir(parents=True, mode=0o700)
-    settings.write_text("store_root = " + json.dumps(str(root / "attempts")) + '\nmaximum_startup_bytes = 65536\nresolvers = ["192.0.2.53"]\n'
+    settings.write_text('maximum_startup_bytes = 65536\nresolvers = ["192.0.2.53"]\n'
                         + "".join(f'[routes.{role}]\nmode = "external"\ninterface = "eth0"\n' for role in ("api", "interpreter", "store")))
     settings.chmod(0o600)
     source_root = root / "source"

@@ -53,14 +53,16 @@ source "$repository_root/tools/inference_native.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
 helper_name=
 finish() {
-    local status=$? cleanup=0
+    local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
     if [[ -n $helper_name && $inference_retirement_confirmed == true ]]; then
         inference_native 'retire deployment configuration helper' 15 stdio "${engine[@]}" rm --force "$helper_name" || cleanup=$?
+        cleanup_diagnostic=$inference_diagnostic
     fi
     if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || cleanup=$?; fi
     [[ $status != 0 || $cleanup == 0 ]] || status=$cleanup
-    [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2
+    [[ -z $primary_diagnostic ]] || printf '%s\n' "$primary_diagnostic" >&2
+    [[ -z $cleanup_diagnostic ]] || printf '%s\n' "$cleanup_diagnostic" >&2
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Inspect Docker Compose status/logs and retain the selected configuration; an interrupted client does not prove Engine-side rollback. No automatic retry was sent.\n' >&2
         [[ -z $helper_name ]] || printf 'Configuration helper, if still present: %s\n' "$helper_name" >&2

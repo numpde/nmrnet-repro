@@ -262,7 +262,7 @@ class NMRNetSession:
             _evidence(reservation)
         except Exception as cause:
             raise PreparationEvidenceFailed({"scientific_evidence_reservation": reservation}) from cause
-        # Core persists this identity before calling execute(). Keep the admitted
+        # Core checkpoints the identity digest before calling execute(). Keep the admitted
         # bytes here until then, so even worker admission follows the durable write.
         if type(prepared) is GeneratedJobInput:
             requests = tuple(item.request_bytes for item in prepared.generated.conformers)
