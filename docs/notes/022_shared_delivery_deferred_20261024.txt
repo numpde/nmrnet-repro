@@ -547,3 +547,35 @@ Contained host11 and actual deployment/API-coordinator25 pass:
 The final checkpoint docstring now describes current START/admission ownership,
 without referring to deleted terminal encoders. No extra behavioral test matrix
 was needed for that comment. Final image identities and deployment follow below.
+
+Final deployed cleanup closure, 25 October 2026 08:50UTC
+
+Application source7db62d6 includes the final provenance-comment correction.
+The initial7569bf5 image batch was superseded before deployment because that
+comment changes captured package bytes. Cached builds refreshed all four images
+on each host from7db62d6; no scientific qualification was repeated.
+Final image IDs (sha256: prefix):
+Local controller 2a5397916d6430950eee925cfd3c880249d3ceb06af097fb1477489766c684de
+      delivery 9c8fcfe4d5dc7ccfb224ca62816e5da8d86a7b5f42a7844bda7e94afbdb48284
+      RDKit 3303a798ccc0ad2249743ffb53d3c1d3d5f9630f61607ef870976ff6ca6d7b60
+      inference 96e8e1154881e4a83eb9adfb73c8efe0d6cc3bbd9151e518aba7b1c36c29c250
+Remote controller 566a06d64db7ef4858b4e8adde9de665057bd3cb712051434983a56a226a9785
+       delivery 90ad4a01b2d76f0e4db9aec569825a2b71496c05d967bd20b6000c96b37af3d5
+       RDKit e306be07daf4bccab45fc98de66d2e9424ef14e63ac7b63c8079320c53613a74
+       inference c71b5370bbfd091ee3872b8946161dd66a76e7a3c7b88765e215aa22d3bfd5c0
+Build logs on each host: /tmp/nmrnet-clean-final-{controller,delivery,geometry,inference}-build.log.
+
+Maintained down/install/up owners preserved actual config, credentials and queue/
+control volumes. Both pre-rollout metadata checks were queue0/checkpoints0.
+Local generation-9wb4AhCR and remote generation-5nhGRV7b have seven healthy roles;
+controller and shared daemon restart0/OOMfalse. Post-rollout queue0/checkpoints0
+on both hosts. A read-only import probe in EACH actual running controller also
+confirms the retired terminal-history interfaces/codecs are absent from its
+installed package. Evidence:
+  local /tmp/nmrnet-clean-local-rollout.log
+  remote /tmp/nmrnet-clean-remote-rollout.log
+  Docker Engine status/inspect and read-only SQLite counts, observed08:50UTC.
+Independent source/caller/test/grant reviews found no further actionable issue.
+Explicit setup/deployment interfaces remain separate and unchanged. No real Job,
+LLM call, prediction, numerical oracle regeneration or scientific tolerance
+change occurred. Historical scientific artifacts and original stores remain.
