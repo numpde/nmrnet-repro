@@ -7,6 +7,7 @@ inputs, units, per-atom results and scientific limits, start with the
 <nav aria-label="On this page">
   <a href="#provider-startup-configuration">Configuration</a> ·
   <a href="#persistent-user-service">Persistent service</a> ·
+  <a href="#update-and-redeploy">Update and redeploy</a> ·
   <a href="#routine-logs-and-private-diagnostics">Logs</a> ·
   <a href="#result-delivery-and-storage">Delivery and storage</a> ·
   <a href="#checking-api-delivery">API qualification</a> ·
@@ -239,6 +240,39 @@ delivery's route to the API. Architecture and qualification are recorded in
 <a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>.
 The superseded systemd design remains a historical record in
 <a href="notes/004_persistent_local_service_20261023.html">note 004</a>.</p>
+<h2 id="update-and-redeploy">Update and redeploy</h2>
+<p>From a clean checkout on the Docker host, using the deployment owner's account:</p>
+<pre><code class="language-sh">git switch main
+git pull --ff-only
+git submodule update --init --recursive
+</code></pre>
+<p>Use the existing deployment profile and credentials. Prepare images and models
+with the shared wheelhouse and an explicit download interface; runtime interfaces
+remain in <code>config/deployments/&lt;name&gt;/deployment.toml</code>.</p>
+<pre><code class="language-sh">deployment=YOUR_DEPLOYMENT
+make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse WLAN_INTERFACE=YOUR_SETUP_INTERFACE
+</code></pre>
+<p>Docker, Compose and the pinned base images must already be available; see
+<a href="#images-and-network-isolation">Images and network isolation</a>.
+Preparation reuses cached inputs and builds all four images.</p>
+<p>This sequence assumes delivery serves only this profile.
+<code>down</code> preserves checkpoint and queue volumes but removes container logs;
+read any needed <a href="#routine-logs-and-private-diagnostics">logs</a> first.</p>
+<pre><code class="language-sh">make provider/deployment/down DEPLOYMENT="$deployment"
+make delivery/deployment/down
+make provider/deployment/install DEPLOYMENT="$deployment"
+make delivery/deployment/install DEPLOYMENTS="$deployment"
+make delivery/deployment/up
+make provider/deployment/up DEPLOYMENT="$deployment"
+make delivery/deployment/status
+make provider/deployment/status DEPLOYMENT="$deployment"
+</code></pre>
+<p>If delivery serves several providers, stop them all before stopping delivery.
+Install changed provider inputs, then supply the complete delivery profile list:
+<code>make delivery/deployment/install DEPLOYMENTS="name1 name2"</code>.
+Start delivery before restarting the providers.</p>
+<p>For an unchanged installation, use only the two <code>up</code> commands.
+For an end-to-end prediction check, see <a href="#checking-api-delivery">Checking API delivery</a>.</p>
 <h2 id="routine-logs-and-private-diagnostics">Routine logs and private diagnostics</h2>
 <p>The provider, native runners, proxies and shared delivery service send stdout
 and stderr to bounded Docker logs:
