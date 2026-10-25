@@ -1,4 +1,4 @@
-"""Separate processes cannot concurrently own one retained Attempt directory."""
+"""Separate processes cannot concurrently own one producer checkpoint database."""
 
 import asyncio
 import json

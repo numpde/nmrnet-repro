@@ -1,4 +1,4 @@
-"""Synthetic pending starts for contained storage ownership tests."""
+"""Synthetic START, admission and scope values for checkpoint/lifecycle tests."""
 
 from provider_core.attempt_record import ProtectedEvidence, RecoveryScope, StartPending
 from provider_core.attempt_response import read_start

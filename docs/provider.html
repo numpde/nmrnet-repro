@@ -520,8 +520,9 @@ The caller retains lifecycle API/store ownership and must settle any interrupted
 inventory read before reuse. All HTTP roles have separate transport owners.</p>
 <p>The controller selects the final request before handoff. Native retirement
 and delivery are independent: a cleanup failure holds worker reuse, while the
-approved request can still be delivered. Direct coordinate-JSON input uses the
-same result fragment and delivery owner as interpreted input.</p>
+approved request can still be delivered. Every session receives an explicit
+preparation owner; production supplies the configured interpreter and source
+readers before the shared scientific execution and delivery path.</p>
 <p><code>nmrnet_provider.service.ProviderService</code> coordinates one Attempt at a time:
 retained-work/capacity and live-inventory checks precede Hello, fresh discovery
 and allocation. Verified relay-owned Attempts do not block unrelated Jobs, and
@@ -685,9 +686,11 @@ and HTTP 500 description, not a blanket permission to repeat mutations.</p>
 molecular coordinates. Once exhausted, no additional source grant or worker
 allocation begins. That Attempt receives <code>input_worker_call_limit</code> with the limit
 and safe next steps; protected evidence retains actual call counts and prior
-interpreter diagnostics. After original resources retire and its FAIL receipt is
-durable, the service can accept the next Job. The limit is separate from an invalid
-input diagnosis. Cleanup, storage or API failure still blocks fresh work.</p>
+interpreter diagnostics. After the relay durably accepts that FAIL and original
+resources retire, the service can accept another Job within available capacity.
+The limit is separate from an invalid input diagnosis. Unsettled producer cleanup,
+checkpoint storage or lifecycle API failures block fresh work. A shared publisher
+outage can leave outcomes queued while other Jobs proceed within the queue limits.</p>
 <p>The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified
 attribution and owned guidance for unclear units, conformer count or Upload record

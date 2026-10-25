@@ -881,7 +881,8 @@ case "$1" in
                 fi
                 if [[ "$1" == test/repository/native-images ]]; then
                     repository_tests=(-v repository_checks.test_geometry_image repository_checks.test_inference_inputs
-                        repository_checks.test_engine_metadata_fixture repository_checks.test_source_closure.ImageSelectorDetectionTests)
+                        repository_checks.test_engine_metadata_fixture repository_checks.test_source_closure.ImageSelectorDetectionTests
+                        repository_checks.quality.test_source_inventory)
                 fi
                 if [[ "$1" == test/repository/operator-inputs ]]; then
                     repository_tests=(-v repository_checks.test_acquisition_inputs repository_checks.test_operator_inputs_port.OperatorInputTests

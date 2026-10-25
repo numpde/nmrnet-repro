@@ -13,8 +13,8 @@ require_container()
 # Port source: https://github.com/numpde/nmr-api-v1/blob/dbd81a81ee92bd04d3223f4389a26891181cc0cd/repository_checks/test_source_inventory.py
 # The four original discovery/error fixture scenarios are retained. Container exact inventory,
 # independent authority and deterministic diagnostic serialization retained.
-# Compose source membership/interpolation/build-service coverage is inapplicable:
-# there are no Compose sources or service build declarations in this repository.
+# There are no checked-in Compose service/build files. Generated runtime recipes
+# have separate rendering and deployment checks; this inventory owns image sources.
 import ast
 import json
 import re
@@ -30,7 +30,8 @@ from .source_inventory import SourceInventoryError, discover_source_files, inven
 from .sources import ROOT
 
 REVIEWED_DOCKERFILES = frozenset(
-    {"containers/inference/Dockerfile", "containers/packages/Dockerfile.lock", "containers/checker/Dockerfile"}
+    {"containers/inference/Dockerfile", "containers/packages/Dockerfile.lock", "containers/checker/Dockerfile",
+     "containers/provider/Dockerfile", "containers/geometry/Dockerfile", "containers/delivery/Dockerfile"}
 )
 REVIEWED_CONTAINER_SUPPORT_FILES = frozenset(
     {
@@ -40,6 +41,10 @@ REVIEWED_CONTAINER_SUPPORT_FILES = frozenset(
         "containers/inference/image-inputs.txt",
         "containers/packages/Dockerfile.lock.dockerignore",
         "containers/checker/Dockerfile.dockerignore",
+        "containers/provider/Dockerfile.dockerignore",
+        "containers/geometry/Dockerfile.dockerignore",
+        "containers/delivery/Dockerfile.dockerignore",
+        "containers/delivery/check_runtime.py",
     }
 )
 REVIEWED_CONTAINER_FILES = REVIEWED_DOCKERFILES | REVIEWED_CONTAINER_SUPPORT_FILES

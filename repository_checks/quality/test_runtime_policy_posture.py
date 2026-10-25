@@ -17,7 +17,6 @@ from pathlib import Path
 
 from .sources import REPOSITORY_ROOT, python_sources
 
-_NMR_API_ROOT = REPOSITORY_ROOT / "nmr_api"
 _ESCAPE = "# repo-check: allow-module-constant"
 
 

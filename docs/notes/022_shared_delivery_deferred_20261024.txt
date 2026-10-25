@@ -712,3 +712,62 @@ absence of prepare_direct_job, prepare_pasted_xyz and read_request_bytes.
 No real scientific Job, numerical fixture regeneration or LLM call was used.
 Independent final source/caller/scientific/authority reviews found no remaining
 signal in the scoped pass. Historical scientific and failure evidence remains.
+
+Third architectural reachability pass (baseline d99162f)
+
+No additional detached application runtime graph was found. Fixed-kind dynamic
+build/capture dispatch, public SDK streaming-file APIs, current checkpoint/input
+fixtures and historical scientific references remain live and were kept.
+Test prologues now name their actual checkpoint/input responsibilities without
+renaming heavily consumed fixture modules or changing their assertions.
+
+Removed tests/integration/provider_core/resource_evidence.py: its measured-resource
+qualification consumers were deleted with the older lifecycle. Its only remaining
+callers checked homemade dictionaries in two tests, not kernel observations.
+Removed that helper/resource_facts and those two self-only methods. The authored
+H128/C128 capacity_manifest, require_capacity_inputs and all altered-size,
+coordinate, producer-key and order refusals remain unchanged. Current actual
+kernel OOM qualification and runtime resource owners remain separate.
+
+The exact source-inventory declaration now reviews all six current Dockerfiles
+and eight support files (including the delivery runtime inspector), rather than
+only the initial three images. The existing native-images lane runs the complete
+inventory module. Discovery equality and generic hardening assertions are intact:
+no unknown-file waiver, weakened digest/user/frontend policy or source omission.
+The source comment distinguishes checked-in image files from generated runtime
+Compose recipes. Removed only unused _NMR_API_ROOT from the policy checker;
+retained its explicitly documented Django migration grammar fixtures for donor
+parity. They cannot exempt the inventoried local provider/tool sources; changing
+that separately documented policy was unnecessary for this bounded pass.
+Active guidance now names mandatory preparation and durable relay acceptance,
+independent native cleanup and publisher availability without promising an API
+FAIL receipt before unrelated work can proceed within capacity.
+
+Duplicate-cache cleanup, after consumer and byte checks:
+  .work/wheelhouse/cpu:59 wheels plus unicore-source.tar.gz;
+  .work/provider-core/wheelhouse:11 wheels;
+  .work/preparation/wheelhouse:3 wheels.
+All73 wheels had identical size/SHA-256 counterparts in the operator-selected
+/home/ra/Downloads/wheelhouse. Immediately before removal, cmp verified every
+wheel and the archive against that shared cache. The archive matches
+Uni-Core-ace6fae1c8479a9751f2bb1e1d6e4047427bc134.tar.gz (tracked source declaration).
+No current source, deployment, process or Engine mount referenced the old pools.
+Removed only these accounted duplicates, their derived .complete markers and
+empty pool directories/empty .work/wheelhouse parent. Shared cache unchanged.
+
+Kept .work/provider/interpreters and interpreter-imports: Gemma/Mistral credentials
+have no identical deployment copies, and imported documents retain source/
+adaptation provenance. Being unmounted is not sufficient reason to destroy them.
+No credential values were printed. Original failed-capture/inspection receipts,
+scientific/readback packets, image records and currently mounted prepared models
+remain; there was no wholesale .work purge or new retention registry.
+
+Focused contained checks:
+  native-images/source inventory65 in168.150s:
+    /tmp/nmrnet-third-source-inventory.log
+  current lifecycle/input fixtures14: /tmp/nmrnet-third-capacity-inputs.log
+  documentation3: /tmp/nmrnet-third-docs.log
+Independent source/caller/authority/scientific U/A reviews found no remaining
+signal in this scope. No application source, model, numeric expectation,
+tolerance, dependency lock, runtime configuration or image changed. No build,
+service restart, API Job, LLM request or scientific execution was needed.
