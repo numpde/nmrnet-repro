@@ -579,3 +579,16 @@ Independent source/caller/test/grant reviews found no further actionable issue.
 Explicit setup/deployment interfaces remain separate and unchanged. No real Job,
 LLM call, prediction, numerical oracle regeneration or scientific tolerance
 change occurred. Historical scientific artifacts and original stores remain.
+
+Second-pass receiving correction: stopped-component log failure
+
+The full provider unit aggregate exposed an old fake Engine without the actual
+logs-before-rm phase. Its recording surface now models bounded logs and retains
+stop/inspect/logs/rm ordering and cancellation controls. The new logs-cancellation
+case also revealed that worker_container_retire's log-failure diagnostic omitted
+the original native status/cancellation/retirement facts. It now reports those
+owned facts consistently with worker_retirement_command, still returns2 and
+withholds rm for unresolved log delivery. A native exit143 reports cancellation0;
+actual SIGTERM reports the owned cancellation143. Failed-log CID and original
+receipts remain retained, with no automatic cleanup retry. Provider aggregate267
+passes: /tmp/nmrnet-second-provider-with-log-refusal.log. No new error framework.

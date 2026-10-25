@@ -4,7 +4,7 @@
 # admission at create, and the scrubbed docker_client.sh engine argv. A correctly
 # spelled ID alone is not ownership. The worker must never mount this directory.
 # Success proves stopped-container removal, not release of IPC grants or Attempt
-# ownership. The future supervisor must complete those before confirming retire().
+# ownership. The allocation owner must confirm those separately before retire().
 # Byte-exact CID admission and capped metadata receipts follow tools/docker.sh;
 # inference_native.sh owns local client termination, never engine-side retirement.
 
@@ -69,7 +69,9 @@ worker_container_retire() {
     # messages directly to the operator first, including a fatal traceback or a
     # failure during TERM. A broken sink retains this exact stopped owner.
     if inference_native 'stopped container diagnostics' 30 stdio "$@" logs --tail 80 "$identifier" >&2; then :; else
-        worker_retirement_diagnostic="Cannot remove stopped container: bounded Docker log delivery failed; retain its original receipts. $inference_diagnostic"
+        local log_status=$?
+        printf -v worker_retirement_diagnostic 'Cannot remove stopped container: bounded Docker log delivery failed (status %s, cancellation %s, local client retired %s); retain its original receipts. %s' \
+            "$log_status" "$inference_cancellation_status" "$inference_retirement_confirmed" "$inference_diagnostic"
         return 2
     fi
     worker_retirement_command remove "$receipts" "$@" rm "$identifier"

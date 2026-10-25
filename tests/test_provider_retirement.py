@@ -27,6 +27,7 @@ class WorkerRetirementTests(unittest.TestCase):
             'case "$1" in\n'
             'stop) printf "private stop evidence\\n" >&2; exit "$STOP_STATUS" ;;\n'
             'inspect) cat "$RECEIPTS/inspection"; exit "$INSPECT_STATUS" ;;\n'
+            'logs) printf "bounded fixture log\\n"; exit "$LOG_STATUS" ;;\n'
             'rm) exit "$REMOVE_STATUS" ;;\n'
             "*) exit 99 ;;\nesac\n"
         )
@@ -34,7 +35,7 @@ class WorkerRetirementTests(unittest.TestCase):
         (self.root / "inspection").write_text(self.cid + " exited false 0 false\n")
 
     # silent-defaults: allow-contract -- Normal retirement succeeds; each fault test explicitly selects the failing operation or prior ownership state.
-    def run_retirement(self, *, stop_status=0, inspect_status=0, remove_status=0, retired="true", cancel="", cap=""):
+    def run_retirement(self, *, stop_status=0, inspect_status=0, remove_status=0, log_status=0, retired="true", cancel="", cap=""):
         return subprocess.run(
             [
                 "bash",
@@ -56,6 +57,7 @@ class WorkerRetirementTests(unittest.TestCase):
                 "STOP_STATUS": str(stop_status),
                 "INSPECT_STATUS": str(inspect_status),
                 "REMOVE_STATUS": str(remove_status),
+                "LOG_STATUS": str(log_status),
                 "CANCEL_OPERATION": cancel,
                 "CAP_OPERATION": cap,
             },
@@ -72,7 +74,7 @@ class WorkerRetirementTests(unittest.TestCase):
     def test_exact_stopped_container_is_removed_and_private_cause_retained(self):
         result = self.run_retirement()
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertEqual(["stop", "inspect", "rm"], [line.split()[0] for line in self.calls()])
+        self.assertEqual(["stop", "inspect", "logs", "rm"], [line.split()[0] for line in self.calls()])
         self.assertTrue(all(line.endswith(self.cid) for line in self.calls()))
         self.assertNotIn("private stop evidence", result.stdout + result.stderr)
         self.assertEqual("private stop evidence\n", (self.root / "retirement/stop.stderr").read_text())
@@ -91,7 +93,7 @@ class WorkerRetirementTests(unittest.TestCase):
         (self.root / "inspection").write_text(self.cid + " created false 0 false\n")
         result = self.run_retirement()
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertEqual(["stop", "inspect", "rm"], [line.split()[0] for line in self.calls()])
+        self.assertEqual(["stop", "inspect", "logs", "rm"], [line.split()[0] for line in self.calls()])
 
     def test_stop_failure_is_not_retirement_or_permission_to_repeat(self):
         result = self.run_retirement(stop_status=7)
@@ -133,11 +135,24 @@ class WorkerRetirementTests(unittest.TestCase):
     def test_stopped_but_unremoved_is_not_success(self):
         result = self.run_retirement(remove_status=9)
         self.assertNotEqual(0, result.returncode)
-        self.assertEqual(3, len(self.calls()))
+        self.assertEqual(4, len(self.calls()))
         self.assertIn("remove", result.stdout)
 
+    def test_failed_logs_preserve_native_status_without_inventing_caller_cancellation(self):
+        for status in (37, 143):
+            with self.subTest(status=status):
+                probe = WorkerRetirementTests()
+                probe.setUp()
+                try:
+                    result = probe.run_retirement(log_status=status)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn(f"status {status}, cancellation 0, local client retired true", result.stdout)
+                    self.assertEqual([line.split()[0] for line in probe.calls()], ["stop", "inspect", "logs"])
+                finally:
+                    probe.doCleanups()
+
     def test_cancellation_during_each_operation_stops_sequence_and_preserves_receipts(self):
-        for operation, count in (("stop", 1), ("inspect", 2), ("rm", 3)):
+        for operation, count in (("stop", 1), ("inspect", 2), ("logs", 3), ("rm", 4)):
             with self.subTest(operation=operation):
                 probe = WorkerRetirementTests()
                 probe.setUp()
