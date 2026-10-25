@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from provider_core.attempt_record import MAX_RECORD_BYTES, LocalExecutionPhase, StartPending, TerminalConfirmed
+from provider_core.attempt_record import LocalExecutionPhase, StartPending
 from provider_core.checkpoint_store import CheckpointStore, CheckpointLimits
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused
 from provider_core.ownership import AttemptClaims

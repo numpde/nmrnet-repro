@@ -9,9 +9,11 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from provider_core.attempt_record import acknowledge_start, decode_record, encode_record, mark_execution_entered
+from provider_core.attempt_record import acknowledge_start, mark_execution_entered
 from provider_core.checkpoint_store import CheckpointLimits, CheckpointRefused, CheckpointStore
-from provider_core.producer_checkpoint import EvidenceDigest
+from provider_core.producer_checkpoint import (
+    AcknowledgedCheckpoint, EnteredCheckpoint, EvidenceDigest, decode_checkpoint, encode_checkpoint,
+)
 from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 
 
@@ -60,18 +62,20 @@ class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await store.close()
 
-    async def test_corrupt_acknowledged_records_cannot_be_restored_as_executable(self):
-        good = json.loads(encode_record(acknowledge_start(record(), admission())))
+    async def test_corrupt_checkpoints_cannot_supply_active_control(self):
+        acknowledged = AcknowledgedCheckpoint(record(), admission())
+        good = json.loads(encode_checkpoint(acknowledged))
         for changes in (
-            {"local_phase": "private-canary"},
-            {"admission": {}},
-            {"start": {}},
-            {"extra": "private-canary"},
-            {"admission": good["admission"] | {"state": "succeeded"}, "local_phase": "execution_entered"},
+            {"kind": "private-canary"}, {"admission": {}}, {"start": {}}, {"extra": "private-canary"},
         ):
             with self.assertRaises(ValueError) as caught:
-                decode_record(json.dumps(good | changes).encode(), scope=scope())
+                decode_checkpoint(json.dumps(good | changes).encode(), scope=scope())
             self.assertNotIn("private-canary", str(caught.exception))
+        entered = EnteredCheckpoint(acknowledged, EvidenceDigest.from_evidence(PREPARED_IDENTITY))
+        document = json.loads(encode_checkpoint(entered))
+        document["acknowledgement"]["admission"]["state"] = "succeeded"
+        with self.assertRaises(ValueError):
+            decode_checkpoint(json.dumps(document).encode(), scope=scope())
 
     async def test_cancelled_acknowledgement_settles_once_before_storage_reuse(self):
         with tempfile.TemporaryDirectory() as directory:

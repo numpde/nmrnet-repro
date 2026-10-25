@@ -240,7 +240,7 @@ def _observe_file_io(waiter):
 class _UploadFile:
     """Own one private leaf and its original create/close/remove operations.
 
-    AttemptStore._run/_observe supplies the original-future precedent. The caller
+    CheckpointStore._run/_observe supplies the original-future precedent. The caller
     lends an exclusively controlled private directory until handoff or cleanup.
     Entry identity protects cleanup only; grant/hash facts own source admission.
     """

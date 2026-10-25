@@ -8,7 +8,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from provider_core.attempt_record import TerminalPending
 from provider_core.execution import AttemptExecutor
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import observation, progress_response

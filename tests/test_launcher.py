@@ -172,6 +172,30 @@ class LauncherTests(unittest.TestCase):
                 self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
                 self.assertNotIn("docker.sock", " ".join(mounts))
 
+    def test_repository_configuration_grants_only_public_selected_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout, environment = self.checker_checkout(temporary)
+            directory = checkout / "config/deployments/example"
+            directory.mkdir(parents=True)
+            public = directory / "provider.toml"
+            private = directory / "deployment.toml"
+            public.write_text('description = "public fixture"\n')
+            private.write_text('PRIVATE_MACHINE_CANARY = "not a source grant"\n')
+            (checkout / "tools/git_metadata.sh").write_text(
+                "repository_git() { printf '%s\\n' config/deployments/example/provider.toml; }\n"
+            )
+            result = subprocess.run(
+                ["bash", str(checkout / "tools/container.sh"), "--print", "test/repository"],
+                env=environment, text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            arguments = shlex.split(result.stdout)
+            mounts = [arguments[i + 1] for i, value in enumerate(arguments) if value == "--mount"]
+            self.assertIn(f"type=bind,src={public},dst=/workspace/config/deployments/example/provider.toml,readonly", mounts)
+            self.assertFalse(any(str(private) in mount for mount in mounts))
+            self.assertFalse(any(f"src={checkout / 'config'}," in mount for mount in mounts))
+            self.assertNotIn("PRIVATE_MACHINE_CANARY", result.stdout + result.stderr)
+
     def test_repository_print_has_no_record_scaffold_or_engine_effects(self):
         with tempfile.TemporaryDirectory() as temporary:
             checkout, environment = self.checker_checkout(temporary)

@@ -11,7 +11,7 @@ import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
-from provider_core.attempt_record import LocalExecutionPhase, TerminalPending
+from provider_core.attempt_record import LocalExecutionPhase
 from provider_core.checkpoint_store import CheckpointRefused
 from provider_core.controller import AttemptController
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped

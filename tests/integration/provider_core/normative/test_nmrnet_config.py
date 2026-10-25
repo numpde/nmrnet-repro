@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.fakes.tls_peer import TlsPeer
-from tests.integration.nmrnet.config_ports import ConfigFiles, native_capture_files
+from tests.integration.nmrnet.config_ports import ConfigFiles, execution_source_files
 
 from nmrnet_provider import config as config_module
 from nmrnet_provider.config import _read_provider_config, load_provider_config, read_startup_file
@@ -17,18 +17,16 @@ from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.native_factory import NativePolicy
 from nmrnet_provider.service import Announcement, ServicePolicy
 from nmrnet_provider.startup_capture import startup_authorities
-from provider_core.attempt_record import MAX_RECORD_BYTES
+from provider_core.checkpoint_store import CheckpointLimits
 from provider_core.chat import ChatEndpoint
 from provider_core.hello import hello_body
 from provider_core.uploads import UploadLimits
 
 
 class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
-    def test_execution_declaration_uses_the_frozen_source_bytes(self):
+    def test_execution_declaration_hashes_actual_sources_and_keeps_caller_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
-            snapshot = Path(directory) / "execution"
-            snapshot.mkdir(mode=0o700)
-            native = native_capture_files(directory)
+            source_root, names = execution_source_files(directory)
             identities = {
                 "image_id": "sha256:" + "b" * 64,
                 "geometry_image_id": "sha256:" + "c" * 64,
@@ -36,19 +34,27 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 "repository_revision": "a" * 40,
                 "upstream_revision": "e" * 40,
             }
-            capture_execution(native, snapshot, **identities)
-            declaration = json.loads((snapshot / "execution.json").read_bytes())
-            self.assertEqual({name: declaration[name] for name in identities}, identities)
-            self.assertEqual(declaration["runtime_identity_source"], "caller")
-            self.assertEqual(
-                declaration["tool_sources"]["tools/worker.py"],
-                {"size": 14, "sha256": hashlib.sha256(b"worker source\n").hexdigest()},
-            )
-            self.assertEqual(
-                set(declaration["tool_sources"]), {"requirements/inference.lock", "tools/reader.py", "tools/worker.py"}
-            )
-            self.assertEqual(declaration["tool_sources"]["requirements/inference.lock"]["size"], 110000)
-            self.assertEqual((snapshot / "execution.json").stat().st_mode & 0o777, 0o600)
+            for case in ("original", "changed_source", "different_declared_revision"):
+                with self.subTest(case=case):
+                    destination = Path(directory) / case
+                    destination.mkdir(mode=0o700)
+                    if case == "changed_source":
+                        (source_root / "tools/worker.py").write_bytes(b"changed source\n")
+                    if case == "different_declared_revision":
+                        identities["repository_revision"] = "f" * 40
+                    capture_execution(source_root, destination, names, **identities)
+                    declaration = json.loads((destination / "execution.json").read_bytes())
+                    self.assertEqual({name: declaration[name] for name in identities}, identities)
+                    self.assertEqual(declaration["runtime_identity_source"], "caller")
+                    self.assertEqual(declaration["tool_sources"], {
+                        name: {"size": len((source_root / name).read_bytes()),
+                               "sha256": hashlib.sha256((source_root / name).read_bytes()).hexdigest()}
+                        for name in names
+                    })
+                    self.assertEqual(declaration["tool_sources"]["requirements/inference.lock"]["size"], 110000)
+                    self.assertEqual((destination / "execution.json").stat().st_mode & 0o777, 0o600)
+                    self.assertEqual({path.name for path in destination.iterdir()}, {"execution.json"})
+            self.assertEqual({path.relative_to(source_root).as_posix() for path in source_root.rglob("*") if path.is_file()}, set(names))
 
     def test_capture_preserves_omitted_default_and_custom_destination_ports(self):
         for port, expected, roles in (
@@ -123,7 +129,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(config.api.identity.credential_ref, "credential:example")
                 self.assertEqual(config.lifecycle.scope.provider_ref, "provider:example")
                 self.assertEqual(config.lifecycle.scope.generation_id, "generation:stable-fixture")
-                self.assertEqual(config.lifecycle.store_limits.recovery_record_bytes, MAX_RECORD_BYTES)
+                self.assertIs(type(config.lifecycle.store_limits), CheckpointLimits)
+                self.assertEqual((config.lifecycle.store_limits.maximum_records, config.lifecycle.store_limits.maximum_bytes), (1, 1048576))
                 self.assertIsInstance(config.uploads.limits, UploadLimits)
                 self.assertEqual(config.preparation.generation_settings.seed, 17)
                 self.assertEqual(config.source_sha256, hashlib.sha256(files.raw).hexdigest())

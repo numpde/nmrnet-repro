@@ -32,7 +32,6 @@ from provider_core.attempt_record import (
     LocalExecutionPhase,
     SuppressionReason,
     TerminalOperation,
-    acknowledged_attempt,
     mark_execution_entered,
 )
 from provider_core.attempt_request import complete_body, fail_body
@@ -1117,7 +1116,7 @@ class AttemptExecutor:
                 outcome=self._outcome,
                 unconfirmed_record=self._unconfirmed,
                 api_failure=self._api_failure,
-                attempt=acknowledged_attempt(self._record),
+                attempt=self._record,
                 # silent-defaults: allow-contract -- A first failure can be a cleanup failure; otherwise no independent cleanup has failed yet.
                 cleanup_failures=(cause,) if cleanup else (),
             )

@@ -1,33 +1,31 @@
 """No fresh science dispatch may omit or replace its retained candidate identity."""
 
-from tests.fakes.checkpoint_execution import RecordingDelivery
-from unittest.mock import Mock
-from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, DeliveryAcceptedCheckpoint, SuppressedCheckpoint, TerminalSelectedCheckpoint, EvidenceDigest
 import json
 import tempfile
 import unittest
 from dataclasses import replace
+from unittest.mock import Mock
 
-from provider_core.attempt_record import (
-    LocalExecutionPhase,
-    ProtectedEvidence,
-    acknowledge_start,
-    decode_record,
-    encode_record,
-    mark_execution_entered,
-    require_transition,
-)
-from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES
+from provider_core.attempt_record import MAX_EVIDENCE_BYTES, ProtectedEvidence, acknowledge_start, mark_execution_entered
 from provider_core.execution import AttemptExecutor, ExecutionFailed
-from tests.fakes.api import Transport, reply
+from provider_core.producer_checkpoint import (
+    MAX_CHECKPOINT_BYTES, AcknowledgedCheckpoint, EnteredCheckpoint, EvidenceDigest,
+    decode_checkpoint, encode_checkpoint,
+)
+from tests.fakes.api import Transport, api, reply
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import observation, progress_response
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.api import api
 
 
 class PreparedIdentityRefusalTests(unittest.TestCase):
+    def test_protected_evidence_refuses_empty_mutable_and_oversized_content(self):
+        for content in (b"", bytearray(b"mutable"), b"x" * (MAX_EVIDENCE_BYTES + 1)):
+            with self.subTest(content_type=type(content).__name__), self.assertRaises(ValueError):
+                ProtectedEvidence("fixture.input.v1", content)
+
     def test_entry_requires_explicit_protected_identity(self):
         acknowledged = acknowledge_start(record(), admission())
         with self.assertRaises(TypeError):
@@ -41,36 +39,34 @@ class PreparedIdentityRefusalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(acknowledged, prepared_identity=ProtectedEvidence("fixture.input.v1", b"identity"))
 
-    def test_fresh_store_transition_cannot_use_a_legacy_entry_without_identity(self):
-        acknowledged = acknowledge_start(record(), admission())
-        legacy = replace(acknowledged, local_phase=LocalExecutionPhase.EXECUTION_ENTERED)
-        with self.assertRaises(ValueError):
-            require_transition(acknowledged, legacy)
+    def test_checkpoint_entry_requires_its_actual_prepared_digest(self):
+        acknowledged = AcknowledgedCheckpoint(record(), admission())
+        for value in (None, b"unbound identity", ProtectedEvidence("fixture.input.v1", b"identity")):
+            with self.subTest(value_type=type(value).__name__), self.assertRaises(ValueError):
+                EnteredCheckpoint(acknowledged, value)
 
-    def test_legacy_acknowledgement_keeps_its_original_byte_limit(self):
-        raw = encode_record(acknowledge_start(record(), admission()))
-        legacy_limit = 65536 + ATTEMPT_RESPONSE_BYTES + 256
+    def test_checkpoint_restore_keeps_its_actual_metadata_byte_limit(self):
+        raw = encode_checkpoint(AcknowledgedCheckpoint(record(), admission()))
         with self.assertRaises(ValueError):
-            decode_record(raw + b" " * (legacy_limit + 1 - len(raw)), scope=scope())
+            decode_checkpoint(raw + b" " * (MAX_CHECKPOINT_BYTES + 1 - len(raw)), scope=scope())
 
-    def test_v2_identity_is_required_and_checked_even_when_state_is_forged(self):
-        entered = mark_execution_entered(
-            acknowledge_start(record(), admission()), ProtectedEvidence("fixture.input.v1", b"identity")
-        )
-        document = json.loads(encode_record(entered))
+    def test_entry_digest_is_required_and_checked_even_when_state_is_forged(self):
+        entered = EnteredCheckpoint(AcknowledgedCheckpoint(record(), admission()),
+            EvidenceDigest.from_evidence(ProtectedEvidence("fixture.input.v1", b"identity")))
+        document = json.loads(encode_checkpoint(entered))
         for change in (
-            {"prepared_identity": None},
-            {"prepared_identity": {"schema_id": "fixture.input.v1", "content": "!!!"}},
-            {"prepared_identity": {"schema_id": "fixture.input.v1", "content": "eA==", "extra": True}},
-            {"prepared_identity": {"schema_id": "fixture.input.v1", "content": "eB=="}},
-            {"local_phase": LocalExecutionPhase.NOT_ENTERED.value},
+            {"prepared": None},
+            {"prepared": {"schema_id": "fixture.input.v1", "sha256": "private-canary", "byte_length": 8}},
+            {"prepared": document["prepared"] | {"content": "private-canary"}},
+            {"prepared": document["prepared"] | {"byte_length": 0}},
+            {"kind": "acknowledged"},
         ):
-            with self.subTest(changed_fields=tuple(change)), self.assertRaises(ValueError):
-                decode_record(json.dumps(document | change).encode(), scope=scope())
-        del document["prepared_identity"]
+            with self.subTest(changed_fields=tuple(change)), self.assertRaises(ValueError) as caught:
+                decode_checkpoint(json.dumps(document | change).encode(), scope=scope())
+            self.assertNotIn("private-canary", str(caught.exception))
+        del document["prepared"]
         with self.assertRaises(ValueError):
-            decode_record(json.dumps(document).encode(), scope=scope())
-
+            decode_checkpoint(json.dumps(document).encode(), scope=scope())
 
 class UnidentifiedPreparationTests(unittest.IsolatedAsyncioTestCase):
     async def test_unidentified_handle_retires_before_running_progress_or_execution(self):

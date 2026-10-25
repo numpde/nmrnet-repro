@@ -85,7 +85,7 @@ class CoreLauncherTests(unittest.TestCase):
                     "test/unit/provider-core/recovery",
                     "unit",
                     [
-                        "test_terminal_record.py",
+                        "test_producer_checkpoint.py",
                         "test_delivery_execution.py",
                         "test_recovery.py",
                         "test_controller*.py",
@@ -141,7 +141,7 @@ class CoreLauncherTests(unittest.TestCase):
                         "test_execution*.py",
                         "test_suppressed_persistence.py",
                         "test_attempt_transitions.py",
-                        "test_terminal_record.py",
+                        "test_producer_checkpoint.py",
                         "test_recovery.py",
                     ],
                 ),

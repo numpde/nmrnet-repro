@@ -1,6 +1,5 @@
 """Explicit disposable startup files; their credentials have no deployed authority."""
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -11,20 +10,15 @@ def ca_line(path):
     return "" if path is None else "ca_file = " + json.dumps(str(path)) + "\n"
 
 
-def native_capture_files(root):
-    """A fixed two-file native capture, independent of the launch producer."""
-    root = Path(root) / "native-inputs"
-    (root / "sources" / "tools").mkdir(parents=True, mode=0o700)
-    (root / "sources" / "requirements").mkdir(mode=0o700)
+def execution_source_files(root):
+    """Actual source files and explicit names, with no observation handoff files."""
+    root = Path(root) / "execution-sources"
+    (root / "tools").mkdir(parents=True, mode=0o700)
+    (root / "requirements").mkdir(mode=0o700)
     names = ("requirements/inference.lock", "tools/reader.py", "tools/worker.py")
-    rows = []
     for name, content in zip(names, (b"lock entry\n" * 10000, b"reader source\n", b"worker source\n"), strict=True):
-        (root / "sources" / name).write_bytes(content)
-        rows.append(hashlib.sha256(content).hexdigest() + "  " + name + "\n")
-    (root / "inputs.paths").write_text("\n".join(names) + "\n")
-    (root / "sources.sha256").write_text("".join(rows))
-    (root / "revision").write_text("a" * 40 + "\n")
-    return root
+        (root / name).write_bytes(content)
+    return root, names
 
 
 class ConfigFiles:

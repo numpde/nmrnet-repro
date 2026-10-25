@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import httpcore
 
-from provider_core.attempt_record import AcknowledgedAttempt, StartPending, encode_record
+from provider_core.attempt_record import AcknowledgedAttempt, StartPending
 from provider_core.checkpoint_store import CheckpointRefused
 from provider_core.controller import AttemptController, ControllerFailed, StartRecovery
 from provider_core.ownership import AttemptClaims, OwnershipRefused

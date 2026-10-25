@@ -19,7 +19,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from provider_core.attempt_record import LocalExecutionPhase, TerminalOperation, TerminalPending
+from provider_core.attempt_record import LocalExecutionPhase, TerminalOperation
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused
 from provider_core.ownership import OwnershipRefused
 from tests.fakes.acquisition import file_sources, private_source_directory, store_headers

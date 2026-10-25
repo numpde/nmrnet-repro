@@ -208,11 +208,6 @@ def _diagnostics_directory(path):
         raise ConfigurationRejected(
             "diagnostics require an absolute private directory owned by the container user with mode 0700."
         )
-    # Recovery shares this admission and publishes a functional result. Reject
-    # earlier admission/result markers before either process can publish its own.
-    for name in ("admitted", "result.json", ".admitted.pending", ".result.json.pending"):
-        if (path / name).exists() or (path / name).is_symlink():
-            raise ConfigurationRejected("diagnostics contain earlier process evidence; use a fresh private run directory.")
 
 
 def _publish(path, name, content):
@@ -223,7 +218,7 @@ def _publish(path, name, content):
 
     pending = path / ("." + name + ".pending")
     # Private creation also covers a permission-setting failure before writing;
-    # fchmod normalizes a restrictive ambient umask, as AttemptFiles does.
+    # fchmod normalizes a restrictive ambient umask.
     with open(pending, "xb", opener=private_file) as target:
         os.fchmod(target.fileno(), 0o600)
         target.write(content)
@@ -309,7 +304,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
 
     def startup_accepted():
         nonlocal status_phase
-        _publish(diagnostics, "admitted", b"startup admission accepted\n")
         process_status.refresh("ready")
         status_phase = "ready"
 

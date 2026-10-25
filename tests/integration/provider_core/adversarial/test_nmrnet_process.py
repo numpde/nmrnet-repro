@@ -204,7 +204,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(b"PRIVATE", report + stdout + stderr)
 
     async def test_unadmitted_diagnostics_retain_safe_reason_without_writing_into_that_directory(self):
-        for change in ("missing", "permissions", "stale"):
+        for change in ("missing", "permissions"):
             with self.subTest(change=change):
                 async with ProcessPeers() as fixture:
                     expected = b'"errno":2'
@@ -213,9 +213,6 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     elif change == "permissions":
                         fixture.diagnostics.chmod(0o755)
                         expected = b"mode 0700"
-                    else:
-                        (fixture.diagnostics / "admitted").write_text("PRIVATE earlier evidence")
-                        expected = b"earlier process evidence"
                     process = await fixture.start()
                     stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
                     self.assertEqual(process.returncode, 2)
@@ -287,12 +284,12 @@ class ProcessDiagnosticRefusalTests(unittest.TestCase):
                 try:
                     failure = OSError(errno.EIO, "injected permission-setting failure")
                     with patch("nmrnet_provider.process.os.fchmod", side_effect=failure), self.assertRaises(OSError) as caught:
-                        _publish(root, "result.json", b"recovery result")
+                        _publish(root, "execution.json", b"execution declaration")
                 finally:
                     os.umask(previous)
                 self.assertIs(caught.exception, failure)
-                self.assertFalse((root / "result.json").exists())
-                pending = root / ".result.json.pending"
+                self.assertFalse((root / "execution.json").exists())
+                pending = root / ".execution.json.pending"
                 self.assertEqual(pending.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(pending.read_bytes(), b"")
 

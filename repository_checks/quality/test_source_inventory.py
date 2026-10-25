@@ -60,7 +60,7 @@ ROOT_ENTRY_MANIFEST = Path("/repository-source-inventory/root-entries")
 # The coordinator explicitly keeps checkout control, credentials and writable
 # acquisition/runtime state outside source-check authority. Capturing their
 # names in the manifest proves classification without exposing their contents.
-PRIVATE_ROOT_ENTRIES = frozenset({".git", ".agents", ".codex", ".aws", ".work"})
+PRIVATE_ROOT_ENTRIES = frozenset({".git", ".agents", ".codex", ".aws", ".work", "secrets"})
 
 
 def root_entry_visibility_findings(manifest, root):
@@ -154,7 +154,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
             root = Path(directory)
             (root / "tools").mkdir()
             (root / "stale.txt").write_text("fixture")
-            manifest = "d\ttools\0f\tnew-source.py\0d\t.pytest_cache\0l\tlinked.py\0d\t.work\0d\t.aws\0"
+            manifest = "d\ttools\0f\tnew-source.py\0d\t.pytest_cache\0l\tlinked.py\0d\t.work\0d\t.aws\0d\tsecrets\0"
             self.assertEqual(
                 [
                     "new-source.py: public source root is invisible to repository checks",
@@ -325,6 +325,10 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         for subtree in ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider", "packages"):
             self.assertIn(f"type=bind,src={ROOT / subtree},dst=/workspace/{subtree},readonly", mounts)
+        for name in ("config/provider.toml.example", "config/deployment.toml.example"):
+            self.assertIn(f"type=bind,src={ROOT / name},dst=/workspace/{name},readonly", mounts)
+        self.assertFalse(any(f"src={ROOT / 'secrets'}" in mount for mount in mounts))
+        self.assertNotIn(f"type=bind,src={ROOT / 'config'},dst=/workspace/config,readonly", mounts)
         for mount in mounts:
             self.assertNotIn("docker.sock", mount)
             self.assertTrue(mount.endswith(",readonly"), msg=mount)

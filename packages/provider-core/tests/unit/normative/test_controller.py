@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import tempfile
 import unittest
 
-from provider_core.attempt_record import AcknowledgedAttempt, TerminalReadRequired, TerminalStateObserved
+from provider_core.attempt_record import AcknowledgedAttempt
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.controller import AttemptController, ControllerFailed, ControllerRefused
 from provider_core.ownership import AttemptClaims, OwnershipRefused

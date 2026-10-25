@@ -657,7 +657,8 @@ retained evidence hashes are in <a href="notes/021_compose_runner_architecture_2
 source and native resources have retired, expiry produces the public failure
 <code>input_selection_time_limit</code>. Protected evidence retains the configured limit,
 received model response facts and any uncertainty about a cancelled model POST.
-Only a durably confirmed FAIL permits the service to accept a later Job. A foreign
+Durable relay acceptance of that FAIL and confirmed native cleanup permit the
+service to accept a later Job; API delivery proceeds independently. A foreign
 timeout, independently observed operation failure or unconfirmed cleanup remains
 operational and stops the service. In particular, an Upload session's cumulative
 deadline is not reclassified as this Job limit. No model request or scientific

@@ -4,7 +4,7 @@ import json
 import unittest
 from dataclasses import replace
 
-from provider_core.attempt_record import RecoveryScope, StartPending, decode_record, encode_record
+from provider_core.attempt_record import RecoveryScope, StartPending, _decode_pending, _encode_pending
 from tests.fakes.attempts import retained_start
 from tests.fakes.job_input import facts
 
@@ -24,7 +24,7 @@ class AttemptRecordFailureTests(unittest.TestCase):
             StartPending(self.scope(), "bad/key", facts(), retained_start())
 
     def test_foreign_api_provider_lane_and_generation_block_restore(self):
-        raw = encode_record(self.record())
+        raw = _encode_pending(self.record())
         for changes in (
             {"api_origin": "https://other.example"},
             {"provider_ref": "provider:other"},
@@ -32,10 +32,10 @@ class AttemptRecordFailureTests(unittest.TestCase):
             {"generation_id": "generation:two"},
         ):
             with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "scope"):
-                decode_record(raw, scope=replace(self.scope(), **changes))
+                _decode_pending(raw, scope=replace(self.scope(), **changes))
 
     def test_unsupported_and_corrupt_records_fail_without_private_text(self):
-        good = json.loads(encode_record(self.record()))
+        good = json.loads(_encode_pending(self.record()))
         for document in (
             good | {"schema_id": "future"},
             good | {"extra": "private-canary"},
@@ -47,11 +47,11 @@ class AttemptRecordFailureTests(unittest.TestCase):
             [],
         ):
             with self.subTest(document_type=type(document).__name__), self.assertRaises(ValueError) as caught:
-                decode_record(json.dumps(document).encode(), scope=self.scope())
+                _decode_pending(json.dumps(document).encode(), scope=self.scope())
             self.assertNotIn("private-canary", str(caught.exception))
         for raw in (b"\xff", b"{}" + b" " * 65536, b'{"state":"a","state":"b"}', b'[{"x":NaN}]'):
             with self.assertRaises(ValueError):
-                decode_record(raw, scope=self.scope())
+                _decode_pending(raw, scope=self.scope())
 
     def test_invalid_scope_is_not_a_recovery_owner(self):
         for changes in (
@@ -69,4 +69,4 @@ class AttemptRecordFailureTests(unittest.TestCase):
         scope = replace(self.scope(), api_origin="https://" + "a" * 70000)
         record = StartPending(scope, "nmr_predict", facts(), retained_start())
         with self.assertRaisesRegex(ValueError, "65536"):
-            encode_record(record)
+            _encode_pending(record)

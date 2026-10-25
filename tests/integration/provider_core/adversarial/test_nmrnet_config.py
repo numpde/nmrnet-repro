@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.integration.nmrnet.config_ports import ConfigFiles, native_capture_files
+from tests.integration.nmrnet.config_ports import ConfigFiles, execution_source_files
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
 from nmrnet_provider.launch_capture import capture_execution
@@ -16,20 +16,30 @@ from nmrnet_provider.startup_capture import startup_authorities
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
-    def test_confirmed_history_window_is_explicit_and_positive_before_startup_effects(self):
-        for value in (None, "0", "-1", "true", '"64"'):
-            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+    def test_checkpoint_limits_are_explicit_positive_integers_before_startup_effects(self):
+        for field, current in (("maximum_records", "1"), ("maximum_checkpoint_bytes", "1048576")):
+            for value in (None, "0", "-1", "true", '"64"'):
+                with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
+                    files = ConfigFiles(directory)
+                    replacement = b"" if value is None else f"{field} = {value}\n".encode()
+                    files.write(files.raw.replace(f"{field} = {current}\n".encode(), replacement))
+                    with self.assertRaises(ConfigurationRejected):
+                        load_provider_config(files.path)
+                    self.assertFalse(files.state.exists())
+
+    def test_displaced_history_and_reservation_fields_are_not_accepted_as_compatibility_policy(self):
+        for declaration in (b"confirmed_history_records = 64\n", b"filesystem_reserve_bytes = 0\n"):
+            with self.subTest(declaration=declaration), tempfile.TemporaryDirectory() as directory:
                 files = ConfigFiles(directory)
-                replacement = b"" if value is None else f"confirmed_history_records = {value}\n".encode()
-                files.write(files.raw.replace(b"confirmed_history_records = 64\n", replacement))
+                files.write(files.raw.replace(b"[lifecycle]\n", b"[lifecycle]\n" + declaration))
                 with self.assertRaises(ConfigurationRejected):
                     load_provider_config(files.path)
                 self.assertFalse(files.state.exists())
 
-    def test_execution_capture_refuses_changed_missing_linked_or_mismatched_inputs_without_publication(self):
-        for fault in ("changed", "missing", "linked", "revision", "inventory", "identity"):
+    def test_direct_execution_sources_refuse_invalid_grants_or_identities_without_publication(self):
+        for fault in ("missing", "linked", "empty_names", "duplicate_names", "escaping_name", "absolute_name", "oversized", "image", "revision"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
-                native = native_capture_files(directory)
+                source_root, names = execution_source_files(directory)
                 destination = Path(directory) / "declaration"
                 destination.mkdir(mode=0o700)
                 identities = {
@@ -39,23 +49,29 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     "repository_revision": "a" * 40,
                     "upstream_revision": "e" * 40,
                 }
-                source = native / "sources" / "tools/worker.py"
-                if fault == "changed":
-                    source.write_bytes(b"changed\n")
-                elif fault == "missing":
+                source = source_root / "tools/worker.py"
+                if fault == "missing":
                     source.unlink()
                 elif fault == "linked":
                     source.unlink()
                     source.symlink_to("reader.py")
-                elif fault == "revision":
-                    identities["repository_revision"] = "f" * 40
-                elif fault == "inventory":
-                    (native / "inputs.paths").write_text("tools/reader.py\n")
-                else:
+                elif fault == "empty_names":
+                    names = ()
+                elif fault == "duplicate_names":
+                    names = (*names, names[-1])
+                elif fault == "escaping_name":
+                    names = ("../private-source",)
+                elif fault == "absolute_name":
+                    names = (str(source),)
+                elif fault == "oversized":
+                    source.write_bytes(b"x" * (1048576 + 1))
+                elif fault == "image":
                     identities["image_id"] = "mutable:latest"
+                else:
+                    identities["repository_revision"] = "invalid-revision"
                 with self.assertRaises((ConfigurationRejected, OSError)):
-                    capture_execution(native, destination, **identities)
-                self.assertFalse((destination / "execution.json").exists())
+                    capture_execution(source_root, destination, names, **identities)
+                self.assertEqual(list(destination.iterdir()), [])
 
     def test_authority_admission_keeps_canonical_url_refusal_for_explicit_default_ports(self):
         for role in ("model", "store"):
@@ -108,8 +124,8 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 files = ConfigFiles(directory)
                 files.write(files.raw.replace(before, after))
                 with (
-                    patch("nmrnet_provider.native_factory.NativeAttemptFactory") as native,
-                    patch("provider_core.attempt_store.AttemptStore") as store,
+                    patch("nmrnet_provider.process.NativeAttemptFactory") as native,
+                    patch("nmrnet_provider.process.CheckpointStore") as store,
                     self.assertRaises(ConfigurationRejected) as caught,
                 ):
                     load_provider_config(files.path)

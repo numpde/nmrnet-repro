@@ -465,3 +465,66 @@ passes (final428 includes the preserved ProtectedEvidence refusal control).
   /tmp/nmrnet-legacy-core-unit.log
   /tmp/nmrnet-legacy-core-unit-fixed.log
   /tmp/nmrnet-legacy-core-unit-final.log
+
+Leftover-code pass: retired persistence graph and operator residue
+
+Caller tracing and independent AST comparison identified the detached full-record
+terminal-history graph in attempt_record.py. Removed terminal pending/confirmed/
+held/read-required/read-observed/suppressed wrappers, their full-record codecs,
+transition dispatcher and obsolete capacity reservations. Thirteen current START,
+admission, scope, phase, operation and evidence definitions remain unchanged,
+including the private START codec used by producer_checkpoint. Execution failure
+projection now uses its actual None/validated AcknowledgedAttempt directly, without
+the removed polymorphic extractor. Deleted uncalled fakes/attempt_history.py;
+kept fakes/attempt_store.py because its pure START/admission factories are used.
+
+Tests for the deleted terminal-history SUT were retired. Useful exact START bytes,
+closed schemas, scopes, bounds, entry identity and no-effects controls were ported
+to the current START/checkpoint owners; current checkpoint tests replace the old
+terminal-record selector in supported lanes. Empty, mutable and oversized
+ProtectedEvidence refusal controls survive in adversarial/test_prepared_identity.
+Config tests now spy on actual process.NativeAttemptFactory/CheckpointStore and
+exercise current CheckpointLimits/direct-source capture, without resurrecting
+removed history fields or snapshot handoffs. Negative scientific payload-file
+assertions remain. The process no longer emits an unconsumed admitted marker or
+gates startup on obsolete admission/result markers; private directory admission
+and actual ProcessStatus readiness remain. _publish remains the active immutable
+execution.json/case-evidence publisher with permission-failure controls. Active
+SDK and provider guidance describe current checkpoint and relay acceptance.
+
+Surviving contained checks:
+  full core unit428 in12.099s: /tmp/nmrnet-legacy-core-unit-final.log
+  config24: /tmp/nmrnet-legacy-config-ports.log
+  process67: /tmp/nmrnet-legacy-process.log
+  prepared integration48: /tmp/nmrnet-legacy-prepared-integration.log
+  repository/core49: /tmp/nmrnet-legacy-selector-privacy.log
+  documentation3: /tmp/nmrnet-legacy-docs.log
+Repository visibility exposed a missing operator-root classification: secrets
+remain private names-only metadata, never content grants. Public configuration
+is individually mounted from Git's tracked files, excluding adjacent private
+settings; a bounded launcher canary proves this. The obsolete empty deployment/
+directory was removed. The public root rule still rejects omitted source roots.
+No blanket config grant, secret mount, weakened limit or new inventory framework.
+
+Operator residue cleanup preserved original evidence instead of duplicate inputs.
+Initial bulk retirement was rejected by automatic approval review; no effect
+occurred. A safer per-project inspection established exact exited container
+ownership and loopback-only synthetic API origins. The one CREATED object was
+an exact never-started API proxy (PID0/zero start timestamp). Maintained scoped
+down commands without --volumes then retired all63 old qualification containers.
+Final Engine inspection showed no qualification labels or config consumers.
+The y24 receipt was reconciled against its exact absent Engine object: failed
+Compose create api (missing runtime/route-api bind), not an API Job operation.
+No approval issue remains unresolved.
+
+Removed public/private config pairs, after verifying no unique scientific data
+inside and preserving original /tmp stores, .work packets and tracked artifacts:
+  qualification-2f2eLDIu, qualification-7XzpKjhV, qualification-NXMfvchO,
+  qualification-SkBASeQ7, qualification-TYONthLi, qualification-fFwYkZk3,
+  qualification-gxvn4S3r, qualification-lAa5hJbO, qualification-lNFcYd5w,
+  qualification-recovery-7VHMqw2B, qualification-recovery-RyUkJm42,
+  qualification-y24e9GZ4, qualification-ySe66an5, qualification-ynuKx7wK.
+No production profile, shared volume, original scientific/control store or
+reviewed numerical receipt was deleted. Independent U/A reviews found the one
+missing evidence-refusal test above, restored before final qualification; the
+completed source and grant reviews found no further actionable issue.

@@ -597,10 +597,11 @@ server idempotency, local persistence/restart recovery or deployed publication.<
 <p><code>attempt_record.StartPending</code> captures exact start bytes, expected analysis kind
 and <code>FeedInputFacts</code> under a <code>RecoveryScope</code> containing canonical API origin,
 provider, consumer/lane identity and binding generation. It contains no signing
-credential. <code>encode_record</code> emits bounded JSON; <code>decode_record(raw, scope=...)</code>
-requires the expected scope and rejects foreign identities before returning an
-obligation. Request whitespace/order remain unchanged inside the record. Encoding
-refuses records over 65536 bytes rather than emitting data its decoder cannot read.</p>
+credential. The compact checkpoint codec embeds this bounded START value and
+requires the expected scope on restore, rejecting foreign identities before
+returning an obligation. Request whitespace/order remain unchanged. Its START
+envelope is limited to 65536 bytes. Acknowledged checkpoints contain START
+admission and execution-control metadata.</p>
 <p>This pending-start codec follows
 <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py">NMRPeak's pending-start record</a>
 and <a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/terminal_outbox.py">Magnet's retained owner binding</a>.

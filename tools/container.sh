@@ -671,7 +671,7 @@ case "$1" in
                 fi
                 if [[ "$1" == test/unit/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_prepared_identity.py 'test_execution*.py' test_suppressed_persistence.py
-                        test_attempt_transitions.py test_terminal_record.py test_recovery.py)
+                        test_attempt_transitions.py test_producer_checkpoint.py test_recovery.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/credential ]]; then
                     command+=(--pattern test_credential.py test_signing.py)
@@ -707,7 +707,7 @@ case "$1" in
                     command+=(--pattern test_starting.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/recovery ]]; then
-                    command+=(--pattern test_terminal_record.py test_delivery_execution.py test_recovery.py 'test_controller*.py' test_failure_projection.py)
+                    command+=(--pattern test_producer_checkpoint.py test_delivery_execution.py test_recovery.py 'test_controller*.py' test_failure_projection.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_nmrnet_session.py test_nmrnet_prediction_recovery.py test_attempt_store.py test_terminal_store.py
@@ -833,6 +833,23 @@ case "$1" in
                         command+=(--mount "type=bind,src=$repository_root/$source_input,dst=/workspace/$source_input,readonly")
                     fi
                 done
+                # Config mixes public definitions with private machine settings.
+                # Grant tracked public files individually; never mount its tree.
+                if [[ -d "$repository_root/config" ]]; then
+                    source "$repository_root/tools/git_metadata.sh"
+                    public_configuration=$(repository_git -C "$repository_root" -c safe.directory="$repository_root" \
+                        ls-tree -r --name-only HEAD -- config) || exit "$?"
+                    while IFS= read -r source_input; do
+                        [[ -n $source_input ]] || continue
+                        if [[ ! $source_input =~ ^config/[A-Za-z0-9_./-]+$ || /$source_input/ == */../* \
+                            || ! -f $repository_root/$source_input || -L $repository_root/$source_input \
+                            || $(realpath -e -- "$repository_root/$source_input") != "$repository_root/$source_input" ]]; then
+                            printf -v pending_diagnostic '%s\n' 'Cannot check public configuration: tracked inputs must be regular files without links or mount delimiters.'
+                            exit 2
+                        fi
+                        command+=(--mount "type=bind,src=$repository_root/$source_input,dst=/workspace/$source_input,readonly")
+                    done <<< "$public_configuration"
+                fi
                 # Git ignores safe.directory in local config. A contained global
                 # config admits only these root-owned mount destinations; HOME
                 # remains available when source verification scrubs GIT_* vars.
@@ -860,6 +877,7 @@ case "$1" in
                 if [[ "$1" == test/repository/provider-core ]]; then
                     repository_tests=(-v repository_checks.test_conventions
                         tests.test_provider_core_launcher
+                        tests.test_launcher.LauncherTests.test_repository_configuration_grants_only_public_selected_files
                         repository_checks.test_scientific_lint.ImportOrderDetectionTests
                         repository_checks.test_scientific_lint.ScientificLintTests.test_provider_core_import_order
                         repository_checks.quality.test_source_inventory.SourceInventoryUnitTests
