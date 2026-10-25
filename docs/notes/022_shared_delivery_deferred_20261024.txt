@@ -771,3 +771,87 @@ Independent source/caller/authority/scientific U/A reviews found no remaining
 signal in this scope. No application source, model, numeric expectation,
 tolerance, dependency lock, runtime configuration or image changed. No build,
 service restart, API Job, LLM request or scientific execution was needed.
+
+2026-10-25 fourth cross-surface review: current owners, not just reachability
+-------------------------------------------------------------------------
+User requested continued review/revision until a complete pass finds no new
+signal. Three independent read-only lenses covered operator/Make callers,
+scientific source/result/provenance, and containment/cleanup/diagnostic effects;
+the supervisor also reviewed actual current consumers. Fixed verified findings:
+
+* tools/compose_deployment.sh::finish now keeps the original native diagnostic
+  separate from helper-cleanup diagnostics; cleanup cannot replace the original
+  status or silently erase its cause. The recording native owner now faithfully
+  resets its diagnostic, and the receiving test covers cleanup success/failure.
+* tools/provider_api_qualification.sh::api_witness_finish retires its final helper
+  before the final local-client hold. api_witness_stop_deployment preserves causes
+  and status for down/inspection/removal/helper/restore failures; an unretired
+  inspection cannot trigger a new removal or publisher restart.
+* tools/compose_qualification.sh::compose_witness_finish reports original and
+  subsequent owned diagnostics before another native call can reset them. Every
+  subsequent helper/log/peer effect requires the preceding client to have retired.
+  Unconfirmed retirement retains the original host process/dependencies. Receiving
+  tests hold the original process group, verify one dispatch and no later cleanup,
+  and reap only the synthetic test group. No Engine/science is granted to these
+  controls. The existing finite qualification owner remains; no new journal or
+  lifecycle framework was added.
+* tools/provider_deployment.py::freeze_deployment no longer accepts or rewrites a
+  private store_root. That value merely redirected a named volume's container
+  target; it did not select host storage. The public runtime still owns its fixed
+  /srv/nmrnet/attempts container path, with existing mount-mask/disjoint checks.
+  client_inputs protects its actual deployment directory, not a fictional host
+  checkpoint directory. Staging/peer callers and examples use the same contract;
+  an obsolete private override is refused, and the emitted checkpoint mount is
+  tested. The reusable runtime store_root API is unchanged.
+* docs/provider.html distinguishes retained OUTPUT configuration/receipts from
+  producer checkpoints and outstanding bodies in named Docker volumes. Both must
+  be preserved. session.py's comment now correctly names the checkpointed identity
+  digest, not persisted identity content. Numerical policy and data are unchanged.
+* Removed the unreachable donor-only Django migration exemption and its three
+  self-only fixtures from test_runtime_policy_posture.py. The third pass retained
+  them for bounded donor parity; the user's expanded current-consumer review now
+  justifies this explicit local adaptation. No inventoried path could enter the
+  branch. Actual detection, escape, privacy and repository scan remain unchanged;
+  quality-ports.html records the adaptation. This does not claim the separately
+  deferred global policy campaign is green.
+
+Source commits:
+  e87e570: unreachable donor migration exemption;
+  4952eb1: actual captured application source and cleanup/storage corrections;
+  0603e7e: remaining host-only private publisher restoration diagnostics/tests.
+
+Focused contained evidence (no real Job, LLM/model request or scientific run):
+  deployment28 in5.561s: /tmp/nmrnet-fourth-deployment-final.log
+  Compose20 in2.829s: /tmp/nmrnet-fourth-compose-final.log
+  staged inputs13 in1.645s: /tmp/nmrnet-fourth-stage-final.log
+  detector/escape/privacy4: /tmp/nmrnet-fourth-runtime-detector.log
+  documentation3: /tmp/nmrnet-fourth-docs.log
+The detector controls used the existing offline checker image with the repository
+native-client/isolation owners; the known deferred global scan was not run.
+Independent final repeats and supervisor current-source review found no new
+material signal in these reviewed dimensions. This is scoped review evidence,
+not a claim that every possible defect or deferred policy has been eliminated.
+
+Refreshed exactly the three images whose declared inputs include session.py;
+geometry/inference currently capture the whole provider source tree. Delivery
+inputs did not change, so its image was reused. No image-layout refactor or
+scientific requalification was needed for these nonnumerical changes.
+  local controller: sha256:61268a0f6737a2496e196e527601da8604ad29c15bd90eda91cab6b485de5c12
+  local RDKit: sha256:18da2d555504e18e9a8e70b86bf952ff6d7985cccca5de51b2779908340059e2
+  local inference: sha256:caf48adbebce1db88ac86cb0b93962dcf7a4f7348a741d6d4a77b6ac09dc7baa
+  remote controller: sha256:a672e41f99332bda40cf0116149c7e0c0efcd2180633d1b23fc8298deb962869
+  remote RDKit: sha256:1d2e338196059002cf4b1c32c727eced2b35dd29959f318ef466e00c223ad80d
+  remote inference: sha256:b3aa73b2cbe2e2b829a872d4eb911ec3160a93ea7e723f2f5108c51ac1a83b23
+Build receipts: /tmp/nmrnet-fourth-{local,remote}-images.log.
+
+Removed only the obsolete store_root entry from each private deployment.toml;
+credentials, scopes and independently selected routes/interfaces stayed intact.
+Before maintained down/install/up, both hosts had0producer checkpoints and
+0outstanding delivery bodies. No volumes were removed. Old/new recipe projections
+confirm identical producer/IPC volume names across the mount-target correction.
+Local generation9ursk3HX and remote generationEEtiyfJI each have all7roles healthy,
+restart0/OOMfalse; their shared delivery daemon is running restart0/OOMfalse with
+its unchanged image. Post-rollout reads again find both durable stores empty.
+These observations prove rollout/retained-state health, not a new prediction or
+external model/API/GUI scientific qualification. Original scientific evidence
+and the no-repeat-science constraint remain intact.
