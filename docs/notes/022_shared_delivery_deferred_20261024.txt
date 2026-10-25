@@ -528,3 +528,22 @@ No production profile, shared volume, original scientific/control store or
 reviewed numerical receipt was deleted. Independent U/A reviews found the one
 missing evidence-refusal test above, restored before final qualification; the
 completed source and grant reviews found no further actionable issue.
+
+Final finite-host helper cut
+
+Actual API qualification and prediction-recovery callers use only canonical
+path/disjoint/IPv4 admission, initialize and finite create/command/remove helpers.
+Removed seven detached functions from tools/provider.sh: target, adopt_plan,
+observe, begin_drain, drain, routes and proxy_arguments; also their unreachable
+controller-running state and old recovery-result advice. Initialize's error
+fallback, exact finite handles, controller-before-API retirement, native-retirement
+gates, Docker config cleanup and lock release remain. Actual callers replace the
+bootstrap trap before creating components. Corresponding retired-workflow tests
+were removed; live finite launch/posture/log/uncertain-CID/exact-retirement and
+canonical path/disjoint/direct-entry refusal tests remain.
+Contained host11 and actual deployment/API-coordinator25 pass:
+  /tmp/nmrnet-finite-host-cleanup-tests.log
+  /tmp/nmrnet-finite-host-callers.log
+The final checkpoint docstring now describes current START/admission ownership,
+without referring to deleted terminal encoders. No extra behavioral test matrix
+was needed for that comment. Final image identities and deployment follow below.

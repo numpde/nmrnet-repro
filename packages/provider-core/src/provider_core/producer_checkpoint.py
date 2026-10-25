@@ -1,8 +1,8 @@
 """Compact producer decisions, never scientific payloads or publication receipts.
 
-Note021 supersedes note017's full suppressed-result retention. Reuse the exact
-small START and API admission codecs from attempt_record, but do not reuse its
-prepared/terminal encoders. Restored metadata cannot recreate a live session.
+Note021 supersedes note017's full suppressed-result retention. The exact small
+START and API admission codecs come from attempt_record. Restored metadata
+cannot recreate a live session.
 Selected-command identity is durable before enqueue; accepted-delivery identity
 records a later real handoff and does not claim API publication or native exit.
 """
