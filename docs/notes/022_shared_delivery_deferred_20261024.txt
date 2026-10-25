@@ -669,3 +669,46 @@ unchanged; isolated input, original-handle retirement, identity and public versu
 protected evidence obligations stay at their current owners. No compatibility
 layer, general validation framework, extra role registry or new scientific run.
 Final synthetic-probe and deployed-image evidence follows after image refresh.
+
+Second-pass final deployed closure, 25 October 2026 09:31UTC
+
+Frozen application/source batchdb92409, after b87ffd9 (retirement diagnostic)
+and4188c70 (complete setup sequence). All four images were built once per host
+from this freeze. Synthetic qualification used the maintained target:
+  make test/integration/provider/prediction-recovery
+    WHEELHOUSE=/home/ra/Downloads/wheelhouse
+It passed with exactly one kernel OOM and one replacement in the same runner,
+identical frozen request bytes, and confirmed original/successor retirement.
+The two synthetic protocol executions were original OOM failure plus successor;
+no released model, API transaction or interpreter call was involved.
+Evidence root:
+  .work/qualification/prediction-recovery-Md71A6RN/owner
+  /tmp/nmrnet-second-synthetic-recovery.log
+output/summary.json SHA-256:
+  bc874e51a1e3dbe02cbe35be2dd1ee10bad9a2f7b0088279b6f0d7cec147418f
+Scientific request SHA-256:
+  6130e1aa9512882c3feeed9d62122170676198c34f3051a203e8f6de50074182
+Original/successor return codes were -9/-15 after the successful synthetic reply.
+
+Final image IDs (sha256: prefix):
+Local controller 929e16bbe5724a574dd716f0d35bd20c7ee17dd65fcb6a556ad3f8d928481543
+      delivery b8f827565e52a6f6e08df7bf99c77bd3a5228f2da7fdff71660567f210889929
+      RDKit 81d2c418ba6ef01132d2d9a5a16e3427357ab68d3dc346637fa598d1596e4ec9
+      inference 2326b55876d5182fbcd3ab31cb3c175eb2c1270ff2e7a77b3693ff32d3e59251
+Remote controller b9da3e1759dbd2b232c2bf10b983556efbafb20829f644fe7268222cbacfdcd7
+       delivery f3418f91c332152b288e7d267d40fa6bc37d0f9ba62ee2a16edc871c070988c5
+       RDKit 0e7819aa805b6777cd1bc22112f6403fe35c41e850dfc0b93a665cc7d401fb22
+       inference 462356a016bf4258f1c693a158ab87559fa3c3dc6fad8f412eb9abbe4b39ac19
+Build logs per host: /tmp/nmrnet-second-{controller,delivery,geometry,inference}-build.log.
+
+Maintained down/install/up targets preserved credentials, explicit deployment
+routes and persistent queue/control volumes. Before and after refresh, both hosts
+had queue0/checkpoints0. Local generation-hFNzDYXV and remote generation-u5jaM2Ml
+have seven healthy roles; controller/shared daemon restart0/OOMfalse. A read-only
+probe inside EACH actual running controller verifies mandatory preparation and
+absence of prepare_direct_job, prepare_pasted_xyz and read_request_bytes.
+  /tmp/nmrnet-second-local-rollout.log
+  remote /tmp/nmrnet-second-remote-rollout.log
+No real scientific Job, numerical fixture regeneration or LLM call was used.
+Independent final source/caller/scientific/authority reviews found no remaining
+signal in the scoped pass. Historical scientific and failure evidence remains.
