@@ -32,16 +32,17 @@ from provider_core.upload_response import require_job_ref, require_upload_ref
 
 
 class UploadFailed(RuntimeError):
-    """Safe reason with bounded protected cause, interruption and cleanup evidence.
+    """Safe reason with private response, cause, interruption and cleanup evidence.
 
     Cleanup failures are diagnostic observations, not ownership flags. They may
     remain available after settle_file confirms later abort cleanup.
     """
 
     # silent-defaults: allow-contract -- An omitted cleanup tuple carries no independent cleanup evidence; it does not confirm retirement.
-    def __init__(self, reason, *, cause=None, cleanup_failures=(), interruption=None):
+    def __init__(self, reason, *, response=None, cause=None, cleanup_failures=(), interruption=None):
         super().__init__(f"Cannot acquire Upload: {reason}")
         self.reason = reason
+        self.response = response
         self.cause = cause
         self.cleanup_failures = tuple(cleanup_failures)
         self.interruption = interruption
@@ -678,7 +679,7 @@ class JobUploads:
 
 def _verify_store_headers(response, grant):
     if response.status != 200:
-        raise UploadFailed(f"store returned HTTP {response.status}; no verified bytes were obtained", cause=response)
+        raise UploadFailed(f"store returned HTTP {response.status}; no verified bytes were obtained", response=response)
     digest = base64.b64encode(bytes.fromhex(grant.content_hash.removeprefix("sha256:")))
     for name, expected in (
         (b"content-type", b"application/octet-stream"),
@@ -687,6 +688,6 @@ def _verify_store_headers(response, grant):
         (b"content-digest", b"sha-256=:" + digest + b":"),
     ):
         if [value for key, value in response.headers if key.lower() == name] != [expected]:
-            raise UploadFailed(f"store response {name.decode()} does not match the granted whole-file transfer", cause=response)
+            raise UploadFailed(f"store response {name.decode()} does not match the granted whole-file transfer", response=response)
     if any(name.lower() in {b"content-encoding", b"content-range"} for name, _ in response.headers):
-        raise UploadFailed("encoded or partial store responses are not admitted", cause=response)
+        raise UploadFailed("encoded or partial store responses are not admitted", response=response)

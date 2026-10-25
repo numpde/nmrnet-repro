@@ -37,11 +37,11 @@ def main():
         options.config, maximum_bytes=65536, label="delivery configuration"
     ).decode("utf-8"))
     if document["schema_id"] != "provider-core.delivery.v1":
-        raise ValueError("Discard requires the installed delivery configuration.")
+        parser.error("Cannot inspect or discard held results: use the installed delivery configuration (schema provider-core.delivery.v1).")
     matches = [binding for binding in document["bindings"]
                if (binding["api"]["origin"], binding["api"]["provider_ref"]) == (options.api_origin, options.provider_ref)]
     if len(matches) != 1:
-        raise ValueError("Discard requires one exact configured API/provider binding.")
+        parser.error("Cannot inspect or discard held results: the supplied API/provider pair must match exactly one configured binding.")
     queue = DeliveryQueue(Path(document["state_directory"]), limits=QueueLimits(**document["limits"]))
     try:
         if options.list_held:

@@ -77,6 +77,37 @@ async def _reap_daemon(process):
 
 
 class DeliveryProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_discard_configuration_refusals_explain_the_reason_without_opening_queue_or_exposing_values(self):
+        for schema, expected in (
+            ("PRIVATE_SCHEMA", "Cannot inspect or discard held results: use the installed delivery configuration (schema provider-core.delivery.v1)."),
+            ("provider-core.delivery.v1", "Cannot inspect or discard held results: the supplied API/provider pair must match exactly one configured binding."),
+        ):
+            with self.subTest(schema=schema), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                queue = root / "PRIVATE_QUEUE"
+                config = root / "PRIVATE_CONFIG.toml"
+                config.write_text(
+                    f'schema_id = "{schema}"\nbindings = []\nstate_directory = "{queue}"\n'
+                    'private_canary = "PRIVATE_CONFIGURATION_VALUE"\n'
+                )
+                config.chmod(0o600)
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable, "-I", "-B", "-m", "provider_core.delivery_discard",
+                    "--config", str(config), "--api-origin", "https://PRIVATE_ORIGIN.example",
+                    "--provider-ref", "provider:PRIVATE_PROVIDER", "--list-held",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), 3)
+                    self.assertEqual(process.returncode, 2)
+                    self.assertEqual(stdout, b"")
+                    self.assertIn(expected.encode(), stderr)
+                    self.assertNotIn(b"PRIVATE", stderr)
+                    self.assertNotIn(str(root).encode(), stderr)
+                    self.assertFalse(queue.exists())
+                finally:
+                    await _reap_daemon(process)
+
     async def test_installed_command_delivers_once_through_proxy_then_sigterm_retires_it(self):
         async with api_tls_peer("success", response_body=fail_response(
             execution_attempt_ref=outcome().execution_attempt_ref,

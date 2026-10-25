@@ -855,3 +855,178 @@ its unchanged image. Post-rollout reads again find both durable stores empty.
 These observations prove rollout/retained-state health, not a new prediction or
 external model/API/GUI scientific qualification. Original scientific evidence
 and the no-repeat-science constraint remain intact.
+
+
+2026-10-25 wide QA/QC after offering deployment (baseline ec3efc8)
+-----------------------------------------------------------------
+Reviewed user-facing scientific claims and instructions, input/result ownership,
+error and cleanup propagation, retries and outstanding delivery, literal operator
+choices, effective local container grants, and active-source legacy reachability.
+The relevant criteria include U01-U05, U07-U08, U12-U19, U22-U27 and A01-A11.
+The review applied the text, code-beauty, helpful-error, container, self-explanatory,
+authority/proof, anti-slop and end-state lenses sequentially. A review of selected
+owners is not exhaustive execution of every repository path.
+
+Two confirmed issues were corrected in the working tree:
+
+1. Generated disconnected SMILES lacked a reader-facing relative-pose caveat
+   (U02/U17/U23/U24, A04/A06/A07). An isolated call of generate_conformers for
+   C.C, requested_count=1, seed=42, max_iterations=100, timeout_seconds=10, using
+   geometry image 3ad400f0c9018f12ed26156a7387ac74e9ba8107d8866860c9ef66098ec8eab4,
+   returned component_count=2, embedFragmentsSeparately=true and a carbon-carbon
+   distance of 0.0 angstrom. No prediction model or API Job was invoked.
+   Source authorities: RDKit Release_2026_09_1,
+   https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L166
+   https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L232-L234
+   https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedParameters.embedFragmentsSeparately
+   Local source at ec3efc8: nmrnet_provider/smiles.py::_embed/_conformer and
+   nmrnet_inference/model.py::compose_net_input. The generated result limits and
+   main guide now disclose separate embedding, possible overlap, unqualified
+   relative placement and the combined geometric context used for prediction.
+   Low already retains component count and topology provenance; all result tiers
+   retain the limitation. No new input restriction, repair, per-component run,
+   schema or warning framework was introduced. No shift-error magnitude was
+   measured. Guide actions distinguish an isolated component from a supplied
+   combined arrangement. Independent source review and blind application checks
+   confirmed the main distinctions.
+
+2. Provider installation suggested replacing shared delivery with only the newly
+   installed profile (U12/U17/U24/U27, A05/A11). The CLI now requests the complete
+   profile list, explicitly including every other shared-service profile, and
+   presents the single-profile command only for that condition. The private
+   qualification branch is unchanged. No registry, discovery or gate was added.
+   A blind reader adding beta to alpha/gamma selected alpha beta gamma.
+
+Focused evidence:
+  Result owner: 48 checks passed; /tmp/nmrnet-fragment-limits-green.log.
+  Deployment launcher: 28 checks passed; /tmp/nmrnet-complete-profiles-hint.log.
+  Operator selectors: 31 checks passed; /tmp/nmrnet-wide-qa-operator-inputs.log.
+  Documentation was checked before edits and rechecked after them using its
+  maintained target; /tmp/nmrnet-wide-qa-documentation-final.log.
+  Existing source/diff checks also passed. No new model/oracle run, API Job,
+  broad regression, soak or failure-timing matrix was run.
+
+Local Engine inspection found all seven provider roles healthy, restart_count=0,
+nonroot and unprivileged with read-only roots, dropped capabilities and bounded
+Docker non-blocking json-file logs. Compute/controller roles had network none;
+network proxies retained their deliberate host-network exceptions. Only owned
+control/IPC paths were writable mounts. This is observed configuration and health,
+not a new numerical, egress-denial or recovery qualification.
+
+A repeat review of the changes found no additional actionable signal. Previously
+deferred load, UID/engine, extended failure timing and global policy work remains
+separate; this pass does not claim those campaigns are green. These changes are
+uncommitted and were not built, published or deployed in this QA pass. Both live
+provider deployments remain on ec3efc8; release needs the affected image refresh
+for result.py plus normal maintained deployment. The short offering is unchanged.
+
+
+2026-10-25 second wide QA/QC: receiving diagnostics and live availability
+-----------------------------------------------------------------------
+Baseline: ec3efc8 plus the preceding uncommitted QA fixes. Reviewed additional
+record-reader paths, exact Upload membership/grant/transfer ownership, held-item
+operations, model-input conversion, exception relationships and actual receiving
+surfaces. Previously reviewed input/verbosity, delivery ownership, containment,
+operator selection and pending-copy changes were rechecked where affected.
+
+Confirmed corrections (U17/U23/U24/U27, A03/A08/A11):
+
+* Upload store-response refusal used HttpResponse/HttpFileResponse as an
+  UploadFailed.cause. Core's exception traversal then raised AttributeError on
+  __traceback__, obscuring the original rejection. An isolated offline probe of
+  the installed controller reproduced this with HTTP200/missing required headers.
+  UploadFailed now retains response separately; all three header/status/encoding
+  refusal branches use it. The protected projection includes only status and the
+  existing admitted request ID. Real exception causes, grant-issued truth,
+  interruption and cleanup evidence are unchanged. No arbitrary header/body/file
+  hash enters the diagnostic. There is no generic renderer fallback or new gate.
+* Held-result inspection/discard hid the specific wrong-schema/unmatched-binding
+  reasons because generic ValueError text is deliberately not rendered. Those
+  two known pre-queue refusals now use argparse.error with operation-aware fixed
+  text. The real CLI regression checks useful reason, status2, empty stdout,
+  private-value/path nondisclosure and absence of a created queue directory.
+
+Focused contained evidence:
+  Receiving process/reports68 passed in42.597s:
+    /tmp/nmrnet-upload-response-green.log
+  Upload ownership/acquisition59 passed in1.497s:
+    /tmp/nmrnet-upload-response-acquisition.log
+  Delivery/actual CLI31 passed in4.992s after final wording correction:
+    /tmp/nmrnet-delivery-discard-reasons-final.log
+The receiving test covers byte/file response ports and status/header/encoding
+refusals through actual acquisition and the existing stderr renderer. Its API and
+store ports are synthetic; it does not create a remote Job or run inference.
+No additional model, dependency, source inventory or broad policy run was needed.
+Diff checks and the final owner/caller/privacy review found no further actionable
+source issue in this pass. Earlier pending QA corrections remain intact.
+
+Observed operational issue, not resolved by these source changes:
+Production's bounded last-30-minute proxy sample contained1144lines, including
+38 DNS-query failure notices with native TimeoutError and1067 BrokenPipeError
+forwarding notices. Provider notices showed repeated CONNECT502 retry/recovery
+pairs, plus a small number of HTTP503 notices. A separate bounded provider sample
+had30 read retry/recovery pairs and7 Hello retries/6recoveries; these are sample
+counts, not a complete outage history or a loss-rate measurement. The configured
+proxy had one IPv4 resolver. All seven roles remained healthy; the API proxy had
+restart_count0/OOMfalse. This health does not establish uninterrupted API access.
+The logs establish interface-bound DNS timeouts and automatic recovery, not why
+queries timed out. Broken pipes were not proved to cause the admission retries
+or to be harmless; they were not suppressed. No route, resolver, interface,
+service or credential was changed, and no packet capture or network-failure
+campaign was performed. Underlying network diagnosis remains open.
+
+All QA changes remain uncommitted and undeployed. Existing live source revision
+is ec3efc8. The additional core changes require refresh of all four affected
+runtime images for release; this audit did not rebuild or restart any deployment.
+Earlier deferred stress, extended failure-timing and global policy work remains
+unqualified. No new durable file outside this existing note was introduced.
+
+
+2026-10-25 third wide QA/QC: repeat review, no new source finding
+--------------------------------------------------------------
+Reviewed the pending corrections again and extended inspection into synchronous
+worker framing, descriptor handoff, private-file I/O settlement, supplied MOL
+projection, interface-bound DNS, proxy half-close behavior and HTTP connection
+retirement. A separate read-only worker review traced output precision,
+provenance, capacity and source-record correspondence across supplied/generated
+inputs and low/medium/max output. No additional reproducible source defect was
+identified. Distinct transport, file, publication and scientific ownership checks
+were retained; no extra validation, fallback, abstraction or cosmetic rewrite
+was introduced.
+
+The independent result review ran the maintained result lane:48checks passed in
+0.423s; /tmp/nmrnet-wideqa-result-readonly.log. This is receiving-contract evidence,
+not a new native geometry, model, API or numerical qualification. The previous
+Upload and held-result corrections remain present with their prior evidence;
+those unaffected suites were not repeated in this pass.
+
+Follow-up on the observed production availability issue:
+Six bounded DNS queries used the existing production API-proxy container, its
+configured IPv4 resolver and its configured interface, without changing grants.
+All six returned answers; observed durations were0.006,0.002,0.002,0.001,0.002,
+0.001seconds. The result establishes reachability at the sample time, not the
+cause or absence of intermittent failures. The earlier native TimeoutError and
+API retry/recovery observations remain valid. No alternate resolver/interface,
+DNS cache, transport or retry policy was substituted. Forwarding BrokenPipeError
+notices were not treated as proof of failed API operations or suppressed without
+establishing their cause. Underlying network diagnosis remains open.
+
+The reviewed source pass finished without a new actionable finding. This does
+not qualify the previously deferred stress, timing, engine/UID, global-policy or
+external-network campaigns. All four earlier QA fixes remain uncommitted and
+undeployed; live deployments were not modified and still use ec3efc8. No service
+restart, model run, Job creation, packet capture or dependency acquisition occurred.
+
+
+2026-10-25 release of the four QA corrections
+--------------------------------------------
+The user authorized committing and deploying the pending fixes locally and in
+production. The final source review also aligned tools/provider_image.sh's
+next-action profile-list example with the corrected installation guidance;
+shared delivery always needs the complete profile list. Shell syntax and diff
+checks passed. Existing focused evidence above remains applicable; no dependency
+or scientific policy changed. Offline builds must refresh all four runtime images
+per host because core diagnostics changed. Deployment preserves existing bindings,
+volumes, credentials, model data and independently selected runtime routes. The
+intermittent production DNS issue remains separately reported and is not addressed
+by changing configuration during this release. Record final rollout evidence below.

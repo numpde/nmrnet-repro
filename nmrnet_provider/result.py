@@ -56,6 +56,12 @@ SCIENTIFIC_LIMITS = (
 GENERATED_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
     "Each returned conformer receives its own prediction; generated conformers are not guaranteed to be distinct.",
+    # RDKit's pinned default embeds fragments separately and permits spatial overlap:
+    # https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L166
+    # https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L232-L234
+    "If the SMILES contains disconnected components, RDKit embeds them separately; they may overlap and their relative placement "
+    "is not physically established. NMRNet uses all components together as the geometric context for H/C predictions, "
+    "so this placement can affect their shifts.",
     "Hydrogens are retained or added according to the recorded SMILES graph expansion; completeness is not independently validated.",
     "Generated coordinates are estimates, not experimental structures. Coordinate-derived stereo is not independent validation.",
     "Only H and C atoms receive shifts; other atoms provide molecular context.",

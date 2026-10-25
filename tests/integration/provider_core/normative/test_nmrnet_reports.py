@@ -21,7 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source
+from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source, store_headers
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
@@ -72,7 +72,7 @@ from provider_core.delivery_worker import DeliveryWorkerFailed
 from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, TerminalSelectedCheckpoint
 from provider_core.recovery import ObservedAttempt, RecoveryFailed, RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
-from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
+from provider_core.transport import ExchangeFailed, HttpFileResponse, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file
 
 
@@ -583,6 +583,46 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("CancelledError", rendered)
         self.assertIn('"grant_issued": true', rendered)
         self.assertNotIn("PRIVATE", rendered)
+
+    async def test_store_response_refusals_reach_renderer_without_becoming_exception_causes(self):
+        for file_output in (False, True):
+            for refusal in ("status", "header", "encoding"):
+                with self.subTest(file_output=file_output, refusal=refusal):
+                    owner, api, _, _ = file_sources()
+                    await owner.inspect()
+                    headers = store_headers(b"geometry") + (
+                        (b"x-request-id", b"request:store-refusal"), (b"x-private", b"PRIVATE_HEADER"),
+                    )
+                    status = 503 if refusal == "status" else 200
+                    if refusal == "header":
+                        headers = tuple((name, value) for name, value in headers if name != b"content-type")
+                    elif refusal == "encoding":
+                        headers += ((b"content-encoding", b"PRIVATE_ENCODING"),)
+                    response = (
+                        HttpFileResponse(status, headers, 8, "PRIVATE_FILE_HASH") if file_output
+                        else HttpResponse(status, headers, b"PRIVATE_BODY")
+                    )
+                    with patch.object(owner, "_transfer", AsyncMock(return_value=response)):
+                        with private_source_directory() as (root, directory):
+                            with self.assertRaises(UploadFailed) as caught:
+                                if file_output:
+                                    await owner.acquire_file(api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1)
+                                else:
+                                    await owner.acquire(api.member.upload_ref)
+                            self.assertEqual(os.listdir(root), [])
+                    failure = caught.exception
+                    rendered = json.dumps(self.receive(failure))
+                    self.assertIs(failure.response, response)
+                    self.assertIsNone(failure.cause)
+                    self.assertTrue(failure.grant_issued)
+                    self.assertIs(owner.last_failure, failure)
+                    self.assertIn(f'"status": {status}', rendered)
+                    self.assertIn("request:store-refusal", rendered)
+                    self.assertIn('"grant_issued": true', rendered)
+                    expected = {"status": "store returned HTTP 503", "header": "content-type does not match",
+                                "encoding": "encoded or partial store responses"}[refusal]
+                    self.assertIn(expected, rendered)
+                    self.assertNotIn("PRIVATE", rendered)
 
     async def test_actual_private_directory_refusal_reaches_the_operator_with_no_grant(self):
         owner, api, _, _ = file_sources()

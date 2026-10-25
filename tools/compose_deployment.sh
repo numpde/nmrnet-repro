@@ -207,7 +207,9 @@ if [[ $action == install ]]; then
     if [[ $role == provider && $delivery_project != nmr-api-delivery ]]; then
         printf 'Private delivery namespace: %s. Continue through the qualification caller; keep the host shared service unchanged.\n' "$delivery_project"
     elif [[ $role == provider ]]; then
-        printf 'Next: make delivery/deployment/install DEPLOYMENTS=%q\n' "$deployment_name"
+        printf 'Next: make delivery/deployment/install DEPLOYMENTS="<complete profile list>"\n'
+        printf 'Include %q and every other profile using the shared delivery service on this host.\n' "$deployment_name"
+        printf 'If %q is the only profile: make delivery/deployment/install DEPLOYMENTS=%q\n' "$deployment_name" "$deployment_name"
         printf 'Then: make delivery/deployment/up\n'
         printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
     else

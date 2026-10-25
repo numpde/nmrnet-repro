@@ -199,6 +199,10 @@ esac
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Next: make delivery/deployment/install DEPLOYMENTS="<complete profile list>"', result.stdout)
+        self.assertIn('Include fixture and every other profile using the shared delivery service on this host.', result.stdout)
+        self.assertIn('If fixture is the only profile: make delivery/deployment/install DEPLOYMENTS=fixture', result.stdout)
+        self.assertNotIn('Next: make delivery/deployment/install DEPLOYMENTS=fixture', result.stdout)
         call = next(call for call in self.calls() if call[0] == 'run')
         for pair in (['--network', 'none'], ['--cap-drop', 'ALL'], ['--pull', 'never'],
                      ['--security-opt', 'no-new-privileges:true'], ['--user', f'{os.getuid()}:{os.getgid()}'],

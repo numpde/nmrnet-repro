@@ -35,7 +35,7 @@ build_provider_image() {
         printf '%s\n' 'Starting the provider requires controller, prediction, geometry and delivery images and both prepared model archives.' \
             'Choose a deployment name. Write config/deployments/<name>/provider.toml and private deployment.toml; put credentials in secrets/deployments/<name>/.'
         next_make_command 'After configuring that deployment, install its inputs:' provider/deployment/install 'DEPLOYMENT=<name>'
-        next_make_command 'Then configure shared delivery for the providers on this host:' delivery/deployment/install 'DEPLOYMENTS=<name>'
+        next_make_command 'Then configure shared delivery with every profile served on this host:' delivery/deployment/install 'DEPLOYMENTS=<complete profile list>'
         next_make_command 'Start shared delivery:' delivery/deployment/up
         next_make_command 'Then start the provider:' provider/deployment/up 'DEPLOYMENT=<name>'
         printf '%s\n' 'Configuration: https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration'

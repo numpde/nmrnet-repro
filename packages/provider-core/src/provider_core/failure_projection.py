@@ -200,6 +200,8 @@ def owned_details(error):
         details["condition_receipt_received"] = error.condition_receipt is not None
     if kind in (UploadFailed, UploadInputRejected):
         details["grant_issued"] = error.grant_issued
+        if error.response is not None:
+            details.update(status=error.response.status, request_id=response_request_id(error.response.headers))
     if kind is ChatFailed:
         details["reason"] = error.reason
         if error.endpoint_error is not None:
