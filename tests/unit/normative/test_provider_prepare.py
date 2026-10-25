@@ -21,10 +21,11 @@ class ProviderPreparationTests(unittest.TestCase):
         self.assertFalse(sentinel.exists())
         self.assertNotIn("NEXT_FROM_CHILD", first.stdout + first.stderr)
         calls = fixture.calls()
-        self.assertEqual(11, len(calls))
+        self.assertEqual(12, len(calls))
         owners = [call[0] for call in calls]
         self.assertLess(owners.index("wheelhouse.sh:download provider-core"), owners.index("inference_image.sh:build"))
         self.assertLess(owners.index("wheelhouse.sh:download provider-core"), owners.index("container.sh:geometry/image/build"))
+        self.assertLess(owners.index("container.sh:provider/image/build"), owners.index("container.sh:delivery/image/build"))
         self.assertTrue(all(root == expected and interface == "lo" for _, root, interface, _ in calls))
         self.assertEqual(["weight.zip", "weight.zip", "checkpoints.zip", "checkpoints.zip"], [call[3] for call in calls[-4:]])
         receipts = [fixture.root / ".work/prepared" / name / "provenance.json" for name in ("weight", "checkpoints")]
@@ -32,5 +33,5 @@ class ProviderPreparationTests(unittest.TestCase):
         fixture.journal.unlink()
         second = fixture.run(selection)
         self.assertEqual(0, second.returncode, second.stderr)
-        self.assertEqual(7, len(fixture.calls()))
+        self.assertEqual(8, len(fixture.calls()))
         self.assertEqual(original, [(path.read_bytes(), path.stat().st_ino) for path in receipts])

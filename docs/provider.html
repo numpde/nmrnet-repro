@@ -244,8 +244,8 @@ The superseded systemd design remains a historical record in
 and stderr to bounded Docker logs:
 <code>json-file</code>, three files of at most 10 MiB each per container, with a
 1 MiB nonblocking delivery buffer. A stalled sink may drop messages; old files
-rotate. Container removal deletes its logs, so a command warns before replacing
-an obsolete generation. There are no parallel application log dumps.</p>
+rotate. Container removal deletes its logs; read bounded logs before stopping
+or reconfiguring a deployment. There are no parallel application log dumps.</p>
 <p><code>make provider/deployment/logs DEPLOYMENT=&lt;name&gt;</code> reads the latest
 80 messages per retained component. Logs may include native tracebacks, molecular
 inputs and completed predictions after a failed reply; restrict Docker access.
@@ -450,17 +450,17 @@ and confirmed-cleanup requirements in
 A result can therefore have been accepted by the
 API even when the target exits nonzero and writes no <code>client/passed.json</code>.</p>
 <h2 id="diagnostics-and-shutdown">Diagnostics and shutdown</h2>
-<p>Diagnostics require a fresh absolute directory, mode <code>0700</code>, owned by the
-container user. The process publishes <code>admitted</code> after startup admission/Hello,
-and sends causal error reports to stderr/Docker logs without a file fallback.
-Stopped recovery separately publishes
-its functional inspect/replay <code>result.json</code>. SIGINT/TERM stops new work and requests bounded settlement.
+<p>Diagnostics require an absolute directory, mode <code>0700</code>, owned by the
+container user. Process readiness uses expiring status observations tied to the
+current process identity. Causal error reports go to stderr/Docker logs without
+a file fallback.
+SIGINT/TERM stops new work and requests bounded settlement.
 If an original borrower remains active, the process reports
 <code>requires_host_retirement = true</code>, keeps its original owners alive and waits for
 the host to retire it; a normal stop signal does not cancel the same work again.
 An unadmitted diagnostics directory receives no files; safe reasons or OS errno
 still reach Docker's stderr logging. Neither diagnostics nor the
-startup marker establish successful science. Run the focused subprocess proof
+readiness observations establish successful science. Run the focused subprocess proof
 with <code>make test/integration/provider-core/process</code>.</p>
 <p>Execution failures include the acknowledged Job and Attempt references in the
 protected report. Native setup can fail before an Attempt exists; when a Job was
@@ -468,7 +468,7 @@ already selected, that setup failure reports its Job reference alone. Source-onl
 setup without Job context leaves those references absent. These fields identify
 affected work; they do not establish dispatch or acceptance of a result.</p>
 <h2 id="images-and-network-isolation">Images and network isolation</h2>
-<p>To acquire the provider dependencies and model files and build all three images
+<p>To acquire the provider dependencies and model files and build all four images
 in one invocation:</p>
 <pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_INTERFACE
 </code></pre>

@@ -592,3 +592,15 @@ withholds rm for unresolved log delivery. A native exit143 reports cancellation0
 actual SIGTERM reports the owned cancellation143. Failed-log CID and original
 receipts remain retained, with no automatic cleanup retry. Provider aggregate267
 passes: /tmp/nmrnet-second-provider-with-log-refusal.log. No new error framework.
+
+Second-pass setup correction
+
+provider/prepare now invokes the existing delivery/image/build owner after the
+controller image, using its already selected shared wheelhouse. The preparation
+sequence previously stopped after three images while deployment required four.
+No new selector, cache, interface default or build implementation was added.
+Real-Make fixtures preserve literal cache/interface forwarding, extraction reuse,
+failure short-circuit and cooperative cancellation. Whole supported operator-input
+lane31 passes: /tmp/nmrnet-second-operator-inputs-fixed.log. Acquisition and
+explicit deployment interfaces remain independent. Operator guidance now names
+all four images and current readiness/log behavior.
