@@ -69,7 +69,7 @@ def _parse_json_integer(digits):
         raise ValueError("Cannot parse prediction input: integer literal exceeds the supported digit limit.") from None
 
 
-def _float32_coordinate(value, atom_index, axis_index):
+def _coordinate_number(value, atom_index, axis_index):
     field = f"coordinates[{atom_index}][{axis_index}]"
     if type(value) not in (int, float):
         raise ValueError(f"Cannot parse prediction input: {field} must be a finite number, not a boolean or string.")
@@ -79,6 +79,12 @@ def _float32_coordinate(value, atom_index, axis_index):
         raise ValueError(f"Cannot parse prediction input: {field} is outside the finite numeric range.") from None
     if not math.isfinite(number):
         raise ValueError(f"Cannot parse prediction input: {field} must be finite.")
+    return number
+
+
+def _float32_coordinate(value, atom_index, axis_index):
+    field = f"coordinates[{atom_index}][{axis_index}]"
+    number = _coordinate_number(value, atom_index, axis_index)
     try:
         converted = struct.unpack("!f", struct.pack("!f", number))[0]
     except OverflowError:
@@ -121,13 +127,11 @@ def decode_request_document(raw):
     return request
 
 
-def parse_request(raw):
-    """Admit one prediction request before model or artifact work.
+def parse_coordinate_source(raw):
+    """Admit structural JSON and finite binary64 coordinates before unit conversion.
 
-    `coordinate_unit` must be nonempty and is returned unchanged; parsing does
-    not infer its physical meaning or rescale coordinates. Every required H/C
-    model unit must already be evidence-qualified before this request is returned.
-    Other element symbols are molecular context and do not select a prediction head.
+    The source reader owns unit meaning. This shared boundary deliberately does
+    not round to model precision or admit a source unit as an executable request.
     """
     request = decode_request_document(raw)
     for field in REQUEST_FIELDS:
@@ -150,11 +154,27 @@ def parse_request(raw):
     coordinates = request["coordinates"]
     if type(coordinates) is not list or len(coordinates) != len(atoms):
         raise ValueError("Cannot parse prediction input: coordinates must contain one row per atom.")
-    float32_coordinates = []
+    source_coordinates = []
     for atom_index, row in enumerate(coordinates):
         if type(row) is not list or len(row) != 3:
             raise ValueError(f"Cannot parse prediction input: coordinates[{atom_index}] must contain three values.")
-        float32_coordinates.append([_float32_coordinate(value, atom_index, axis_index) for axis_index, value in enumerate(row)])
+        source_coordinates.append([_coordinate_number(value, atom_index, axis_index) for axis_index, value in enumerate(row)])
+
+    return {"coordinate_unit": coordinate_unit, "atoms": atoms, "coordinates": source_coordinates}
+
+
+def parse_request(raw):
+    """Admit executable coordinates at model precision and qualified model units.
+
+    Source conversion must already be complete. Other element symbols remain
+    molecular context and do not select a prediction head.
+    """
+    request = parse_coordinate_source(raw)
+    coordinate_unit, atoms = request["coordinate_unit"], request["atoms"]
+    float32_coordinates = [
+        [_float32_coordinate(value, atom_index, axis_index) for axis_index, value in enumerate(row)]
+        for atom_index, row in enumerate(request["coordinates"])
+    ]
 
     # Reject a present head here so callers can finish admission before loading its artifacts.
     for element in ("H", "C"):

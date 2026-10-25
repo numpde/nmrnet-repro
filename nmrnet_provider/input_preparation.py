@@ -380,13 +380,13 @@ class InputPreparation:
             # owned cause without leaking it to the event loop's default logger.
             self.source_failure = cause
 
-    # silent-defaults: allow-contract -- Omitted member selects a direct file; ZIP requires an exact name. Omitted output uses the shared settings; malformed explicit fragments reject before effects.
+    # silent-defaults: allow-contract -- Omitted member selects a direct file; ZIP requires a name. JSON owns its unit; other formats require one. Output uses the shared settings; malformed options reject before effects.
     async def prepare_upload(
         self,
         upload_ref,
         *,
         source_format,
-        source_unit,
+        source_unit=None,
         selection,
         member=None,
         alternate_location=None,

@@ -30,6 +30,21 @@ from provider_core.uploads import UploadFailed
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_non_json_unit_refuses_before_upload_or_reader_allocation(self):
+        ports = SessionPorts()
+
+        async def choose(_instructions, capability):
+            for source_format in ("xyz", "table", "mol", "sdf", "pdb", "mol2"):
+                with self.subTest(source_format=source_format), self.assertRaisesRegex(InputRejected, "unit"):
+                    await capability.prepare_upload("upload:unreached", source_format=source_format, selection=None)
+            ports.uploads.acquire.assert_not_awaited()
+            ports.allocate_reader.assert_not_awaited()
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        owner = ports.owner(choose)
+        self.addAsyncCleanup(owner.retire)
+        await owner.prepare(ports.instructions)
+
     async def test_foreign_timeout_remains_the_original_operational_failure(self):
         ports = SessionPorts()
         failure = TimeoutError("An independent source operation exceeded its deadline")

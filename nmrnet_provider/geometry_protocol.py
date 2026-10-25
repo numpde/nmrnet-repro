@@ -53,9 +53,8 @@ def require_read_options(source_format, source_unit, selection, alternate_locati
             raise InputRejected("Cannot select PDB alternate locations: supply one printable nonblank ASCII label.")
     elif alternate_location is not None:
         raise InputRejected("Cannot select alternate locations: this option applies only to PDB sources.")
-    coordinate_conversion(source_unit)
-    if source_format == "json" and source_unit != "angstrom":
-        raise InputRejected("Cannot read direct coordinate JSON: its source unit must be angstrom.")
+    if source_format != "json" or source_unit is not None:
+        coordinate_conversion(source_unit)
     if source_format not in ("xyz", "sdf", "pdb", "mol2"):
         if selection is not None:
             raise InputRejected("Cannot select records: JSON, coordinate tables and MOL contain one geometry; omit selection.")
@@ -176,7 +175,7 @@ def _read_records(source, source_format, source_unit, selection, alternate_locat
     if is_archive(source):
         raise InputRejected("Cannot read a ZIP as molecular coordinates: call inspect_upload and select an exact member name.")
     if source_format == "json":
-        geometries = (prepare_json(source),)
+        geometries = (prepare_json(source, source_unit=source_unit),)
     elif source_format == "table":
         geometries = (prepare_table(source, source_unit=source_unit),)
     elif source_format == "xyz":
@@ -234,18 +233,24 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     if len(records) != len(expected_numbers):
         raise WorkerProtocolError("Structure worker record count differs from the requested selection.")
     source_sha256 = hashlib.sha256(source).hexdigest()
-    factor, reference = coordinate_conversion(source_unit)
+    # JSON owns its unit. Bind the reply to the deterministic angstrom request
+    # derived from the original source, not merely any valid worker request.
+    source_geometry = prepare_json(source, source_unit=source_unit) if source_format == "json" else None
+    resolved_unit = source_geometry.source_unit if source_geometry is not None else source_unit
+    factor, reference = coordinate_conversion(resolved_unit)
     line_count = len(source.splitlines())
     prepared = []
     for record, number in zip(records, expected_numbers, strict=True):
-        geometry = _prepared_record(record, number, source, source_format, line_count)
+        geometry = _prepared_record(
+            record, number, source_geometry.request_bytes if source_geometry is not None else None, source_format, line_count
+        )
         prepared.append(
             PreparedGeometry(
                 request_bytes=geometry.request_bytes,
                 source_sha256=source_sha256,
                 source_positions=tuple(record["source_positions"]),
                 source_position_kind=record["source_position_kind"],
-                source_unit=source_unit,
+                source_unit=resolved_unit,
                 scale_to_angstrom=factor,
                 conversion_reference=reference,
                 source_record_number=number,
@@ -255,7 +260,7 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     return tuple(prepared)
 
 
-def _prepared_record(record, number, source, source_format, line_count):
+def _prepared_record(record, number, expected_json_bytes, source_format, line_count):
     fields = {"request_base64", "source_positions", "source_position_kind", "source_record_number", "diagnostic"}
     if type(record) is not dict or set(record) != fields:
         raise WorkerProtocolError("Structure worker record has missing or unexpected fields.")
@@ -263,7 +268,7 @@ def _prepared_record(record, number, source, source_format, line_count):
         raise WorkerProtocolError("Structure worker records differ from the requested order or source identities.")
     raw = decode_source_bytes(record["request_base64"])
     try:
-        admitted = prepare_json(raw)
+        admitted = prepare_json(raw, source_unit="angstrom")
     except InputRejected as cause:
         raise WorkerProtocolError("Structure worker returned an invalid executable coordinate request.") from cause
     positions = record["source_positions"]
@@ -274,7 +279,7 @@ def _prepared_record(record, number, source, source_format, line_count):
     ):
         raise WorkerProtocolError("Structure worker must return one integer source position for each atom.")
     if source_format == "json":
-        valid = raw == source and positions == list(admitted.source_positions) and record["source_position_kind"] == "atom_index"
+        valid = raw == expected_json_bytes and positions == list(admitted.source_positions) and record["source_position_kind"] == "atom_index"
     elif source_format in ("mol", "sdf"):
         # Qualified native readers preserve MOL atom rows, numbered within each
         # selected record. Atom-map properties and source line numbers are not IDs.

@@ -738,6 +738,9 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
                 fi
                 unit_tests=(discover -s tests)
+                if [[ "$1" == test/unit/prediction-input ]]; then
+                    unit_tests=(-v tests.test_prediction_input tests.test_provider_input)
+                fi
                 if [[ "$1" == test/unit/provider/deployment ]]; then
                     unit_tests=(-v tests.test_provider_deployment_launcher
                         test_api_qualification_normative
@@ -778,7 +781,7 @@ case "$1" in
                 elif [[ "$1" == test/unit/bond-distances ]]; then
                     command+=(-p test_bond_distances.py -v)
                 elif [[ "$1" == test/unit/prediction-input ]]; then
-                    command+=(-p test_prediction_input.py -v)
+                    : # Shared source admission and strict model input remain one focused lane.
                 elif [[ "$1" == test/unit/baseline-prepare ]]; then
                     command+=(-p test_baseline_prepare.py -v)
                 elif [[ "$1" == test/unit/baseline-launcher ]]; then

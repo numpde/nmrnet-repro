@@ -343,6 +343,40 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
         self.assertEqual("atom_index", geometry.source_position_kind)
         self.assertEqual(1, geometry.source_record_number)
 
+    async def test_json_units_and_source_identity_cross_direct_and_zip_reader_processes(self):
+        for unit, value, expected in (("nm", 0.100000001, 1.00000001), ("bohr", 2, 1.058354421088)):
+            source = json.dumps({"coordinate_unit": unit, "atoms": ["H", "C"],
+                                 "coordinates": [[value, 0, 0], [0, 0, 0]]}).encode()
+            for archived in (False, True):
+                for option in (None, unit):
+                    with self.subTest(unit=unit, archived=archived, option=option):
+                        client = await self.client(fault=False)
+                        options = {"source_format": "json", "source_unit": option, "selection": None}
+                        if archived:
+                            stream = io.BytesIO()
+                            with ZipFile(stream, "w") as archive:
+                                archive.writestr("structure.json", source)
+                            member = await client.read_member(stream.getvalue(), member="structure.json", **options)
+                            self.assertEqual(member.source_bytes, source)
+                            geometries = member.geometries
+                        else:
+                            geometries = await client.read(source, **options)
+                        geometry, = geometries
+                        self.assertEqual(json.loads(geometry.request_bytes)["coordinates"], [[expected, 0, 0], [0, 0, 0]])
+                        self.assertEqual(geometry.source_sha256, hashlib.sha256(source).hexdigest())
+                        self.assertEqual((geometry.source_positions, geometry.source_position_kind), ((0, 1), "atom_index"))
+                        self.assertEqual(geometry.source_unit, unit)
+
+    async def test_json_missing_unknown_or_conflicting_units_are_input_refusals(self):
+        for declared, option in ((None, "angstrom"), ("unknown", None), ("nm", "angstrom")):
+            source = {"atoms": ["C"], "coordinates": [[0, 0, 0]]}
+            if declared is not None:
+                source["coordinate_unit"] = declared
+            with self.subTest(declared=declared, option=option):
+                client = await self.client(fault=False)
+                with self.assertRaises(InputRejected):
+                    await client.read(json.dumps(source).encode(), source_format="json", source_unit=option, selection=None)
+
     async def test_table_converts_once_and_retains_original_lines(self):
         source = b"\nH 0.109 0 0\nC 0 0 0\n"
         client = await self.client(fault=False)
@@ -444,6 +478,22 @@ class GeometryWorkerAdversarialTests(GeometryProcessTests):
 
 
 class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
+    async def test_json_reply_is_bound_to_original_conversion_and_strict_angstrom_execution(self):
+        source = b'{"coordinate_unit":"nm","atoms":["C"],"coordinates":[[0.100000001,0,0]]}'
+        original = read_source(source_request(source, source_format="json", source_unit=None, selection=None))[0]
+        baseline = json.loads(json.dumps(original))
+        self.assertEqual(len(prepared_reply({"kind": "geometries", "allocation": ALLOCATION, "records": [baseline]},
+                                            source, source_format="json", source_unit=None, selection=None)), 1)
+        for changed in ({"coordinates": [[10.0000001, 0, 0]]}, {"atoms": ["H"]}, {"coordinate_unit": "nm"}):
+            raw = json.loads(base64.b64decode(original["request_base64"])) | changed
+            record = baseline | {"request_base64": base64.b64encode(json.dumps(raw, separators=(",", ":")).encode()).decode()}
+            with self.subTest(changed=changed):
+                client, writer = self.client({"kind": "geometries", "allocation": ALLOCATION, "records": [record]})
+                with self.assertRaises(WorkerProtocolError):
+                    await client.read(source, source_format="json", source_unit=None, selection=None)
+                writer.close.assert_called()
+                await client.wait_closed()
+
     async def test_mol2_reply_rejects_false_atom_ids_and_changed_selected_order(self):
         source = (FIXTURES / "normative/mixed_records.mol2").read_bytes()
         options = {"source_format": "mol2", "source_unit": "angstrom", "selection": (2, 1)}

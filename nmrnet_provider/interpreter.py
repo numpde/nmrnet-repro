@@ -85,8 +85,12 @@ and adds hydrogens using fixed provider settings.
 Coordinates and units
 For attached files, supported formats are json, table, xyz, mol, sdf, pdb and
 mol2. Set source_unit to angstrom, nm or bohr based on the request instructions
-or a supported format convention, never on coordinate magnitudes. Attached
-coordinate JSON requires angstrom. Copy supplied coordinate text faithfully;
+or a supported format convention, never on coordinate magnitudes. Coordinate
+JSON declares coordinate_unit as angstrom, nm or bohr in the file: omit source_unit
+or pass null to use it. An explicit source_unit must agree with that field.
+If the Job's stated unit conflicts with the file, report the conflict for clarification;
+do not drop the stated unit or pass null to bypass it.
+Copy supplied coordinate text faithfully;
 preparation converts units to angstroms. Do not rescale coordinates yourself,
 invent coordinates, or add hydrogens to supplied geometries. Do not supply
 filesystem paths, URLs or programs as molecular input, or execute code.
@@ -123,7 +127,9 @@ def _tool(name, description, properties):
     if name == "prepare_upload":
         # A direct file has no archive member. Omission and null both select
         # its complete bytes; the reader refuses to treat a ZIP as a direct file.
+        # JSON owns its unit; other formats reject an omitted unit before acquisition.
         required.remove("member")
+        required.remove("source_unit")
     if name.startswith("prepare_"):
         properties = {
             **properties,
@@ -204,6 +210,7 @@ _TOOLS = json.dumps(
             "Prepare structures from an inspected attached file; success ends selection. "
             "For ZIPs, member is one exact member name (use inspect_upload if unknown). "
             "For direct files, omit member or set it to null. "
+            "For JSON, coordinate_unit in the file owns the unit; omit source_unit or pass null, or assert the same unit. "
             "For xyz, sdf and mol2, selection is 'all' or a list of unique 1-based record numbers in requested order. "
             "For pdb, use 'all' or explicit MODEL numbers (record 1 if the file has no MODEL records). "
             "For json, table and mol, which each contain one geometry, set selection to null. "
@@ -213,7 +220,7 @@ _TOOLS = json.dumps(
                 "upload_ref": _TEXT,
                 "member": {"type": ["string", "null"]},
                 "source_format": _TEXT,
-                "source_unit": _TEXT,
+                "source_unit": {"type": ["string", "null"]},
                 "selection": {"type": ["array", "string", "null"], "items": _INTEGER},
                 "alternate_location": {"type": ["string", "null"]},
             },

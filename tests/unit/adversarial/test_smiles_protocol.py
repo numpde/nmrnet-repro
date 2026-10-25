@@ -25,6 +25,15 @@ from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError
 
 
 class SmilesProtocolAdversarialTests(unittest.TestCase):
+    def test_generated_executable_coordinates_cannot_declare_source_units(self):
+        for unit in ("nm", "bohr"):
+            reply = self.reply()
+            request = json.loads(reply["conformers"][0]["request_utf8"])
+            request["coordinate_unit"] = unit
+            reply["conformers"][0]["request_utf8"] = json.dumps(request)
+            with self.subTest(unit=unit):
+                self.rejected(reply)
+
     def reply(self):
         return conformer_reply(collection(), allocation="fixture")
 

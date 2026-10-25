@@ -8,7 +8,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 
-from nmrnet_inference.predict import MAX_ATOMS, MAX_INPUT_BYTES, CoordinateUnitMismatch, parse_request
+from nmrnet_inference.predict import MAX_ATOMS, MAX_INPUT_BYTES, parse_coordinate_source, parse_request
 
 
 class InputRejected(ValueError):
@@ -70,31 +70,44 @@ def _admit_request(raw):
     """Translate only the existing pure parser's expected rejection, not model errors."""
     try:
         request = parse_request(raw)
-    except CoordinateUnitMismatch as error:
-        raise InputRejected(
-            f"{error} Direct JSON requires angstrom coordinates; use explicit preparation to convert other units."
-        ) from None
     except ValueError as error:
         raise InputRejected(str(error)) from None
     if request["coordinate_unit"] != "angstrom":
         raise InputRejected(
-            "Cannot prepare direct coordinates: coordinate_unit must be exactly angstrom. "
-            "Use the explicit preparation route to convert other units."
+            "Cannot admit executable coordinates: coordinate_unit must be exactly angstrom."
         )
     return request
 
 
-def prepare_json(source):
-    """Admit declared coordinate JSON unchanged; malformed JSON never becomes prose."""
-    request = _admit_request(source)
+def prepare_json(source, *, source_unit=None):
+    """Preserve JSON's declared unit and original identity, converting once if needed.
+
+    A tool unit is only a consistency assertion; it cannot override the file.
+    Angstrom sources retain their exact executable bytes, including whitespace.
+    """
+    try:
+        request = parse_coordinate_source(source)
+    except ValueError as error:
+        raise InputRejected(str(error)) from None
+    declared_unit = request["coordinate_unit"]
+    factor, reference = coordinate_conversion(declared_unit)
+    if source_unit is not None:
+        coordinate_conversion(source_unit)
+        if source_unit != declared_unit:
+            raise InputRejected("Cannot read coordinate JSON: supplied source_unit conflicts with the file's coordinate_unit.")
+    if declared_unit == "angstrom":
+        _admit_request(source)
+        raw = source
+    else:
+        raw = coordinate_request(request["atoms"], [[value * factor for value in row] for row in request["coordinates"]])
     return PreparedGeometry(
-        request_bytes=source,
+        request_bytes=raw,
         source_sha256=hashlib.sha256(source).hexdigest(),
         source_positions=tuple(range(len(request["atoms"]))),
         source_position_kind="atom_index",
-        source_unit="angstrom",
-        scale_to_angstrom=1.0,
-        conversion_reference="identity (angstrom)",
+        source_unit=declared_unit,
+        scale_to_angstrom=factor,
+        conversion_reference=reference,
         source_record_number=1,
     )
 

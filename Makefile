@@ -449,7 +449,7 @@ help:
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \
 		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
-		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
+		'make test/unit/prediction-input        Check source coordinate conversion and strict prediction-input admission.' \
 		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \
 		'make test/unit/baseline-run            Run only the contained baseline-run tests.' \

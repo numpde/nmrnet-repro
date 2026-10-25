@@ -18,13 +18,19 @@ from tests.integration.nmrnet.interpreter_ports import UploadPorts, chat_endpoin
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.interpreter import InputInterpreter
+from nmrnet_provider.interpreter import InputInterpreter, _TOOLS
 from provider_core.analysis import AnalysisFailure
 
 OBSERVATION = b'{"endpoint":{"configuration_id":"fixture","model":"fixture-model"},"prompt_sha256":"authored-test-identity"}'
 
 
 class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
+    def test_only_upload_tool_can_derive_unit_from_its_json_file(self):
+        tools = {item["function"]["name"]: item["function"]["parameters"] for item in json.loads(_TOOLS)}
+        self.assertNotIn("source_unit", tools["prepare_upload"]["required"])
+        self.assertEqual(tools["prepare_upload"]["properties"]["source_unit"]["type"], ["string", "null"])
+        self.assertIn("source_unit", tools["prepare_pasted"]["required"])
+
     async def test_owned_input_deadline_during_model_post_returns_job_failure_with_final_diagnostics(self):
         ports = SessionPorts()
         async with TlsPeer("body-stall", response_headers=((b"x-request-id", b"request:input-time-limit"),)) as peer:

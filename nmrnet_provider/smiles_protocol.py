@@ -229,7 +229,7 @@ def _prepared_batch(reply, source_sha256, requested_count, settings):
             raise WorkerProtocolError("Generated conformer IDs must be unique nonnegative native identifiers.")
         identifiers.add(identifier)
         raw, request = _json_text(record["request_utf8"])
-        prepare_json(raw)
+        prepare_json(raw, source_unit="angstrom")
         if request["atoms"] != atoms:
             raise WorkerProtocolError("Generated atom order differs from its source and added-hydrogen map.")
         stereo, annotation = _json_text(record["stereochemistry_utf8"])
