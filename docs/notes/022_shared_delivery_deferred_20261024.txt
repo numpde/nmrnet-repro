@@ -250,3 +250,97 @@ of its cancellation evidence, including cancellation of its original wait. Outer
 cleanup loops no longer append that same observation again. Exact parent/child
 cause and original-task controls pass in the complete 104-case prepared lane;
 no generic error deduplication or new lifetime registry was introduced.
+
+Follow-up closure evidence, 25 October 2026 UTC
+
+Source: 4d14863 (qualification and SDK), b3dcaeb (fresh-install native locks).
+These resolutions supersede the original deferrals in entries 1, 6, 7, 8,
+11, 12 and 15. Broader timing/load/UID/engine matrices remain deferred.
+
+6 / 11 / Supported test consumers: 3d9fe9a ports useful lifecycle assertions to
+CheckpointStore, DeliveryQueue/Service, the executor and direct deployment owners.
+Removed tests belonged to deliberately deleted full-record AttemptStore,
+AttemptFiles, producer TerminalPublisher and stopped-recovery capture interfaces.
+Their obsolete file rename/archive/history semantics have no successor; scope,
+single-writer, durability, cancellation, conditions, suppression and immutable
+handoff controls are preserved at the current owners. No legacy adapter or
+selector narrowing hides these removed interfaces. Scientific fixtures, upstream
+source, expected outputs and numerical tolerances were not changed.
+Focused contained results (complete named lanes, not a claim about test/all):
+  service 57; process 67 (including receiving SQLite native code/name);
+  prepared identity 109; prepared integration 48;
+  recovery unit 78 and signed-TLS recovery 1;
+  delivery unit 36 and connected delivery 28;
+  START unit 8 and connected START 1; API 54; admission 25;
+  runtime 16; application admission 10; Upload session 39; interpreter 15;
+  installation contract 13; private recipe/API-only capture 20;
+  launcher selectors 7; deployment 25; documentation 3; API client 44.
+The 109 prepared cases supersede the earlier 104-case count above.
+
+7 / 12 / SDK and source guidance: 4d14863 rewrites docs/provider-core/index.html
+and tests.html around checkpoint/relay ownership. Admission and durable entry
+precede science; approved handoff and native retirement are independent. API
+receipt, relay enqueue acknowledgement and native cleanup remain separate facts.
+Suppression requires explicit retained disposition; only absent relay rows fall
+through to API observation. Controller comments now describe these same owners.
+The historical readback guide names paired JOB_RECEIPT and JOB_IDENTITY.
+
+Qualification glue: isolated recipes use the production source/Compose owners,
+private queue/IPC/control namespaces and API-only delivery secrets. Private
+configuration is sealed like ordinary configuration. Finite helper names retain
+cleanup authority on failure; metadata helper retirement precedes daemon restore.
+Ordinary deployment has no Engine-observation receipt or success-marker gate.
+A legacy worker-retirement receipt remains confined to the opt-in qualification
+peer's cleanup/evidence ownership; it is not an ordinary deployment handoff.
+The Bash deployment entrypoint explicitly exits after command completion, so a
+later checkout-file append cannot execute in a still-open interpreter.
+
+Fresh-install correction: initial private recovery at 4d14863 stopped before
+science because runner._lease required .owner-session.lock, absent from a fresh
+native runtime directory. Existing live deployments had inherited these files.
+b3dcaeb creates missing caller-owned mode0600 locks exclusively under private
+prediction/reader/smiles directories, preserving existing lock inode and mode.
+Symlink locks are refused before helper effects. Full deployment lane: 25 pass,
+/tmp/nmrnet-final-lock-install-tests.log. This host-only correction required no
+application-image rebuild. Original failed fixture evidence remains at
+/tmp/nmrnet-compose-lAa5hJbO; its containers were stopped, with private volumes
+retained rather than inferring an empty queue after a failed qualification.
+
+8 / Actual isolated recovery: maintained target
+  make test/integration/provider/deployment/recovery
+    WHEELHOUSE=/home/ra/Downloads/wheelhouse
+passed at b3dcaeb, /tmp/nmrnet-final-private-recovery-lock-fixed.log,
+private evidence /tmp/nmrnet-compose-ySe66an5. The signed peer counted:
+  START=0; COMPLETE=0; model=0; download=0; Hello=13.
+Idle relay down/up emitted api_delivery_retry then api_delivery_recovered;
+producer container ID/PID/restart0 and queue device/inode stayed unchanged.
+The controlled reader supervisor crash confirmed old-child exit via pidfd,
+new generation/operation, zero scientific input bytes, fresh scratch and released
+successor scratch. Final queue inspection: held=[], outstanding_items=0.
+Successful private queue/IPC/control volumes were then removed by their owner.
+This proves the local deployed recovery path with signed peers, not a live
+external-model prediction, public API outage or broad failure-timing matrix.
+
+Image builds (offline selected wheelhouses, matching application source4d14863):
+Local controller 39711be0366936b37512b5e310859f7ff29989bb7f65772797166a59a7e07662
+      delivery e09f0285a80de3f384662b221cc5c903112b18acf19353cc6163ad25998d1233
+      RDKit 19fcb0e2d7f3bc05b71f81ba4d825eb9db0bde8a31a0bf177c6d79c4ef482685
+      inference ffca2dc7a281982aa06f8d0c02f1fe3176030ea125e4699029c32de1068e0c8a
+Remote controller a7e0ac23468e773b63bb953fd1f547cc20b5477cc86c60aa6e474b18d30aeb86
+       delivery 69fd25b2c46101eac52f780cf2789c2aa7663519f58ee69855fd07445d74203e
+       RDKit 1f71442fb2f2eb52f3ac48bd672c3229812082b4efc155048f2543a82454ed45
+       inference 035c96e7fb2ee1303f511b1ede1a700de8a0c9419f0251a4f62fcc93f3b81579
+Full IDs have sha256: prefix. Build logs on each host:
+  /tmp/nmrnet-final-{controller,delivery,geometry,inference}-build.log
+
+Deployment refresh used maintained down/install/up owners, retaining persistent
+volumes and existing credentials; no new Job, model call or scientific run.
+Local nmr-localhost generation-6Mu12zYz: seven roles healthy, controller and
+shared daemon restart0/OOMfalse; shared queue0 and producer checkpoints0.
+Remote nmr-dapp32-com generation-Tu9hieB4: native/proxy roles healthy, controller
+and daemon restart0/OOMfalse, shared queue0. At 07:21UTC its controller waited
+for API reads: selected interface wlp10s0 was DOWN, DNS returned errno101
+(network unreachable); host default route used a different, wired interface.
+An explicit interface choice was requested; no fallback route was selected.
+This network prerequisite remains distinct from installed images and local
+qualification. Final route/health outcome is appended when observed.
