@@ -46,7 +46,15 @@ H  -0.0514   0.089   -0.0363
 H  -0.0514  -0.089   -0.0363</code></pre>
 <p>This authored chloromethane geometry is used in the <a href="#reading-a-result-chloromethane">example result</a>.
 Plain XYZ text is also accepted: an atom-count line, a comment line, then exactly
-that many atom rows. Paste only one geometry; attach a file for several structures.
+that many atom rows. The same geometry in XYZ format, with coordinates in angstroms:</p>
+<pre><code>5
+Chloromethane; coordinates in angstrom
+H   1.027   0       -0.363
+Cl  0       0        1.78
+C   0       0        0
+H  -0.514   0.89    -0.363
+H  -0.514  -0.89    -0.363</code></pre>
+<p>Paste only one geometry; attach a file for several structures.
 Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/input_geometry.py#L113-L157">coordinate-table reader</a>;
 <a href="https://github.com/numpde/nmrnet-repro/blob/54e9be75c6ef6ad270b27d67f27a24c0c26ec849/nmrnet_provider/xyz.py">plain XYZ reader</a>.</p>
 <p>For both pasted and attached coordinates, atom order is preserved and no
