@@ -14,6 +14,7 @@ import ssl
 import unittest
 from builtins import ExceptionGroup
 from functools import partial
+from unittest.mock import patch
 
 import httpcore
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -43,6 +44,60 @@ def unavailable_problem(**changes):
 
 
 class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_terminal_refusals_retry_without_granting_other_operation_permissions(self):
+        denied = unavailable_problem(type="urn:nmr-api:problem:authorization-denied", status=403,
+                                     code="authorization_denied")
+        responses = [reply(signature_window_problem(code=code), status=401) for code in (
+            "authentication_failed", "authentication_nonce_reused", "signature_created_in_future",
+        )]
+        responses += [reply(denied, status=403), reply(b"rate limited", status=429,
+                      headers=((b"content-type", b"text/html"),))]
+        for operation in ("start", "complete", "fail", "progress", "condition"):
+            for response in responses:
+                with self.subTest(operation=operation, status=response.status):
+                    api, transport, failure = await self.failed_replay_operation(response, operation=operation)
+                    self.assertIs(api.can_replay_terminal(failure), operation in ("complete", "fail"))
+                    self.assertFalse(api.can_replay_start(failure))
+                    self.assertFalse(api.can_retry_condition(failure, execution_attempt_ref=ATTEMPT_REF))
+                    self.assertFalse(api.can_retry_read(failure))
+                    self.assertFalse(api.can_refresh_hello(failure))
+                    self.assertEqual(failure.status, response.status)
+                    self.assertNotIn("PRIVATE_SERVER_DETAIL", str(failure))
+                    transport.retirement_confirmed = False
+                    self.assertFalse(api.can_replay_terminal(failure))
+
+    async def test_terminal_retry_still_refuses_untrusted_or_unknown_authentication_evidence(self):
+        for response in (
+            reply(b"rate limited", status=429, headers=response_headers(status=429, topology=b"web")),
+            reply(b"rate limited", status=429, headers=((b"nmr-api-topology", b"dev-local"),
+                                                       (b"nmr-api-topology", b"dev-local"))),
+            reply(signature_window_problem(code="authentication_failed"), status=401,
+                  headers=response_headers(status=401, request_id=b"request:other")),
+            reply(signature_window_problem(code="unreviewed_code"), status=401),
+            reply(b"denied", status=403),
+        ):
+            with self.subTest(status=response.status, headers=response.headers):
+                api, _, failure = await self.failed_replay_operation(response, operation="complete")
+                self.assertFalse(api.can_replay_terminal(failure))
+
+    def test_retry_after_accepts_http_time_forms_without_changing_retry_authority(self):
+        with patch("provider_core.api.time.time", return_value=784111777):
+            for value, expected in (
+                (b"120", 120), (b"0", 0), (b"Sun, 06 Nov 1994 08:49:37 GMT", 0),
+                (b"Sun, 06 Nov 1994 08:51:37 GMT", 120), (b"Sunday, 06-Nov-94 08:51:37 GMT", 120),
+                (b"Sun Nov  6 08:51:37 1994", 120), (b"-3", None), (b"0.1", None),
+                (b"not a date", None), (b"9" * 400, None), (b"\xff", None),
+            ):
+                with self.subTest(value=value):
+                    failure = ApiFailure("publish result", "refused", response=reply(
+                        b"rate limited", status=429, headers=((b"retry-after", value),)
+                    ))
+                    self.assertEqual(failure.retry_after_seconds, expected)
+            duplicate = ApiFailure("publish result", "refused", response=reply(
+                b"rate limited", status=429, headers=((b"retry-after", b"120"), (b"retry-after", b"240"))
+            ))
+            self.assertIsNone(duplicate.retry_after_seconds)
+
     async def test_connect_gateway_status_requires_the_owned_proxy_failure_and_settled_io(self):
         for status, expected in ((None, False), (200, False), (403, False), (502, True), (503, True), (504, True)):
             with self.subTest(status=status):

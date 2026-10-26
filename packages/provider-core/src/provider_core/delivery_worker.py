@@ -83,6 +83,9 @@ class DeliveryWorker:
                     await self.api.retire(owner=self)
                 if self.api.can_replay_terminal(failure):
                     seconds = random.uniform(delay / 2, delay)
+                    minimum = failure.retry_after_seconds
+                    if minimum is not None:
+                        seconds += minimum
                     self.on_notice(failure, {**self._facts("delivery_retry", item), "retry_seconds": seconds})
                     # New arrivals must not bypass backoff. Only shutdown ends
                     # this wait early; no overall expiry discards a durable item.

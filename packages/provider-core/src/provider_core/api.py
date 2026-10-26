@@ -13,11 +13,14 @@ require_container()
 import asyncio
 import errno
 import json
+import math
 import re
 import secrets
 import socket
 import time
 from builtins import ExceptionGroup
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 
 import httpcore
 
@@ -90,6 +93,31 @@ class ApiFailure(RuntimeError):
         head = self._received_head()
         return None if head is None else response_request_id(head.headers)
 
+    @property
+    def retry_after_seconds(self):
+        """Read server timing advice; this does not authorize another request.
+
+        RFC 9110 section 10.2.3 permits delay-seconds or an HTTP-date. Invalid
+        or ambiguous advice leaves the operation owner's local pacing intact.
+        """
+        head = self._received_head()
+        values = [] if head is None else [value for name, value in head.headers if name.lower() == b"retry-after"]
+        if len(values) != 1:
+            return None
+        try:
+            value = values[0].decode("ascii").strip()
+            if re.fullmatch(r"[0-9]+", value):
+                seconds = float(value)
+            else:
+                date = parsedate_to_datetime(value)
+                if date.tzinfo is None:
+                    # The obsolete asctime HTTP-date form also denotes GMT.
+                    date = date.replace(tzinfo=timezone.utc)
+                seconds = max(0.0, date.timestamp() - time.time())
+        except (ValueError, OverflowError, TypeError):
+            return None
+        return seconds if math.isfinite(seconds) else None
+
 
 def require_api_topology(value):
     """Admit the edge vocabulary, independently of credential deployment profiles.
@@ -161,7 +189,7 @@ _PROBLEM_REASONS = {
         "authentication-failed",
         "signature_created_in_future",
     ): "the signature timestamp is in the future; check the provider clock",
-    (403, "authorization-denied", "authorization_denied"): "API denied this provider access to the requested resource",
+    (403, "authorization-denied", "authorization_denied"): "API denied this provider access to the requested resource; check the provider's API permissions",
     (404, "not-found", "resource_not_found"): "the requested resource was not found or is not accessible to this provider",
     (
         409,
@@ -368,8 +396,8 @@ class ProviderAPI:
 
         This alone grants no operation replay. The caller must use its existing
         route/body permission, request deadlines and retry/stop policy, and retain
-        the refusal. Other
-        authentication failures stay fatal. The
+        the refusal. Other authentication failures do not qualify for signature
+        refresh through this predicate. The
         complete correlated problem was admitted by _http_failure; an incomplete
         response or unsettled exchange cannot authorize this decision.
 
@@ -439,19 +467,40 @@ class ProviderAPI:
         fresh GET or Hello, terminal replay is safe even when the first send
         committed. A pre-head protocol failure supplies no verified response;
         it does not establish EOF, transience or absence of server effects.
+        Rate limits and reviewed authentication/authorization refusals permit
+        paced attempts of the same command without claiming access will recover.
 
         Authority: pinned tests/fixtures/nmr_api_v1/openapi/openapi.v1.json,
         /x-nmr-attempt-recovery/terminal and each terminal POST's x-nmr-recovery;
         source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
         """
-        return (
-            self._recoverable_attempt_failure(failure)
-            and failure.request_method == "POST"
-            and failure.request_target
-            in (
-                b"/provider/v1/execution-attempts/complete",
-                b"/provider/v1/execution-attempts/fail",
+        if type(failure) is not ApiFailure or failure is not self.last_failure or not self.retirement_confirmed:
+            return False
+        if failure.request_method != "POST" or failure.request_target not in (
+            b"/provider/v1/execution-attempts/complete",
+            b"/provider/v1/execution-attempts/fail",
+        ):
+            return False
+        if self._recoverable_attempt_failure(failure):
+            return True
+        head = failure._received_head()
+        if head is not None and head.status == 429 and self._gateway_environment_matches(head):
+            # An origin/edge rate limit may use HTML (RFC 6585 section 4).
+            # An interrupted body still needs settled, clean transport evidence.
+            exchange = failure.cause
+            return failure.response is not None or (
+                type(exchange) is ExchangeFailed and not exchange.cleanup_failures
+                and not isinstance(exchange.interruption, asyncio.CancelledError)
+                and _temporary_io_failure(exchange.primary, 8)
             )
+        # These correlated API refusals can persist. Exact terminal replay is
+        # safe if access later recovers; retrying does not assert it will recover.
+        return failure.response is not None and (
+            failure.status == 401 and failure.problem_code in {
+                "authentication_failed", "authentication_nonce_reused", "authentication_window_closed",
+                "signature_expired", "signature_created_in_future",
+            }
+            or failure.status == 403 and failure.problem_code == "authorization_denied"
         )
 
     def _recoverable_attempt_failure(self, failure):

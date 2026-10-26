@@ -1077,3 +1077,68 @@ The underlying intermittent production DNS issue remains unresolved. No resolver
 interface, network policy, Job, model, GUI or dependency-acquisition change was
 made. The four QA fixes are now deployed; earlier pending-status paragraphs are
 historical audit observations, superseded by this release record.
+
+26 October 2026 - Shared terminal-delivery resilience
+
+Source baseline: 0956108. This slice changes shared provider-core delivery;
+it does not implement or deploy Magnet's handoff integration.
+
+Review found that a queued terminal request could remain paused until manual
+restart after a rate limit or an intermittent authentication refusal. The
+existing API owner now permits exact COMPLETE/FAIL replay after same-origin
+HTTP 429, including edge-generated HTML, or an admitted, correlated, recognised
+401/403 problem. Explicit topology mismatch, TLS/trust errors, unknown auth
+responses, unsettled I/O and cleanup failure do not gain replay permission.
+START, progress, read and Hello permissions remain unchanged. Auth refusals do
+not prove temporary failure: existing credential/clock evidence is retained,
+and the authorization diagnostic now directs the operator to API permissions.
+
+ApiFailure.retry_after_seconds reads one server delay from the original received
+head; this advice grants no operation permission. DeliveryWorker adds its
+existing positive jittered, capped exponential backoff after the server floor.
+A valid server delay can exceed the local cap. Stop interrupts the wait. An
+independent review caught and corrected the initial max(jitter, server floor)
+formula, which synchronized providers whenever the server delay dominated.
+
+Ownership remains unchanged: one shared queue retains the exact terminal body
+until a matching API receipt. Local durable acceptance is not remote completion.
+No producer payload spool, archive, store, generic proxy, retry framework or
+dependency was added. Other bindings can continue while one waits. The declared
+Python base was restored through packages/base-images/python/download to run
+the existing offline lanes; its pinned digest and dependencies did not change.
+
+Focused installed evidence, each command run once after the final code change:
+  make test/unit/provider-core/api WHEELHOUSE=<shared-cache>: 57 passed.
+  make test/integration/provider-core/delivery WHEELHOUSE=<shared-cache>:
+    33 passed.
+  Logs: /tmp/shared-delivery-api-check.log and
+    /tmp/shared-delivery-integration-check.log.
+  make test/repository/documentation: 3 passed;
+    /tmp/shared-delivery-doc-check.log.
+The TLS API peer exercises 429, then authentication_failed, then a matching
+receipt in one worker: identical bodies and distinct valid signatures are
+observed. A second case keeps a 120-second Retry-After plus positive jitter
+above the local cap, lets another binding publish, and stops promptly while
+retaining the original pending bytes. Existing reply-loss, receipt mismatch,
+topology, storage and retirement cases also pass. This is installed local
+API/IPC/storage evidence, not a production outage or scientific-model run.
+
+U/A review focused on U07/U08/U11, U13/U14, U16/U17/U19/U22/U23, U25-U27,
+A01/A03/A05/A10/A11: operation-specific retry ownership, honest uncertain
+effects, bounded pacing, safe existing Docker diagnostics, no duplicate store,
+and automatic resumption after routine refusal. Scientific implementations,
+input semantics, model data, numerical tolerances and Make selectors did not
+change. A context-isolated operator reader understood the local-acceptance/API
+receipt distinction and required credential/clock/permissions investigation;
+source-aware review found the revised provider guidance matched the code.
+
+Sources: provider_core/api.py::ProviderAPI.can_replay_terminal and
+ApiFailure.retry_after_seconds; provider_core/delivery_worker.py::_deliver;
+tests/unit/adversarial/test_api_unavailability.py and
+tests/integration/delivery/normative/test_delivery_worker.py, all beneath
+packages/provider-core. HTTP semantics:
+https://www.rfc-editor.org/rfc/rfc6585.html#section-4 and
+https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3.
+No deployment, live Job, model execution or credential/network-policy change
+was performed. Magnet's handoff and relay-aware reconciliation remain separate
+work with its owner; shared API retry support alone does not complete that work.

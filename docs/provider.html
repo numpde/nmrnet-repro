@@ -585,11 +585,25 @@ treating an unverified error body as API authority. The verified API timing refu
 this request did not run. Existing operation owners may retry with a fresh signature
 after transport retirement: service reads and Hello keep their paced, stop-responsive
 retry loops; retained writes keep their own route, command and recovery-window checks.
-Invalid credentials, future-dated signatures, reused nonces, explicit wrong environment,
-malformed success, storage/ownership errors and admission holds still stop. Sources:
+These read and Hello permissions exclude invalid credentials, future-dated signatures
+and reused nonces. Explicit wrong environment, malformed success, storage/ownership
+errors and admission holds still stop. Sources:
 <a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L826-L847">API timing-refusal contract</a> and
 <a href="https://github.com/numpde/nmrnet-repro/blob/ab56e80/packages/provider-core/src/provider_core/api.py">operation-specific retry permissions</a>.
-Active Attempt observations also recover within the required finite
+</p>
+<p>Shared delivery retries retained completion and failure requests after rate limits
+and recognised API authentication or authorization refusals, as well as network and
+gateway failures covered by its retry policy. Each attempt preserves the request body
+and uses a fresh signature. Capped exponential backoff includes jitter; a valid
+<code>Retry-After</code> adds a minimum wait before that jitter. Stop interrupts the wait.
+Repeated refusals remain visible in Docker logs: check the reported credentials,
+clock or API permissions. A matching API receipt clears the queued body; durable local
+acceptance alone does not establish API publication. Conflicting outcomes remain held;
+trust, storage and ownership failures require operator attention. Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/api.py">terminal replay permissions</a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/delivery_worker.py">delivery pacing and receipts</a> and
+<a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3">HTTP Retry-After</a>.</p>
+<p>Active Attempt observations also recover within the required finite
 <code>lifecycle.observation_gap_seconds</code> window. Each fresh-observation wait includes
 exchange-lock acquisition, reads, transport retirement and backoff. Its initial
 delay is the smaller of <code>lifecycle.poll_seconds</code> and <code>service.api_backoff_max_seconds</code>,

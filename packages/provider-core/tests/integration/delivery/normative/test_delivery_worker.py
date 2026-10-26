@@ -14,7 +14,7 @@ from provider_core.delivery_worker import DeliveryWorker, DeliveryWorkerFailed
 from provider_core.failure_projection import owned_details
 from provider_core.transport import HttpTransport
 from tests.fakes.api_tls import api_tls_peer, verify_signed_request
-from tests.fakes.api import response_headers
+from tests.fakes.api import response_headers, signature_window_problem
 from tests.fakes.attempts import fail_response
 from tests.fakes.delivery import outcome
 from tests.fakes.api import api
@@ -77,6 +77,70 @@ class DeliveryWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotEqual(signatures[0], signatures[1])
             self.assertEqual([facts["event"] for _, facts in self.notices], ["delivery_retry", "delivery_published"])
             self.assertEqual(self.queue.inventory(item.api_origin, item.provider_ref), [])
+
+    async def test_api_rate_limit_and_authentication_refusals_recover_without_restart(self):
+        async def response(_request, _body):
+            if len(peer.requests) == 1:
+                peer.response_status = 429
+                peer.response_headers = ((b"content-type", b"text/html"),)
+                return b"rate limited"
+            if len(peer.requests) == 2:
+                peer.response_status = 401
+                peer.response_headers = response_headers(status=401, request_id=b"request:test")
+                return signature_window_problem(code="authentication_failed")
+            peer.response_status = 200
+            peer.response_headers = response_headers()
+            return fail_response(execution_attempt_ref=outcome().execution_attempt_ref,
+                                 failure_code="provider_interrupted", failure_message="SCIENTIFIC_PAYLOAD_NEEDLE")
+
+        async with api_tls_peer("success", response_factory=response) as peer:
+            item = replace(outcome(), api_origin=peer.origin)
+            self.queue.enqueue(item)
+            worker = self.worker(peer)
+            await asyncio.wait_for(worker.run(), 2)
+            self.assertEqual(peer.request_bodies, [item.body] * 3)
+            for request in peer.requests:
+                verify_signed_request(request, item.body, origin=peer.origin, key=worker.api.identity.private_key)
+            signatures = [request.split(b"Signature-Input: ")[1].split(b"\r\n")[0] for request in peer.requests]
+            self.assertEqual(len(set(signatures)), 3)
+            self.assertEqual([error.status for error, facts in self.notices if facts["event"] == "delivery_retry"], [429, 401])
+            self.assertFalse(worker.paused)
+            self.assertEqual(self.queue.inventory(item.api_origin, item.provider_ref), [])
+
+    async def test_retry_after_above_backoff_cap_preserves_other_binding_progress_and_prompt_stop(self):
+        retry_seen = asyncio.Event()
+        async with api_tls_peer("success", response_status=429, response_body=b"rate limited",
+                                response_headers=((b"content-type", b"text/html"), (b"retry-after", b"120"))) as limited:
+            async with api_tls_peer("success", response_body=fail_response(
+                execution_attempt_ref=outcome().execution_attempt_ref,
+                failure_code="provider_interrupted", failure_message="SCIENTIFIC_PAYLOAD_NEEDLE"
+            )) as healthy:
+                first, second = replace(outcome(), api_origin=limited.origin), replace(outcome(), api_origin=healthy.origin)
+                self.queue.enqueue(first)
+                self.queue.enqueue(second)
+                worker = self.worker(limited)
+                original_notice = worker.on_notice
+
+                def notice(error, facts):
+                    original_notice(error, facts)
+                    if facts["event"] == "delivery_retry":
+                        retry_seen.set()
+
+                worker.on_notice = notice
+                original = asyncio.create_task(worker.run())
+                try:
+                    await asyncio.wait_for(retry_seen.wait(), 1)
+                    self.assertGreater(self.notices[0][1]["retry_seconds"], 120)
+                    self.assertLessEqual(self.notices[0][1]["retry_seconds"], 120 + worker.retry_max_seconds)
+                    await asyncio.wait_for(self.worker(healthy).run(), 1)
+                    self.assertFalse(original.done())
+                    self.assertEqual(limited.request_bodies, [first.body])
+                    self.assertEqual(self.queue.inventory(second.api_origin, second.provider_ref), [])
+                finally:
+                    worker.request_stop()
+                    await asyncio.wait_for(original, 1)
+                self.assertFalse(worker.paused)
+                self.assertEqual(self.queue.next_pending(first.api_origin, first.provider_ref), first)
 
     async def test_unmatched_receipt_holds_one_item_and_next_item_can_publish(self):
         second = outcome(suffix="1")
