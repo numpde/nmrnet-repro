@@ -9,6 +9,14 @@ imperfections and most additional testing here for later. These entries are
 not release gates. Result ownership, scientific correctness and basic operation
 remain part of the implementation.
 
+Magnet follow-up owner, 26 October 2026
+
+Magnet's single maintained follow-up record is
+magnet-deploy/notes/041_deferred_20261026.txt. It consolidates the accepted START
+limit and nonblocking source/qualification follow-ups. Historical Magnet
+observations below remain evidence, not a parallel work queue or new delivery
+gates. Keep current Magnet follow-up status in that owning record.
+
 Follow-up status, 25 October 2026 (local date)
 
 The user subsequently authorized closing the five concrete follow-ups:
@@ -1330,3 +1338,634 @@ status requests for all bindings concurrently. It does not depend on remote API
 availability and Docker unhealthy status alone does not restart the publisher.
 The owner's updated deployment/proxy lane passed 34 cases; actual lifecycle proof
 and coordinated incumbent retirement remain required before rollout completion.
+
+26 October 2026 - Local operational cutover and actual API receipt
+
+NMRNet main 69346e2 and shared-tools main b144ac0 are public. Before local
+retirement, the original producer reported zero checkpoints and the actual IPC
+inventory's items array was empty, publisher running. All seven old producer
+containers retired through provider/deployment/down; a networkless read-only
+inspection of the preserved control volume then confirmed zero checkpoints.
+The old shared daemon retired before its proxies through its sealed old Compose
+recipe; down retained queue, IPC and producer control volumes. New shared up
+used image sha256:4f1416c75b23bbbdda4927e2561baf842e64f24736ab43413b513748deed5c65
+and the operator binding definition. Both the API proxy and local intake became
+healthy. Provider install/up created generation-OXbnNMGn; all seven roles became
+healthy, including the API Hello readiness condition.
+
+A first attempted post-producer IPC read passed a script on stdin through the
+native command owner and produced no JSON: the owner closes borrowed stdin.
+That invocation supplies no inventory proof. The successful earlier explicit
+Python -c IPC read and post-retirement checkpoint count are the actual evidence.
+Future finite metadata reads pass inspected code as an explicit argument.
+
+One maintained provider/qualify/api/existing-pasted run used the real interpreter
+and retained scientific oracle. Evidence directory:
+.work/qualification/shared-sdk-refac-69346e2
+Job job:02fc0828bad91b5fd9ff64aa3f52cf501e6f5bc98e95fe6bc345372ec3225497
+Attempt execution_attempt:sha256:458c5386657d3dea0b73ef6f0713a1fcc80537c9f9ed8e5c8c191f26a3c11f28
+The API final Attempt read returned succeeded, from 2026-10-26T12:46:25.086803Z
+to 12:46:39.115886Z. passed.json reports scientific_repeatability=true and
+interpretation_scripted=false. This establishes actual remote API publication
+and numerical comparison for one pasted-input Job; it is not a broad benchmark.
+No further local scientific repetition is required for this slice.
+
+Real operator finding: incumbent queue and IPC volumes have Labels=null. New
+Compose safely reused their exact names, but the shared held/discard wrapper
+required a Compose construction label. Shared owner is removing that redundant
+label condition in favor of the explicitly selected existing volume name and
+SDK storage ownership/schema/exclusive-writer authority. No volume relabel,
+queue replacement, compatibility importer or SDK/image rebuild is required.
+
+Production checkout fast-forwarded cleanly to 69346e2. Pinned released SDK
+closure and source archive were additively transferred to /data/cache/wheelhouse
+without overwriting existing files. All three maintained offline image builds
+and inference imports passed; incumbent services stayed running during staging.
+Production image IDs:
+controller sha256:edd743c3924677e03f02e31eb0decd618dd164cf979c97c6c4b32c99c0ce066e
+geometry sha256:39a8c26b0130d1375a8ab670d476c538cf19f036da543922e699dd3fb22a847d
+inference sha256:28a10dc9735a5ab20e75061605e6e6a2ccc0fd60e3f37d7ff9ab791e09bb9128
+Shared runtime archive transfer timed out after 300 seconds without a load or
+live mutation. Direct offline production shared-image build was recommended
+using the existing closure and a small copy of original release metadata.
+
+Separate known incident: an owner's broad read-only search exposed an incumbent
+issued local provider credential in private tool output. The coordinating user
+was informed. No credential bytes were copied here, into public source/release
+assets, or into peer messages. No automatic rotation, disabling or database
+mutation was performed. The API's force-regenerate lane changes only local
+files and rejects existing registered-key replacement; it is not remediation.
+The supported provider-level admin disable is distinct from credential rotation.
+The latter needs the API authority owner's separate scoped decision; production
+credential bytes were not read during this refactor staging.
+
+26 October 2026 - Assumptions challenged during final rollout
+
+The local obsolete shared managed deployment tree was removed only after all
+container mount metadata showed no borrowers, its top-level entries were exactly
+current/bundles, and every entry was caller-owned. Original operator inputs and
+Docker queue/IPC/control volumes remain. The held/discard label correction is
+public as shared-tools 0b97435bf674b3c987f17fb8f8c05e23b04fa793; an isolated
+existing unlabeled queue passed the maintained held command, with no key grants.
+It changes the host shell only; release 0.2.0 and runtime image remain unchanged.
+
+A fresh independent reader found no new actionable operator command, selector
+or ownership mismatch in the end-state docs against the actual shared launcher.
+An independent evidence reader accepted only the exact passed.json/final Attempt
+and identity projections for the local Job, without reading molecular/key bodies
+or repeating scientific work.
+
+My staging assumption that the production NMRNet Python base implied the shared
+base was present was false: NMRNet uses 3.12.12, shared delivery pins 3.12.15.
+The actual helper create refusal established this before any new service start.
+The shared owner uses the maintained exact-base bootstrap, whose Docker-daemon
+routing exception is explicit, then the ordinary offline image build. BuildKit
+cache presence alone is not image availability. The compressed bulk-copy retry
+was also too slow; its own client was retired before choosing the smaller
+metadata-copy/offline-build path. No competing staging path was launched.
+
+A substantive reuse assumption remains under owner adjudication: replacing
+Magnet's HTTP implementation with SDK 0.2.0 is not automatically behavior-neutral.
+Magnet currently paces certain GET failures including HTTP500/429; SDK
+ProviderAPI.can_retry_read has a narrower safe-read availability policy and
+explicitly treats HTTP500 separately for Attempt recovery. Blind replacement
+could reduce unattended resilience. Owners were directed to preserve actual
+route/effect/retirement/identity semantics and decide any required SDK policy
+change centrally. An immutable 0.2.0 asset must never be silently replaced.
+Local success, empty-queue cutover and health are not substitutes for this U27/A11
+contract, and local science does not prove production GPU/runtime publication.
+
+26 October 2026 - Production operational cutover
+
+Shared production staging completed from the exact original release closure
+using the maintained offline builder after the pinned base bootstrap. Actual
+shared image sha256:4cc5cb9571c47b6903348f588a35e55958ba7bea3682f5d0549ba98ef3365426
+has construction fingerprint
+6561e7677f96aa1e257cde3de7fbddc10d67f8ab14057fd68f295a5f110e3e60,
+matching the qualified local construction inputs. Different OCI image IDs are
+recorded honestly; equal construction input hashes are not asserted as equal
+image bytes. Shared source is public 0b97435bf674b3c987f17fb8f8c05e23b04fa793.
+
+Root executed the authorized production lifecycle; shared owner staged/reviewed
+without issuing competing live commands. Fresh incumbent checks reported zero
+producer checkpoints and zero IPC items with publisher running. After all seven
+old producer roles retired through their maintained down target, the original
+control volume's read-only store again reported zero checkpoints; a second
+explicit-argument IPC inventory confirmed zero outstanding items. Old shared
+daemon retired before its proxies through the sealed incumbent Compose recipe;
+down omitted -v and retained existing queue/IPC/control volumes. New stateless
+shared up reached healthy API proxy and local intake.
+
+The first new producer install failed before selection because the public
+provider.toml was UID/GID1000:1000 mode0664 after Git checkout. I missed this
+pre-cutover mode check. Its private deployment.toml remained0600. Correcting only
+the public definition to0644 allowed an explicit new install and up; no key,
+queue, scientific parameter or other interface changed. Documentation now states
+the public/private mode requirement. A useful future improvement is earlier
+configuration admission before planned downtime, reusing the existing parser
+rather than inventing a mirrored validator. This does not justify relaxing the
+actual configuration authority or claiming the rejected install succeeded.
+
+New producer generation-UBJxMHtZ reached healthy state in all seven components,
+including accepted API Hello. Fresh new shared inventory returned items0 and
+publisher running. This is production startup/authentication/intake proof; no
+new production scientific Job or GPU benchmark ran. The independent local real
+interpreter/scientific-oracle/remote-receipt proof above remains its stated scope.
+
+The obsolete production shared managed host tree had no remaining container
+mount borrowers and exactly current/bundles top-level entries, all caller-owned.
+It was removed without archiving or importing it. Original operator config and
+credential files, current consumer generation, queue/IPC/control Docker volumes
+and unrelated provider services were preserved. The same local cleanup already
+completed. No new shared host recipe tree, handoff file or registry remains.
+
+Overall goal remains open for the separately required remaining Magnet SDK API/
+proxy adoption and its operation-specific retry-policy release decision. Shared
+terminal handoff deployment is not represented as full cross-consumer adoption.
+
+A further supervision correction: I initially applied the maintainer's NMRNet
+setup/deployment interface instruction as though it explicitly required binding
+Magnet's producer traffic to a host interface. The exact instruction was given
+in the NMRNet deployment context; no separate explicit Magnet producer-interface
+requirement was established. That broader application was my interpretation,
+which I withdrew rather than forcing a new proxy or extending the shared route
+contract. The host publisher route and the producer's existing Docker network
+grant must each be described truthfully. Actual local edge metadata now publishes
+both loopback and a Docker-host address, so the earlier loopback-only assumption
+was stale; a producer host-gateway projection has a real reachable endpoint to
+qualify while retaining API TLS authority. This does not establish all-host or
+external-route behavior, nor authorize silently exposing additional API ports.
+
+My subsequent proposal to borrow the existing shared API-proxy volume also had
+an unverified UID assumption. Magnet's compose/provider.yml actually runs its
+producer as 65532:65532; the shared proxy runs as1000 with private0700 directory
+and0600 socket. A read-only mount does not supply the missing Unix access grant.
+The proposal was withdrawn before implementation. One shared delivery service
+does not require one proxy process; if needed, a producer-owned role using the
+installed common proxy implementation can preserve independent UID/lifecycle
+ownership without copying proxy code. No new group-sharing feature is implied.
+Magnet's existing frozen-secret POSIX ACL grant must likewise remain distinct
+from SDK default private-file admission; original source admission and the exact
+compiled runtime reader are their existing owners.
+
+Durable byte references for the existing local qualification packet (SHA-256;
+no payload or key contents copied into this record):
+client/passed.json,168 bytes:
+35f4795a3b341729e77c4e8bc8acb1fab0a5cdbee57bdadc59a684056e3de6b2
+client/035-final-attempts.response.json,459 bytes:
+972ae742e96b69714a321c0972b1f2780424230252e2a1711c739463c9a5feb3
+client/scientific-result.json,14919 bytes:
+57aa56e090e4763aacac8c6abcde10b7259e58c4b658f1ae7625430d27b4b6a1
+source/identity.json,542 bytes:
+bc30e2eb0b4dff8da0f22867cf930ed871fe14087617de03910d89574225e153
+These identify the captured bytes; a digest is not a substitute for the actual
+comparison/receipt checks and the qualified scope reported above.
+
+Cross-consumer rollout coordination: keep the live host binding definition
+unchanged until Magnet API/route source is qualified. Stage one complete shared
+binding definition preserving NMRNet and add Magnet's entry at the coordinated
+boundary. One affected shared-runtime adoption should serve both consumers,
+without a second singleton or independent restart churn. Any later NMRNet SDK
+patch adoption waits for qualified immutable publication; the current0.2 proof
+remains a0.2 proof. Its pre-existing500 safe-read gap also affects NMRNet U27/A11
+and must not be described as unrelated merely because Magnet exposed it.
+
+26 October 2026 - Public SDK0.2.1 adoption staging
+
+Shared source c2b02c6aa3de41c5410fcd3d86f1f8bcfb724dbc is published as
+https://github.com/numpde/nmr-provider-tools/releases/tag/v0.2.1.
+Public assets were downloaded and compared with the qualified original bytes;
+the existing0.2.0 asset identities/digests remained unchanged. Exact0.2.1 pins:
+wheel SHA2563c15c53aefc4583e86a40556a93c30cb99ee9492fab30fd761dbc31da82aaf9f
+source SHA25651a9eaf4e8943e7af2fe709f2a00c892d2383424ae7d3d0af64c74f685c58ffd
+install lock SHA2568536d4a493b5ad32f9b958e20fc8d3d82d8d6ee332d4dee6d3afe906e7e7ab04
+release record SHA256003b202be9d0c603afef1e2a47096b1e067f2aa4df51a1db7eb75302cf8fd788
+
+The third-party dependency closure is unchanged. NMRNet copied the exact issued
+lock/record, pinned the two GitHub artifact URLs and updated the installed-image
+asset witness. Its maintained interface-bound acquisition actually downloaded
+the new wheel and source archive into the existing flat wheelhouse; the index
+input still contained only the12 third-party dependencies, not provider-core.
+All three NMRNet image captures include the single shared install lock, so its
+actual changed construction input requires offline image rebuilds; no duplicate
+role-specific pin or fingerprint exception is being added to avoid that work.
+
+The patch permits safe GET recovery after500/429 and verified408 admission
+refusal, fresh current Hello recovery after those permitted failures, and scoped
+job-discovery access recovery. Request-ID, topology, retirement and earlier
+uncertainty remain distinct; this send's no-effect408 does not resolve an earlier
+unanswered send. Mutation replay retains each operation's existing authority.
+Docs describe the selected end state. Live runtimes remain0.2.0 until the single
+coordinated adoption boundary; the earlier numerical/receipt evidence keeps its
+original version scope. No new scientific Job is implied by the package update.
+
+SDK0.2.1 consumer staging checks completed from NMRNet0b4af31:
+  public artifact acquisition: actual wheel and source download passed;
+  existing configuration/admission lane:24 passed against installed0.2.1;
+  documentation links/anchors/historical-record lane:3 passed;
+  newly built controller installed inventory/origin/signing lane:4 passed;
+  local and production new inference imports passed.
+No scientific Job, new numerical benchmark or broader fault matrix ran.
+
+Local staged images:
+controller sha256:1962ef1784c230e5933a3e7fa879ae3b0a6f5cc9c8ee3d6510e5109875fef88b
+geometry sha256:bba91c9cb0159f5d4e105c420c50b78498f6425f9db89ab97164f64d2c5fe139
+inference sha256:a9750876cd67baa7e50434f1b9d189dc6f83f4e71634f2095de4db7d524b5d45
+Production staged images:
+controller sha256:2184efa743925e5157e6fdb82d84203ed93f8f6c267bd74acf554b8e9d78c326
+geometry sha256:0edefafc8cb546b81ef6834e0d7a518436a796647148bb86995f9dceb09cc166
+inference sha256:b820a65fe9668cbbef475a7e335179d5ac2d4f0db5dffc0635076784f0a6dc58
+Known production public/private input modes were checked before the next
+boundary:0644 and0600, respectively, UID/GID1000:1000. Current live0.2.0
+local/production producer and publisher counters remained restart0 and healthy.
+Stage completion is not live patch adoption. Existing canonical definitions
+remain unchanged pending coordinated Magnet source closure and host adoption.
+
+Error-transport QA found a real scope gap in the first Magnet main diagnostic
+witness: its patched _run_provider bypassed supervision. The real supervisor
+retrieved a task exception as data then emitted a failure event before raising
+it, so an event-sink failure had no automatic context linking the original task
+error. Magnet569496f activates that error before reporting; independent source
+review accepted the correction and saved RED/GREEN27 evidence, while the actual
+supervision-to-main receiving-path witness remained separately required. Native
+cleanup/cancellation evidence was addressed in subsequent coherent5cbe78e.
+A suspected Hello add_note omission was adjudicated as nonblocking: existing
+owned operation and 'Cannot confirm provider Hello acceptance' already preserve
+uncertainty, and Attempt/issuance false flags are not Hello no-effect claims.
+No arbitrary-note dump or redundant Hello state was added for that suspicion.
+
+Shared0.2.1 runtime staging completed independently by its owner:
+local sha256:ab664d1e19c2daae73f06a946ec951296f6f99d080ac44ad8dd2bf46fabb4025
+production sha256:d5d39bcfce25bf39b38ba28bf207e42298989c8b732ad0314cbc7362b0bdd3cc
+common construction fingerprint
+20b70f5e6195c1c9413e347c45b855894ad518b658772a5438f79d9e431bc6a5.
+Local installed helper/proxy34 passed; production build admitted its own exact
+ID/fingerprint. These are staged, with no shared live restart or binding edit.
+The completed temporary0.2.0 GitHub acquisition proof cache and its private pip
+cache were removed; the chosen shared wheelhouse and durable hashes remain.
+
+The actual supervision-to-main diagnostic witness was subsequently corrected:
+real _run_provider and supervision remain in the path; injection fails
+ProviderOperationsFailed after earlier Hello reporting succeeds. The final sink
+checks original API/request-ID facts, reporting OSError, privacy and later cleanup.
+An independent reader inspected the saved installed0.2.1 process proof (46 cases
+OK) without rerunning it. This closes that receiving-path seam, not all separate
+status-publication, cancellation, discovery, routing or live-adoption questions.
+
+Additional recovery-envelope assumption checked, read-only: the real local
+nmr-api-v1-dev-local project has healthy public-api/provider-api services and
+four cleanup/retention worker services, but no execution-attempt-expiry worker
+service was found. Make's DEV_PRIVATE_WORKER_SERVICES omits it; the RUN list
+includes it and compose/run.shared.yml owns maintain_execution_attempt_expiry.
+No alternative expiry owner was identified by this inspection. This does not
+prove a universal API deployment defect or authorize changing its data/policy.
+The deployed provider-api's static ExecutionAttemptExpirySettings.load reported
+86400 seconds eligibility age and60 seconds normal cycle; no database was read
+or changed to obtain those settings. Thus automatic capacity recovery must not
+be assumed to exist locally, or to be immediate where an expiry worker exists.
+Production API expiry was not inspected in this probe.
+
+Conservative START uncertainty also does not by itself fail U27: current Magnet
+controller continues traversal after ExistingInProgress/StartCommitUnresolved.
+A committed lost-ACK key remains replayed; a later feed cannot make that same
+committed key fresh. A never-created/preconnect case can eventually receive a
+fresh non-replayed creation. These are different useful-progress claims. The
+actual server expiry/capacity envelope, honest diagnostics and pending user
+choice determine any further work. No new nonce/checkpoint/proxy feature or
+SDK0.2.2 was prescribed merely to improve a conservative effect flag. Required
+shared API ownership integration continues independently with existing safe
+behavior; no scientific replay or API expiry mutation was attempted.
+
+Magnet subsequently settled the START policy under the user's instruction to
+continue pragmatically and document the caveat. Commit 997af40 implements it;
+notes/041_ambiguous_start_recovery_20261026.txt is the dedicated explanation,
+linked from notes/040. An active replay never starts scientific execution,
+including a replay after this campaign lost a genuinely fresh START reply.
+The lane reports the Job, stable attempt key and Attempt identity, then considers
+other Jobs. This preserves the no-rerun safety rule but supersedes the earlier
+notes/029 lost-reply completion behavior; it is not unchanged recovery behavior.
+An unexecuted active Attempt can consume capacity until an actual API-owned
+expiry or other authorized resolution occurs. Skipping it does not guarantee
+continued service once admission capacity is exhausted, or eventual completion.
+
+Root read the dedicated note and source commit identity directly. Magnet's
+supervisor reports 155 focused checks passing for source, tests and updated
+native fixture expectations; the changed native campaign has not been run.
+Earlier native qualification must not be claimed for this changed policy.
+Typed discovery/input integration continues next, followed by START/progress
+transport ownership. No SDK0.2.2, ownership protocol, checkpoint or new scientific
+run was added to settle this decision. Both hosts' 0.2.1 images remain staged,
+not adopted into the live shared runtime or NMRNet producers by this note.
+
+Receiving-boundary review while Magnet discovery/input integration continued:
+the shared binding's socket_group_id is the daemon's primary GID, while Magnet's
+deployment_inputs.delivery_compose derives the producer's supplementary group
+from that binding. A producer UID65532 can therefore use the existing shared
+GID1000 grant without changing the daemon UID or inventing per-binding daemon
+GIDs. This is source review, not proof of the final installed socket connection.
+The direct producer API route remains a distinct pending composition boundary:
+the reviewed Magnet loader rejects mapped loopback addresses and its Compose
+projection copies the admitted addresses. The publisher's working host route
+does not prove producer-container reachability. Final readiness must include
+the actual producer's TLS/authenticated read route and the required shared
+outbox/API publication effect; startup, local ACK and empty queue alone do not
+establish the latter. No binding or live runtime was changed during this review.
+
+A proposed broader sanitizer for an input-error reporting failure was withdrawn
+after inspecting the actual receiver: _admit_serially projects the error through
+restricted diagnostics and ends the lane without retaining its raw graph.
+FatalRunError's private-frame detachment is not a ban on natural exception
+context reaching that internal receiver. No new carrier or broad interception
+was justified by that hypothesis. The worker retained one focused check of the
+actual failed-reporting receiver instead of expanding the architecture.
+
+Magnet read-path source milestone: baf9469b5ede7d3ccfb653305b2d6bc8b50854b1,
+'Use shared API ownership for Job discovery and input reads'. Root inspected
+the committed deletion/integration scope and the dependency-posture change:
+it replaces the exact local job_input import with provider_core.job_input and
+also includes core imports in the existing check. It does not broadly exempt
+SDK dependencies. Native runner input lists still omit analysis_contract and
+the API input module; the separate SDK-equipped runner probes own those reads.
+The saved final aggregate reports 192 repository checks, 786 unit tests,
+20 contract tests and 177 integration tests, all OK. Root read those observations
+without rerunning the campaign. Log /tmp/magnet-sdk-reads-full-check-final.log,
+SHA-256 46d04a399a2b41cd7cf946732159f16fc5ce4c30cbd86a99b423548461b407f6.
+An earlier aggregate failed its old dependency expectation; the final aggregate
+is the passing one. This milestone is source/read qualification, not START,
+observation/progress replacement, physical retirement or live route proof.
+
+Nonblocking deferred fixture issue: the final aggregate emits repeated missing
+provider-core-install.lock/provider-core-release.json diagnostics before its
+G01 release-input check. repository_checks/check-g01-release-inputs.sh copies
+Makefile and requirements.lock into its temporary repository but omits these
+newly hashed files; Makefile:24 eagerly computes TEST_BASE_KEY at parse time.
+The final aggregate still passes. Do not hide the stderr or treat that success
+as proof of the fixture's complete hash inputs. Triage the fixture/input scope
+later; this does not block the remaining transport integration or authorize
+another broad campaign now. Sent through the single Magnet supervisor stream.
+
+Next-slice assumption challenged, source review only: Magnet's existing progress
+port describes observing a phase or observing/clearing a condition, without
+acquiring outcome ownership. The pinned SDK fixture's PUT /progress
+x-nmr-recovery ('latest_progress') likewise says these are observations, not
+permission to start/stop work or confirmation of a final outcome. Retries may
+send only facts that still represent the latest observation; an obsolete retry
+can overwrite a newer condition. The API text does not require acknowledgement
+before science. SDK0.2.1 separately constrains phase deferral (fresh allowed read
+before effects) and replay of a still-current awaited condition. Those helpers
+do not make every provider condition an awaited one. Root sent the actual
+contract distinction to Magnet's supervisor so its consumer mapping remains
+explicit, rather than acquiring NMRNet's execution-session semantics by analogy.
+No progress implementation, API policy or SDK release was changed by this review.
+
+Two concrete U27/A11 findings in the next working START patch (after baf9469),
+sent to the single Magnet supervisor stream before qualification:
+1. job_provider_attempt_limit_reached and job_attempt_limit_reached409 were
+   grouped with key conflicts as StartConflict. Its actual receiver holds the
+   affected analysis lane, preventing other Jobs of that kind from proceeding.
+   Other lanes may still run; this is not proof that the whole process exits
+   immediately. The pinned START409 contract says retained Job attempts count
+   after completion/expiry and neither waiting nor changing the key releases
+   that Job's capacity. Job-specific exhaustion does not establish an identity
+   conflict or justify holding unrelated Jobs. Preserve earlier unanswered
+   START uncertainty and do not invent a key, delete records or raise limits.
+2. ApiFailure exposes the START response's Retry-After advice, but the patch
+   called wait_before_start_retry() without a floor. The real callback,
+   SelectedJobControl.wait_before_start_redelivery, used only the configured
+   operational polling interval. A positive server delay would therefore be
+   visible in diagnosis but ignored by actual pacing. Carry it through the
+   existing pacer, preserving exact replay, its bounded budget and the existing
+   drain/cancellation policy; zero adds no server delay. No retry framework or
+   broad new fault campaign was requested. Both findings remain pending until
+   the actual changed consumer and focused evidence are inspected.
+
+Subsequent working-source inspection found both corrections in place: Job limit
+refusals return SelectionNotAdmitted, or StartCommitUnresolved when an earlier
+send may have committed; specific key conflict remains separate. START passes
+the positive Retry-After floor (zero becomes None) into the existing control
+callback and pacer. These are source corrections, not yet closed qualification.
+
+Remaining terminal-ownership cleanup found by a runtime reference scan:
+attempt_outcome.py still defines COMPLETE/FAIL response parsers and receipt
+types, plus restore_attempt_complete/fail, although only tests/helpers call
+them after publication/recovery moved to the shared service. Remove these
+displaced owners and their duplicated wire checks at the final deletion
+boundary; retain genuinely used prepared values and scientific/public failure
+policy. Its _complete_body/_fail_body also duplicate the SDK's public builders
+for opaque bytes. Check delegation for new commands. The local outer serializer
+sorts keys while the SDK emits insertion order/ASCII escapes: do not normalize
+any retained or queued request to change its identity. Scientific payload bytes
+and existing unresolved obligations must remain exact. Sent to the supervisor
+as final ownership work, not a demand to rewrite all local terminal policy or
+publish a new SDK. No source deletion or queue rewrite was performed by root.
+
+Focused START milestone while implementation continues: root read the saved
+47-case passing controller log, /tmp/magnet-start-sdk-controller-green.log,
+SHA-256 e3f1b16bfa4cccdad4fd7eed6685a9771d1825670f68cc3372edc10553025406,
+and inspected the actual Job-limit test. The first correlated 409 produces
+SelectionNotAdmitted; an earlier 503 with an uncertain effect followed by 409 produces
+StartCommitUnresolved. Neither branch requests science. This is a scripted SDK
+exchange with an uncertain HTTP 503 outcome, not proof of a physical lost reply.
+The existing receiver continues traversal for both outcomes. This qualifies the
+Job-limit correction at that seam; the START delay's control/pacer path and
+the remaining transport/adoption boundaries still need their own evidence.
+
+Rollout preparation, without stopping or changing services: both selected
+Magnet operator policies use a 30-second API timeout and have no delivery table
+in their old input shape. Preserve that exchange budget in the new bindings;
+NMRNet's 10-second binding budget is independent. The selected new finite choices
+are 5 seconds for API retirement and 30/5 seconds for producer IPC exchange/
+retirement, matching the maintained consumer fixture's IPC budgets. These new
+budgets are explicit choices, not claims about old policy values. Local and
+production original policy/key/definition metadata was checked: operator UID/
+GID 1000:1000, policy 0644, signing input 0600 and shared definition 0600; the local
+canonical CA is also 0600. Credential contents were not read for this metadata
+inspection. Preserve admitted modes during rewrites and recheck the exact final
+inputs before downtime; no bulk permission change is justified by this preflight.
+
+Run-authority preservation checked in source: run_generation_fingerprint hashes
+the provider, analysis kind, explicit generation ID and creation-time window;
+provider_attempt_key adds the Job and input fingerprints. Transport, credentials,
+process/GPU identity and the configuration schema are absent. Preserve existing
+lane IDs/windows when replacing the operator policy; initialization defaults
+must not manufacture new keys for existing Jobs. The readiness comparison must
+use the actual running frozen authority as its baseline, without assuming that
+the mutable operator file matches the active capture. Sent to the supervisor
+for the existing freeze/preflight; no extra snapshot/handoff file, scientific
+rerun or new test campaign was introduced.
+
+Completion priority reiterated: finish the agreed delivery path and defer
+nonblocking improvements. An extra positive START-delay witness is not a new
+completion gate: forwarding was source-reviewed and established pacer behavior
+can be reused. Do not claim a direct positive START-floor test from the existing
+None-delay cases or the earlier controller-only result. Optional terminal
+builder/restorer refinements must not prolong the completion push.
+
+Concrete two-provider definition preflight, using the actual staged 0.2.1 SDK on
+each host: load the original definition, add the selected Magnet binding in
+memory, size host totals for the declared shares, serialize and admit through
+the public parser. The SDK requires host totals to cover all provider shares;
+unchanged single-provider totals would reject the new binding. Both actual
+definitions use 8 items and 16 MiB per provider. Preserve those shares and allocate
+16 items and 32 MiB host totals for the two providers. This is allocation for a newly
+admitted provider, not repeatedly raising a history limit to sustain throughput.
+Every original NMRNet binding dataclass compared equal after the addition,
+including its API, route, socket and derived IPC identity. New bindings admit
+with GID 1000 and their selected socket names. Proposed serialized-definition
+SHA-256 values: local
+e42c669669277b7ad0ba137bcf9c2d45c352b2e1e5bc4f16cb51b4f30926fd45;
+production
+49428d535939c8c259b630c9fac03cdb7c29a78f180700551c8473a57af9705c.
+The checks used cached immutable runtime images in finite, network-disabled,
+read-only containers. No proposed file or descriptor was persisted; canonical
+definitions, services and queues were untouched and credential contents were
+not read. This proves definition admission and derived identity, not credential
+admission, producer reachability, actual IPC grants or remote delivery. Publish
+the complete definitions only at the coordinated lifecycle boundary and refresh
+inputs if they change before then.
+
+0.2.1 operational adoption, 26 October 2026
+
+The earlier plan to wait for Magnet before adopting the shared/NMRNet patch
+introduced an unnecessary dependency. A complete shared definition may contain
+an idle Magnet binding while its producer is still being prepared. Adopt that
+complete service once, upgrade the already qualified NMRNet consumer, and let
+Magnet adopt its existing socket later without another shared restart.
+
+Both hosts completed that adoption through the maintained shared delivery and
+NMRNet down/install/up targets. Before stopping, each NMRNet producer had zero
+compact checkpoints and zero queued deliveries. The installed SDK admitted both
+providers' exact signing/TLS inputs without printing credentials. Selected public
+and private configuration modes were checked before downtime. The complete
+definitions were atomically published with exactly the preflighted hashes above;
+temporary writer files were removed. No importer, archive, runtime descriptor or
+registry was introduced. This rollout did not alter a Magnet process or its
+operator policy.
+
+Local NMRNet generation: generation-vpYDkZ4g.
+Production NMRNet generation: generation-sotqpmM7.
+All seven NMRNet roles and the shared daemon/two API proxies became healthy.
+Actual controller/inference/geometry/shared image IDs matched the staged 0.2.1
+identities recorded above; those inspected containers had restart count zero.
+An independent read-only peer confirmed the image/health observations on each
+host. Provider readiness follows startup admission and accepted Hello in
+service._startup; it is not merely successful process creation.
+
+Actual mounts retain nmr-api-delivery-queue and the existing producer checkpoint
+volumes:
+local nmr-api-delivery-control-b0ac10481bd2a099e4cd4cba9a41c0d160dd4caff47738c275aa47259c41a6d3;
+production nmr-api-delivery-control-a257f21578b3ff6535aa5fe4bd99e15d97382e70086b679092bed4e0f701a358.
+Original NMRNet IPC identities
+are unchanged. Per-provider capacity remains 8 items/16 MiB; host totals now
+cover the two declared shares at 16 items/32 MiB.
+
+Each new Magnet socket passed an actual pending() query in a finite read-only,
+network-disabled SDK container as UID/GID 65532:65532 with supplementary GID 1000.
+Both reported zero items, publisher running, and the unchanged provider share.
+This establishes that socket grant, not Magnet's producer API route, scientific
+execution or terminal publication. No new scientific Job or model rerun was
+requested. The existing numerical/API result evidence remains scoped to its
+recorded run. Magnet's remaining source, captured API-route proof, result handoff
+and consumer adoption remain with its implementation owner.
+
+Publisher API route qualification, 26 October 2026, 18:52-18:53 UTC
+
+Each installed shared daemon admitted its actual /run/delivery.toml through
+load_delivery_service without starting another service or opening the queue.
+For each binding, its installed ProviderAPI performed jobs() with
+analysis_kind_ref=peaks_from_mol, has_provider_execution_attempt=false, limit=1,
+cursor=None through the configuration's actual API proxy socket. Both local
+identities (provider:nmrnet-fw-a and provider:magnet-fw-a) and both production
+identities (provider:nmrnet-pa-a and provider:magnet-pa-a) returned authenticated,
+admitted pages with zero items. All four clients confirmed transport retirement;
+both finite commands exited zero. Output contained only provider identity,
+operation, success, item count and retirement confirmation, without credentials,
+Job contents or response bodies. No Hello, START, progress or terminal mutation,
+Job creation, queue submission or model execution was requested.
+
+This proves installed publisher signing, TLS, API topology and proxy reachability
+on both hosts. It does not prove Magnet's separate producer-container API route,
+terminal publication or numerical behavior. Those remain distinct obligations.
+
+Deferred deployment-bundle retention, 26 October 2026
+
+A read-only local inventory found 17 NMRNet frozen configuration generations
+under secrets/deployments/nmr-localhost/bundles, including the current
+generation-vpYDkZ4g. Docker mount inspection across all local containers found
+only that current generation borrowed. The maintained install path in
+tools/compose_deployment.sh creates an exclusive new generation and atomically
+selects it; it does not remove earlier generations. Existing deployment tests
+deliberately require previous frozen inputs to remain unchanged. These are
+deployment configuration snapshots, distinct from the shared delivery queue and
+scientific result storage. This inspection did not read credential contents or
+establish a production inventory.
+
+Defer an explicit retirement policy for unborrowed configuration generations.
+Before removal, separate useful qualification evidence from redundant frozen
+inputs, preserve current bindings and original operator inputs, and honor every
+actual borrower. Do not add an archive, registry, payload dump or another shared
+deployment root. No files were removed or lifecycle behavior changed for this
+finding; it is not a new gate on Magnet's current integration and delivery proof.
+
+Local Magnet adoption and coexistence, 26 October 2026, 19:22 UTC
+
+Magnet's owner completed local adoption with the converted policies committed
+as 9e87836, following provider-code commit 00978d0. Independent Docker metadata
+inspection confirmed the actual localhost provider running and healthy at
+sha256:03b8cfb75087e18cc19e3772d61759f04876684d927d288b71a8730c183a312a,
+UID/GID 65532:65532 with supplementary GID 1000, restart count zero. E01 and E02
+CPU runners were running with restart count zero at, respectively,
+sha256:cac894ae366379bb93641b1f82ad49a69b18a9514f94cba2fd33b9bdc82a165a
+and sha256:9293a1ac89b4cb3ddf2ec88ca6ff447535f4902dca8aa1da77ba6ea2be634c28.
+
+All seven NMRNet roles remained healthy in generation-vpYDkZ4g at their previously
+recorded image identities, each with restart count zero. The shared daemon and
+both API proxies remained healthy at ab664d1e19c2daae73f06a946ec951296f6f99d080ac44ad8dd2bf46fabb4025,
+each with restart count zero. This independently confirms local consumer
+adoption and coexistence without a shared-service or NMRNet restart. It is not
+terminal API publication evidence. Production Magnet adoption and the authentic
+retained-command replay remain outstanding at this observation.
+
+Production Magnet adoption and authentic replay, 26 October 2026, 19:46 UTC
+
+Independent production Docker inspection confirmed Magnet's provider running
+and healthy at
+sha256:29faacd97add78bab0e0883016200bdf59c782abb16974de944925aa111af238,
+UID/GID 65532:65532 with supplementary GID 1000 and restart count zero. Its three
+selected runners were running, each with restart count zero:
+E01 sha256:19490f3fdc45d8c28998f69ed52d49b953ab65f4e0a165b61693a53745e2e479;
+E02 sha256:20b6cdf55f528360c106903dbd0b9a9dc7c803772c92e80fb6336fdaa04a0166;
+G01 sha256:3f5f39d5bdf9d554e611472316a4ce94bc8f3f35e2200048877b4ac40a0a3136.
+All seven NMRNet roles remained healthy in generation-sotqpmM7 at their original
+recorded images, each with restart count zero. The shared daemon and both API
+proxies remained healthy at their original d5d39bcfce25bf39b38ba28bf207e42298989c8b732ad0314cbc7362b0bdd3cc
+image, each with restart count zero.
+
+The actual shared daemon's Docker log contained one matching delivery_published
+event for provider:magnet-pa-a, operation complete, on the original production
+API https://nmr.dapp32.com:
+Attempt execution_attempt:sha256:0953a16e35b10a742b2d143bb68552f6b58e7713f4c6a2013d635919c0966a0b;
+body sha256:637a40883622ca7f9a4e8ace96f4bf26c3e4046ea8f02c297e88802c5f5ee5db;
+replayed true.
+The SDK emits that event after a matching API receipt and queue-row removal
+(provider_core.delivery_worker.DeliveryWorker._deliver). This is actual delivery
+path evidence for the controlled demo's authentic retained command, not merely
+an enqueue or an empty-queue observation. It is an exact replay of the original
+result, not a new scientific execution or first-time result creation. The worker
+read the original command in place; no scientific payload export was required.
+
+Sequencing correction: Magnet's require_legacy_terminal_adoption checks
+the original terminal-outbox volume without removing it. The maintained up path
+only removes the distinct obsolete provider-state volume. Earlier advice that
+terminal replay had to precede automatic terminal-outbox removal was based on
+conflating those volumes. In-place replay after adoption is supported by the
+actual lifecycle. Retention/retirement of old terminal stores remains an explicit
+owning decision; preserving unique evidence does not make local payload-history
+retention automatically satisfy the maintainer's file-pollution requirement.
+
+Overall completion is still open. The maintainer challenged blanket deferral of
+Magnet's remaining SDK use; its owner is mapping actual chat, runner/lifecycle
+and result/status calls against the shared contracts before deciding and making
+the necessary replacements. The live API/delivery adoption and replay above do
+not establish adoption of those other components. Current scope and deferred
+limits remain in Magnet's maintained notes/041_deferred_20261026.txt.

@@ -197,6 +197,8 @@ Keep the public provider definition in
 <code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
 <code>config/deployments/&lt;name&gt;/deployment.toml</code>. Copy the latter from
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">the deployment settings example</a>.
+Use mode <code>0644</code> for the caller-owned public definition and
+<code>0600</code> for private machine settings; neither may be writable by group or others.
 Keep the path and network settings in that private deployment definition.
 The producer's checkpoint database uses a provider-only Docker volume; final
 request bodies use the delivery service's separate queue volume.</p>
@@ -577,17 +579,21 @@ successful read cycle or accepted Hello resets its own backoff. Requests keep th
 configured deadlines; an outage may wait until recovery or stop, and stop interrupts
 the backoff wait. A startup
 request already in flight still has its exchange/retirement deadlines.</p>
-<p>This applies to safe reads, including selected proxy maintenance responses, without
-treating an unverified error body as API authority. The verified API timing refusals
+<p>Safe reads and fresh complete Hello announcements can recover after rate limits
+and HTTP 500, 502, 503 or 504, without treating an unverified error body as API authority.
+The verified API refusals <code>request_body_timeout</code> (HTTP 408),
 <code>authentication_window_closed</code> and <code>signature_expired</code> confirm that
-this request did not run. Existing operation owners may retry with a fresh signature
+this request did not run; earlier unanswered requests remain unresolved.
+Existing operation owners may retry with a fresh signature
 after transport retirement: service reads and Hello keep their paced, stop-responsive
 retry loops; retained writes keep their own route, command and recovery-window checks.
 These read and Hello permissions exclude invalid credentials, future-dated signatures
 and reused nonces. Explicit wrong environment, malformed success, storage/ownership
 errors and admission holds still stop. Sources:
-<a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L826-L847">API timing-refusal contract</a> and
-<a href="https://github.com/numpde/nmrnet-repro/blob/ab56e80/packages/provider-core/src/provider_core/api.py">operation-specific retry permissions</a>.
+<a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L826-L847">API timing-refusal contract</a>,
+<a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L860-L868">body-timeout refusal</a>,
+<a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L231-L240">this-send effect policy</a> and
+<a href="https://github.com/numpde/nmr-provider-tools/blob/c2b02c6aa3de41c5410fcd3d86f1f8bcfb724dbc/packages/provider-core/src/provider_core/api.py">operation-specific retry permissions</a>.
 </p>
 <p>Shared delivery retries retained completion and failure requests after rate limits
 and recognised API authentication or authorization refusals, as well as network and
