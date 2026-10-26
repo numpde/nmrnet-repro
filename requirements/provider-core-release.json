@@ -25,9 +25,9 @@
     }
   },
   "files": {
-    "provider_core-0.2.1-install.lock": "8536d4a493b5ad32f9b958e20fc8d3d82d8d6ee332d4dee6d3afe906e7e7ab04",
-    "provider_core-0.2.1-py3-none-any.whl": "3c15c53aefc4583e86a40556a93c30cb99ee9492fab30fd761dbc31da82aaf9f",
-    "provider_core-0.2.1.tar.gz": "51a9eaf4e8943e7af2fe709f2a00c892d2383424ae7d3d0af64c74f685c58ffd"
+    "provider_core-0.2.3-install.lock": "c76e60778c2b8834bb03883e75045df18319b081a09bfaecef2c32ad931af094",
+    "provider_core-0.2.3-py3-none-any.whl": "2b5fe22d9bab969b83445e9ac3d839ad9c980c226ad53893e70776f3bc75e376",
+    "provider_core-0.2.3.tar.gz": "7bb9989b7230ba35b4ba6cf5bb81244a289944e51c6096f8a26ab31581fabce6"
   },
   "source_files": {
     "MANIFEST.in": {
@@ -37,12 +37,12 @@
     },
     "README.md": {
       "mode": 420,
-      "sha256": "2d36d049b90d8be18a4716e4c242abf82012b34934e2d1ec3f158859acf9777a",
-      "size": 5887
+      "sha256": "d81f07de1a0d4dc2c77127cd807f1ef1f5418603588358db879448bb65094a07",
+      "size": 8447
     },
     "pyproject.toml": {
       "mode": 420,
-      "sha256": "91233ac080422b9ad8bed9c2e2959bbdfe033268e9f5b3a115b11aac7f7d882a",
+      "sha256": "d08122a79b26f9c13bd83c0c3e06e8f626ecb19e13febe64f29cff9b01662fe5",
       "size": 546
     },
     "src/provider_core/__init__.py": {
@@ -112,8 +112,8 @@
     },
     "src/provider_core/conversation.py": {
       "mode": 420,
-      "sha256": "86b6fa103136c70ed6f2bf215e2534a7a1bbb2a949ee3236c73a3ac575016241",
-      "size": 18517
+      "sha256": "1df136c6a950ad30a3a978dd2a9daab3842e5a7ed3ecfc39c074e8497f17678a",
+      "size": 20302
     },
     "src/provider_core/credential.py": {
       "mode": 420,
@@ -247,8 +247,8 @@
     },
     "src/provider_core/runner.py": {
       "mode": 420,
-      "sha256": "6c962abcad0a14f93bfd92a1fa2443b4717049389c706b7913a2f94311725614",
-      "size": 13955
+      "sha256": "8fce0529b874a12f720c38ccf017ae72705fff438cd7dc1a2395791ac6ddbbbd",
+      "size": 14737
     },
     "src/provider_core/runner_protocol.py": {
       "mode": 420,
@@ -257,8 +257,8 @@
     },
     "src/provider_core/runner_session.py": {
       "mode": 420,
-      "sha256": "769c690f7462bff736ee2309c17dcc6dd8a6d208ea89b05345765fdef4053a49",
-      "size": 5181
+      "sha256": "10ccec5b70794dace412daa885058b7d74bfdec09bb17ceec811cde3b930967f",
+      "size": 6751
     },
     "src/provider_core/signing.py": {
       "mode": 420,
@@ -412,8 +412,8 @@
     },
     "tests/fakes/conversation.py": {
       "mode": 420,
-      "sha256": "cbf358c62b72eb6d92e5320cf765eb421ab1b9c9a35c354dd5b05f3f418355fa",
-      "size": 912
+      "sha256": "8ed404e17b5cb1d56c50eb9cacea4301fdeb695931c24b531ed0e06c622cbcca",
+      "size": 1293
     },
     "tests/fakes/credential.py": {
       "mode": 420,
@@ -467,8 +467,8 @@
     },
     "tests/fakes/runner.py": {
       "mode": 420,
-      "sha256": "004bdee7c3ab9bc3d84238b16c3d1a5a2d8e37806117e33211553e13dc75de32",
-      "size": 4989
+      "sha256": "bc72498d01454483cc2af979487267834ed151420091f3c529a825defea138e1",
+      "size": 5346
     },
     "tests/fakes/secs_sources.py": {
       "mode": 420,
@@ -635,6 +635,11 @@
       "sha256": "9146f274f61715f5f30f3e085ccbd5d5ae35abe189c7f33d1a15fa2fbcd32ab2",
       "size": 16493
     },
+    "tests/integration/chat/adversarial/test_text_correction.py": {
+      "mode": 420,
+      "sha256": "359927efc1078e732bd64272d77d88ab4bf16e924ff697f1f48294ea0599195a",
+      "size": 6578
+    },
     "tests/integration/chat/normative/__init__.py": {
       "mode": 420,
       "sha256": "e9b2d56dc8ddb5724c2968be29a53db3d3d93c6714509d3380baac8214a46225",
@@ -649,6 +654,11 @@
       "mode": 420,
       "sha256": "57f7ee1ef7655f5f250657837bc73933bd9d0ec6aee85e3f9e63d2dab435f76d",
       "size": 4008
+    },
+    "tests/integration/chat/normative/test_text_correction.py": {
+      "mode": 420,
+      "sha256": "d8e34b0b527ed1fbd700b251b5cb65ecec189fb5831b1f0ae1fd9d3cf7ef278f",
+      "size": 3749
     },
     "tests/integration/delivery/__init__.py": {
       "mode": 420,
@@ -1107,8 +1117,8 @@
     },
     "tests/unit/adversarial/test_runner.py": {
       "mode": 420,
-      "sha256": "0c5fef50b83b16b46b30d0f50941ff48fb51f9f61b851d554b41aebe591ac6fe",
-      "size": 6955
+      "sha256": "9bdf51e17794c7e39c512f5d643ab77edc6b2d499a20be5d57b6f58aebb59981",
+      "size": 13640
     },
     "tests/unit/adversarial/test_signing.py": {
       "mode": 420,
@@ -1362,8 +1372,13 @@
     },
     "tests/unit/normative/test_runner.py": {
       "mode": 420,
-      "sha256": "edf49c511d1abfa0139e50468b3788a2a2c28e816ff733ee653f5294d5a4e948",
-      "size": 3288
+      "sha256": "cee358e1a2afdf659644d6170db2eecb4ebb13ed4ff0c9b69135bc36a6721297",
+      "size": 6187
+    },
+    "tests/unit/normative/test_runner_startup.py": {
+      "mode": 420,
+      "sha256": "6e1c23d18eeff7077a4f1d9d6264df399a9d7d1dab98e11dc9ce2b4499afd7ac",
+      "size": 9336
     },
     "tests/unit/normative/test_signing.py": {
       "mode": 420,
@@ -1401,5 +1416,5 @@
       "size": 3486
     }
   },
-  "source_revision": "c2b02c6aa3de41c5410fcd3d86f1f8bcfb724dbc"
+  "source_revision": "d9e7b18bbf5b7d0d310f2515e3f23500acfc4d35"
 }

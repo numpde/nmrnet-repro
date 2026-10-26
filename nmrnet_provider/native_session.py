@@ -18,7 +18,7 @@ import time
 
 from nmrnet_provider.worker_protocol import document, frame_size, require_seconds
 from provider_core.runner_protocol import LifecycleRejected
-from provider_core.runner_session import RunnerSession
+from provider_core.runner_session import RunnerSession, RunnerStartupStopped, RunnerStartupUnavailable
 
 
 class NativeOperation:
@@ -77,7 +77,7 @@ class NativeOperation:
     def _connect(self):
         if not self.endpoint.is_absolute() or self.endpoint.parent.resolve() != self.endpoint.parent:
             raise ValueError("Native runner endpoint requires an admitted canonical absolute parent.")
-        descriptor = os.open(self.endpoint.parent / ".owner-session.lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        descriptor = os.open(self.endpoint.parent / ".owner-session.lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
         try:
             observed = os.fstat(descriptor)
             if not stat.S_ISREG(observed.st_mode) or observed.st_uid != os.geteuid() or stat.S_IMODE(observed.st_mode) != 0o600:
@@ -89,6 +89,8 @@ class NativeOperation:
             self.endpoint, role=self.role, expected_lock_identity=identity,
             startup_seconds=self._seconds, retirement_seconds=self._seconds,
         )
+        if self._stop_requested:
+            self.session.request_stop()
         self.session.connect()
 
     async def _open(self):
@@ -182,6 +184,12 @@ class NativeOperation:
         if self._opening is not None:
             try:
                 await self._wait(self._opening, deadline)
+            except (RunnerStartupStopped, RunnerStartupUnavailable):
+                # The control connection was never established. A proof session
+                # would create a child instead of retiring an existing one.
+                self.session.close()
+                self._report_settled_failures()
+                return
             except Exception:
                 if not self._opening.done():
                     raise

@@ -1,17 +1,90 @@
 """Original native setup and retirement tasks outlive cancellation of their waiter."""
 
 import asyncio
+import errno
+import socket
 import threading
-import time
 import unittest
 from unittest.mock import Mock, patch
 
 from nmrnet_provider.native_session import NativeOperation
-from provider_core.runner_session import RunnerSession
+from provider_core.runner_session import RunnerSession, RunnerStartupStopped, RunnerStartupUnavailable
 from tests.fakes.runner import RunningSupervisor
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_before_connect_does_not_allocate_a_retirement_child(self):
+        entered, stopped, release = threading.Event(), threading.Event(), threading.Event()
+        connect = RunnerSession.connect
+        allocations = []
+        operation = self.operation()
+        stop = operation._request_stop
+
+        def gated_session(*arguments, **options):
+            if not entered.is_set():
+                entered.set()
+                if not release.wait(timeout=3):
+                    raise TimeoutError("Fixture did not release the stopped connection")
+            return RunnerSession(*arguments, **options)
+
+        def observed_connect(session, **options):
+            try:
+                return connect(session, **options)
+            finally:
+                if session.operation is not None:
+                    allocations.append(session.operation)
+
+        def requested_stop():
+            stop()
+            stopped.set()
+
+        self.addAsyncCleanup(operation.retire)
+        with (patch("nmrnet_provider.native_session.RunnerSession", side_effect=gated_session),
+              patch.object(RunnerSession, "connect", observed_connect),
+              patch.object(operation, "_request_stop", requested_stop)):
+            caller = asyncio.create_task(operation.start())
+            retirement = None
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+                caller.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await caller
+                retirement = asyncio.create_task(operation.retire())
+                self.assertTrue(await asyncio.to_thread(stopped.wait, 2))
+                self.assertIsNone(operation.session)
+            finally:
+                release.set()
+                if retirement is not None:
+                    await retirement
+                else:
+                    await operation.retire()
+            await operation.settle()
+        self.assertEqual(allocations, [])
+        self.assertIsNone(operation.allocation)
+        self.assertEqual(operation.session.control.fileno(), -1)
+        self.assertIsInstance(self.notices.call_args.args[0], RunnerStartupStopped)
+
+    async def test_never_connected_readiness_expiry_retires_without_a_proof_child(self):
+        self.runner.process.kill()
+        await asyncio.to_thread(self.runner.process.wait, timeout=2)
+        operation = self.operation()
+        operation._seconds = 0.2
+        try:
+            with self.assertRaises(TimeoutError):
+                await operation.start()
+            await asyncio.gather(operation._opening, return_exceptions=True)
+            await operation.retire()
+            await operation.settle()
+            self.assertIsNone(operation.allocation)
+            self.assertIsNone(operation.proof)
+            self.assertEqual(operation.session.control.fileno(), -1)
+            self.assertIsInstance(self.notices.call_args.args[0], RunnerStartupUnavailable)
+        finally:
+            if operation.session is not None:
+                operation.session.close()
+            if operation.proof is not None:
+                operation.proof.close()
+
     async def test_retirement_barrier_does_not_adopt_or_send_scientific_input(self):
         operation = self.operation()
         with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=AssertionError("Scientific channel adopted")):
@@ -307,13 +380,17 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.to_thread(self.runner.process.wait, timeout=2)
         original.control.close()
         retrying = threading.Event()
-        pause = time.sleep
+        connect = socket.socket.connect
 
-        def readiness_wait(seconds):
-            retrying.set()
-            pause(seconds)
+        def observe_refusal(channel, address):
+            try:
+                return connect(channel, address)
+            except OSError as cause:
+                if address == str(self.runner.path) and cause.errno in (errno.ENOENT, errno.ECONNREFUSED):
+                    retrying.set()
+                raise
 
-        with patch("provider_core.runner_session.time.sleep", side_effect=readiness_wait):
+        with patch.object(socket.socket, "connect", observe_refusal):
             retirement = asyncio.create_task(operation.retire())
             self.assertTrue(await asyncio.to_thread(retrying.wait, 1))
             retained = operation._proof_task

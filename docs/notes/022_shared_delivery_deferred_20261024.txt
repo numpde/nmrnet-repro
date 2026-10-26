@@ -1969,3 +1969,94 @@ and result/status calls against the shared contracts before deciding and making
 the necessary replacements. The live API/delivery adoption and replay above do
 not establish adoption of those other components. Current scope and deferred
 limits remain in Magnet's maintained notes/041_deferred_20261026.txt.
+
+27 October 2026 - Installed SDK startup-stop receiving evidence
+
+GitHub release v0.2.2 is public and immutable, from shared source
+2a74aaed6a07307f021cc523197b10717070455e. Independently observed public asset
+digests match the qualified wheel, source archive, full install lock and release
+record. NMRNet acquired its wheel/source through the maintained interface-bound
+packages/provider-core/wheelhouse lane into the existing selected flat cache;
+no consumer wheel build, sibling runtime import or private PyPI resolution ran.
+Wheel SHA256 a0727593a7f74fa4f6fa6b0fb7d7935829f3d17e8a2665fa7bcdea9b73df8e2e;
+source SHA256 3fcc34d623317f6ea6b443878a36111ac0b96c14d0a49c527d429dfcf30a8ca9;
+install lock SHA256 24327ac72322b8643dfe5b4009ca7bd89864ec1bed6f95d7f56c15f382ad1bcf;
+release record SHA256 b59e548a3d4e34c3a6ab945cfea28483374329b18cd0e7353790dc63b308986c.
+The twelve third-party dependency pins and hashes are unchanged from v0.2.1.
+
+The receiving test held RunnerSession construction while NativeOperation still
+had no published session, cancelled the startup waiter, requested retirement,
+then released construction. Before the consumer fix it observed one allocated
+child after cancellation. Forwarding the existing owner stop flag immediately
+after publishing the SDK session and before connect reduced that to zero.
+The typed RunnerStartupStopped outcome permits local closure without creating a
+proof child; arbitrary socket/greeting failures still require the retained
+opening observation and existing retirement barrier. The original typed stop
+still reaches the protected diagnostic recipient.
+
+The maintained test/integration/provider-core/runner target then passed all16
+checks against the installed v0.2.2 wheel and matching published source support.
+This includes actual child/reader behavior, lost-control proof retirement,
+cancelled waiters and supervisor replacement. Its readiness witness now observes
+an actual ENOENT/ECONNREFUSED connection result instead of patching the SDK's
+sleep implementation. test/integration/provider-core/interpreter passed all41
+checks against the same release; both contained installations passed pip check.
+These checks use model-free fixtures, not a live LLM, new scientific calculation
+or API terminal delivery. No production or shared-service lifecycle changed.
+
+Final image staging awaits the owner's separate narrow v0.2.3 patch for its own
+pre-connect deadline expiring after only known endpoint absence/refusal. Generic
+TimeoutError cannot prove no allocation. The settled new public contract is
+RunnerStartupUnavailable(TimeoutError), restricted to the SDK-owned pre-attempt
+deadline branch. NMRNet must adopt that typed no-connect outcome together with
+the final immutable pin; ordinary OS/greeting timeouts remain uncertain. This
+avoids rebuilding three consumer images twice while the receiving defect is
+being fixed. It does not reopen the completed API/delivery rollout or make
+NMRNet an additional Magnet release gate.
+
+The added receiving witness
+test_never_connected_readiness_expiry_retires_without_a_proof_child also failed
+against the actual installed v0.2.2:16 existing checks passed, while this one
+raised TimeoutError in NativeOperation.retire. It kills only a disposable test
+supervisor, leaves its real refused control socket, joins the failed original
+startup, then requests retirement. The generic deadline outcome sends cleanup
+through an unnecessary proof-session connection and consumes the cleanup budget.
+This is a demonstrated NMRNet need for the typed v0.2.3 outcome, not an upgrade
+for version uniformity. The witness sends no scientific command.
+
+27 October 2026 - Public v0.2.3 receiving qualification
+
+The final public release is
+https://github.com/numpde/nmr-provider-tools/releases/tag/v0.2.3, from source
+d9e7b18bbf5b7d0d310f2515e3f23500acfc4d35. GitHub independently reports a
+non-draft release with seven assets and these exact adopted identities:
+wheel SHA256 2b5fe22d9bab969b83445e9ac3d839ad9c980c226ad53893e70776f3bc75e376;
+source SHA256 7bb9989b7230ba35b4ba6cf5bb81244a289944e51c6096f8a26ab31581fabce6;
+install lock SHA256 c76e60778c2b8834bb03883e75045df18319b081a09bfaecef2c32ad931af094;
+release record SHA256 d84cf997d544a84c3da20ab75fdfb03a1c384b4fe4aba4a7871c20870b57d4fe.
+The owner qualified the wheel/source rebuild with690 passing checks. NMRNet
+downloaded the wheel and source through its maintained acquisition lane, and
+pinned the exact full lock and release record. Third-party pins remain unchanged.
+
+The final installed-package runner target passed all17 tests, including the
+previously failing refused-endpoint cleanup witness and stop-before-publication
+witness. NMRNet catches only RunnerStartupStopped and RunnerStartupUnavailable
+as proof that this startup never connected. The original typed cause remains
+available to protected reporting; generic OS/greeting errors keep the existing
+proof-session path. Comparing release records shows runner_session.py is the
+only production source file changed from v0.2.2. Conversation bytes are identical,
+so the41 interpreter checks above retain their stated scope without a redundant
+rerun. The v0.2.3 contained installation also passed pip check.
+
+These are consumer-source/package checks. Controller, geometry and inference
+images and local/production deployment still require the final adoption step.
+Existing shared delivery/proxy API and IPC source bytes did not change; their
+healthy v0.2.1 service does not need a restart for consumer version uniformity.
+
+Independent final review closed the early-stop handoff and retained-uncertainty
+source questions. It also found that opening the existing lifetime lock read-only
+could wait forever if that path were a stale FIFO, before the regular-file check
+ran. The open now includes O_NONBLOCK so the existing fstat admission can reject
+that object; no extra state, validator or fallback was added. A dedicated FIFO
+failure-injection test is deferred. This was a source-level failure scenario,
+not an observed production incident.

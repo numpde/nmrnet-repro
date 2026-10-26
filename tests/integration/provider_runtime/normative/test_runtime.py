@@ -36,7 +36,7 @@ class ProviderRuntimeTests(unittest.TestCase):
             for line in Path("/opt/provider/provider-core-install.lock").read_text().splitlines()
             if (match := re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s;]+) \\", line))
         )
-        self.assertIn(("provider-core", "0.2.1"), expected)
+        self.assertIn(("provider-core", "0.2.3"), expected)
         observed = sorted(
             (re.sub(r"[-_.]+", "-", item.metadata["Name"]).lower(), item.version) for item in importlib.metadata.distributions()
         )
@@ -108,8 +108,8 @@ class ProviderRuntimeTests(unittest.TestCase):
     def test_consumed_dependency_inventory_is_retained_in_the_image(self):
         evidence = json.loads(Path("/opt/provider/dependency-inputs.json").read_bytes())
         self.assertEqual(set(evidence), {"runtime"})
-        self.assertEqual(evidence["runtime"]["files"]["provider_core-0.2.1-py3-none-any.whl"],
-                         "3c15c53aefc4583e86a40556a93c30cb99ee9492fab30fd761dbc31da82aaf9f")
+        self.assertEqual(evidence["runtime"]["files"]["provider_core-0.2.3-py3-none-any.whl"],
+                         "2b5fe22d9bab969b83445e9ac3d839ad9c980c226ad53893e70776f3bc75e376")
         self.assertEqual(
             evidence["runtime"]["lock_sha256"], hashlib.sha256(Path("/opt/provider/provider-core-install.lock").read_bytes()).hexdigest()
         )
