@@ -193,5 +193,5 @@ typing-extensions==4.16.0 \
 tomli-w==1.2.0 \
     --hash=sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90 \
     --hash=sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021
-provider-core==0.2.0 \
-    --hash=sha256:248bcf548a25edb5d3b349e024d2ace568a5f9d2d01474d7a14d2c1d0394f6da
+provider-core==0.2.1 \
+    --hash=sha256:3c15c53aefc4583e86a40556a93c30cb99ee9492fab30fd761dbc31da82aaf9f
