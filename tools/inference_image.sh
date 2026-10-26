@@ -249,14 +249,11 @@ if [[ "$1" == build ]]; then
     else
         execute_wheel_capture "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image" "$native_timeout"
     fi
-    for lock in provider-core.lock provider-core-build.lock; do
-        if [[ $lock == provider-core.lock ]]; then destination=runtime-wheels; else destination=build-wheels; fi
-        if "$print_command"; then
-            print_wheel_capture_plan "$frozen_context" provider-core "$lock" "$core_capture_root/$destination" "$python_image"
-        else
-            execute_wheel_capture "$frozen_context" provider-core "$lock" "$core_capture_root/$destination" "$python_image" "$native_timeout"
-        fi
-    done
+    if "$print_command"; then
+        print_wheel_capture_plan "$frozen_context" provider-core provider-core-install.lock "$core_capture_root/runtime-wheels" "$python_image"
+    else
+        execute_wheel_capture "$frozen_context" provider-core provider-core-install.lock "$core_capture_root/runtime-wheels" "$python_image" "$native_timeout"
+    fi
     if ! "$print_command"; then
         inference_native 'base image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$python_image"
@@ -266,7 +263,6 @@ if [[ "$1" == build ]]; then
         --build-arg "INFERENCE_INPUTS=$inputs_digest"
         --build-context "wheelhouse=$frozen_wheelhouse"
         --build-context "runtime-wheels=$core_capture_root/runtime-wheels"
-        --build-context "build-wheels=$core_capture_root/build-wheels"
         --file "$frozen_context/containers/inference/Dockerfile" "$frozen_context")
     if "$print_command"; then
         run "${build[@]}"

@@ -15,14 +15,15 @@ import hashlib
 import json
 import math
 import re
+from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected
 from provider_core.delivery_client import delivery_volume_name
 from provider_core.producer_checkpoint import checkpoint_volume_name
 from nmrnet_provider.process import _declared_execution
 from nmrnet_provider.startup_capture import _bind_path, startup_authorities, prediction_lifetime_seconds
-from tools.provider_proxy import ServicePolicy, ServiceRefused
-from tools.bound_http_proxy import require_interface_name
+from provider_core.provider_proxy import ServicePolicy, ServiceRefused
+from provider_core.bound_http_proxy import require_interface_name
 
 
 def project_name(checkout, deployment):
@@ -77,7 +78,7 @@ def _disjoint(first, second):
 
 
 # silent-defaults: allow-contract -- The installed production relay namespace remains unchanged unless a contained recipe explicitly selects a private project.
-def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes,
+def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes, shared_image_id,
                    delivery_project="nmr-api-delivery"):
     """Return the seven fixed services without touching Engine or acquiring work.
 
@@ -92,6 +93,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         raise ConfigurationRejected("deployment requires an explicit name of up to 48 letters, digits, underscores or hyphens.")
     if any(type(value) is not int or value < 1 for value in (uid, gid)):
         raise ConfigurationRejected("deployment requires an explicit nonroot caller UID and GID.")
+    if type(shared_image_id) is not str or re.fullmatch(r"sha256:[0-9a-f]{64}", shared_image_id) is None:
+        raise ConfigurationRejected("deployment requires the shared runtime's full immutable image ID.")
     checkout, bundle, prepared = map(_bind_path, (checkout, bundle, prepared))
     if bundle.parent.name != "bundles" or bundle.parent.parent.name != deployment:
         raise ConfigurationRejected("frozen bundle must belong to this deployment's bundles directory.")
@@ -104,6 +107,14 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
             "bin", "sbin", "lib", "lib64", "usr", "opt", "etc", "proc", "sys", "dev", "native", "routes", "input", "diagnostics", "run"
         ):
             raise ConfigurationRejected("deployment input/store mounts must not mask image software, trust or fixed runtime grants.")
+    socket_root = _bind_path(config.delivery.endpoint.socket_path.parent)
+    protected = (bundle, store, *(Path("/") / name for name in (
+        "bin", "sbin", "lib", "lib64", "usr", "opt", "etc", "proc", "sys", "dev", "native", "routes", "input"
+    )), Path("/run/status.json"))
+    if socket_root == Path("/tmp") or any(
+        socket_root.is_relative_to(path) or path.is_relative_to(socket_root) for path in protected
+    ):
+        raise ConfigurationRejected("delivery socket directory must not overlap provider software, frozen inputs, checkpoints or runtime grants.")
     identity = _declared_execution(execution)
     if type(routes) is not dict or set(routes) != {"api", "interpreter", "store"}:
         raise ConfigurationRejected("deployment requires exactly the api, interpreter and store routes.")
@@ -124,9 +135,9 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
                             "volume": {"nocopy": True}}]
     delivery_volume = delivery_volume_name(config.delivery.endpoint.api_origin, config.delivery.endpoint.provider_ref, namespace=delivery_project)
     provider["volumes"].append({"type": "volume", "source": delivery_volume,
-                                "target": str(config.delivery.endpoint.socket_path.parent), "read_only": True,
+                                "target": str(socket_root), "read_only": True,
                                 "volume": {"nocopy": True}})
-    provider["group_add"] = [str(gid)]
+    provider["group_add"] = [str(config.delivery.endpoint.socket_group_id)]
     services["provider"] = provider
     native = config.service.native
     for role in ("prediction", "reader", "smiles"):
@@ -162,8 +173,10 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     networks = {}
     for role in ("api", "interpreter", "store"):
         route = routes[role]
-        if type(route) is not dict or not {"mode", "interface"} <= set(route) or set(route) - {"mode", "interface", "addresses", "network"}:
-            raise ConfigurationRejected("each deployment route requires mode/interface and only its applicable address/network grants.")
+        if type(route) is not dict or not {"mode", "interface", "log_level"} <= set(route) or set(route) - {"mode", "interface", "log_level", "addresses", "network"}:
+            raise ConfigurationRejected("each deployment route requires mode/interface/log_level and only its applicable address/network grants.")
+        if route["log_level"] not in ("INFO", "DEBUG", "WARNING"):
+            raise ConfigurationRejected("route log_level must be INFO, DEBUG or WARNING.")
         interface = route["interface"]
         if type(interface) is not str:
             raise ConfigurationRejected("each route requires an explicit network interface name of at most 15 characters.")
@@ -180,10 +193,10 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
             raise ConfigurationRejected(str(cause), cause=cause) from None
         # Proxies use SIGTERM's immediate process exit, after provider drain.
         # Five seconds allows Engine/init scheduling, not an HTTP retry window.
-        service = _service(identity["controller_image_id"], controller_python, "tools.provider_proxy", uid=uid, gid=gid, labels=labels,
+        service = _service(shared_image_id, "/opt/provider-core/environment/bin/python", "provider_core.provider_proxy", uid=uid, gid=gid, labels=labels,
                            stop_seconds=5)
         service["command"] = ["--mode", route["mode"], "--interface", interface, "--socket", "/route/proxy.sock",
-                              "--ready-file", "/route/ready", "--status-directory", "/run"]
+                              "--ready-file", "/route/ready", "--status-directory", "/run", "--log-level", route["log_level"]]
         for value in authorities[role]:
             service["command"] += ["--authority", value]
         for value in addresses:
@@ -201,7 +214,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
                 raise ConfigurationRejected("only local routing accepts a Docker network grant.")
             service["network_mode"] = "host"
             if route["mode"] == "external":
-                service["volumes"].append(_bind(bundle / "resolv.conf", "/etc/resolv.conf"))
+                resolver = "api-resolv.conf" if role == "api" else "resolv.conf"
+                service["volumes"].append(_bind(bundle / resolver, "/etc/resolv.conf"))
         services[role] = service
         provider["volumes"].append(_bind(runtime / ("route-" + role), f"/routes/{role}"))
         provider["command"] += [f"--{role}-proxy-socket", f"/routes/{role}/proxy.sock"]

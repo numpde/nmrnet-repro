@@ -4,17 +4,15 @@ ARG PROVIDER_INPUTS
 LABEL io.nmrnet-repro.provider-inputs="${PROVIDER_INPUTS}"
 ENV NMRNET_IN_CONTAINER=1 PROVIDER_CORE_IN_CONTAINER=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /opt/build
-COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/provider_environment.py tools/core_environment.py tools/provider_proxy.py tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py ./tools/
-COPY requirements/provider-core.lock requirements/provider-core-build.lock ./requirements/
-COPY packages/provider-core/ ./packages/provider-core/
+COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/provider_environment.py tools/baseline_prepare.py tools/container_resources.py ./tools/
+COPY requirements/provider-core-install.lock ./requirements/
 COPY nmrnet_provider/ ./nmrnet_provider/
 COPY nmrnet_inference/predict.py ./nmrnet_inference/predict.py
 # The caller freezes both contexts and disables build networking. Only locked
-# dependency wheels and the core wheel built here can enter the runtime.
+# dependency wheels and the released core wheel can enter the runtime.
 RUN --mount=type=bind,from=runtime-wheels,target=/runtime-wheels \
-    --mount=type=bind,from=build-wheels,target=/build-wheels \
     python3 -B -m tools.provider_environment --root /opt/provider --source /opt/build \
-        --runtime-wheels /runtime-wheels --build-wheels /build-wheels \
+        --install-lock /opt/build/requirements/provider-core-install.lock --runtime-wheels /runtime-wheels \
     && /opt/provider/environment/bin/python -I -B -m nmrnet_provider.process --help \
     && rm -rf /opt/build
 WORKDIR /opt/provider

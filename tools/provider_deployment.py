@@ -17,10 +17,12 @@ import ipaddress
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 
 import tomllib
+import tomli_w
 
 from nmrnet_provider.config import ConfigurationRejected, _read_provider_config, read_startup_file
 from nmrnet_provider.deployment import _disjoint, compose_bytes, render_compose
@@ -30,6 +32,7 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.startup_capture import _bind_path, _source_path
 from provider_core.response_json import ResponseRejected, read_document
 from provider_core.chat import ChatEndpoint
+from provider_core.deployment_binding import BindingDefinitionRejected, load_deployment_bindings
 
 INPUT_ROOT = Path("/srv/nmrnet/input")
 
@@ -43,7 +46,8 @@ def _write(path, raw):
 
 
 def freeze_deployment(definition, settings, secrets, bundle, source_root, models,
-                      *, source_names, deployment, checkout, uid, gid, prepared, delivery_project="nmr-api-delivery", **identities):
+                      *, source_names, deployment, checkout, uid, gid, prepared,
+                      delivery_bindings, delivery_binding, shared_image_id, **identities):
     """Freeze admitted inputs into a fresh generation for Compose normalization.
 
     No API/model request, store opening or worker allocation occurs. Failed
@@ -58,9 +62,21 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     raw = read_startup_file(definition, maximum_bytes=65536, label="public deployment definition")
     local_raw = read_startup_file(settings, maximum_bytes=65536, label="private deployment settings", secret=True)
     try:
+        document = tomllib.loads(raw.decode("utf-8"))
         local = tomllib.loads(local_raw.decode("utf-8"))
     except (ValueError, UnicodeError):
-        raise ConfigurationRejected("deployment.toml must contain valid UTF-8 TOML.") from None
+        raise ConfigurationRejected("provider and deployment definitions must contain valid UTF-8 TOML.") from None
+    try:
+        binding = load_deployment_bindings(_bind_path(delivery_bindings)).selected(delivery_binding)
+    except BindingDefinitionRejected as failure:
+        raise ConfigurationRejected(f"Cannot select shared delivery binding: {failure}", cause=failure) from None
+    if "delivery" not in document or type(document["delivery"]) is not dict:
+        raise ConfigurationRejected("provider definition requires a delivery table with its IPC intake policy.")
+    if "api" in document or {"socket_path", "socket_group_id"} & document["delivery"].keys():
+        raise ConfigurationRejected("API settings and delivery socket grants must come only from the selected shared binding.")
+    document["api"] = dict(binding.api)
+    document["delivery"].update(socket_path=str(binding.socket_path), socket_group_id=binding.socket_group_id)
+    raw = tomli_w.dumps(document).encode("utf-8")
     if not {"maximum_startup_bytes", "routes"} <= set(local) or set(local) - {
         "maximum_startup_bytes", "routes", "resolvers"
     }:
@@ -68,58 +84,63 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     maximum = local["maximum_startup_bytes"]
     if type(maximum) is not int or maximum < 1:
         raise ConfigurationRejected("deployment maximum_startup_bytes must be a positive integer.")
+    if type(local["routes"]) is not dict or set(local["routes"]) != {"interpreter", "store"}:
+        raise ConfigurationRejected("deployment.toml owns only interpreter/store routes; the selected shared binding owns the API route.")
+    routes = dict(local["routes"])
+    routes["api"] = {key: value for key, value in binding.route.items() if key not in {"resolver_file", "network_id"}}
+    if binding.route["mode"] == "local":
+        routes["api"]["network"] = binding.route["network_id"]
     (bundle / "config").mkdir(mode=0o700)
     (bundle / "secrets").mkdir(mode=0o700)
-    consumed = {}
+    for role in ("api", "provider"):
+        (bundle / "secrets" / role).mkdir(mode=0o700)
+    consumed, retained_api, retained_provider = {}, {}, {}
+    api_inputs = {Path(binding.api["credential_file"]): Path("api/signing.json")}
+    if "ca_file" in binding.api:
+        api_inputs[Path(binding.api["ca_file"])] = Path("api/ca.pem")
 
-    def retain(path, **limits):
+    def retain_input(actual, leaf, **limits):
+        content = read_startup_file(actual, **limits)
+        if leaf in consumed:
+            if consumed[leaf] != content:
+                raise ConfigurationRejected("a repeated deployment input changed while freezing; preserve this failed bundle.")
+        else:
+            _write(bundle / "secrets" / leaf, content)
+            consumed[leaf] = content
+        return content
+
+    def retain_provider(path, **limits):
         path = _bind_path(path)
         if path == definition:
             return raw
         if not path.is_relative_to(INPUT_ROOT) or len(path.relative_to(INPUT_ROOT).parts) != 1:
-            raise ConfigurationRejected(
-                "deployment credential, key and CA paths must name files directly under /srv/nmrnet/input/."
-            )
-        actual = _source_path(secrets / path.name, secrets)
-        content = read_startup_file(actual, **limits)
-        if path in consumed:
-            if consumed[path] != content:
-                raise ConfigurationRejected("a repeated deployment input changed while freezing; preserve this failed bundle.")
-        else:
-            _write(bundle / "secrets" / path.name, content)
-            consumed[path] = content
-        return content
+            raise ConfigurationRejected("provider key and CA paths must name files directly under /srv/nmrnet/input/.")
+        leaf = Path("provider") / path.name
+        retained_provider[path] = bundle / "secrets" / leaf
+        return retain_input(_source_path(secrets / path.name, secrets), leaf, **limits)
 
-    admitted = _read_provider_config(definition, retain)
+    def retain_api(path, **limits):
+        path = _bind_path(path)
+        leaf = api_inputs[path]
+        retained_api[path] = bundle / "secrets" / leaf
+        return retain_input(path, leaf, **limits)
+
+    admitted = _read_provider_config(definition, retain_provider, read_api_file=retain_api)
     if Path(admitted.lifecycle.store_root) != Path("/srv/nmrnet/attempts"):
         raise ConfigurationRejected(
             "the public deployment store_root must be /srv/nmrnet/attempts, the producer checkpoint volume's container path."
         )
-    # Render only the path-bearing scalar lines. The parsed-document comparison
-    # below prevents accidental edits to scientific policy or other settings.
-    document = tomllib.loads(raw.decode("utf-8"))
-    document["api"]["credential_file"] = str(bundle / "secrets" / Path(document["api"]["credential_file"]).name)
+    # Only admitted input paths change; the writer preserves the parsed scientific
+    # values without imposing scalar-line or table-layout restrictions on TOML.
+    document["api"]["credential_file"] = str(retained_api[Path(document["api"]["credential_file"])])
     for endpoint in document["interpreter"]["endpoints"]:
-        endpoint["key_file"] = str(bundle / "secrets" / Path(endpoint["key_file"]).name)
-    for table in (document["api"], document["uploads"], *document["interpreter"]["endpoints"]):
+        endpoint["key_file"] = str(retained_provider[Path(endpoint["key_file"])])
+    if "ca_file" in document["api"]:
+        document["api"]["ca_file"] = str(retained_api[Path(document["api"]["ca_file"])])
+    for table in (document["uploads"], *document["interpreter"]["endpoints"]):
         if "ca_file" in table:
-            table["ca_file"] = str(bundle / "secrets" / Path(table["ca_file"]).name)
-    lines = []
-    for source_line in raw.decode("utf-8").splitlines():
-        rendered = source_line
-        match = re.match(r"\s*(credential_file|key_file|ca_file)\s*=", source_line)
-        if match:
-            # The public definition was admitted above; only flat input
-            # names may cross this path boundary, regardless of TOML quotes.
-            scalar = tomllib.loads(source_line)[match[1]]
-            value = str(bundle / "secrets" / Path(scalar).name)
-            rendered = match[1] + " = " + json.dumps(value)
-        lines.append(rendered)
-    frozen = ("\n".join(lines) + "\n").encode()
-    if tomllib.loads(frozen.decode()) != document:
-        raise ConfigurationRejected(
-            "deployment paths must use complete single-line assignments; no runtime profile was published."
-        )
+            table["ca_file"] = str(retained_provider[Path(table["ca_file"])])
+    frozen = tomli_w.dumps(document).encode("utf-8")
     if len(frozen) + sum(map(len, consumed.values())) > maximum:
         raise ConfigurationRejected("the frozen deployment exceeds maximum_startup_bytes; no runtime profile was published.")
     path = bundle / "config/provider.toml"
@@ -128,7 +149,7 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     def read_frozen(value, **limits):
         return read_startup_file(_source_path(value, bundle), **limits)
 
-    config = _read_provider_config(path, read_frozen)
+    config = _read_provider_config(path, read_frozen, read_api_file=read_frozen)
     capture_execution(source_root, bundle, source_names, **identities)
     # Repository declarations arrive as individual read-only source grants.
     # Checkout write modes are unrelated to the frozen config/secret policy.
@@ -149,8 +170,8 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     for name in ("inference.lock", "unicore-source.json"):
         _write(bundle / name, source_bytes(source_root / "requirements" / name, 1024 * 1024))
     plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
-                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=local["routes"],
-                          delivery_project=delivery_project)
+                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=routes,
+                          delivery_project=binding.project, shared_image_id=shared_image_id)
     external = any(route["mode"] == "external" for route in local["routes"].values())
     if external:
         resolvers = local.get("resolvers")
@@ -165,6 +186,10 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         _write(bundle / "resolv.conf", "".join("nameserver " + str(address) + "\n" for address in addresses).encode())
     elif "resolvers" in local:
         raise ConfigurationRejected("resolvers are unused by local/mapped routes; remove that grant.")
+    if binding.route["mode"] == "external":
+        _write(bundle / "api-resolv.conf", read_startup_file(
+            _bind_path(binding.route["resolver_file"]), maximum_bytes=65536, label="selected API resolver definition"
+        ))
     _write(bundle / "compose.json", compose_bytes(plan))
     return bundle
 
@@ -177,6 +202,40 @@ def creation_plan(bundle):
         return read_document(encoded.replace(b"$$", b"$"), 1024 * 1024)
     except ResponseRejected as cause:
         raise ConfigurationRejected("original Compose plan requires strict retained JSON.", cause=cause) from None
+
+
+def checkpoint_owner(bundle):
+    """Select the existing producer grant, without deriving a second volume name."""
+    provider = creation_plan(bundle)["services"]["provider"]
+    grants = [grant for grant in provider["volumes"] if grant["target"] == "/srv/nmrnet/attempts"]
+    if len(grants) != 1 or grants[0]["type"] != "volume" or grants[0]["read_only"]:
+        raise ConfigurationRejected("the installed provider must have one writable checkpoint volume grant.")
+    uid, gid = provider["user"].split(":")
+    return provider["image"], grants[0]["source"], uid, gid
+
+
+def initialize_checkpoint(uid, gid):
+    """Initialize only a fresh volume root; an existing producer owns its data."""
+    if os.geteuid() != 0 or uid <= 0 or gid <= 0:
+        raise ConfigurationRejected("checkpoint initialization requires root with CHOWN and nonzero target UID/GID.")
+    path = Path("/checkpoint")
+    observed = path.lstat()
+    if not stat.S_ISDIR(observed.st_mode):
+        raise ConfigurationRejected("the checkpoint volume root must be a real directory.")
+    if (observed.st_uid, observed.st_gid, stat.S_IMODE(observed.st_mode)) == (uid, gid, 0o700):
+        return
+    if observed.st_uid != 0:
+        raise ConfigurationRejected("refusing to change a checkpoint volume with unexpected ownership or mode.")
+    with os.scandir(path) as entries:
+        if next(entries, None) is not None:
+            raise ConfigurationRejected("refusing to change a nonempty checkpoint volume with unexpected ownership or mode.")
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        os.fchmod(descriptor, 0o700)
+        os.fchown(descriptor, uid, gid)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def client_inputs(*, bundle, prediction_image_id, client_root):
@@ -196,7 +255,7 @@ def client_inputs(*, bundle, prediction_image_id, client_root):
             return raw
         return read_startup_file(path, **limits)
 
-    admitted = _read_provider_config(configuration, read_file)
+    admitted = _read_provider_config(configuration, read_file, read_api_file=read_file)
     _disjoint(client_root, bundle.parent.parent)
     identity = {
         "origin": admitted.api.identity.origin, "authority": admitted.api.identity.authority,
@@ -217,11 +276,12 @@ def main(arguments=None):
     parser = argparse.ArgumentParser(description="Prepare deployment configuration and export public-client expectations offline.")
     operations = parser.add_subparsers(dest="operation", required=True)
     freeze = operations.add_parser("freeze", help="Freeze one deployment generation without starting services.")
-    for name in ("definition", "settings", "secrets", "bundle", "source-root", "models", "checkout", "prepared"):
+    for name in ("definition", "settings", "secrets", "bundle", "source-root", "models", "checkout", "prepared", "delivery-bindings"):
         freeze.add_argument("--" + name, type=Path, required=True)
     freeze.add_argument("--source", dest="source_names", action="append", required=True)
     freeze.add_argument("--deployment", required=True)
-    freeze.add_argument("--delivery-project", default="nmr-api-delivery")
+    freeze.add_argument("--delivery-binding", required=True)
+    freeze.add_argument("--shared-image-id", required=True)
     for name in ("uid", "gid"):
         freeze.add_argument("--" + name, type=int, required=True)
     for name in ("image-id", "geometry-image-id", "controller-image-id", "repository-revision", "upstream-revision"):
@@ -230,6 +290,11 @@ def main(arguments=None):
     client.add_argument("--bundle", type=Path, required=True)
     client.add_argument("--prediction-image-id", required=True)
     client.add_argument("--client-root", type=Path, required=True)
+    checkpoint = operations.add_parser("checkpoint-owner", help="Print the installed checkpoint grant and its image/owner.")
+    checkpoint.add_argument("--bundle", type=Path, required=True)
+    initialize = operations.add_parser("initialize-checkpoint", help="Initialize a fresh mounted producer checkpoint volume.")
+    initialize.add_argument("--uid", type=int, required=True)
+    initialize.add_argument("--gid", type=int, required=True)
     options = parser.parse_args(arguments)
     values = vars(options)
     operation = values.pop("operation")
@@ -238,6 +303,13 @@ def main(arguments=None):
             freeze_deployment(**values)
         elif operation == "client-inputs":
             client_inputs(**values)
+            return 0
+        elif operation == "checkpoint-owner":
+            sys.stdout.write(" ".join(checkpoint_owner(**values)) + "\n")
+            return 0
+        elif operation == "initialize-checkpoint":
+            initialize_checkpoint(**values)
+            sys.stdout.write("Producer checkpoint volume ready.\n")
             return 0
     except (ConfigurationRejected, OSError) as failure:
         # Protected Docker-stderr projection for this finite receiving boundary:

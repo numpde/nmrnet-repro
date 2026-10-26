@@ -4,13 +4,11 @@
 # Source/context labels identify committed inputs; immutable IDs identify output.
 
 provider_image_inputs=(containers/provider/Dockerfile containers/provider/Dockerfile.dockerignore
-    requirements/provider-core-build.lock requirements/provider-core.lock
-    packages/provider-core/pyproject.toml
-    nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py tools/provider_proxy.py tools/bound_http_proxy.py
-    tools/provider_environment.py tools/core_environment.py tools/provider_image.sh tools/core_image.sh tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
-# Both packages currently have flat module layouts. Every controller module is
-# captured, while separate scientific entrypoints never enter this image.
-for provider_input in "$repository_root"/nmrnet_provider/*.py "$repository_root"/packages/provider-core/src/provider_core/*.py; do
+    requirements/provider-core-install.lock
+    nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py
+    tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
+# Capture controller bindings; shared runtime code enters only as a locked wheel.
+for provider_input in "$repository_root"/nmrnet_provider/*.py; do
     case "$provider_input" in
         */nmrnet_provider/worker_main.py|*/nmrnet_provider/native_child.py|*/nmrnet_provider/geometry_worker.py|*/nmrnet_provider/smiles_worker.py) continue ;;
     esac
@@ -21,7 +19,7 @@ unset provider_input
 source "$repository_root/tools/core_image.sh"
 
 capture_provider_inputs() {
-    capture_core_inputs controller provider_image_inputs nmrnet_provider packages/provider-core/src
+    capture_core_inputs controller provider_image_inputs nmrnet_provider
 }
 
 build_provider_image() {
@@ -35,8 +33,7 @@ build_provider_image() {
         printf '%s\n' 'Starting the provider requires controller, prediction, geometry and delivery images and both prepared model archives.' \
             'Choose a deployment name. Write config/deployments/<name>/provider.toml and private deployment.toml; put credentials in secrets/deployments/<name>/.'
         next_make_command 'After configuring that deployment, install its inputs:' provider/deployment/install 'DEPLOYMENT=<name>'
-        next_make_command 'Then configure shared delivery with every profile served on this host:' delivery/deployment/install 'DEPLOYMENTS=<complete profile list>'
-        next_make_command 'Start shared delivery:' delivery/deployment/up
+        printf '%s\n' 'Start shared delivery through nmr-provider-tools using the complete host binding definition.'
         next_make_command 'Then start the provider:' provider/deployment/up 'DEPLOYMENT=<name>'
         printf '%s\n' 'Configuration: https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration'
     )

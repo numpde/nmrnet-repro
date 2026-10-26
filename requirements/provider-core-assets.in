@@ -1,0 +1,3 @@
+# Private package artifacts are published by the shared owner on GitHub.
+https://github.com/numpde/nmr-provider-tools/releases/download/v0.2.0/provider_core-0.2.0-py3-none-any.whl#sha256=248bcf548a25edb5d3b349e024d2ace568a5f9d2d01474d7a14d2c1d0394f6da
+https://github.com/numpde/nmr-provider-tools/releases/download/v0.2.0/provider_core-0.2.0.tar.gz#sha256=7b872bc620f56417eeab7fb0a16b5dd30e200dd18f8c3a84074996860c8d9867

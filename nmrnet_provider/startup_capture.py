@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from nmrnet_provider.config import ConfigurationRejected
-from tools.provider_proxy import ServiceRefused, authority_parts
+from provider_core.provider_proxy import ServiceRefused, authority_parts
 
 
 def _bind_path(value):

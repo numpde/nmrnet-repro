@@ -1,16 +1,5 @@
-# Maintained local definition: original API/provider/lifecycle scope preserved during note 021 cutover.
-# Private input/store paths are rebased to the deployment logical paths; terminal retry availability follows current core policy.
+# Provider policy; the selected shared binding supplies API identity and delivery grants.
 schema_id = "nmrnet.provider.runtime_config.v1"
-
-[api]
-origin = "https://nmr.localhost:10443"
-profile = "dev-local"
-topology = "dev-local"
-provider_ref = "provider:nmrnet-fw-a"
-credential_file = "/srv/nmrnet/input/signing.private.json"
-exchange_seconds = 10
-retirement_seconds = 5
-ca_file = "/srv/nmrnet/input/api-ca.crt"
 
 [interpreter]
 max_turns = 6
@@ -83,7 +72,6 @@ prediction_seconds = 90
 source_seconds = 10
 
 [delivery]
-socket_path = "/delivery/provider.sock"
 request_seconds = 30
 retirement_seconds = 5
 retry_initial_seconds = 1

@@ -1,19 +1,7 @@
 schema_id = "nmrnet.provider.runtime_config.v1"
 
-# Public deployment definition. Logical input/store paths are bound by
-# make provider/deployment/install; machine-local paths stay in deployment.toml.
-# Public API/layout precedent: magnet-deploy 0619d9ffd92a4326758b442c532aa09496161098,
-# config/deployments/nmr-dapp32-com/provider.toml and scripts/provider-deployment.sh.
-# Interpreter settings were copied from private deployment inputs; Git does not
-# identify those ignored files. Their source paths are retained privately.
-[api]
-origin = "https://nmr.dapp32.com"
-profile = "run"
-topology = "web"
-provider_ref = "provider:nmrnet-pa-a"
-credential_file = "/srv/nmrnet/input/signing.private.json"
-exchange_seconds = 10
-retirement_seconds = 5
+# Provider policy; the selected shared binding supplies API identity and delivery grants.
+# Local interpreter keys and network settings remain outside this public definition.
 
 [interpreter]
 max_turns = 6
@@ -85,7 +73,6 @@ prediction_seconds = 90
 source_seconds = 10
 
 [delivery]
-socket_path = "/delivery/provider.sock"
 request_seconds = 30
 retirement_seconds = 5
 retry_initial_seconds = 1

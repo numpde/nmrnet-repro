@@ -1,12 +1,12 @@
 {
   "checked_at": "2026-10-13T17:54:07.461093+00:00",
-  "scope": "PyPI exact-version advisory metadata; not a complete security audit",
+  "scope": "PyPI exact-version advisory metadata; package-specific checked_at values override the baseline date; not a complete security audit",
   "inputs_sha256": {
     "inference.in": "a1abd8080154efc74f1f0120dd1142e59930d1905dc0d8a31b7e10271476bdfc",
     "build.in": "7a4ac887d1ca1fbe8734925698b19d13eb7365b80f8c7ddb66f9835bd0c145be",
     "unicore-source.json": "c58cad18b89a3db3358a6e1995b27287fd0b434e8ee3b37f4e26c87f72e39200"
   },
-  "lock_sha256": "7a4ee5bbf4dbc7b6adcbe364fbd887674d2075e3837d3dd0e9f069f06b01b34a",
+  "lock_sha256": "59883cfc16a56f0532385254920011918db3c3eab70ccd9b39747030bbaf3906",
   "packages": [
     {
       "name": "absl-py",
@@ -28,8 +28,9 @@
     },
     {
       "name": "certifi",
-      "version": "2026.7.22",
-      "url": "https://pypi.org/pypi/certifi/2026.7.22/json",
+      "version": "2026.10.23",
+      "url": "https://pypi.org/pypi/certifi/2026.10.23/json",
+      "checked_at": "2026-10-26T08:37:21.346511+00:00",
       "vulnerabilities": []
     },
     {

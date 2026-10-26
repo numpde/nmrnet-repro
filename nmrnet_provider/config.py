@@ -148,16 +148,16 @@ class ProviderConfig:
 
 def load_provider_config(path):
     """Read admitted startup files once; never discover credentials or endpoints."""
-    return _read_provider_config(path, read_startup_file)
+    return _read_provider_config(path, read_startup_file, read_api_file=read_startup_file)
 
 
-def _read_provider_config(path, read_file):
+def _read_provider_config(path, read_file, *, read_api_file):
     """Use the same admission path for runtime and exact-byte offline capture."""
     raw, document = _configuration_document(path, read_file)
     # Only known owner messages may cross this disclosure boundary. Raw TOML,
     # filesystem and SSL errors remain private causes instead of public text.
     try:
-        api, provider_ref = _api(document["api"], read_file)
+        api, provider_ref = _api(document["api"], read_api_file)
         return ProviderConfig(
             api,
             _interpreter(document["interpreter"], read_file),
@@ -354,9 +354,10 @@ def _lifecycle(table, api_origin, provider_ref):
 
 
 def _delivery(table, api_origin, provider_ref):
-    _fields(table, {"socket_path", "request_seconds", "retirement_seconds", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
+    _fields(table, {"socket_path", "socket_group_id", "request_seconds", "retirement_seconds", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
     return DeliverySettings(
-        DeliveryEndpoint(api_origin, provider_ref, _path(table["socket_path"], "Delivery socket")),
+        DeliveryEndpoint(api_origin, provider_ref, _path(table["socket_path"], "Delivery socket"),
+                         socket_group_id=table["socket_group_id"]),
         table["request_seconds"], table["retirement_seconds"],
         table["retry_initial_seconds"], table["retry_max_seconds"],
     )

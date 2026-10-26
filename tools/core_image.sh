@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared controller/delivery image operations, ported from provider_image.sh at
+# Controller image operations, ported from provider_image.sh at
 # 765958643bd3371bc908218d09caaa73fcb406a4.
 # Role wrappers supply literal roles, selectors and operator guidance;
 # container.sh retains the native client, input capture and cleanup owners.
@@ -15,7 +15,7 @@ capture_core_inputs() {
     changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${selected_inputs[@]}" "$@")
     [[ -z "$changes" ]] \
         || { git_input_failure "$description image inputs" 'build inputs must match their committed bytes and modes.'; return 2; }
-    mkdir -- "$image_input_directory/context" "$image_input_directory/runtime-wheels" "$image_input_directory/build-wheels"
+    mkdir -- "$image_input_directory/context" "$image_input_directory/runtime-wheels"
     copy_git_blobs "$description image inputs" "$repository_root" "$commit" "$image_input_directory/context" \
         "$image_input_directory/inputs" "${selected_inputs[@]}"
     cmp -s -- "$image_input_directory/inputs.paths" <(printf '%s\n' "${selected_inputs[@]}" | LC_ALL=C sort) \
@@ -57,19 +57,14 @@ build_core_image() {
         inputs_digest="sha256:${inputs_digest%% *}"
     fi
     source "$repository_root/tools/wheelhouse_inputs.sh"
-    local lock destination
-    for lock in provider-core.lock provider-core-build.lock; do
-        if [[ $lock == provider-core.lock ]]; then destination=runtime-wheels; else destination=build-wheels; fi
-        if "$print_command"; then
-            print_wheel_capture_plan "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image"
-        elif execute_wheel_capture "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image" "$build_timeout"; then :; else
-            status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-        fi
-    done
+    if "$print_command"; then
+        print_wheel_capture_plan "$image_input_directory/context" provider-core provider-core-install.lock "$image_input_directory/runtime-wheels" "$image"
+    elif execute_wheel_capture "$image_input_directory/context" provider-core provider-core-install.lock "$image_input_directory/runtime-wheels" "$image" "$build_timeout"; then :; else
+        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+    fi
     local -a build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
         --iidfile "$image_input_directory/built-image-id" --build-arg "${kind^^}_INPUTS=$inputs_digest"
         --build-context "runtime-wheels=$image_input_directory/runtime-wheels"
-        --build-context "build-wheels=$image_input_directory/build-wheels"
         --file "$image_input_directory/context/containers/$kind/Dockerfile" "$image_input_directory/context")
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
     # Only committed public source and locked wheels enter this build. Inherit

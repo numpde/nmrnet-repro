@@ -314,12 +314,53 @@ def prepare_source(source_path, directory):
     shutil.rmtree(stage)
 
 
+def prepare_core_assets(inputs, pool):
+    """Acquire pinned GitHub bytes directly, without invoking an index or a build."""
+    with regular_file(inputs, os.O_RDONLY) as stream:
+        lines = stream.read().decode().splitlines()
+    for line in lines:
+        if not line or line.startswith("#"):
+            continue
+        url, checksum = line.rsplit("#sha256=", 1)
+        parsed = urllib.parse.urlsplit(url)
+        if (parsed.scheme != "https" or parsed.netloc != "github.com"
+                or not parsed.path.startswith("/numpde/nmr-provider-tools/releases/download/")
+                or re.fullmatch(r"[0-9a-f]{64}", checksum) is None):
+            raise ValueError("Cannot acquire provider-core: require a pinned shared-owner GitHub release URL and SHA-256.")
+        name = parsed.path.rsplit("/", 1)[1]
+        destination = pool / name
+        if destination.exists() or destination.is_symlink():
+            if digest(destination) != checksum:
+                raise ValueError(f"Cannot reuse {name}: cached bytes differ from their GitHub release pin; existing file preserved.")
+            continue
+        with tempfile.TemporaryDirectory(prefix=".nmrnet-core-download-", dir=pool) as temporary:
+            staged = Path(temporary) / name
+            print(f"Downloading shared release artifact: {name}", flush=True)
+            with open_url(urllib.request.Request(url), timeout=60) as response, staged.open("xb") as target:
+                shutil.copyfileobj(response, target, CHUNK_BYTES)
+            if digest(staged) != checksum:
+                raise ValueError(f"Cannot publish {name}: downloaded bytes differ from their GitHub release pin.")
+            publish_file(staged, destination, checksum)
+
+
+def core_dependencies(lock, destination):
+    """Let PyPI supply third-party dependencies only; the private wheel has its own origin."""
+    packages = requirements(lock)
+    if sum(name == "provider-core" for name, _version in packages) != 1:
+        raise ValueError("Cannot acquire shared dependencies: the installation lock must identify provider-core once.")
+    with destination.open("x") as stream:
+        for (name, version), hashes in sorted(packages.items()):
+            if name != "provider-core":
+                stream.write(" \\\n    ".join([f"{name}=={version}", *(f"--hash=sha256:{value}" for value in sorted(hashes))]) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("download", "check", "capture"))
     parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"), required=True)
     parser.add_argument("--lock", type=Path, action="append", required=True)
     parser.add_argument("--source", type=Path)
+    parser.add_argument("--assets", type=Path)
     parser.add_argument("--pool", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -351,6 +392,15 @@ def main():
                 shutil.copyfileobj(stream, target, CHUNK_BYTES)
             source_identity(source_path)
         if args.action == "download":
+            if args.profile == "provider-core":
+                if args.assets is None or len(locks) != 1:
+                    parser.error("provider-core acquisition requires --assets and one released installation lock")
+                prepare_core_assets(args.assets, args.pool)
+                third_party = root / "third-party.lock"
+                core_dependencies(locks[0], third_party)
+                populate_pool(third_party, args.pool, inference=False)
+                select_wheels(locks[0], args.pool)
+                return
             for lock in locks:
                 populate_pool(lock, args.pool, inference=args.profile == "inference")
             if source_path is not None:

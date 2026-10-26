@@ -4,14 +4,7 @@
 !containers/provider/Dockerfile
 !containers/provider/Dockerfile.dockerignore
 !requirements/
-!requirements/provider-core.lock
-!requirements/provider-core-build.lock
-!packages/
-!packages/provider-core/
-!packages/provider-core/pyproject.toml
-!packages/provider-core/src/
-!packages/provider-core/src/provider_core/
-!packages/provider-core/src/provider_core/*.py
+!requirements/provider-core-install.lock
 !nmrnet_provider/
 !nmrnet_provider/*.py
 nmrnet_provider/worker_main.py
@@ -25,8 +18,5 @@ nmrnet_provider/smiles_worker.py
 !tools/artifacts.py
 !tools/wheelhouse.py
 !tools/provider_environment.py
-!tools/core_environment.py
-!tools/provider_proxy.py
-!tools/bound_http_proxy.py
 !tools/baseline_prepare.py
 !tools/container_resources.py

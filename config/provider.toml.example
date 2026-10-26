@@ -1,15 +1,8 @@
 schema_id = "nmrnet.provider.runtime_config.v1"
 
-# Copy to config/deployments/<name>/provider.toml; keep credentials in secrets/deployments/<name>/.
-[api]
-origin = "https://nmr.localhost:10443"
-profile = "dev-local"
-topology = "dev-local"
-provider_ref = "provider:example"
-credential_file = "/srv/nmrnet/input/signing.private.json"
-exchange_seconds = 10
-retirement_seconds = 5
-ca_file = "/srv/nmrnet/input/api-ca.crt"
+# Copy to config/deployments/<name>/provider.toml.
+# API identity, trust and delivery socket grants come from the selected shared binding.
+# Interpreter keys remain in secrets/deployments/<name>/.
 
 [interpreter]
 max_turns = 6
@@ -82,7 +75,6 @@ prediction_seconds = 90
 source_seconds = 10
 
 [delivery]
-socket_path = "/delivery/provider.sock"
 request_seconds = 30
 retirement_seconds = 5
 retry_initial_seconds = 1

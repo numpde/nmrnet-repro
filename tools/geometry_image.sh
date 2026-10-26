@@ -5,10 +5,9 @@
 geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Dockerfile.dockerignore
     requirements/preparation.lock tools/artifacts.py tools/container_guard.py
     tools/rdkit_environment.py tools/wheelhouse.py
-    requirements/provider-core.lock requirements/provider-core-build.lock
-    packages/provider-core/pyproject.toml packages/provider-core/src/provider_core
-    nmrnet_provider nmrnet_inference tools/provider_environment.py tools/core_environment.py tools/provider_proxy.py
-    tools/bound_http_proxy.py tools/baseline_prepare.py tools/container_resources.py)
+    requirements/provider-core-install.lock
+    nmrnet_provider nmrnet_inference tools/provider_environment.py
+    tools/baseline_prepare.py tools/container_resources.py)
 
 capture_geometry_inputs() {
     local commit changes file
@@ -19,7 +18,7 @@ capture_geometry_inputs() {
     changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${geometry_image_inputs[@]}")
     [[ -z "$changes" ]] \
         || { git_input_failure 'RDKit image inputs' 'build inputs must match their committed bytes and modes.'; return 2; }
-    mkdir -- "$image_input_directory/context" "$image_input_directory/wheelhouse" "$image_input_directory/runtime-wheels" "$image_input_directory/build-wheels"
+    mkdir -- "$image_input_directory/context" "$image_input_directory/wheelhouse" "$image_input_directory/runtime-wheels"
     copy_git_blobs 'RDKit image inputs' "$repository_root" "$commit" "$image_input_directory/context" \
         "$image_input_directory/inputs" "${geometry_image_inputs[@]}"
     # copy_git_blobs admits every selected committed record. Required COPY and
@@ -61,20 +60,15 @@ build_geometry_image() {
     elif execute_wheel_capture "$image_input_directory/context" preparation preparation.lock "$image_input_directory/wheelhouse" "$image" "$build_timeout"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
-    local lock destination
-    for lock in provider-core.lock provider-core-build.lock; do
-        if [[ $lock == provider-core.lock ]]; then destination=runtime-wheels; else destination=build-wheels; fi
-        if "$print_command"; then
-            print_wheel_capture_plan "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image"
-        elif execute_wheel_capture "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image" "$build_timeout"; then :; else
-            status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-        fi
-    done
+    if "$print_command"; then
+        print_wheel_capture_plan "$image_input_directory/context" provider-core provider-core-install.lock "$image_input_directory/runtime-wheels" "$image"
+    elif execute_wheel_capture "$image_input_directory/context" provider-core provider-core-install.lock "$image_input_directory/runtime-wheels" "$image" "$build_timeout"; then :; else
+        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+    fi
     local -a build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "GEOMETRY_INPUTS=$inputs_digest"
         --build-context "wheelhouse=$image_input_directory/wheelhouse"
         --build-context "runtime-wheels=$image_input_directory/runtime-wheels"
-        --build-context "build-wheels=$image_input_directory/build-wheels"
         --file "$image_input_directory/context/containers/geometry/Dockerfile" "$image_input_directory/context")
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
     if container_native 'RDKit image build' "$build_timeout" image-id "${build[@]}"; then :; else
