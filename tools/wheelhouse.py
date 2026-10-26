@@ -314,7 +314,7 @@ def prepare_source(source_path, directory):
     shutil.rmtree(stage)
 
 
-def prepare_core_assets(inputs, pool):
+def prepare_core_assets(inputs, pool, *, download):
     """Acquire pinned GitHub bytes directly, without invoking an index or a build."""
     with regular_file(inputs, os.O_RDONLY) as stream:
         lines = stream.read().decode().splitlines()
@@ -333,6 +333,8 @@ def prepare_core_assets(inputs, pool):
             if digest(destination) != checksum:
                 raise ValueError(f"Cannot reuse {name}: cached bytes differ from their GitHub release pin; existing file preserved.")
             continue
+        if not download:
+            raise ValueError(f"Cannot verify shared release artifact {name}: missing from the selected wheelhouse; acquire provider-core artifacts first.")
         with tempfile.TemporaryDirectory(prefix=".nmrnet-core-download-", dir=pool) as temporary:
             staged = Path(temporary) / name
             print(f"Downloading shared release artifact: {name}", flush=True)
@@ -395,7 +397,7 @@ def main():
             if args.profile == "provider-core":
                 if args.assets is None or len(locks) != 1:
                     parser.error("provider-core acquisition requires --assets and one released installation lock")
-                prepare_core_assets(args.assets, args.pool)
+                prepare_core_assets(args.assets, args.pool, download=True)
                 third_party = root / "third-party.lock"
                 core_dependencies(locks[0], third_party)
                 populate_pool(third_party, args.pool, inference=False)
@@ -408,6 +410,8 @@ def main():
         elif args.action == "capture":
             capture(locks[0], source_path, args.pool, args.output)
         else:
+            if args.profile == "provider-core" and args.assets is not None:
+                prepare_core_assets(args.assets, args.pool, download=False)
             files = set()
             for lock in locks:
                 files.update(select_wheels(lock, args.pool)["files"])
