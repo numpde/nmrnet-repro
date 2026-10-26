@@ -33,6 +33,8 @@ class ComposeRefusalTests(ComposeFixture, unittest.TestCase):
             {"mode": "external", "interface": "eth0", "unused": "PRIVATE_CANARY"},
         )
         for route in cases:
+            if route:
+                route = dict(route, log_level="INFO")
             with self.subTest(route=route), self.assertRaises(ConfigurationRejected):
                 self.plan(routes={**self.routes, "api": route})
         with self.assertRaises(ConfigurationRejected):

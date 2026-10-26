@@ -4,6 +4,7 @@
 # https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/secs/pyproject.toml
 # Commands select every authored Python tree, including tests and the checks.
 line-length = 130
+target-version = "py312"
 lint.select = [
   "E", "F", "W", "B", "I", "ARG", "C4", "EM", "ICN", "ISC", "G",
   "PGH", "PIE", "PL", "PT", "PTH", "RET", "RUF", "SIM", "T20", "UP",
@@ -19,6 +20,6 @@ lint.unfixable = ["T20", "F841"]
 lint.flake8-unused-arguments.ignore-variadic-names = true
 lint.pydocstyle.convention = "numpy"
 lint.isort.known-first-party = ["tools", "repository_checks", "nmrnet_inference", "nmrnet_provider", "provider_core"]
-src = ["tools", "repository_checks", "nmrnet_inference", "nmrnet_provider", "packages/provider-core/src"]
+src = ["tools", "repository_checks", "nmrnet_inference", "nmrnet_provider"]
 # Retain the original exclusions; every authored tree remains in the gate.
 extend-exclude = ["resources_ee", "notebooks", "app", "data/**", "configs"]

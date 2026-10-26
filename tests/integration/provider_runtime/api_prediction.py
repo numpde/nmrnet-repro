@@ -24,6 +24,7 @@ import math
 import os
 import re
 import signal
+import socket
 import ssl
 import struct
 import tempfile
@@ -53,9 +54,6 @@ from nmr_api.upload_refs import require_upload_ref
 from nmr_api.upload_store_target import UploadStoreTarget
 from nmr_api.upload_transfer_capabilities import UPLOAD_TRANSFER_CAPABILITY_MAX_CHARACTERS
 from nmr_api.upload_transfer_http_contract import UPLOAD_BYTES_PUBLISH_METHOD
-
-from tools.bound_http_proxy import connect_bound
-
 
 def require(condition, message):
     if not condition:
@@ -119,11 +117,14 @@ class Client:
         connection = http.client.HTTPSConnection(self.host, self.port, timeout=10, context=self.trust)
         failures, phase = [], "connect"
         try:
-            # Use the same existing bound-address owner as the provider's mapped
-            # proxy. TLS and HTTP still use the original canonical authority.
-            outbound = connect_bound(self.address, self.port, self.interface)
+            # This finite API client has an already admitted literal IPv4
+            # publication. It needs no proxy resolver or provider SDK in the
+            # independently owned API-client image. TLS retains the authority.
+            outbound = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             connection.sock = outbound
             outbound.settimeout(10)
+            outbound.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, self.interface.encode("ascii") + b"\0")
+            outbound.connect((self.address, self.port))
             connection.sock = self.trust.wrap_socket(outbound, server_hostname=self.host)
             phase = "request dispatch"
             connection.request(method, path + ("?" + query if query else ""), body=body, headers=headers)

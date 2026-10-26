@@ -148,6 +148,7 @@ class LauncherFixture:
         self.environment = os.environ | {
             "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
+            "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
             "PATH": str(root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
             "PYTHONPATH": str(ROOT),
             "NMRNET_FAKE_ENGINE_LOG": str(self.log),

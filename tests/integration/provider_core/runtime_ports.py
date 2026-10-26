@@ -114,7 +114,7 @@ class RuntimePeers:
             self.stack.push_async_callback(self.api.retire)
             relay_root = Path(directory) / "relay-state"
             relay_root.mkdir(mode=0o700)
-            self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o700)
+            self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
             publisher = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport(),
                                     expected_topology=self.config.api.expected_topology)
             self.relay = DeliveryService(

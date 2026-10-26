@@ -18,20 +18,16 @@ class LauncherTests(unittest.TestCase):
             # --print admits file locations but performs no build or execution.
             # Authored placeholders keep this argv witness independent of caches.
             for name in (
-                "packages/provider-core",
                 "requirements",
                 "tests/integration/provider_core",
                 ".work/wheelhouse",
             ):
                 (checkout / name).mkdir(parents=True, exist_ok=True)
             for name in (
-                "requirements/provider-core-build.lock",
-                "requirements/provider-core.lock",
-                ".work/wheelhouse/setuptools-84.0.0-py3-none-any.whl",
+                "requirements/provider-core-install.lock",
+                "requirements/provider-core-release.json",
                 "tools/container_guard.py",
                 "tools/artifacts.py",
-                "tools/bound_http_proxy.py",
-                "tools/provider_proxy.py",
             ):
                 (checkout / name).write_bytes(b"argv witness only")
             result = subprocess.run(
@@ -51,7 +47,7 @@ class LauncherTests(unittest.TestCase):
         self.assertNotIn("docker.sock", " ".join(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertEqual(
-            arguments[arguments.index("--pattern") :], ["--pattern", "test_nmrnet_process.py", "test_nmrnet_reports.py"]
+            arguments[-2:], ["test_nmrnet_process.py", "test_nmrnet_reports.py"]
         )
 
     def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
@@ -69,6 +65,9 @@ class LauncherTests(unittest.TestCase):
         # silent-defaults: allow-pop-default -- Revoke inherited forwarded selection before omission and explicit archive cases; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads
         environment.pop("NMRNET_ARCHIVE_INPUT", None)
         environment["NMRNET_WLAN_INTERFACE_INPUT"] = "lo"
+        environment["NMRNET_SHARED_RUNTIME_IMAGE_INPUT"] = "sha256:" + "a" * 64
+        environment["NMRNET_WHEELHOUSE_INPUT"] = "/tmp"
+        environment["NMRNET_WHEELHOUSE_INPUT_ORIGIN"] = "command line"
         if archive is not None:
             environment["NMRNET_ARCHIVE_INPUT"] = archive
         return subprocess.run(
@@ -85,9 +84,11 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
         self.assertIn("--init", arguments)
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
-        self.assertEqual(4, len(mounts))
+        self.assertEqual(9, len(mounts))
         self.assertEqual(
-            {"/workspace/tools", "/workspace/tests", "/workspace/nmrnet_inference", "/workspace/nmrnet_provider"},
+            {"/workspace/tools", "/workspace/tests", "/workspace/nmrnet_inference", "/workspace/nmrnet_provider",
+             "/consumer/tools", "/consumer/nmrnet_inference", "/consumer/nmrnet_provider",
+             "/input/provider-core-install.lock", "/wheelhouse"},
             {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
         )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
@@ -100,12 +101,15 @@ class LauncherTests(unittest.TestCase):
         (checkout / "nmrnet_inference").mkdir()
         (checkout / "nmrnet_provider").mkdir()
         (checkout / "repository_checks").mkdir()
+        (checkout / "requirements").mkdir()
+        (checkout / "requirements/provider-core-install.lock").write_text("fixture lock\n")
         (checkout / "Makefile").write_text("help:\n")
         (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
         (checkout / "tools/wheelhouse_path.sh").write_bytes(Path("tools/wheelhouse_path.sh").read_bytes())
         (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (checkout / ".work/checker").mkdir(parents=True)
+        (checkout / ".work/wheelhouse").mkdir()
         (checkout / "bin").mkdir()
         # These fake owners exercise launcher admission and cleanup without an
         # engine or Git dependency in the base-image unit lane. The separate Git

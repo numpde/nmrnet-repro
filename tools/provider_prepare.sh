@@ -10,6 +10,11 @@ source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
 source "$repository_root/tools/acquisition_interface.sh"
 select_acquisition_interface
+shared_runtime_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
+if [[ ! $shared_runtime_image =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    printf '%s\n' 'Provider preparation requires SHARED_RUNTIME_IMAGE=<full local image ID>; build the shared runtime in nmr-provider-tools first.' >&2
+    exit 2
+fi
 source "$repository_root/tools/inference_native.sh"
 inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true caller_cancellation=0
 finish() {
@@ -33,7 +38,7 @@ prepare_step() {
     # Each child Make runs independently and serially, without an inherited
     # jobserver or override list. The selected values remain literal arguments.
     local -a command=(env -u MAKEFLAGS -u MFLAGS -u MAKEOVERRIDES NMRNET_SUPPRESS_NEXT_ACTIONS=1 make --no-print-directory -C "$repository_root"
-        "$@" "WHEELHOUSE=$wheelhouse_directory" "WLAN_INTERFACE=$interface")
+        "$@" "WHEELHOUSE=$wheelhouse_directory" "WLAN_INTERFACE=$interface" "SHARED_RUNTIME_IMAGE=$shared_runtime_image")
     if "$print_command"; then
         printf '%q ' "${command[@]}"; printf '\n'
     else
@@ -71,13 +76,12 @@ prepare_models() {
 # service launcher does; exit afterward without reading a changed script tail.
 prepare_provider() {
     prepare_step 'Acquire inference dependencies' packages/wheelhouse
-    prepare_step 'Acquire shared provider dependencies for all four images' packages/provider-core/wheelhouse
+    prepare_step 'Acquire the released shared provider dependencies' packages/provider-core/wheelhouse
     prepare_step 'Build the inference image' packages/image
     prepare_step 'Check inference imports' packages/import
     prepare_step 'Acquire geometry dependencies' packages/preparation/wheelhouse
     prepare_step 'Build the geometry image' geometry/image/build
     prepare_step 'Build the controller image' provider/image/build
-    prepare_step 'Build the shared delivery image' delivery/image/build
     prepare_models weight.zip
     prepare_models checkpoints.zip
     if ! "$print_command"; then

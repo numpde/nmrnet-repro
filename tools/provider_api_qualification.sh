@@ -33,7 +33,7 @@ api_witness_stop_deployment() {
     fi
     if [[ ${qualification_delivery_started-false} == true ]]; then
         if (( invocation_status != 0 )); then
-            printf 'Private delivery project %s was retained; inspect status/logs using %s/compose.json. Any queued outcome remains owned there. Do not repeat the Job.\n' \
+            printf 'Private delivery project %s was retained; inspect status/logs using %s/current/compose.json. Any queued outcome remains owned there. Do not repeat the Job.\n' \
                 "$qualification_delivery_project" "$qualification_delivery_root" >&2
             return 0
         fi
@@ -43,7 +43,7 @@ api_witness_stop_deployment() {
             return "$failure"
         }
         if qualification_delivery_empty; then
-            qualification_delivery_remove || {
+            qualification_delivery_release || {
                 local failure=$?
                 [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
                 return "$failure"
@@ -53,11 +53,6 @@ api_witness_stop_deployment() {
             [[ $inference_retirement_confirmed == true ]] || return 2
             # The client readback passed, but another retained obligation may
             # remain. Restore its original publisher rather than discard it.
-            qualification_delivery_retire_helper || {
-                local failure=$?
-                [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
-                return "$failure"
-            }
             qualification_delivery_up || {
                 local failure=$?
                 [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
@@ -91,10 +86,6 @@ api_witness_finish() {
         fi
     fi
     if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || cleanup=2; fi
-    if [[ -n ${qualification_delivery_helper-} && $inference_retirement_confirmed == true ]]; then
-        qualification_delivery_retire_helper || cleanup=2
-        [[ -z ${inference_diagnostic-} ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
-    fi
     if [[ $inference_retirement_confirmed != true ]]; then
         printf 'Qualification still owns an unretired local client at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
@@ -130,7 +121,7 @@ api_witness_ambiguity() {
     esac
     local selector alias path resolver interpreter_key interpreter_ca authority host_seconds deadline
     local -a resolvers=() common_grants=() admission_argv=()
-    for selector in INTERPRETER_CONFIG EXTERNAL_INTERFACE RESOLVERS OUTPUT; do
+    for selector in INTERPRETER_CONFIG EXTERNAL_INTERFACE RESOLVERS OUTPUT SHARED_RUNTIME_IMAGE; do
         alias=NMRNET_${selector}_INPUT
         [[ -n ${!alias-} ]] || { printf 'Missing explicit ambiguity qualification selector: %s.\n' "$selector" >&2; return 2; }
     done
@@ -155,7 +146,8 @@ api_witness_ambiguity() {
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
-    local print_command=false controller_image
+    local print_command=false controller_image shared_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
+    [[ $shared_image =~ ^sha256:[0-9a-f]{64}$ ]] || return 2
     source "$repository_root/tools/provider_image.sh"
     require_provider_image || return $?
     controller_image=$provider_image_id
@@ -165,17 +157,13 @@ api_witness_ambiguity() {
     sha256sum -- "$repository_root/Makefile" "$repository_root/tools/"{provider_api_qualification,provider,provider_logging,provider_image,docker_client,inference_native,worker_retirement,git_metadata}.sh \
         "$repository_root/tests/integration/provider_runtime/"{interpreter_ambiguity,stage_api_config}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
-        "$repository_root/packages/provider-core/tests/__init__.py" \
-        "$repository_root/packages/provider-core/tests/fakes/"{__init__,credential}.py \
         "$repository_root/tests/fixtures/preparation/$case_fixture" > "$provider_host_root/qualification-sources.sha256" || return $?
     printf '%s\n' "$controller_image" > "$provider_host_root/controller-image-id"
     common_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_ambiguity.py,dst=/fixture/interpreter_ambiguity.py,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly"
         --mount "type=bind,src=$NMRNET_INTERPRETER_CONFIG_INPUT,dst=/input/interpreter.toml,readonly")
     provider_host_grants=("${common_grants[@]}" --mount "type=bind,src=$provider_host_root/selection,dst=/output")
     provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage_api_config.py --root /output --inspect-interpreter /input/interpreter.toml)
@@ -204,9 +192,9 @@ api_witness_ambiguity() {
         && cmp -s -- "$provider_host_root/admission/host-seconds.txt" <(printf '%s\n' "$host_seconds") || return 2
     provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/model,dst=/route"
         --mount "type=bind,src=$provider_host_root/resolv.conf,dst=/etc/resolv.conf,readonly")
-    provider_host_argv=(/opt/provider/environment/bin/python -I -B -m tools.provider_proxy --mode external --authority "$authority" \
-        --interface "$NMRNET_EXTERNAL_INTERFACE_INPUT" --socket /route/proxy.sock --ready-file /route/ready --status-directory /diagnostics)
-    provider_host_create proxy host "$controller_image" provider_host_grants provider_host_argv true || return $?
+    provider_host_argv=(/opt/provider-core/environment/bin/python -I -B -m provider_core.provider_proxy --mode external --authority "$authority" \
+        --interface "$NMRNET_EXTERNAL_INTERFACE_INPUT" --log-level INFO --socket /route/proxy.sock --ready-file /route/ready --status-directory /diagnostics)
+    provider_host_create proxy host "$shared_image" provider_host_grants provider_host_argv true || return $?
     deadline=$((SECONDS + 10))
     until [[ -S $provider_host_root/routes/model/proxy.sock && -f $provider_host_root/routes/model/ready ]] \
         && cmp -s -- "$provider_host_root/routes/model/ready" <(printf 'ready\n'); do
@@ -290,7 +278,7 @@ api_witness_existing_pasted() {
     source "$repository_root/tools/git_metadata.sh"
     revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?
     local -a inputs=(tools/provider_api_qualification.sh tests/integration/provider_runtime/api_prediction.py
-        tests/fixtures/preparation/api_pasted.json tools/bound_http_proxy.py tools/container_guard.py)
+        tests/fixtures/preparation/api_pasted.json tools/container_guard.py)
     [[ -z $(repository_git -C "$repository_root" status --porcelain -- "${inputs[@]}") ]] \
         || { provider_host_refuse 'Commit the client witness inputs before capturing them.'; return 2; }
     copy_git_blobs 'deployed API client witness' "$repository_root" "$revision" "$provider_host_root/sources" \
@@ -310,7 +298,6 @@ api_witness_existing_pasted() {
     local -a provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$source/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
         --mount "type=bind,src=$source/tests/fixtures/preparation/api_pasted.json,dst=/fixture/case.json,readonly"
-        --mount "type=bind,src=$source/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
         --mount "type=bind,src=$source/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/registration.json,dst=/credentials/registration.json,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/signing.private.json,dst=/credentials/signing.private.json,readonly"
@@ -409,16 +396,15 @@ api_witness_main() {
         local revision
         local -a inputs=(Makefile tools/provider_api_qualification.sh tools/provider.sh tools/provider_logging.sh
             tools/provider_deployment.sh tools/compose_deployment.sh tools/provider_deployment.py tools/operator_guidance.sh
-            tools/compose_qualification.sh tools/delivery_deployment.sh tools/delivery_image.sh tools/core_image.sh tools/geometry_image.sh
+            tools/compose_qualification.sh tools/core_image.sh tools/geometry_image.sh
             tools/provider_image.sh tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh tools/git_inputs.sh tools/git_metadata.sh
             containers/inference/image-inputs.txt requirements/inference.lock requirements/unicore-source.json
             artifacts/prediction-models.json
-            tools/bound_http_proxy.py tools/provider_proxy.py tools/container_guard.py
+            tools/container_guard.py tools/provider_consumer_tests.py requirements/provider-core-release.json
             tests/integration/provider_runtime/stage_api_config.py
             tests/integration/provider_runtime/api_prediction.py
             config/provider.toml.example
-            tests/integration/provider_core/config_ports.py packages/provider-core/tests/__init__.py
-            packages/provider-core/tests/fakes/__init__.py packages/provider-core/tests/fakes/credential.py
+            tests/integration/provider_core/config_ports.py tests/integration/provider_runtime/binding_inputs.py
             "tests/fixtures/preparation/$case_fixture")
         if [[ $case_kind == sdf-zip ]]; then inputs+=(tests/fixtures/preparation/normative/butane_conformers.sdf); fi
         revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?
@@ -438,12 +424,14 @@ api_witness_main() {
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
         "$repository_root/tools/"{provider_deployment.sh,compose_deployment.sh,provider_deployment.py,operator_guidance.sh} \
-        "$repository_root/tools/"{compose_qualification.sh,delivery_deployment.sh,delivery_image.sh,core_image.sh,geometry_image.sh,provider_image.sh,git_inputs.sh,git_metadata.sh} \
+        "$repository_root/tools/"{compose_qualification.sh,core_image.sh,geometry_image.sh,provider_image.sh,git_inputs.sh,git_metadata.sh} \
         "$repository_root/containers/inference/image-inputs.txt" "$repository_root/requirements/"{inference.lock,unicore-source.json} \
         "$repository_root/artifacts/prediction-models.json" \
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
-        "$repository_root/packages/provider-core/tests/fakes/"{tls_peer,conversation,credential}.py \
+        "$repository_root/tools/provider_consumer_tests.py" \
+        "$repository_root/tests/integration/provider_runtime/binding_inputs.py" \
+        "$repository_root/requirements/provider-core-release.json" \
         "$repository_root/tests/fixtures/preparation/"{api_pasted,api_smiles,api_smiles_multiple,api_upload,smiles,expected}.json \
         "$repository_root/tests/fixtures/preparation/normative/atom_order.xyz" > "$provider_host_root/qualification-sources.sha256"; fi
     source "$repository_root/tools/docker_client.sh"
@@ -452,7 +440,22 @@ api_witness_main() {
     docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
     declare -gA provider_host_ids=()
     api_witness_mode=$mode api_deployment_active=false provider_host_stop_requested=false
-    qualification_delivery_prepared=false qualification_delivery_started=false qualification_delivery_helper=
+    source "$repository_root/tools/compose_qualification.sh"
+    qualification_shared_tools || return $?
+    source "$repository_root/tools/wheelhouse_path.sh"
+    select_wheelhouse && require_wheelhouse_pool || return $?
+    local delivery_digest delivery_project
+    delivery_digest=$(printf '%s' "$provider_host_root" | sha256sum)
+    delivery_project=nmrnet-qualification-${delivery_digest:0:24}
+    local -a support_argv=(/opt/provider/environment/bin/python -I -B /fixture/support.py fixture
+        --release /fixture/core-release.json --pool /wheelhouse --target /fixture)
+    local -a support_grants=(--env NMRNET_IN_CONTAINER=1 --env PROVIDER_CORE_IN_CONTAINER=1
+        --tmpfs /fixture:rw,nosuid,nodev,noexec,size=16m
+        --mount "type=bind,src=$qualification_source_root/tools/provider_consumer_tests.py,dst=/fixture/support.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/requirements/provider-core-release.json,dst=/fixture/core-release.json,readonly"
+        --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly")
+    qualification_delivery_prepared=false qualification_delivery_started=false
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -467,13 +470,11 @@ api_witness_main() {
         [[ $network_id =~ ^[0-9a-f]{64}$ && $network_name == "$local_network" && $internal == true ]] \
             && cmp -s -- "$provider_host_root/network.stdout" <(printf '%s|%s|true\n' "$network_id" "$network_name") \
             || { provider_host_refuse 'The scripted model requires exact observed membership in a named internal network.'; return 2; }
-        provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
+        provider_host_grants=("${support_grants[@]}" --env PYTHONPATH=/fixture
             --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/model_peer.py,dst=/fixture/model_peer.py,readonly"
-            --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/tls_peer.py,dst=/fixture/tls_peer.py,readonly"
-            --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/conversation.py,dst=/fixture/conversation.py,readonly"
             --mount "type=bind,src=$repository_root/tests/fixtures/preparation/api_pasted.json,dst=/fixture/case.json,readonly"
             --mount "type=bind,src=$provider_host_root/peer,dst=/output")
-        provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/model_peer.py)
+        provider_host_argv=("${support_argv[@]}" --script /fixture/model_peer.py --)
         provider_host_create peer "$network_id" "$controller_image" provider_host_grants provider_host_argv true || return $?
         provider_host_command membership "$provider_host_root" inspect --type container --format \
             "{{with index .NetworkSettings.Networks \"$network_name\"}}{{.IPAddress}}{{end}}" "${provider_host_ids[peer]}" || return $?
@@ -486,19 +487,16 @@ api_witness_main() {
             sleep 0.1 || :
         done
     fi
-    local -a stage_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
+    local -a stage_grants=("${support_grants[@]}" --env PYTHONPATH=/fixture
         --mount "type=bind,src=$qualification_source_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
-        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
-        --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
-        --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
-        --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly")
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly")
     if [[ $mode != scripted-pasted ]]; then
         mkdir -m 700 -- "$provider_host_root/selection" || return $?
         provider_host_grants=("${stage_grants[@]}"
             --mount "type=bind,src=$NMRNET_INTERPRETER_CONFIG_INPUT,dst=/input/interpreter.toml,readonly"
             --mount "type=bind,src=$provider_host_root/selection,dst=/output")
-        provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage.py --root /output --inspect-interpreter /input/interpreter.toml)
+        provider_host_argv=("${support_argv[@]}" --script /fixture/stage.py -- --root /output --inspect-interpreter /input/interpreter.toml)
         provider_host_create selection none "$controller_image" provider_host_grants provider_host_argv true || return $?
         api_witness_wait selection 30 || return $?
         provider_host_remove selection || return $?
@@ -514,10 +512,10 @@ api_witness_main() {
         --mount "type=bind,src=$NMRNET_CA_FILE_INPUT,dst=/input/api-ca.crt,readonly"
         --mount "type=bind,src=$provider_host_root/source,dst=$provider_host_root/source"
         --mount "type=bind,src=$provider_host_root/deployment,dst=$provider_host_root/deployment")
-    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage.py \
+    provider_host_argv=("${support_argv[@]}" --script /fixture/stage.py -- \
         --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT" \
         --prediction-image-id "$prediction_image" \
-        --deployment --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
+        --deployment --delivery-project "$delivery_project" --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
         --interpreter-route "$interpreter_route")
     if [[ $mode == scripted-pasted ]]; then
         provider_host_argv+=(--interpreter-interface "$local_interface" --interpreter-network "$network_id" --interpreter-address "$local_address")
@@ -556,15 +554,15 @@ api_witness_main() {
             chmod 600 -- "$private/$input" || return $?
         fi
     done
-    # Reuse the ordinary recipe owners in a private qualification namespace.
-    # This must not replace the host's live shared-delivery configuration.
-    source "$repository_root/tools/compose_qualification.sh"
-    local delivery_digest delivery_project
-    delivery_digest=$(printf '%s' "$provider_host_root" | sha256sum)
-    delivery_project=nmrnet-qualification-${delivery_digest:0:24}
-    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" install \
-        --delivery-project "$delivery_project" || return $?
-    qualification_delivery_prepare "$private" "$provider_host_root/deployment/delivery" "$delivery_project" "$controller_image" || return $?
+    # Both owners consume the fixture's one neutral API/IPC definition.
+    qualification_api_origin=$NMRNET_API_ORIGIN_INPUT
+    qualification_provider_ref=$(jq -er '.provider_ref' "$provider_host_root/source/identity.json") || return $?
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name \
+    NMRNET_DELIVERY_BINDINGS_INPUT=$provider_host_root/deployment/bindings.toml \
+    NMRNET_DELIVERY_BINDING_INPUT=nmrnet NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
+        bash "$repository_root/tools/provider_deployment.sh" install || return $?
+    qualification_delivery_prepare "$provider_host_root/deployment/delivery" "$delivery_project" \
+        "$provider_host_root/deployment/bindings.toml" || return $?
     qualification_delivery_up || return $?
     # Up can dispatch effects before returning failure. Its original receipts
     # must settle through down before the model peer's route can be withdrawn.
@@ -573,7 +571,6 @@ api_witness_main() {
     provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"
-        --mount "type=bind,src=$qualification_source_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/registration.json,dst=/credentials/registration.json,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/signing.private.json,dst=/credentials/signing.private.json,readonly"

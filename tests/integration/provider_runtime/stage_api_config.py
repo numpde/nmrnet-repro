@@ -18,13 +18,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import tomllib
-from config_ports import ConfigFiles
 
 from nmrnet_provider.config import _interpreter, load_provider_config, read_startup_file
 from nmrnet_provider.startup_capture import _bind_path
 from provider_core.chat import ChatEndpoint
 from provider_core.credential import parse_provider_credential
-from tools.provider_proxy import authority_parts
+from provider_core.provider_proxy import authority_parts
+from binding_inputs import write_deployment_inputs
 
 
 def interpreter_fragment(path):
@@ -63,7 +63,7 @@ def inspect_interpreter(path, output):
 
 
 def stage_deployment(root, *, api_interface, api_address, interpreter_route,
-                     interpreter_interface, interpreter_network, interpreter_address, resolvers):
+                     interpreter_interface, interpreter_network, interpreter_address, resolvers, delivery_project):
     """Translate this admitted fixture into the production named-deployment inputs.
 
     Keep the original API-issued key bytes. Only the
@@ -86,11 +86,10 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
                 output.write(path.read_bytes())
             raw = raw.replace(json.dumps(str(path)), json.dumps("/srv/nmrnet/input/" + name))
     raw = raw.replace(json.dumps(str(root / "state")), json.dumps("/srv/nmrnet/attempts"))
-    (destination / "provider.toml").write_text(raw)
     document = tomllib.loads(raw)
     host = urlsplit(document["api"]["origin"]).hostname
-    mapped = {"mode": "mapped", "interface": api_interface, "addresses": [host + "=" + api_address]}
-    interpreter = {"mode": interpreter_route, "interface": interpreter_interface}
+    mapped = {"mode": "mapped", "interface": api_interface, "log_level": "INFO", "addresses": [host + "=" + api_address]}
+    interpreter = {"mode": interpreter_route, "interface": interpreter_interface, "log_level": "INFO"}
     if interpreter_route == "local":
         interpreter.update(network=interpreter_network, addresses=["localhost=" + interpreter_address])
     elif interpreter_route == "mapped":
@@ -98,16 +97,20 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
         interpreter["addresses"] = [model_host + "=" + interpreter_address]
     elif interpreter_route != "external":
         raise ValueError("Qualification interpretation requires an explicit local, mapped or external route")
-    lines = ["maximum_startup_bytes = 2097152"]
-    if interpreter_route == "external":
-        lines.append("resolvers = " + json.dumps(resolvers))
-    for role, route in (("api", mapped), ("interpreter", interpreter), ("store", mapped)):
-        lines.append("\n[routes." + role + "]")
-        lines.extend(name + " = " + json.dumps(value) for name, value in route.items())
-    (destination / "deployment.toml").write_text("\n".join(lines) + "\n")
+    api = dict(document["api"])
+    for name in ("credential_file", "ca_file"):
+        if name in api:
+            api[name] = str(secrets / Path(api[name]).name)
+    write_deployment_inputs(
+        destination, document, api=api, api_route=mapped,
+        routes={"interpreter": interpreter, "store": mapped}, project=delivery_project,
+        maximum_startup_bytes=2097152, resolvers=resolvers if interpreter_route == "external" else [],
+    )
 
 
 def stage(root, origin, topology, *, inputs, interpreter_config, prediction_image_id):
+    from config_ports import ConfigFiles
+
     if re.fullmatch(r"sha256:[0-9a-f]{64}", prediction_image_id) is None:
         raise ValueError("Qualification requires the explicit current prediction image identity.")
     """Freeze one qualification's inputs before normal provider startup capture."""
@@ -217,6 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("--topology")
     parser.add_argument("--prediction-image-id")
     parser.add_argument("--deployment", action="store_true")
+    parser.add_argument("--delivery-project")
     parser.add_argument("--api-interface")
     parser.add_argument("--api-address")
     parser.add_argument("--interpreter-route", choices=("local", "external"))
@@ -242,5 +246,5 @@ if __name__ == "__main__":
                 args.root, api_interface=args.api_interface, api_address=args.api_address,
                 interpreter_route=args.interpreter_route, interpreter_interface=args.interpreter_interface,
                 interpreter_network=args.interpreter_network, interpreter_address=args.interpreter_address,
-                resolvers=args.resolver,
+                resolvers=args.resolver, delivery_project=args.delivery_project,
             )

@@ -23,7 +23,7 @@ class CapturedInputTests(unittest.TestCase):
     def author_pool(self, fixture, pool):
         wheel = fixture_wheel(pool, "fixture", "1")
         locked(fixture.root / "requirements/inference.lock", [("fixture", "1", [wheel])])
-        for name in ("provider-core.lock", "provider-core-build.lock"):
+        for name in ("provider-core-install.lock",):
             locked(fixture.root / "requirements" / name, [("fixture", "1", [wheel])])
         archive = pool / ("Uni-Core-" + "a" * 40 + ".tar.gz")
         archive.write_bytes(b"synthetic source bytes")

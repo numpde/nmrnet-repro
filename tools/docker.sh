@@ -6,13 +6,8 @@
 set -euo pipefail
 
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# Alpine reduces the stdlib-only proxy download to 17.12 MB. Scientific workers
-# retain Debian for glibc-dependent wheels. docs/reproduction.html records sources and sizes.
-# Pin the index digest so a moved version tag cannot change the proxy runtime.
-readonly proxy_image_name='docker.io/library/python'
-readonly proxy_image_version='3.12.12-alpine3.22'
-readonly proxy_image_sha256='848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32'
-readonly proxy_image="$proxy_image_name:$proxy_image_version@sha256:$proxy_image_sha256"
+# The shared owner builds this runtime. Callers select an immutable local image.
+proxy_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
 readonly resolver_source='/run/systemd/resolve/resolv.conf'
 # Metadata uses the existing 30-second admission policy in inference_image.sh:9.
 # Attachment has no operation deadline; local retirement is not engine cleanup.
@@ -34,23 +29,21 @@ require_interface() {
 }
 
 if [[ $# == 0 ]]; then
-    printf '%s\n' 'Usage: tools/docker.sh [--print] {download-proxy|check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
+    printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
     exit 2
 fi
 operation=$1
 case "$operation" in
-    download-proxy)
-        if [[ $# != 1 ]]; then
-            printf '%s\n' 'Usage: tools/docker.sh [--print] download-proxy' >&2
-            exit 2
-        fi
-        ;;
     check-interface) require_interface; exit ;;
     require-images) shift; if [[ $# == 0 ]]; then exit 0; fi ;;
     run) ;;
-    *) printf '%s\n' 'Usage: tools/docker.sh [--print] {download-proxy|check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2; exit 2 ;;
+    *) printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2; exit 2 ;;
 esac
 if [[ "$operation" == run ]]; then
+    if [[ ! $proxy_image =~ ^sha256:[0-9a-f]{64}$ ]]; then
+        printf '%s\n' 'Acquisition requires SHARED_RUNTIME_IMAGE=<full local image ID> on the make command line; build it in nmr-provider-tools first.' >&2
+        exit 2
+    fi
     require_interface
     shift
     readonly caller_uid="$(id -u)"
@@ -166,7 +159,7 @@ require_images() {
             'Inspection failure does not show whether the image is absent or the Docker daemon is unavailable; check both.'
         if [[ "$image" == "$proxy_image" ]]; then
             printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
-                'If this proxy image is missing, run make packages/base-images/proxy/download; it uses Docker default routing, without WLAN_INTERFACE binding.'
+                'Build or load the selected shared runtime image through nmr-provider-tools before retrying acquisition.'
         else
             printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
                 'If the image is missing, preload it through an independently interface-bound process; this launcher cannot bind daemon pulls to WLAN_INTERFACE.'
@@ -309,39 +302,22 @@ else
     scratch="$(mktemp -d /tmp/nmrnet-proxy.XXXXXXXX)"
 fi
 if [[ "$operation" == require-images ]]; then require_images "$@"; exit; fi
-if [[ "$operation" == download-proxy ]]; then
-    next_actions=$'\nNext, acquire the Python base if it is not already available:\n  make packages/base-images/python/download'
-    # Cold start cannot use the proxy image it is acquiring. This explicit lane
-    # uses daemon routing; WLAN_INTERFACE binds only subsequent acquisition.
-    # Digest pulls: https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
-    # Daemon network settings: https://docs.docker.com/engine/daemon/proxy/
-    if "$print_command"; then
-        printf '%q ' "${engine[@]}" image pull "$proxy_image"; printf '\n'
-        exit
-    fi
-    if inference_native 'proxy image download' untimed stdio "${engine[@]}" image pull "$proxy_image"; then download_status=0; else download_status=$?; fi
-    pending_diagnostic+=$inference_diagnostic
-    if [[ "$download_status" != 0 ]]; then
-        printf -v pending_diagnostic '%sProxy image download did not finish successfully (status %s). Docker may retain layers or finish the download after its client stops. Retry make packages/base-images/proxy/download; no image removal was attempted.\n' \
-            "$pending_diagnostic" "$download_status"
-    fi
-    exit "$download_status"
-fi
 if "$print_command"; then scratch=/tmp/nmrnet-proxy.PRINT; else
     require_images "$proxy_image"
     mkdir -m 700 -- "$scratch/ready"
 fi
-# The proxy shares the tools namespace with its guard; neither source is writable.
+# The installed proxy implementation comes only from the selected shared image.
 proxy=("${engine[@]}" create --cidfile "$scratch/proxy.cid" --pull never --network host --read-only
-    --env NMRNET_IN_CONTAINER=1 --workdir /workspace
+    --env PROVIDER_CORE_IN_CONTAINER=1 --workdir /tmp
+    --entrypoint /opt/provider-core/environment/bin/python
+    --log-driver json-file --log-opt max-size=10m --log-opt max-file=3
+    --log-opt mode=non-blocking --log-opt max-buffer-size=1m
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 1 --memory 128m --memory-swap 128m --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m
     "${resolver_mount[@]}"
-    --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/workspace/tools/bound_http_proxy.py,readonly"
-    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$scratch/ready,dst=/ready"
-    "$proxy_image" python3 -B -m tools.bound_http_proxy --interface "$interface" --port 0 --ready-file /ready/port)
+    "$proxy_image" -I -B -m provider_core.bound_http_proxy --interface "$interface" --port 0 --ready-file /ready/port)
 if "$print_command"; then
     printf '%q ' "${proxy[@]}"; printf '\n'
     printf '%q ' "${engine[@]}" start PROXY_ID; printf '\n'

@@ -36,12 +36,12 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
             wheels = Path(directory) / "wheels"
             wheels.mkdir()
             candidate = wheel(wheels, "example", "2")
-            locked(source / "requirements/provider-core.lock", [("example", "2", [candidate])])
+            locked(source / "requirements/provider-core-install.lock", [("example", "2", [candidate])])
             with (
                 patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as effects,
                 self.assertRaisesRegex(ValueError, "installed example==1 differs from core lock 2"),
             ):
-                install_provider_into(python, source, wheels, wheels, environment)
+                install_provider_into(python, source, source / "requirements/provider-core-install.lock", wheels, environment)
             # check_output delegates the read-only metadata probe to run. No
             # pip/build process or target mutation may follow that observation.
             effects.assert_called_once()
@@ -152,32 +152,25 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Cannot capture controller image inputs", result.stderr)
 
-    def test_pip_refuses_missing_or_changed_locked_wheels_before_building_the_controller(self):
-        for role in ("build", "runtime"):
-            for mutation in ("missing", "changed"):
-                with self.subTest(role=role, mutation=mutation), tempfile.TemporaryDirectory() as directory:
-                    source = Path(directory) / "source"
-                    (source / "requirements").mkdir(parents=True)
-                    wheelhouses = {}
-                    for kind in ("build", "runtime"):
-                        wheels = Path(directory) / kind
-                        wheels.mkdir()
-                        candidate = wheel(wheels, "example", "1")
-                        lock = source / "requirements" / ("provider-core-" + kind + ".lock")
-                        if kind == "runtime":
-                            lock = source / "requirements/provider-core.lock"
-                        locked(lock, [("example", "1", [candidate])])
-                        wheelhouses[kind] = wheels
-                    target = wheelhouses[role] / "example-1-py3-none-any.whl"
-                    if mutation == "missing":
-                        target.unlink()
-                    else:
-                        target.write_bytes(b"PRIVATE changed wheel")
-                    destination = Path(directory) / "installed"
-                    with (
-                        patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as calls,
-                        self.assertRaises(subprocess.CalledProcessError),
-                    ):
-                        install_provider(destination, source, wheelhouses["build"], wheelhouses["runtime"])
-                    self.assertFalse(any("wheel" in call.args[0] for call in calls.call_args_list))
-                    self.assertFalse((destination / "dependency-inputs.json").exists())
+    def test_pip_refuses_missing_or_changed_locked_wheels_before_installing_bindings(self):
+        for mutation in ("missing", "changed"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "source"
+                (source / "requirements").mkdir(parents=True)
+                wheels = Path(directory) / "wheels"
+                wheels.mkdir()
+                candidate = wheel(wheels, "example", "1")
+                lock = source / "requirements/provider-core-install.lock"
+                locked(lock, [("example", "1", [candidate])])
+                if mutation == "missing":
+                    candidate.unlink()
+                else:
+                    candidate.write_bytes(b"PRIVATE changed wheel")
+                destination = Path(directory) / "installed"
+                with (
+                    patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as calls,
+                    self.assertRaises(subprocess.CalledProcessError),
+                ):
+                    install_provider(destination, source, lock, wheels)
+                self.assertFalse(any("wheel" in call.args[0] for call in calls.call_args_list))
+                self.assertFalse((destination / "dependency-inputs.json").exists())

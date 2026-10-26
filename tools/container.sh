@@ -13,7 +13,7 @@ if [[ $# -gt 0 && "$1" == --print ]]; then
     shift
 fi
 if [[ $# -ne 1 ]]; then
-    printf '%s\n' 'Usage: bash tools/container.sh [--print] LANE; see make help for contained test, provider-core, repository and artifact lanes.' >&2
+    printf '%s\n' 'Usage: bash tools/container.sh [--print] LANE; see make help for contained test, provider, repository and artifact lanes.' >&2
     exit 2
 fi
 
@@ -202,7 +202,8 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
-    geometry/image/build|test/integration/rdkit-runtime|provider/image/build|delivery/image/build|test/contract/provider-core|test/integration/provider-core*|test/unit/provider-core*|test/integration/provider/proxy)
+    test/unit/provider/image|test/unit/provider/api-client) ;;
+    geometry/image/build|test/integration/rdkit-runtime|provider/image/build|test/integration/provider-core*|test/integration/provider/proxy|test|test/unit/provider*|test/unit/smiles*|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-*)
         source "$repository_root/tools/wheelhouse_path.sh"
         select_wheelhouse
         require_wheelhouse_pool
@@ -210,13 +211,13 @@ case "$1" in
 esac
 
 case "$1" in
-    provider/image/build|delivery/image/build)
+    provider/image/build)
         build_kind=${1%%/*}
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
             printf -v pending_diagnostic '%s\n' 'Provider image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
             exit 2
         fi
-        for directory in tools requirements containers "containers/$build_kind" packages packages/provider-core; do
+        for directory in tools requirements containers "containers/$build_kind"; do
             require_source_directory "$directory"
         done
         if [[ $build_kind == provider ]]; then
@@ -293,7 +294,7 @@ case "$1" in
         exit 2
         ;;
     test/unit/provider/deployment|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
-    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/chat|test/integration/provider-core/delivery|test/integration/provider-core/starting|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/delivery|test/unit/provider-core/checkpoints|test/unit/provider-core/starting|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/runner|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/delivery|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -371,7 +372,7 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse ]]; then
+        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse || "$1" == test/repository/provider ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
@@ -379,20 +380,24 @@ case "$1" in
         fi
         case "$1" in
             test/unit/provider/api-stage)
-                for directory in tools tests/integration/provider_runtime tests/integration/provider_core packages/provider-core/tests .work .work/provider; do require_source_directory "$directory"; done
+                for directory in tools tests/integration/provider_runtime tests/integration/provider_core .work .work/provider; do require_source_directory "$directory"; done
                 source "$repository_root/tools/provider_image.sh"
                 require_provider_image
                 command+=(--init --entrypoint /opt/provider/environment/bin/python --env PYTHONPATH=/fixture
+                    --env PROVIDER_CORE_IN_CONTAINER=1 --tmpfs /fixture:rw,nosuid,nodev,noexec,size=16m
+                    --mount "type=bind,src=$repository_root/tools/provider_consumer_tests.py,dst=/fixture/support.py,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/fixture/core-release.json,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly"
                     --mount "type=bind,src=$repository_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_stage_api_config.py,dst=/fixture/test_stage_api_config_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_stage_api_config.py,dst=/fixture/test_stage_api_config_adversarial.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/staging_test_ports.py,dst=/fixture/staging_test_ports.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
-                    --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
-                    --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
-                    --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly"
-                    "$provider_image_id" -B -m unittest -v test_stage_api_config_normative test_stage_api_config_adversarial)
+                    "$provider_image_id" -I -B /fixture/support.py fixture
+                    --release /fixture/core-release.json --pool /wheelhouse --target /fixture --module unittest --
+                    -v test_stage_api_config_normative test_stage_api_config_adversarial)
                 ;;
             test/unit/provider/api-client)
                 for directory in tools tests/integration/provider_runtime; do require_source_directory "$directory"; done
@@ -412,20 +417,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly"
                     --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/atom_order.xyz,dst=/fixture/atom_order.xyz,readonly"
                     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
-                    --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
                     "$api_test_image" -B -m unittest -v test_api_prediction_normative test_api_prediction_adversarial)
-                ;;
-            test/unit/provider/proxy)
-                for directory in tools tests repository_checks; do require_source_directory "$directory"; done
-                checker_image
-                command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
-                    --mount "type=bind,src=$repository_root/packages/provider-core/src/provider_core,dst=/workspace/provider_core,readonly"
-                    --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
-                    --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
-                    --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
-                    "$checker_image_id" python3 -B -m unittest -v
-                    tests.unit.normative.test_provider_proxy tests.unit.adversarial.test_provider_proxy
-                    tests.test_bound_http_proxy repository_checks.test_proxy_posture)
                 ;;
             test/unit/provider/image)
                 for directory in tools tests requirements; do require_source_directory "$directory"; done
@@ -433,18 +425,13 @@ case "$1" in
                     printf -v pending_diagnostic '%s\n' 'Cannot check provider image commands: Makefile must be a regular file without a symlink.'
                     exit 2
                 fi
-                if [[ ! -f "$repository_root/requirements/provider-core-build.lock" || -L "$repository_root/requirements/provider-core-build.lock" ]]; then
-                    printf -v pending_diagnostic '%s\n' 'Cannot check provider installation: the build lock must be a regular file without a symlink.'
-                    exit 2
-                fi
                 checker_image
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
-                    --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly"
                     "$checker_image_id" python3 -B -m unittest -v
-                    tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image tests.unit.normative.test_delivery_image)
+                    tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
                 ;;
             test/integration/provider-runtime)
                 for directory in tools tests/integration/provider_runtime .work .work/provider; do require_source_directory "$directory"; done
@@ -517,51 +504,14 @@ case "$1" in
                     command+=(tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
                 fi
                 ;;
-            test/integration/provider/proxy|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/chat|test/integration/provider-core/delivery|test/integration/provider-core/starting|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/delivery|test/unit/provider-core/checkpoints|test/unit/provider-core/starting|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/runner|test/unit/provider-core/prepared-identity)
-                require_source_directory tools
-                require_source_directory packages
-                require_source_directory packages/provider-core
-                require_source_directory requirements
-                for core_file in "$repository_root/requirements/provider-core-build.lock" "$repository_root/requirements/provider-core.lock" "$repository_root/tools/container_guard.py"; do
-                    if [[ ! -f "$core_file" || -L "$core_file" ]]; then
-                        printf -v pending_diagnostic '%sCannot test provider-core: expected a regular build input at %s.\n' "$pending_diagnostic" "$core_file"
-                        exit 2
-                    fi
+            test/integration/provider/proxy|test/integration/provider-core|test/integration/provider-core/*)
+                for directory in tools requirements nmrnet_provider nmrnet_inference tests/integration/provider_core; do
+                    require_source_directory "$directory"
                 done
-                core_suite=unit
-                if [[ "$1" == test/contract/provider-core ]]; then core_suite=contract; fi
-                if [[ "$1" == test/integration/provider/proxy || "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/runner || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/interpreter-ambiguity || "$1" == test/integration/provider-core/process || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core/output || "$1" == test/integration/provider-core/interpreter ]]; then
-                    core_suite=integration
-                    require_source_directory nmrnet_provider
-                    require_source_directory nmrnet_inference
-                    require_source_directory tests
-                    require_source_directory tests/integration
-                    require_source_directory tests/integration/provider_core
-                    if [[ ! -f "$repository_root/tools/artifacts.py" || -L "$repository_root/tools/artifacts.py" ]]; then
-                        printf -v pending_diagnostic '%sCannot test provider startup: tools/artifacts.py must be a regular source file without a symlink.\n' "$pending_diagnostic"
-                        exit 2
-                    fi
-                    command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
-                        --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
-                        --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
-                        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/consumer/tools/container_guard.py,readonly"
-                        --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/consumer/tools/artifacts.py,readonly")
-                    integration_sources=(bound_http_proxy.py provider_proxy.py)
-                    if [[ "$1" == test/integration/provider-core ]]; then
-                        integration_sources+=(container_resources.py provider_deployment.py)
-                    elif [[ "$1" == test/integration/provider-core/runner ]]; then
-                        integration_sources+=(container_resources.py)
-                    elif [[ "$1" == test/integration/provider-core/compose ]]; then
-                        integration_sources+=(provider_deployment.py)
-                    fi
-                    for integration_source in "${integration_sources[@]}"; do
-                        if [[ ! -f "$repository_root/tools/$integration_source" || -L "$repository_root/tools/$integration_source" ]]; then
-                            printf -v pending_diagnostic '%sCannot test provider integration: expected a regular authored tool source at %s.\n' "$pending_diagnostic" "tools/$integration_source"
-                            exit 2
-                        fi
-                        command+=(--mount "type=bind,src=$repository_root/tools/$integration_source,dst=/consumer/tools/$integration_source,readonly")
-                    done
-                fi
+                command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
+                    --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
+                    --mount "type=bind,src=$repository_root/tools,dst=/consumer/tools,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly")
                 if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/uploads ]]; then
                     require_source_directory tests/fixtures
                     require_source_directory tests/fixtures/preparation
@@ -590,15 +540,6 @@ case "$1" in
                         command+=(--mount "type=bind,src=$repository_root/$probe_input,dst=$probe_target,readonly")
                     done
                 fi
-                if [[ "$1" == */normative ]]; then core_suite=unit/normative; fi
-                if [[ "$1" == */adversarial ]]; then core_suite=unit/adversarial; fi
-                if [[ "$1" == test/integration/provider-core/chat ]]; then core_suite=integration/chat; fi
-                if [[ "$1" == test/integration/provider-core/delivery ]]; then core_suite=integration/delivery; fi
-                if [[ "$1" == test/integration/provider-core/recovery ]]; then core_suite=integration/recovery; fi
-                if [[ "$1" == test/integration/provider-core/starting ]]; then core_suite=integration/starting; fi
-                if [[ "$1" == test/integration/provider-core/hello ]]; then core_suite=integration/hello; fi
-                if [[ "$1" == test/integration/provider-core/transport ]]; then core_suite=integration/transport; fi
-                if [[ "$1" == test/integration/provider-core/api ]]; then core_suite=integration/api; fi
                 if [[ "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core ]]; then
                     require_source_directory tests/fixtures/scientific_inputs
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly"
@@ -609,109 +550,66 @@ case "$1" in
                 command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
                     --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
-                    --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
-                    --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
-                    --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-                    --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
-                    --mount "type=bind,src=$wheelhouse_directory,dst=/build-deps,readonly"
-                    "$image" python3 -B -m tools.provider_core_tests "$core_suite")
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/input/provider-core-release.json,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
+                    "$image" python3 -B -m tools.provider_test_environment integration)
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
-                    command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py test_upload_acquisition.py test_secs_sources.py)
+                    command+=(test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/smiles ]]; then
-                    command+=(--pattern 'test_nmrnet_smiles_*.py')
+                    command+=('test_nmrnet_smiles_*.py')
                 fi
                 if [[ "$1" == test/integration/provider-core/pasted ]]; then
-                    command+=(--pattern test_nmrnet_pasted.py)
+                    command+=(test_nmrnet_pasted.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/interpreter ]]; then
-                    command+=(--pattern test_nmrnet_interpreter.py test_nmrnet_interpreter_preparation.py)
+                    command+=(test_nmrnet_interpreter.py test_nmrnet_interpreter_preparation.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/output ]]; then
-                    command+=(--pattern test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
+                    command+=(test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/native-factory ]]; then
-                    command+=(--pattern test_nmrnet_native_factory.py)
+                    command+=(test_nmrnet_native_factory.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/config ]]; then
-                    command+=(--pattern test_nmrnet_config.py)
+                    command+=(test_nmrnet_config.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/compose ]]; then
-                    command+=(--pattern test_provider_compose.py test_provider_deployment.py test_compose_scientific_inputs.py)
+                    command+=(test_provider_compose.py test_provider_deployment.py test_compose_scientific_inputs.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/runtime ]]; then
-                    command+=(--pattern test_nmrnet_runtime.py)
+                    command+=(test_nmrnet_runtime.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/admission ]]; then
-                    command+=(--pattern test_nmrnet_service_admission.py)
+                    command+=(test_nmrnet_service_admission.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
-                    command+=(--pattern test_nmrnet_service.py test_nmrnet_service_recovery.py test_nmrnet_service_delivery.py)
+                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py test_nmrnet_service_delivery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/recovery ]]; then
-                    command+=(--pattern test_recovery.py)
+                    command+=(test_nmrnet_service_recovery.py test_nmrnet_reference_lifecycle.py test_nmrnet_prediction_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
-                    command+=(--pattern test_nmrnet_interpreter_ambiguity.py)
+                    command+=(test_nmrnet_interpreter_ambiguity.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/process ]]; then
-                    command+=(--pattern test_nmrnet_process.py test_nmrnet_reports.py)
+                    command+=(test_nmrnet_process.py test_nmrnet_reports.py)
                 fi
                 if [[ "$1" == test/integration/provider/proxy ]]; then
-                    command+=(--pattern test_nmrnet_proxy.py)
+                    command+=(test_nmrnet_proxy.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/lifecycle ]]; then
-                    command+=(--pattern 'test_nmrnet_*_lifecycle.py')
-                fi
-                if [[ "$1" == test/unit/provider-core/runner ]]; then
-                    command+=(--pattern test_runner.py test_process_status.py)
+                    command+=('test_nmrnet_*_lifecycle.py')
                 fi
                 if [[ "$1" == test/integration/provider-core/runner ]]; then
-                    command+=(--pattern 'test_nmrnet_runner_*.py')
-                fi
-                if [[ "$1" == test/unit/provider-core/prepared-identity ]]; then
-                    command+=(--pattern test_prepared_identity.py 'test_execution*.py' test_suppressed_persistence.py
-                        test_attempt_transitions.py test_producer_checkpoint.py test_recovery.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/credential ]]; then
-                    command+=(--pattern test_credential.py test_signing.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/verbosity ]]; then
-                    command+=(--pattern test_result_verbosity.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/hello ]]; then
-                    command+=(--pattern test_hello.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/transport ]]; then
-                    command+=(--pattern test_transport.py test_network.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/api ]]; then
-                    command+=(--pattern 'test_api*.py' test_attempt_start.py test_attempt_progress.py test_attempt_outcome.py test_upload_api.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/admission ]]; then
-                    command+=(--pattern test_admission_inventory.py test_checkpoint_store.py test_delivery_store.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/uploads ]]; then
-                    command+=(--pattern test_upload_acquisition.py test_upload_file_acquisition.py test_upload_snapshot.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/diagnostics ]]; then
-                    command+=(--pattern test_failure_projection.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/delivery ]]; then
-                    command+=(--pattern 'test_delivery*.py')
-                fi
-                if [[ "$1" == test/unit/provider-core/checkpoints ]]; then
-                    command+=(--pattern 'test*checkpoint*.py')
-                fi
-                if [[ "$1" == test/unit/provider-core/starting || "$1" == test/integration/provider-core/starting ]]; then
-                    command+=(--pattern test_starting.py)
-                fi
-                if [[ "$1" == test/unit/provider-core/recovery ]]; then
-                    command+=(--pattern test_producer_checkpoint.py test_delivery_execution.py test_recovery.py 'test_controller*.py' test_failure_projection.py)
+                    command+=('test_nmrnet_runner_*.py')
                 fi
                 if [[ "$1" == test/integration/provider-core/prepared-identity ]]; then
-                    command+=(--pattern test_nmrnet_session.py test_nmrnet_prediction_recovery.py test_attempt_store.py test_terminal_store.py
-                        test_magnet_adaptation.py test_child_retirement.py test_execution.py)
+                    command+=(test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
+                fi
+                if [[ "$1" == test/integration/provider-core/delivery ]]; then
+                    command+=(test_nmrnet_service_delivery.py)
                 fi
                 ;;
             test/unit/provider/deployment|test/unit/provider/result|\
@@ -720,22 +618,18 @@ case "$1" in
                 require_source_directory tests
                 require_source_directory nmrnet_inference
                 require_source_directory nmrnet_provider
-                require_source_directory packages/provider-core/src/provider_core
-                # Source-unit tests see the real package initializer and its pure
-                # vocabulary; installed-package/runtime proof uses separate lanes.
                 unit_image=$image
-                if [[ "$1" == test/unit/provider ]]; then
-                    # This aggregate includes image/Make fixtures that require Git.
+                if [[ "$1" == test/unit/provider || "$1" == test/unit/provider/deployment ]]; then
+                    # Host composition fixtures need the checker-owned Make/Git tools.
                     checker_image
                     unit_image=$checker_image_id
                     if [[ ! -f $repository_root/Makefile || -L $repository_root/Makefile \
-                        || ! -f $repository_root/requirements/provider-core-build.lock \
-                        || -L $repository_root/requirements/provider-core-build.lock ]]; then
-                        printf -v pending_diagnostic '%s\n' 'Cannot run provider unit checks: Makefile and the provider-core build lock must be regular files without symlinks.'
+                        || ! -f $repository_root/requirements/provider-core-install.lock \
+                        || -L $repository_root/requirements/provider-core-install.lock ]]; then
+                        printf -v pending_diagnostic '%s\n' 'Cannot run provider unit checks: Makefile and the released provider-core install lock must be regular files without symlinks.'
                         exit 2
                     fi
-                    command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
-                        --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
+                    command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly")
                 fi
                 unit_tests=(discover -s tests)
                 if [[ "$1" == test/unit/prediction-input ]]; then
@@ -753,9 +647,14 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
-                    --mount "type=bind,src=$repository_root/packages/provider-core/src/provider_core,dst=/workspace/provider_core,readonly"
                     --env PROVIDER_CORE_IN_CONTAINER=1
-                    "$unit_image" python3 -B -m unittest "${unit_tests[@]}")
+                    --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
+                    --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
+                    --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
+                    --mount "type=bind,src=$repository_root/tools,dst=/consumer/tools,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
+                    "$unit_image" python3 -B -m tools.provider_test_environment unit "${unit_tests[@]}")
                 if [[ "$1" == test ]]; then
                     command+=(-v)
                 elif [[ "$1" == test/unit/smiles-protocol ]]; then
@@ -792,7 +691,7 @@ case "$1" in
                     command+=(-p test_baseline_run.py -v)
                 fi
                 ;;
-            test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core)
+            test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs)
                 # Checkers read public source inputs, never workspace state or credentials.
                 # A root-entry inventory makes omitted new source paths fail visibly.
                 require_source_directory tools
@@ -877,10 +776,9 @@ case "$1" in
                 if [[ "$1" == test/repository/wheelhouse ]]; then
                     repository_tests=(-v repository_checks.test_wheelhouse_client_config repository_checks.test_geometry_image
                         repository_checks.test_inference_inputs repository_checks.test_engine_metadata_fixture
-                        tests.test_guarded_tooling tests.test_provider_core_launcher
+                        tests.test_guarded_tooling tests.test_provider_consumer_launcher
                         tests.test_launcher.LauncherTests.test_foreground_process_lane_is_focused_offline_and_reaps_children
-                        tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image tests.unit.normative.test_delivery_image)
-                    command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
+                        tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
                 fi
                 if [[ "$1" == test/repository/native-images ]]; then
                     repository_tests=(-v repository_checks.test_geometry_image repository_checks.test_inference_inputs
@@ -892,18 +790,14 @@ case "$1" in
                         repository_checks.test_operator_inputs_port.EngineEnvironmentTests tests.unit.normative.test_operator_guidance
                         tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare)
                 fi
-                if [[ "$1" == test/repository/provider-core ]]; then
+                if [[ "$1" == test/repository/provider ]]; then
                     repository_tests=(-v repository_checks.test_conventions
-                        tests.test_provider_core_launcher
-                        tests.test_launcher.LauncherTests.test_repository_configuration_grants_only_public_selected_files
                         repository_checks.test_scientific_lint.ImportOrderDetectionTests
                         repository_checks.test_scientific_lint.ScientificLintTests.test_provider_core_import_order
-                        repository_checks.quality.test_source_inventory.SourceInventoryUnitTests
-                        repository_checks.quality.test_source_inventory.SourceInventoryRepositoryTests.test_host_root_inventory_is_complete_and_visible_to_source_checks
-                        repository_checks.quality.test_source_inventory.SourceInventoryRepositoryTests.test_authored_python_roots_are_complete_safe_trees
-                        repository_checks.quality.test_source_inventory.SourceInventoryRepositoryTests.test_repository_checker_grants_complete_read_only_source_trees
+                        repository_checks.quality.test_source_inventory
                         repository_checks.quality.test_make_hygiene
-                        repository_checks.quality.test_python_cache_clutter)
+                        repository_checks.quality.test_python_cache_clutter
+                        tests.test_provider_consumer_launcher)
                 fi
                 command+=(--env HOME=/tmp/checker-home "$checker_image_id" bash -eu -c
                     'mkdir -m 700 /tmp/checker-home; printf "%s\n" "[safe]" "directory = /workspace" "directory = /workspace/NMRNetplusplus" > /tmp/checker-home/.gitconfig; exec python3 -B -m unittest "$@"'

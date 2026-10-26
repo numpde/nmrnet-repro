@@ -31,7 +31,7 @@ from provider_core.api import ProviderAPI
 from provider_core.checkpoint_store import CheckpointStore
 from provider_core.delivery_service import DeliveryBinding, DeliveryService
 from provider_core.delivery_store import QueueLimits
-from tools.provider_proxy import ServicePolicy, ServiceProxyServer
+from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
 class JoinedServiceProxy(ServiceProxyServer):
@@ -100,7 +100,7 @@ class ProcessPeers:
         self.config = load_provider_config(self.files.path)
         relay_root = self.root / "relay-state"
         relay_root.mkdir(mode=0o700)
-        self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o700)
+        self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
         publisher = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport(),
                                 expected_topology=self.config.api.expected_topology)
         self.relay = DeliveryService(

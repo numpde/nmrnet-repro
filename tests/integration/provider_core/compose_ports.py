@@ -2,7 +2,10 @@
 
 import tempfile
 import json
+import tomllib
 from pathlib import Path
+
+import tomli_w
 
 from nmrnet_provider.config import load_provider_config
 from nmrnet_provider.deployment import render_compose
@@ -18,6 +21,7 @@ class ComposeFixture:
         self.bundle.mkdir(parents=True, mode=0o700)
         self.files = ConfigFiles(self.bundle)
         raw = self.files.raw.replace(str(self.files.state).encode(), str(self.root / "attempts").encode())
+        raw = raw.replace(str(self.files.root / "delivery/http.sock").encode(), b"/run/delivery/http.sock")
         self.files.write(raw.replace(b"prediction_seconds = 90", b"prediction_seconds = 5"))
         self.config = load_provider_config(self.files.path)
         self.execution = {
@@ -26,12 +30,12 @@ class ComposeFixture:
             "upstream_revision": "b" * 40, "runtime_identity_source": "caller",
             "tool_sources": {"tools/worker.py": {"sha256": "c" * 64, "size": 1}},
         }
-        self.routes = {role: {"mode": "external", "interface": "eth0"} for role in ("api", "interpreter", "store")}
+        self.routes = {role: {"mode": "external", "interface": "eth0", "log_level": "INFO"} for role in ("api", "interpreter", "store")}
 
     def plan(self, **changes):
         arguments = dict(deployment="web", checkout=self.root / "checkout", bundle=self.bundle,
                          uid=1000, gid=1001, prepared=self.root / "prepared", execution=self.execution,
-                         routes=self.routes)
+                         routes=self.routes, shared_image_id="sha256:" + "9" * 64)
         arguments.update(changes)
         return render_compose(self.config, **arguments)
 
@@ -42,12 +46,29 @@ def deployment_inputs(root):
         directory.mkdir(mode=0o700)
     files = ConfigFiles(private / "inputs")
     definition = root / "provider.toml"
-    definition.write_bytes(files.raw.replace(str(files.state).encode(), b"/srv/nmrnet/attempts").replace(
-        str(files.root).encode(), b"/srv/nmrnet/input"))
+    document = tomllib.loads(files.raw.decode())
+    api = document.pop("api")
+    socket_path = document["delivery"].pop("socket_path")
+    document["delivery"].pop("socket_group_id")
+    document["lifecycle"]["store_root"] = "/srv/nmrnet/attempts"
+    document["interpreter"]["endpoints"][0]["key_file"] = "/srv/nmrnet/input/interpreter.key"
+    definition.write_text(tomli_w.dumps(document))
+    api_resolver = root / "api-resolv.conf"
+    api_resolver.write_text("nameserver 192.0.2.54\n")
+    bindings = root / "bindings.toml"
+    bindings.write_text(tomli_w.dumps({
+        "project": "nmr-api-delivery", "uid": 1000, "gid": 1001, "request_seconds": 30,
+        "retry_initial_seconds": 1, "retry_max_seconds": 30,
+        "limits": {"provider_items": 8, "provider_bytes": 16777216, "total_items": 8, "total_bytes": 16777216},
+        "bindings": [{"name": "nmrnet", "socket_path": socket_path, "api": api,
+                      "route": {"mode": "external", "interface": "eth0", "log_level": "INFO",
+                                "resolver_file": str(api_resolver)}}],
+    }))
+    bindings.chmod(0o600)
     settings = root / "config/deployments/web/deployment.toml"
     settings.parent.mkdir(parents=True, mode=0o700)
     settings.write_text('maximum_startup_bytes = 65536\nresolvers = ["192.0.2.53"]\n'
-                        + "".join(f'[routes.{role}]\nmode = "external"\ninterface = "eth0"\n' for role in ("api", "interpreter", "store")))
+                        + "".join(f'[routes.{role}]\nmode = "external"\ninterface = "eth0"\nlog_level = "INFO"\n' for role in ("interpreter", "store")))
     settings.chmod(0o600)
     source_root = root / "source"
     (source_root / "requirements").mkdir(parents=True, mode=0o700)
@@ -70,6 +91,7 @@ def deployment_inputs(root):
     bundle.mkdir(mode=0o700)
     return dict(definition=definition, settings=settings, secrets=files.root, bundle=bundle,
                 source_root=source_root, source_names=tuple(sources), models=models, deployment="web", checkout=root / "checkout", uid=1000, gid=1001,
-                prepared=root / "prepared", image_id="sha256:" + "1" * 64,
+                prepared=root / "prepared", delivery_bindings=bindings, delivery_binding="nmrnet", shared_image_id="sha256:" + "9" * 64,
+                image_id="sha256:" + "1" * 64,
                 geometry_image_id="sha256:" + "2" * 64, controller_image_id="sha256:" + "3" * 64,
                 repository_revision="a" * 40, upstream_revision="b" * 40), files

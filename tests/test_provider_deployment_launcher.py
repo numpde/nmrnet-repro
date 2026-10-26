@@ -30,7 +30,7 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / 'tools'
         tools.mkdir()
-        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'delivery_deployment.sh'):
+        for name in ('compose_deployment.sh', 'provider_deployment.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
         (tools / 'docker_client.sh').write_text('''docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
@@ -39,7 +39,7 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
     local operation=$1 seconds=$2 result=$3 status=0; shift 3
     inference_diagnostic=
     printf '%s|%s|%s\\n' "$operation" "$seconds" "$result" >> "$repository_root/budgets"
-    "$@" || status=$?
+    if [[ $result == image-id ]]; then inference_result=$("$@") || status=$?; else "$@" || status=$?; fi
     inference_retirement_confirmed=${TEST_RETIRED-true}
     if [[ $status != 0 ]]; then
         if [[ $operation == 'retire deployment configuration helper' ]]; then
@@ -69,6 +69,11 @@ case $1 in
  ps) [[ ${TEST_LIVE-false} != true ]] || printf '%064d\n' 7 ;;
  run)
     if [[ ${TEST_RUN_STATUS-0} != 0 ]]; then printf 'actual helper cause\n' >&2; exit "$TEST_RUN_STATUS"; fi
+    if [[ " $* " == *' provider_core.deployment_binding paths '* ]]; then
+        printf '%s\0' "$root/secrets/deployments/fixture/signing.private.json"
+    elif [[ " $* " == *' checkpoint-owner '* ]]; then
+        printf 'sha256:%064d nmr-api-delivery-control-%064d %s %s\n' 9 1 "$(id -u)" "$(id -g)"
+    fi
     arguments=("$@")
     for ((i=0;i<${#arguments[@]};i++)); do
       case ${arguments[i]} in
@@ -76,7 +81,7 @@ case $1 in
       esac
     done
     ;;
- inspect) printf 'sha256:%064d\n' 9 ;;
+ image|inspect) printf 'sha256:%064d\n' 9 ;;
  compose)
     if [[ ${TEST_PAUSE-false} == true ]]; then
       : > "$root/ready"
@@ -89,7 +94,7 @@ case $1 in
  *) exit 91 ;;
 esac
 ''')
-        for kind in ('provider', 'delivery', 'inference', 'preparation'):
+        for kind in ('provider', 'inference', 'preparation'):
             directory = self.root / '.work' / kind
             directory.mkdir(parents=True)
             (directory / 'image-id').write_text(IMAGE + '\n')
@@ -105,9 +110,8 @@ esac
         (self.provider / 'unselected-directory').mkdir(mode=0o700)
         (self.provider / 'unselected-directory/canary').write_text('never grant this root\n')
         self.bundle = self.selected(self.provider)
-        self.delivery = self.home / '.local/share/nmr-api-delivery'
-        self.delivery.mkdir(parents=True, mode=0o700)
-        self.delivery_bundle = self.selected(self.delivery)
+        self.bindings = self.root / "bindings.toml"
+        self.bindings.write_text("# explicit neutral binding fixture\\n")
 
     def selected(self, root):
         bundles = root / 'bundles'
@@ -120,7 +124,9 @@ esac
         return bundle
 
     def run_command(self, action, role='provider', *, changes=None, extra=()):
-        environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture')
+        environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
+                           NMRNET_DELIVERY_BINDINGS_INPUT=str(self.bindings), NMRNET_DELIVERY_BINDING_INPUT='fixture',
+                           NMRNET_SHARED_RUNTIME_IMAGE_INPUT='sha256:' + format(9, '064d'))
         environment.update(changes or {})
         return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
                               env=environment, capture_output=True, text=True, timeout=5)
@@ -144,16 +150,16 @@ esac
             'down': ['down', '--timeout', '60'], 'status': ['ps', '--all'],
             'logs': ['logs', '--no-color', '--tail', '80'],
         }
-        for role in ('provider', 'delivery'):
+        for role in ('provider',):
             for action, suffix in expected.items():
                 with self.subTest(role=role, action=action):
                     result = self.run_command(action, role)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     call = self.calls()[-1]
-                    project = 'nmr-api-delivery' if role == 'delivery' else 'nmrnet-' + hashlib.sha256(
+                    project = 'nmrnet-' + hashlib.sha256(
                         (str(self.root) + '\0fixture').encode()).hexdigest()[:20]
-                    bundle = self.delivery_bundle if role == 'delivery' else self.bundle
-                    directory = self.delivery if role == 'delivery' else self.root
+                    bundle = self.bundle
+                    directory = self.root
                     self.assertEqual(call, ['compose', '--env-file', '/dev/null', '--project-name', project,
                                             '--project-directory', str(directory), '--file', str(bundle / 'compose.json'), *suffix])
                     self.assertTrue((bundle / 'compose.json').exists())
@@ -163,7 +169,7 @@ esac
     def test_failed_compose_preserves_original_status_and_selected_configuration_without_retry(self):
         result = self.run_command('up', changes={'TEST_COMPOSE_STATUS': '7'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(len([call for call in self.calls() if call[0] == 'compose']), 1)
         self.assertIn('actual Compose cause', result.stderr)
         self.assertIn('No automatic retry', result.stderr)
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
@@ -199,11 +205,8 @@ esac
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('Next: make delivery/deployment/install DEPLOYMENTS="<complete profile list>"', result.stdout)
-        self.assertIn('Include fixture and every other profile using the shared delivery service on this host.', result.stdout)
-        self.assertIn('If fixture is the only profile: make delivery/deployment/install DEPLOYMENTS=fixture', result.stdout)
-        self.assertNotIn('Next: make delivery/deployment/install DEPLOYMENTS=fixture', result.stdout)
-        call = next(call for call in self.calls() if call[0] == 'run')
+        self.assertIn('through nmr-provider-tools using this binding definition', result.stdout)
+        call = next(call for call in self.calls() if 'freeze' in call)
         for pair in (['--network', 'none'], ['--cap-drop', 'ALL'], ['--pull', 'never'],
                      ['--security-opt', 'no-new-privileges:true'], ['--user', f'{os.getuid()}:{os.getgid()}'],
                      ['--memory', '512m'], ['--memory-swap', '512m'], ['--pids-limit', '64']):
@@ -221,7 +224,7 @@ esac
         self.assertEqual(selected.stat().st_mode & 0o777, 0o500)
         self.assertEqual((selected / 'compose.json').stat().st_mode & 0o777, 0o400)
         self.assertTrue(self.bundle.exists())
-        self.assertFalse(any(call[0] in ('inspect', 'create', 'start') for call in self.calls()))
+        self.assertFalse(any(call[0] in ('create', 'start') for call in self.calls()))
 
     def test_native_lifetime_locks_are_created_private_and_keep_their_inode(self):
         result = self.run_command('install')
@@ -247,16 +250,15 @@ esac
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('native lifetime locks', result.stderr)
         self.assertEqual(target.read_text(), 'keep original bytes')
-        self.assertFalse(any(call[0] == 'run' for call in self.calls()))
+        self.assertFalse(any('freeze' in call for call in self.calls()))
 
-    def test_private_qualification_project_is_passed_only_to_provider_freezer(self):
-        result = self.run_command('install', extra=('--delivery-project', 'fixture-private'))
+    def test_selected_neutral_binding_is_passed_to_the_provider_freezer(self):
+        result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
-        call = next(call for call in self.calls() if call[0] == 'run')
-        index = call.index('--delivery-project')
-        self.assertEqual(call[index+1], 'fixture-private')
-        self.assertIn('Private delivery namespace: fixture-private', result.stdout)
-        self.assertNotIn('Next: make delivery/deployment/install', result.stdout)
+        call = next(call for call in self.calls() if 'freeze' in call)
+        self.assertEqual(call[call.index('--delivery-bindings') + 1], '/input/bindings.toml')
+        self.assertEqual(call[call.index('--delivery-binding') + 1], 'fixture')
+        self.assertNotIn('--delivery-project', call)
 
     def test_failed_helper_is_removed_by_its_original_name_without_reexecution(self):
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7'})
@@ -272,7 +274,7 @@ esac
     def test_unretired_local_helper_never_dispatches_a_new_cleanup_client(self):
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps', 'run'])
+        self.assertEqual([call[0] for call in self.calls()], ['ps', 'image', 'run'])
         self.assertFalse((self.root / 'cleanup').exists())
         self.assertIn('Configuration helper, if still present:', result.stderr)
 
@@ -312,37 +314,6 @@ esac
         self.assertIn(f'type=bind,src={self.bundle},dst={self.bundle},readonly', call)
         self.assertEqual(call[call.index('client-inputs')+1:], ['--bundle', str(self.bundle),
             '--prediction-image-id', 'sha256:' + f'{9:064d}', '--client-root', str(output)])
-
-    def test_delivery_prepare_uses_explicit_unique_provider_bundles(self):
-        result = self.run_command('install', 'delivery', changes={'NMRNET_DELIVERY_DEPLOYMENTS_INPUT': 'fixture'})
-        self.assertEqual(result.returncode, 0, result.stderr)
-        call = next(call for call in self.calls() if call[0] == 'run')
-        self.assertIn('nmrnet_provider.delivery_deployment', call)
-        self.assertIn(f'type=bind,src={self.bundle},dst={self.bundle},readonly', call)
-        self.assertEqual(call[call.index('--provider-bundle')+1], str(self.bundle))
-        self.assertFalse(any('nmr-api-delivery-queue' in value for value in call))
-        self.assertTrue((self.delivery_bundle / 'compose.json').exists())
-
-    def test_duplicate_delivery_binding_profiles_refuse_before_helper(self):
-        result = self.run_command('install', 'delivery', changes={'NMRNET_DELIVERY_DEPLOYMENTS_INPUT': 'fixture fixture'})
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps'])
-
-    def test_held_and_discard_are_offline_with_exact_literal_selectors(self):
-        changes = {'NMRNET_API_ORIGIN_INPUT': 'https://api.example', 'NMRNET_PROVIDER_REF_INPUT': 'provider:fixture',
-                   'NMRNET_EXECUTION_ATTEMPT_REF_INPUT': 'execution_attempt:sha256:' + 'c'*64,
-                   'NMRNET_BODY_SHA256_INPUT': 'd'*64}
-        for action in ('held', 'discard'):
-            result = self.run_command(action, 'delivery', changes=changes)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            call = self.calls()[-1]
-            self.assertEqual(call[0], 'run')
-            self.assertIn('provider_core.delivery_discard', call)
-            self.assertIn('type=volume,src=nmr-api-delivery-queue,dst=/state,volume-nocopy', call)
-            self.assertNotIn('signing.private.json', ' '.join(call))
-            self.assertEqual(call[call.index('--network')+1], 'none')
-            if action == 'held': self.assertEqual(call[-1], '--list-held')
-            else: self.assertEqual(call[-4:], ['--execution-attempt-ref', changes['NMRNET_EXECUTION_ATTEMPT_REF_INPUT'], '--body-sha256', 'd'*64])
 
     def test_native_event_projection_and_engine_failure_keep_their_existing_owners(self):
         operation = 'a'*32

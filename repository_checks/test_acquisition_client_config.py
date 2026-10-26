@@ -42,9 +42,7 @@ class AcquisitionClientTests(unittest.TestCase):
             "NMRNET_ACQUISITION_FIXTURE_ROOT": str(self.root),
         }
         image = "docker.io/library/python"
-        version = "3.12.12-alpine3.22"
-        sha = "848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32"
-        self.proxy_image = f"{image}:{version}@sha256:{sha}"
+        self.proxy_image = self.environment["NMRNET_SHARED_RUNTIME_IMAGE_INPUT"]
         worker_version = "3.12.12-slim-bookworm"
         worker_sha = "593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
         self.worker_image = f"{image}:{worker_version}@sha256:{worker_sha}"
@@ -230,55 +228,11 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertTrue(ambient.is_dir())
         self.assertIn("image inspect", self.caller("--print", "require-images", "sha256:" + "b" * 64).stdout)
 
-    def test_proxy_image_download_print_needs_no_interface_or_existing_image(self):
-        result = self.caller("--print", "download-proxy", additions={"NMRNET_WLAN_INTERFACE_INPUT": ""})
-        self.assertEqual(0, result.returncode, msg=result.stderr)
-        self.assertEqual("", result.stderr)
-        self.assertEqual(1, len(result.stdout.splitlines()))
-        self.assertEqual(["image", "pull", self.proxy_image], shlex.split(result.stdout)[-3:])
-        self.assertFalse(self.fixture.calls())
-        invalid = self.caller("download-proxy", "unexpected")
-        self.assertEqual(2, invalid.returncode)
-        self.assertFalse(self.fixture.calls())
-
-    def test_proxy_image_download_preserves_failure_and_keeps_daemon_effects(self):
-        for status in (0, 37):
-            with self.subTest(status=status):
-                result = self.caller(
-                    "download-proxy",
-                    additions={"NMRNET_WLAN_INTERFACE_INPUT": "", "NMRNET_FAKE_ENGINE_STATUS": str(status)},
-                )
-                self.assertEqual(status, result.returncode, msg=result.stderr)
-                if status:
-                    self.assertIn("registry transfer failed", result.stderr)
-                    self.assertIn("Docker may retain", result.stderr)
-                    self.assertIn("packages/base-images/proxy/download", result.stderr)
-                else:
-                    self.assertEqual("", result.stderr)
-        for call in self.fixture.calls():
-            self.assertEqual(["image", "pull", self.proxy_image], call["arguments"])
-            self.assertEqual([], call["client_config"]["entries"])
-            self.assertFalse(Path(call["client_config"]["path"]).parent.exists())
-
-    def test_proxy_image_download_make_target_works_without_interface_selection(self):
-        result = subprocess.run(
-            ["make", "--no-print-directory", "packages/base-images/proxy/download"],
-            cwd=self.root,
-            env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": ""},
-            capture_output=True,
-            text=True,
-            timeout=8,
-            check=False,
-        )
-        self._remember(result.stderr)
-        self.assertEqual(0, result.returncode, msg=result.stderr)
-        self.assertEqual([["image", "pull", self.proxy_image]], [call["arguments"] for call in self.fixture.calls()])
-
-    def test_missing_proxy_image_points_to_its_download_target(self):
+    def test_missing_shared_image_points_to_its_owner(self):
         result = self.caller("require-images", self.proxy_image, additions={"NMRNET_FAKE_INSPECT_STATUS": "1"})
         self.assertEqual(2, result.returncode)
-        self.assertIn("make packages/base-images/proxy/download", result.stderr)
-        self.assertIn("without WLAN_INTERFACE binding", result.stderr)
+        self.assertIn("shared runtime image", result.stderr)
+        self.assertIn("nmr-provider-tools", result.stderr)
         self.assertNotIn("preload it through an independently interface-bound process", result.stderr)
         self.assertEqual([["image", "inspect", self.proxy_image]], [call["arguments"] for call in self.fixture.calls()])
 

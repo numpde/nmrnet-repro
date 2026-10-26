@@ -14,8 +14,6 @@ from pathlib import Path
 
 from tests.unit.provider_image_ports import ImageSource
 
-from tools.wheelhouse import requirements
-
 
 class ProviderImageCommandTests(unittest.TestCase):
     def test_capture_uses_external_sets_without_old_local_dependency_directories(self):
@@ -28,30 +26,19 @@ class ProviderImageCommandTests(unittest.TestCase):
             result, capture = fixture.capture()
             self.assertEqual(result.returncode, 0, result.stderr)
             runtime = capture / "runtime-wheels"
-            build = capture / "build-wheels"
+            self.assertFalse((capture / "build-wheels").exists())
             self.assertEqual({path.name for path in runtime.iterdir()}, {fixture.pool_wheels["runtime"].name})
-            self.assertEqual({path.name for path in build.iterdir()}, {fixture.pool_wheels["build"].name})
             self.assertEqual(
                 (runtime / fixture.pool_wheels["runtime"].name).read_bytes(),
                 fixture.pool_wheels["runtime"].read_bytes(),
             )
-            self.assertEqual(
-                (build / fixture.pool_wheels["build"].name).read_bytes(),
-                fixture.pool_wheels["build"].read_bytes(),
-            )
             runtime_names = {path.name for path in runtime.iterdir()}
-            build_names = {path.name for path in build.iterdir()}
             self.assertNotIn(fixture.pool_wheels["alternate_runtime"].name, runtime_names)
-            self.assertNotIn(fixture.pool_wheels["alternate_runtime"].name, build_names)
             self.assertNotIn(fixture.pool_wheels["unrelated"].name, runtime_names)
-            self.assertNotIn(fixture.pool_wheels["unrelated"].name, build_names)
             original = (runtime / fixture.pool_wheels["runtime"].name).read_bytes()
             fixture.pool_wheels["runtime"].write_bytes(b"later shared-pool mutation")
             self.assertEqual((runtime / fixture.pool_wheels["runtime"].name).read_bytes(), original)
             self.assertFalse((shared / ".complete").exists())
-
-    def test_real_build_lock_is_admitted_by_the_image_verifier(self):
-        self.assertEqual(set(requirements(Path("/input/provider-core-build.lock"))), {("setuptools", "84.0.0")})
 
     def test_progress_is_not_identity_and_both_complete_id_forms_publish(self):
         for form in ("plain", "newline"):
@@ -78,9 +65,9 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             captured = {str(path.relative_to(before / "context")) for path in (before / "context").rglob("*") if path.is_file()}
             self.assertIn("nmrnet_provider/process.py", captured)
-            self.assertIn("tools/provider_proxy.py", captured)
-            self.assertIn("tools/bound_http_proxy.py", captured)
-            self.assertIn("packages/provider-core/src/provider_core/__init__.py", captured)
+            self.assertNotIn("tools/provider_proxy.py", captured)
+            self.assertNotIn("tools/bound_http_proxy.py", captured)
+            self.assertFalse(any(name.startswith("packages/provider-core/") for name in captured))
             self.assertNotIn("PRIVATE_CANARY", captured)
             for name in ("worker_main.py", "geometry_worker.py", "smiles_worker.py"):
                 self.assertNotIn("nmrnet_provider/" + name, captured)
@@ -104,7 +91,6 @@ class ProviderImageCommandTests(unittest.TestCase):
                 "tools",
                 "containers/provider",
                 "requirements",
-                "packages/provider-core",
                 "nmrnet_provider",
                 "nmrnet_inference",
                 ".work/wheelhouse",
@@ -135,7 +121,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
             captures = [command for command in commands if "tools.wheelhouse" in command]
-            self.assertEqual(len(captures), 2, result.stdout)
+            self.assertEqual(len(captures), 1, result.stdout)
             (build_command,) = [command for command in commands if "--build-context" in command]
             capture = root / ".work/provider/.build.PRINT"
             for capture_command in captures:
@@ -152,8 +138,7 @@ class ProviderImageCommandTests(unittest.TestCase):
                     if argument.endswith(",dst=/input/requirements.lock,readonly")
                 },
                 {
-                    f"type=bind,src={capture}/context/requirements/provider-core.lock,dst=/input/requirements.lock,readonly",
-                    f"type=bind,src={capture}/context/requirements/provider-core-build.lock,dst=/input/requirements.lock,readonly",
+                    f"type=bind,src={capture}/context/requirements/provider-core-install.lock,dst=/input/requirements.lock,readonly",
                 },
             )
             command = build_command
@@ -165,7 +150,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--iidfile") + 1], str(capture / "built-image-id"))
             self.assertEqual(command[-1], str(capture / "context"))
             contexts = {command[index + 1] for index, word in enumerate(command) if word == "--build-context"}
-            self.assertEqual(contexts, {f"runtime-wheels={capture}/runtime-wheels", f"build-wheels={capture}/build-wheels"})
+            self.assertEqual(contexts, {f"runtime-wheels={capture}/runtime-wheels"})
             self.assertFalse(capture.exists())
             self.assertFalse((root / ".work/provider").exists())
             self.assertNotIn("--secret", command)

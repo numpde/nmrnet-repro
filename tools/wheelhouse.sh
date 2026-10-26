@@ -28,9 +28,9 @@ case "$profile" in
         worker_arguments=(--profile preparation --lock /input/preparation.lock --pool /wheelhouse)
         ;;
     provider-core)
-        inputs=(provider-core.lock provider-core-build.lock)
+        inputs=(provider-core-install.lock provider-core-assets.in)
         build_target=provider/image/build
-        worker_arguments=(--profile provider-core --lock /input/provider-core.lock --lock /input/provider-core-build.lock --pool /wheelhouse)
+        worker_arguments=(--profile provider-core --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
         ;;
     *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
 esac
@@ -58,6 +58,9 @@ if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
 fi
 following_acquisition_arguments=()
 if [[ $1 == download ]]; then following_acquisition_arguments=("WLAN_INTERFACE=$interface"); fi
+if [[ -n ${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-} ]]; then
+    following_acquisition_arguments+=("SHARED_RUNTIME_IMAGE=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT")
+fi
 next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
 if [[ $profile != provider-core ]]; then
     next_actions=$(next_make_command 'The scientific images also require shared provider dependencies in this same pool:' \

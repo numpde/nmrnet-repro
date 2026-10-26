@@ -42,9 +42,7 @@ def lock_profile(name):
         return LockProfile(INPUTS, "inference.lock", "advisories.json")
     if name == "preparation":
         return LockProfile(("preparation.in",), "preparation.lock", "preparation-advisories.json")
-    if name == "provider-core":
-        return LockProfile(("provider-core.in",), "provider-core.lock", "provider-core-advisories.json")
-    raise ValueError("Cannot select package profile: choose inference, preparation or provider-core.")
+    raise ValueError("Cannot select package profile: choose inference or preparation.")
 
 
 def input_hashes(profile):
@@ -290,4 +288,4 @@ if __name__ == "__main__":
         else:
             apply(profile_name)
     else:
-        raise SystemExit("Usage: package_lock.py {stage|apply} {inference|preparation|provider-core}")
+        raise SystemExit("Usage: package_lock.py {stage|apply} {inference|preparation}")

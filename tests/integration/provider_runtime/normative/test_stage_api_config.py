@@ -29,15 +29,17 @@ class StageApiConfigTests(unittest.TestCase):
             path.write_text(path.read_text().replace("api-ca.crt", "api-ca.pem"))
             (root / "deployment").mkdir(mode=0o700)
             stage_deployment(
-                root, api_interface="lo", api_address="127.0.0.1", interpreter_route="mapped",
+                root, delivery_project="nmrnet-qualification-stage", api_interface="lo", api_address="127.0.0.1", interpreter_route="mapped",
                 interpreter_interface="lo", interpreter_address="127.0.0.1", interpreter_network=None, resolvers=[],
             )
             public = tomllib.loads((root / "deployment/provider.toml").read_text())
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
-            self.assertEqual(public["api"]["ca_file"], "/srv/nmrnet/input/api-ca.pem")
+            binding = tomllib.loads((root / "deployment/bindings.toml").read_text())["bindings"][0]
+            self.assertNotIn("api", public)
+            self.assertEqual(binding["api"]["ca_file"], str(root / "deployment/secrets/api-ca.pem"))
             self.assertEqual((root / "deployment/secrets/api-ca.pem").read_bytes(), original_ca)
             self.assertEqual(private["routes"]["interpreter"], {
-                "mode": "mapped", "interface": "lo", "addresses": ["model.example=127.0.0.1"],
+                "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["model.example=127.0.0.1"],
             })
             self.assertNotIn("resolvers", private)
 
@@ -48,7 +50,7 @@ class StageApiConfigTests(unittest.TestCase):
             (root / "deployment").mkdir(mode=0o700)
             original = tomllib.loads((root / "source/provider.toml").read_text())
             stage_deployment(
-                root, api_interface="lo", api_address="127.0.0.1", interpreter_interface="external0",
+                root, delivery_project="nmrnet-qualification-stage", api_interface="lo", api_address="127.0.0.1", interpreter_interface="external0",
                 interpreter_route="external", interpreter_network=None, interpreter_address=None,
                 resolvers=["192.0.2.53"],
             )
@@ -56,11 +58,13 @@ class StageApiConfigTests(unittest.TestCase):
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
             self.assertNotIn("store_root", private)
             self.assertEqual(public["lifecycle"]["store_root"], "/srv/nmrnet/attempts")
-            self.assertEqual(private["routes"]["api"], {
-                "mode": "mapped", "interface": "lo", "addresses": ["api.example=127.0.0.1"],
+            binding = tomllib.loads((root / "deployment/bindings.toml").read_text())["bindings"][0]
+            self.assertEqual(binding["route"], {
+                "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["api.example=127.0.0.1"],
             })
-            self.assertEqual(private["routes"]["store"], private["routes"]["api"])
-            self.assertEqual(private["routes"]["interpreter"], {"mode": "external", "interface": "external0"})
+            self.assertNotIn("api", private["routes"])
+            self.assertEqual(private["routes"]["store"], binding["route"])
+            self.assertEqual(private["routes"]["interpreter"], {"mode": "external", "interface": "external0", "log_level": "INFO"})
             self.assertEqual(private["resolvers"], ["192.0.2.53"])
             selected = public["interpreter"]["endpoints"][0]
             previous = original["interpreter"]["endpoints"][0]

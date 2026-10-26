@@ -9,6 +9,7 @@ import json
 import math
 import struct
 import tempfile
+import socket
 import traceback
 import unittest
 import sys
@@ -285,7 +286,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 patch("api_prediction._retained_science", return_value=retained),
                 patch("api_prediction.sign_request", side_effect=synthetic_signer),
                 patch("api_prediction.http.client.HTTPSConnection", return_value=connection) as constructor,
-                patch("api_prediction.connect_bound") as bound,
+                patch("api_prediction.socket.socket") as bound,
                 self.assertRaises(RuntimeError) as caught,
             ):
                 submit(client, {"specification": "Use attached XYZ."}, case_kind="upload")
@@ -298,7 +299,9 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             head = json.loads(next(client.output.glob("*-upload-bytes.head.json")).read_bytes())
             self.assertEqual((head["status"], head["request_id"]), (201, "synthetic-request-id"))
             constructor.assert_called_once_with("api.example", 9443, timeout=10, context=client.trust)
-            bound.assert_called_once_with("192.0.2.1", 9443, "fixture0")
+            bound.assert_called_once_with(socket.AF_INET, socket.SOCK_STREAM)
+            bound.return_value.setsockopt.assert_called_once_with(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"fixture0\0")
+            bound.return_value.connect.assert_called_once_with(("192.0.2.1", 9443))
             self.assertEqual(client.trust.wrap_socket.call_args.kwargs["server_hostname"], "api.example")
             connection.close.assert_called_once()
 
@@ -318,7 +321,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 connection.close.side_effect = OSError(5, canary)
                 with (
                     patch("api_prediction.http.client.HTTPSConnection", return_value=connection),
-                    patch("api_prediction.connect_bound"),
+                    patch("api_prediction.socket.socket"),
                     patch("api_prediction.sign_request", side_effect=synthetic_signer),
                     self.assertRaises(RuntimeError) as caught,
                 ):
@@ -341,7 +344,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             connection.close.side_effect = outbound.close
             with (
                 patch("api_prediction.http.client.HTTPSConnection", return_value=connection),
-                patch("api_prediction.connect_bound", return_value=outbound),
+                patch("api_prediction.socket.socket", return_value=outbound),
                 self.assertRaisesRegex(RuntimeError, "connect: OSError"),
             ):
                 client._exchange(client.output / "setup", "GET", "/", "", None, {}, 65536)

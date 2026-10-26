@@ -81,15 +81,6 @@ def unguarded_sources(root):
         for path in sorted(sources)
         if not has_early_guard(path.read_text(), package_marker=path.name == "__init__.py")
     ]
-    core_root = root / "packages/provider-core/src/provider_core"
-    failures.extend(
-        str(path.relative_to(root))
-        for path in sorted(core_root.rglob("*.py"))
-        if path != core_root / "container_guard.py"
-        and not has_early_guard(
-            path.read_text(), package_marker=path.name == "__init__.py", guard_module="provider_core.container_guard"
-        )
-    )
     return failures
 
 
@@ -128,16 +119,6 @@ class RepositoryConventionTests(unittest.TestCase):
 
 class ConventionDetectionTests(unittest.TestCase):
     GUARD = "from tools.container_guard import require_container\nrequire_container()\n"
-
-    def test_installed_core_requires_its_own_portable_guard(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            worker = root / "packages/provider-core/src/provider_core/worker.py"
-            worker.parent.mkdir(parents=True)
-            worker.write_text(self.GUARD + "import json\n")
-            self.assertEqual([str(worker.relative_to(root))], unguarded_sources(root))
-            worker.write_text("from provider_core.container_guard import require_container\nrequire_container()\nimport json\n")
-            self.assertEqual([], unguarded_sources(root))
 
     def test_missing_late_conditional_and_rebound_guards_fail(self):
         for source in (

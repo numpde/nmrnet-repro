@@ -19,6 +19,13 @@ import unittest
 from pathlib import Path
 
 OWNER = r"""#!/usr/bin/env bash
+jq() {
+    "$TEST_PYTHON" -c 'import json,sys
+document=json.load(open(sys.argv[-1]))
+if sys.argv[2] == ".provider_ref": print(document["provider_ref"])
+elif "outstanding_items" in sys.argv[2]: sys.exit(0 if document["outstanding_items"] == 0 else 1)
+else: raise AssertionError("Unmodeled jq query")' "$@"
+}
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     printf 'obsolete foreground invoked\n' >&2; exit 97
 fi
@@ -52,7 +59,9 @@ provider_host_create() {
             ;;
         stage)
             printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt"
+            printf '%s\n' '{"provider_ref":"provider:fixture"}' > "$provider_host_root/source/identity.json"
             mkdir -m 700 -p "$provider_host_root/deployment/secrets"
+            printf 'fixture binding\\n' > "$provider_host_root/deployment/bindings.toml"
             for file in provider.toml deployment.toml; do printf '%s\n' "$file" > "$provider_host_root/deployment/$file"; done
             for file in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
                 printf 'fixture-%s\n' "$file" > "$provider_host_root/deployment/secrets/$file"
@@ -105,8 +114,9 @@ DEPLOYMENT = r'''#!/usr/bin/env bash
 set -eu
 [[ $1 =~ ^(install|up|down)$ ]]
 if [[ $1 == install ]]; then
-    [[ $# == 3 && $2 == --delivery-project && $3 == nmrnet-qualification-* ]]
-    printf '%s\n' "$3" > "$TEST_RECORDS/delivery-project"
+    [[ $# == 1 && $NMRNET_DELIVERY_BINDING_INPUT == nmrnet && -f $NMRNET_DELIVERY_BINDINGS_INPUT ]]
+    digest=$(printf '%s' "${NMRNET_DELIVERY_BINDINGS_INPUT%/deployment/bindings.toml}" | sha256sum)
+    printf 'nmrnet-qualification-%s\n' "${digest:0:24}" > "$TEST_RECORDS/delivery-project"
 else
     [[ $# == 1 ]]
 fi
@@ -130,50 +140,31 @@ fi
 if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
 '''
 
-# The actual private-delivery shell owner runs against this finite Engine.
-# It records Docker grants; it does not run Compose, SQLite or scientific work.
-DELIVERY_ENGINE = r'''#!/usr/bin/env bash
+# This fake stops at the shared host's public Make boundary; its owner tests
+# Engine, SQLite and helper retirement separately.
+SHARED_OWNER = r'''#!/usr/bin/env bash
 set -eu
-arguments=("$@")
-case $1 in
-run)
-    name= output=
-    for ((i=0; i<$#; i++)); do
-        if [[ ${arguments[i]} == --name ]]; then name=${arguments[i+1]}; fi
-        if [[ ${arguments[i]} == --output ]]; then output=${arguments[i+1]}; fi
-    done
-    [[ $name == "$(cat "$TEST_RECORDS/delivery-project")"-* ]]
-    printf '%s\0' "$@" > "$TEST_RECORDS/$name.argv"
-    if [[ -n $output ]]; then
-        printf '{}\n' > "$output/compose.json"
-        printf 'fixture\n' > "$output/daemon.toml"
+action=$1
+case $action in
+    install)
+        [[ -f $DELIVERY_BINDINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
+        mkdir -p "$DELIVERY_ROOT/current"
         printf 'delivery-prepare\n' >> "$TEST_RECORDS/events"
-    else
+        ;;
+    held)
         printf 'delivery-empty\n' >> "$TEST_RECORDS/events"
         [[ ${TEST_FAIL-} != inspection ]] || exit 7
         printf '%s\n' '{"outstanding_items":0}'
-    fi
-    ;;
-compose)
-    [[ $2 == --env-file && $3 == /dev/null && $4 == --project-directory ]]
-    [[ $6 == --project-name && $7 == "$(cat "$TEST_RECORDS/delivery-project")" ]]
-    [[ $8 == --file && $9 == "$5/compose.json" ]]
-    operation=${10}
-    if [[ ${*: -1} == --volumes ]]; then operation=remove; fi
-    printf 'delivery-%s\n' "$operation" >> "$TEST_RECORDS/events"
-    ;;
-rm)
-    [[ $2 == --force && $3 == "$(cat "$TEST_RECORDS/delivery-project")"-* ]]
-    printf 'delivery-retire-helper\n' >> "$TEST_RECORDS/events"
-    ;;
-*) exit 96 ;;
+        ;;
+    up|down) printf 'delivery-%s\n' "$action" >> "$TEST_RECORDS/events" ;;
+    *) exit 96 ;;
 esac
 '''
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
     def test_compose_cleanup_never_dispatches_after_a_client_fails_to_retire(self):
-        for phase in ("inspection", "helper", "logs"):
+        for phase in ("logs",):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 script = r'''
@@ -245,69 +236,24 @@ effect() {
 qualification_delivery_down() { effect down; }
 qualification_delivery_empty() {
     effect inspection || return $?
-    if [[ $TEST_PHASE == helper || $TEST_PHASE == restore ]]; then
+    if [[ $TEST_PHASE == restore ]]; then
         inference_diagnostic='queue still owns outcomes'
         return 2
     fi
 }
-qualification_delivery_remove() { effect remove; }
-qualification_delivery_retire_helper() { effect helper; }
+qualification_delivery_release() { effect remove; }
 qualification_delivery_up() { effect restore; }
 api_witness_stop_deployment 0
 '''
         for phase, effects in (("down", ["down"]), ("inspection", ["down", "inspection"]),
                                ("remove", ["down", "inspection", "remove"]),
-                               ("helper", ["down", "inspection", "helper"]),
-                               ("restore", ["down", "inspection", "helper", "restore"])):
+                               ("restore", ["down", "inspection", "restore"])):
             with self.subTest(phase=phase):
                 result = subprocess.run(["bash", "-c", script], env=dict(os.environ, TEST_PHASE=phase),
                                         capture_output=True, text=True, timeout=3)
                 self.assertEqual(result.returncode, 2 if phase == "inspection" else 7, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), effects)
                 self.assertIn("original cleanup diagnostic", result.stderr)
-
-    def test_final_delivery_helper_retirement_holds_original_host_before_client_cleanup(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            script = r'''
-source /fixture/provider_api_qualification.sh
-source /workspace/tools/compose_qualification.sh
-provider_host_root=$TEST_ROOT
-provider_host_diagnostic=
-declare -A provider_host_ids=()
-inference_retirement_confirmed=true
-qualification_delivery_helper=original-helper
-engine=(recorded-engine)
-provider_host_remove() { :; }
-api_witness_stop_deployment() { :; }
-inference_native() {
-    printf '%s\n' "$*" >> "$TEST_ROOT/removal"
-    inference_retirement_confirmed=false
-    return 7
-}
-docker_client_cleanup() { : > "$TEST_ROOT/forbidden-cleanup"; }
-sleep() {
-    printf '%s\n' "$qualification_delivery_helper" > "$TEST_ROOT/held"
-    command sleep "$@"
-}
-api_witness_finish
-'''
-            process = subprocess.Popen(["bash", "-c", script], env=dict(os.environ, TEST_ROOT=str(root)),
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                       start_new_session=True)
-            try:
-                deadline = time.monotonic() + 2
-                while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                self.assertIsNone(process.poll(), "finish exited with an unretired original client")
-                self.assertEqual((root / "held").read_text(), "original-helper\n")
-                self.assertFalse((root / "forbidden-cleanup").exists())
-                self.assertEqual((root / "removal").read_text().splitlines(), [
-                    "retire private delivery helper 15 stdio recorded-engine rm --force original-helper"])
-            finally:
-                if process.poll() is None:
-                    os.killpg(process.pid, signal.SIGTERM)
-                process.communicate(timeout=3)
 
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
         for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent"):
@@ -341,7 +287,7 @@ printf '%s\\n' "$1" > "$TEST_RECORDS/query"
 [[ $TEST_QUERY_FAILED == false ]] || exit 7
 printf '%s\\n' '{"fixture":"admitted original identity"}'
 ''')
-                for name in ("tools/inference_native.sh", "tools/worker_retirement.sh", "tools/bound_http_proxy.py",
+                for name in ("tools/inference_native.sh", "tools/worker_retirement.sh",
                              "tools/container_guard.py", "tests/integration/provider_runtime/api_prediction.py",
                              "tests/fixtures/preparation/api_pasted.json"):
                     path = repository / name
@@ -397,9 +343,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
             "tests/integration/provider_runtime/interpreter_ambiguity.py",
             "tests/integration/provider_runtime/stage_api_config.py",
             "tests/integration/provider_core/config_ports.py",
-            "packages/provider-core/tests/__init__.py",
-            "packages/provider-core/tests/fakes/__init__.py",
-            "packages/provider-core/tests/fakes/credential.py",
+            "tests/integration/provider_runtime/binding_inputs.py",
             "tests/fixtures/preparation/interpreter_ambiguity.json",
             "tests/fixtures/preparation/interpreter_formats.json",
         ):
@@ -418,6 +362,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
             "NMRNET_EXTERNAL_INTERFACE_INPUT": "fixture0",
             "NMRNET_RESOLVERS_INPUT": "192.0.2.53 198.51.100.53",
             "NMRNET_OUTPUT_INPUT": str(output),
+            "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": image,
         }
         if missing is not None:
             del environment["NMRNET_" + missing + "_INPUT"]
@@ -454,7 +399,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(forbidden, selection + proxy + probe)
             argv = (records / "proxy.argv").read_text().split("\0")[:-1]
             self.assertEqual(
-                argv[-12:],
+                argv[argv.index("--mode"):],
                 [
                     "--mode",
                     "external",
@@ -462,6 +407,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "model.example:443",
                     "--interface",
                     "fixture0",
+                    "--log-level",
+                    "INFO",
                     "--socket",
                     "/route/proxy.sock",
                     "--ready-file",
@@ -543,7 +490,13 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 (repository / "tools/provider_deployment.sh").write_text(DEPLOYMENT)
                 shutil.copyfile("/fixture/operator_guidance.sh", repository / "tools/operator_guidance.sh")
                 shutil.copyfile("/workspace/tools/compose_qualification.sh", repository / "tools/compose_qualification.sh")
-                (repository / "tools/record-engine.sh").write_text(DELIVERY_ENGINE)
+                shared = root / "shared-tools"
+                shared.mkdir()
+                (shared / "record.sh").write_text(SHARED_OWNER)
+                (shared / "Makefile").write_text("delivery/deployment/%:\n\t@bash record.sh $*\n")
+                (repository / "tools/wheelhouse_path.sh").write_text(
+                    'select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }\n'
+                )
                 (repository / "config/deployments").mkdir(parents=True)
                 (repository / "tools/docker_client.sh").write_text(
                     'docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh"); }\n'
@@ -555,7 +508,6 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "tools/inference_native.sh",
                     "tools/worker_retirement.sh",
                     "tools/compose_deployment.sh",
-                    "tools/delivery_deployment.sh",
                     "tools/core_image.sh",
                     "tools/geometry_image.sh",
                     "tools/git_inputs.sh",
@@ -565,13 +517,13 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "requirements/unicore-source.json",
                     "artifacts/prediction-models.json",
                     "tools/provider_deployment.py",
+                    "tools/provider_consumer_tests.py",
+                    "requirements/provider-core-release.json",
                     "tests/integration/provider_runtime/model_peer.py",
                     "tests/integration/provider_runtime/stage_api_config.py",
+                    "tests/integration/provider_runtime/binding_inputs.py",
                     "tests/integration/provider_runtime/api_prediction.py",
                     "tests/integration/provider_core/config_ports.py",
-                    "packages/provider-core/tests/fakes/tls_peer.py",
-                    "packages/provider-core/tests/fakes/conversation.py",
-                    "packages/provider-core/tests/fakes/credential.py",
                     "tests/fixtures/preparation/api_pasted.json",
                     "tests/fixtures/preparation/api_smiles.json",
                     "tests/fixtures/preparation/api_smiles_multiple.json",
@@ -581,11 +533,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "tests/fixtures/preparation/normative/atom_order.xyz",
                     "tools/provider_image.sh",
                     "tools/provider_logging.sh",
-                    "tools/bound_http_proxy.py",
-                    "tools/provider_proxy.py",
                     "tools/container_guard.py",
-                    "packages/provider-core/tests/__init__.py",
-                    "packages/provider-core/tests/fakes/__init__.py",
                     "tests/fixtures/preparation/api_sdf_zip.json",
                     "tests/fixtures/preparation/normative/butane_conformers.sdf",
                 ):
@@ -593,11 +541,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.touch()
                 image = "sha256:" + "a" * 64
-                (repository / "tools/delivery_image.sh").write_text(
-                    f"require_delivery_image() {{ delivery_image_id={image}; }}\n"
-                )
                 (repository / "tools/inference_native.sh").write_text(
-                    'inference_native() { shift 3; "$@"; }\n'
+                    'inference_native() { shift 3; "$@"; }; controller_native() { shift 3; "$@"; }\n'
                 )
                 image_record = repository / ".work/provider/image-id"
                 image_record.parent.mkdir(parents=True)
@@ -617,6 +562,9 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         'for path in "$@"; do mkdir -p "$(dirname -- "$target/$path")"; cp -- "$source/$path" "$target/$path"; done; }\n'
                     )
                 selectors = {
+                    "PROVIDER_TOOLS": str(shared),
+                    "SHARED_RUNTIME_IMAGE": image,
+                    "WHEELHOUSE": str(root / "wheelhouse"),
                     "API_ORIGIN": "https://nmr.localhost:10443",
                     "TOPOLOGY": "dev-local",
                     "PROJECT_REF": "project:user-demo",
@@ -635,14 +583,17 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "EXTERNAL_INTERFACE": "fixture0",
                     "RESOLVERS": "192.0.2.53 198.51.100.53",
                 }
+                (root / "wheelhouse").mkdir()
                 selected_key, selected_ca = str(root / "selected-key"), str(root / "selected-ca")
                 environment = {
                     "PATH": os.environ["PATH"],
+                    "TEST_PYTHON": sys.executable,
                     "TEST_RECORDS": str(records),
                     "TEST_KEY": selected_key,
                     "TEST_CA": selected_ca,
                 }
                 environment.update({"NMRNET_" + name + "_INPUT": value for name, value in selectors.items()})
+                environment["NMRNET_WHEELHOUSE_INPUT_ORIGIN"] = "command line"
                 if resumed:
                     environment["NMRNET_UPLOAD_RECEIPT_INPUT"] = str(root / "original-upload.json")
                 if failed:
@@ -659,8 +610,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     if failed == "inspection":
                         self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
                         events = (records / "events").read_text().splitlines()
-                        self.assertLess(events.index("delivery-empty"), events.index("delivery-retire-helper"))
-                        self.assertLess(events.index("delivery-retire-helper"), len(events) - 1 - events[::-1].index("delivery-up"))
+                        self.assertLess(events.index("delivery-empty"), len(events) - 1 - events[::-1].index("delivery-up"))
                         self.assertNotIn("delivery-remove", events)
                         self.assertIn("Any queued outcome remains owned there", result.stderr)
                         continue
@@ -692,14 +642,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertLess(events.index("client"), events.index("down"))
                 self.assertLess(events.index("down"), events.index("delivery-down"))
                 self.assertLess(events.index("delivery-down"), events.index("delivery-empty"))
-                self.assertLess(events.index("delivery-empty"), events.index("delivery-remove"))
-                project = (records / "delivery-project").read_text().strip()
-                for role in ("config", "inspect"):
-                    argv = next(records.glob(f"{project}-{role}-*.argv")).read_text().split("\0")[:-1]
-                    self.assertEqual(argv[argv.index("--network") + 1], "none")
-                    self.assertIn("--read-only", argv)
-                    self.assertEqual(argv[argv.index("--name") + 1].split(f"-{role}-")[0], project)
-                    self.assertNotIn("/var/run/docker.sock", " ".join(argv))
+                self.assertNotIn("delivery-remove", events)
+                self.assertIn("Stopped shared qualification storage retained", result.stderr)
                 if mode == "scripted-pasted":
                     self.assertLess(events.index("down"), events.index("signal-peer"))
                     self.assertLess(events.index("signal-peer"), events.index("peer"))

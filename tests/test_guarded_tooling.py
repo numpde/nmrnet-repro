@@ -10,11 +10,12 @@ from pathlib import Path
 
 MODULES = (
     "artifacts",
-    "bound_http_proxy",
     "build_unicore",
     "package_lock",
     "probe",
     "provider_environment",
+    "provider_consumer_tests",
+    "provider_test_environment",
     "rdkit_environment",
     "rdkit_runtime_tests",
     "wheelhouse",
@@ -135,6 +136,7 @@ class ToolingLauncherTests(unittest.TestCase):
                 "NMRNET_WHEELHOUSE_INPUT": str(self.root / ".work/wheelhouse"),
                 "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
                 "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
                 "NMRNET_STAGE_INPUT": "lock.TEST",
             },
             text=True,
@@ -318,9 +320,10 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assert_wheel_profile("provider-core")
 
     def assert_wheel_profile(self, profile):
-        (self.root / f"requirements/{profile}.lock").write_text("fixture==1\n")
+        name = "provider-core-install" if profile == "provider-core" else profile
+        (self.root / f"requirements/{name}.lock").write_text("fixture==1\n")
         if profile == "provider-core":
-            (self.root / "requirements/provider-core-build.lock").write_text("build-fixture==1\n")
+            (self.root / "requirements/provider-core-assets.in").write_text("fixture origin pin\n")
         for lane, writable in (
             ("download", [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]),
             ("check", []),
@@ -334,7 +337,7 @@ class ToolingLauncherTests(unittest.TestCase):
             if profile == "provider-core":
                 self.assertEqual(
                     [command[index + 1] for index, value in enumerate(command) if value == "--lock"],
-                    ["/input/provider-core.lock", "/input/provider-core-build.lock"],
+                    ["/input/provider-core-install.lock"],
                 )
 
 

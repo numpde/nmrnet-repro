@@ -74,8 +74,8 @@ class ImportOrderDetectionTests(unittest.TestCase):
 class ScientificLintTests(unittest.TestCase):
     def test_provider_core_import_order(self):
         paths = [
-            *sorted((ROOT / "packages/provider-core").rglob("*.py")),
-            ROOT / "tools/provider_core_tests.py",
+            ROOT / "tools/provider_consumer_tests.py",
+            ROOT / "tools/provider_test_environment.py",
             ROOT / "nmrnet_provider/submission.py",
             *sorted((ROOT / "tests/integration/provider_core").rglob("*.py")),
         ]

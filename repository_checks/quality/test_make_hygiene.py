@@ -111,7 +111,7 @@ class RepositoryHygieneTest(unittest.TestCase):
         # separately maintained suites. No recipe may replace aggregation.
         makefile = read_text(repo_path("Makefile"))
         self.assertEqual(
-            ("test/unit", "test/repository", "test/contract/provider-core", "test/integration/provider-core"),
+            ("test/unit", "test/repository", "test/integration/provider-core"),
             self.make_target_prereqs(makefile, "test"),
         )
         self.assertEqual("", self.make_target_recipe(makefile, "test").strip())

@@ -2,102 +2,74 @@
 # Opt-in qualification uses the production recipe owners in a private project.
 # The local signed peers own fixture data; no host delivery singleton is changed.
 
-qualification_delivery_prepare() {
-    local provider_private=$1 output=$2 project=$3 controller_image=$4 bundle helper_uuid
-    [[ $project == nmrnet-qualification-* ]] || {
-        printf '%s\n' 'Qualification requires its own delivery project; the host singleton is not a test fixture.' >&2
+qualification_shared_tools() {
+    qualification_provider_tools=${NMRNET_PROVIDER_TOOLS_INPUT-}
+    qualification_shared_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
+    [[ -n $qualification_provider_tools && $qualification_shared_image =~ ^sha256:[0-9a-f]{64}$ ]] || {
+        printf '%s\n' 'Qualification requires explicit PROVIDER_TOOLS=<shared checkout> and SHARED_RUNTIME_IMAGE=<immutable local image ID>.' >&2
         return 2
     }
+    qualification_provider_tools=$(realpath -e -- "$qualification_provider_tools") || return $?
+    [[ -f $qualification_provider_tools/Makefile ]] || return 2
+}
+
+qualification_delivery_command() {
+    local action=$1
+    shift
+    controller_native 'shared delivery qualification lifecycle' untimed stdio \
+        env -u MAKEFLAGS -u MFLAGS -u MAKEOVERRIDES make --no-print-directory -s \
+        -C "$qualification_provider_tools" "delivery/deployment/$action" \
+        "DELIVERY_ROOT=$qualification_delivery_root" "$@"
+}
+
+qualification_delivery_prepare() {
+    local output=$1 project=$2 definition=$3
+    [[ $project == nmrnet-qualification-* ]] || return 2
     qualification_delivery_root=$output qualification_delivery_project=$project
-    qualification_delivery_prepared=false qualification_delivery_started=false qualification_delivery_helper=
-    bundle=$(realpath -e -- "$provider_private/current") || return $?
-    source "$repository_root/tools/delivery_image.sh"
-    require_delivery_image || return $?
-    qualification_delivery_image=$delivery_image_id
-    mkdir -m 700 -- "$output" || return $?
-    IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
-    qualification_delivery_helper=$project-config-${helper_uuid//-/}
-    inference_native 'freeze private qualification delivery' 120 stdio "${engine[@]}" run --rm --pull never \
-        --name "$qualification_delivery_helper" --init --network none --read-only \
-        --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
-        --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
-        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=0700,uid=$(id -u),gid=$(id -g)" \
-        --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
-        --mount "type=bind,src=$bundle,dst=$bundle,readonly" --mount "type=bind,src=$output,dst=$output" \
-        --entrypoint /opt/provider/environment/bin/python "$controller_image" -I -B \
-        -m nmrnet_provider.delivery_deployment prepare --provider-bundle "$bundle" --output "$output" \
-        --uid "$(id -u)" --gid "$(id -g)" --delivery-image "$delivery_image_id" \
-        --controller-image "$controller_image" --project "$project" || return $?
-    qualification_delivery_helper=
+    qualification_delivery_prepared=false qualification_delivery_started=false
+    qualification_delivery_command install "DELIVERY_BINDINGS=$definition" \
+        "SHARED_RUNTIME_IMAGE=$qualification_shared_image" || return $?
     qualification_delivery_prepared=true
 }
 
-qualification_delivery_compose() {
-    local seconds=$1
-    shift
-    inference_native 'private qualification delivery Compose' "$seconds" stdio "${engine[@]}" compose \
-        --env-file /dev/null --project-directory "$qualification_delivery_root" \
-        --project-name "$qualification_delivery_project" --file "$qualification_delivery_root/compose.json" "$@"
-}
-
 qualification_delivery_up() {
-    # An interrupted up may already have created containers.
     qualification_delivery_started=true
-    qualification_delivery_compose 180 up --detach --no-build --pull never --wait --wait-timeout 120
+    qualification_delivery_command up
 }
 
 qualification_delivery_down() {
     [[ ${qualification_delivery_prepared-false} == true ]] || return 0
-    qualification_delivery_compose 120 down --timeout 60 || return $?
+    qualification_delivery_command down || return $?
     qualification_delivery_started=false
 }
 
 qualification_delivery_empty() {
-    # The daemon must be stopped for the existing operator's exclusive queue lock.
-    # The idle-recovery case may keep its producer alive; deleting volumes also
-    # requires stopped producers and independent API-success evidence.
-    local helper_uuid
-    IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
-    qualification_delivery_helper=$qualification_delivery_project-inspect-${helper_uuid//-/}
-    inference_native 'inspect stopped private delivery metadata' 30 stdio "${engine[@]}" run --rm --pull never \
-        --name "$qualification_delivery_helper" --init --network none --read-only --user "$(id -u):$(id -g)" \
-        --cap-drop ALL --security-opt no-new-privileges:true --cpus 1 --memory 256m --memory-swap 256m --pids-limit 32 \
-        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=16m,mode=0700,uid=$(id -u),gid=$(id -g)" \
-        --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
-        --mount "type=bind,src=$qualification_delivery_root/daemon.toml,dst=/input/daemon.toml,readonly" \
-        --mount "type=volume,src=$qualification_delivery_project-queue,dst=/state,volume-nocopy" \
-        --entrypoint /opt/provider-core/environment/bin/python "$qualification_delivery_image" -I -B -c '
-import contextlib, io, json, runpy, sys, tomllib
-from pathlib import Path
-configuration = tomllib.loads(Path("/input/daemon.toml").read_text())
-outstanding = 0
-for binding in configuration["bindings"]:
-    api = binding["api"]
-    sys.argv = ["held", "--config", "/input/daemon.toml",
-                "--api-origin", api["origin"], "--provider-ref", api["provider_ref"], "--list-held"]
-    output = io.StringIO()
-    with contextlib.redirect_stdout(output):
-        runpy.run_module("provider_core.delivery_discard", run_name="__main__")
-    print(output.getvalue(), end="")
-    outstanding += json.loads(output.getvalue())["outstanding_items"]
-if outstanding:
-    print("Private delivery still owns outcomes; its volumes must remain.", file=sys.stderr)
-    raise SystemExit(2)
-' || return $?
-    qualification_delivery_helper=
+    qualification_delivery_command held "API_ORIGIN=$qualification_api_origin" \
+        "PROVIDER_REF=$qualification_provider_ref" > "$qualification_delivery_root/held.json" || return $?
+    jq -e 'type == "object" and .outstanding_items == 0' \
+        "$qualification_delivery_root/held.json" > /dev/null || {
+        printf '%s\n' 'Private delivery is not confirmed empty; retain its configuration and volumes.' >&2
+        return 2
+    }
 }
 
-qualification_delivery_remove() {
-    # The caller has confirmed its API witness, native retirement and empty queue.
-    qualification_delivery_compose 120 down --timeout 60 --volumes || return $?
+qualification_delivery_release() {
+    # Shared down preserves volumes. This fixture has no second lifecycle or
+    # destructive storage owner; the explicit evidence directory identifies them.
+    printf 'Stopped shared qualification storage retained at %s.\n' "$qualification_delivery_root" >&2
     qualification_delivery_prepared=false
 }
 
-qualification_delivery_retire_helper() {
-    [[ -n ${qualification_delivery_helper-} ]] || return 0
-    inference_native 'retire private delivery helper' 15 stdio \
-        "${engine[@]}" rm --force "$qualification_delivery_helper" || return $?
-    qualification_delivery_helper=
+qualification_delivery_daemon() {
+    local output=$qualification_delivery_root/daemon-id
+    inference_native 'query private delivery container' 10 stdio bash -eu -c \
+        'output=$1; shift; exec "$@" > "$output"' bash "$output" "${engine[@]}" ps --quiet --no-trunc \
+        --filter "label=com.docker.compose.project=$qualification_delivery_project" \
+        --filter 'label=com.docker.compose.service=delivery' || return $?
+    IFS= read -r qualification_delivery_daemon_id < "$output" || return $?
+    [[ $qualification_delivery_daemon_id =~ ^[0-9a-f]{64}$ ]] \
+        && cmp -s "$output" <(printf '%s\n' "$qualification_delivery_daemon_id") || return 2
+    rm -- "$output"
 }
 
 compose_witness_wait() {
@@ -123,7 +95,10 @@ compose_witness_role() {
 }
 
 compose_witness_provider() {
-    NMRNET_DEPLOYMENT_INPUT=$deployment bash "$repository_root/tools/provider_deployment.sh" "$@"
+    NMRNET_DEPLOYMENT_INPUT=$deployment \
+    NMRNET_DELIVERY_BINDINGS_INPUT=$peer_data/bindings.toml NMRNET_DELIVERY_BINDING_INPUT=nmrnet \
+    NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
+        bash "$repository_root/tools/provider_deployment.sh" "$@"
 }
 
 compose_witness_provider_compose() {
@@ -225,8 +200,9 @@ compose_witness_relay_restart() {
     identifier=$(compose_witness_role provider) || return $?
     before=$(inference_native 'observe idle provider before relay restart' 10 stdio "${engine[@]}" inspect \
         --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier") || return $?
+    qualification_delivery_daemon || return $?
     queue_before=$(inference_native 'observe private queue file before restart' 10 stdio "${engine[@]}" exec \
-        "$qualification_delivery_project-daemon" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
+        "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
     since=$(date -u +'%Y-%m-%dT%H:%M:%S.%NZ')
     qualification_delivery_down || return $?
     qualification_delivery_empty || return $?
@@ -240,8 +216,9 @@ compose_witness_relay_restart() {
         printf '%s\n' 'The private provider restarted during idle relay recovery.' >&2
         return 2
     }
+    qualification_delivery_daemon || return $?
     queue_after=$(inference_native 'observe private queue file after restart' 10 stdio "${engine[@]}" exec \
-        "$qualification_delivery_project-daemon" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
+        "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
     [[ $queue_before == "$queue_after" ]] || {
         printf '%s\n' 'The private queue file identity changed across delivery restart.' >&2
         return 2
@@ -275,13 +252,9 @@ compose_witness_finish() {
             exit 2
         }
         if (( status == 0 )); then
-            if qualification_delivery_empty; then qualification_delivery_remove || cleanup=$?
+            if qualification_delivery_empty; then qualification_delivery_release || cleanup=$?
             else cleanup=$?; fi
         fi
-        [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
-    fi
-    if [[ -n ${qualification_delivery_helper-} && $inference_retirement_confirmed == true ]]; then
-        qualification_delivery_retire_helper || cleanup=$?
         [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
     fi
     if [[ -n $peer_id && $inference_retirement_confirmed == true ]]; then
@@ -320,10 +293,13 @@ compose_witness_main() {
     source "$repository_root/tools/worker_retirement.sh"
     source "$repository_root/tools/git_metadata.sh"
     source "$repository_root/tools/provider_image.sh"
+    qualification_shared_tools || return $?
+    source "$repository_root/tools/wheelhouse_path.sh"
+    select_wheelhouse && require_wheelhouse_pool || return $?
     docker_client_directory= pending_diagnostic= inference_diagnostic= worker_retirement_diagnostic=
     inference_retirement_confirmed=true inference_cancellation_status=0
     peer_id= deployment_installed=false peer_creation_attempted=false print_command=false
-    qualification_delivery_prepared=false qualification_delivery_started=false qualification_delivery_helper=
+    qualification_delivery_prepared=false qualification_delivery_started=false
     scratch=$(mktemp -d /tmp/nmrnet-compose-XXXXXXXX)
     deployment=qualification-${scratch##*-}
     public=$repository_root/config/deployments/$deployment
@@ -351,7 +327,8 @@ compose_witness_main() {
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
         tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/runner_crash_probe.py \
-        tests/integration/provider_core packages/provider-core/tests tools/compose_runner_events.sh \
+        tests/integration/provider_core tools/compose_runner_events.sh tools/provider_consumer_tests.py \
+        requirements/provider-core-release.json tests/integration/provider_runtime/binding_inputs.py \
         tests/fixtures/preparation/expected.json tests/fixtures/preparation/smiles.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0
@@ -363,7 +340,11 @@ compose_witness_main() {
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
         --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=128m,mode=0700,uid=$(id -u),gid=$(id -g)" \
         --mount "type=bind,src=$peer_data,dst=$peer_data" "${crash_grants[@]}" \
-        --mount "type=bind,src=$capture/packages/provider-core/tests,dst=/fixture/core-tests,readonly" \
+        --env PROVIDER_CORE_IN_CONTAINER=1 --tmpfs /fixture:rw,nosuid,nodev,noexec,size=16m \
+        --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly" \
+        --mount "type=bind,src=$capture/requirements/provider-core-release.json,dst=/fixture/core-release.json,readonly" \
+        --mount "type=bind,src=$capture/tools/provider_consumer_tests.py,dst=/fixture/support.py,readonly" \
+        --mount "type=bind,src=$capture/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_core,dst=/fixture/binding-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer.py,dst=/fixture/compose_peer.py,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly" \
@@ -371,8 +352,9 @@ compose_witness_main() {
         --mount "type=bind,src=$capture/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly" \
         --mount "type=bind,src=$capture/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly" \
         --mount "type=bind,src=$capture/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly" \
-        --entrypoint /opt/provider/environment/bin/python "$provider_image_id" -I -B /fixture/compose_peer.py \
-        --root "$peer_data" --seconds 420 --case "$scientific_case" || create_status=$?
+        --entrypoint /opt/provider/environment/bin/python "$provider_image_id" -I -B /fixture/support.py fixture \
+        --release /fixture/core-release.json --pool /wheelhouse --target /fixture --script /fixture/compose_peer.py -- \
+        --root "$peer_data" --seconds 420 --case "$scientific_case" --delivery-project "$delivery_project" || create_status=$?
     pending_diagnostic+=$worker_retirement_diagnostic
     worker_container_created "$scratch/peer" || { pending_diagnostic+=$worker_retirement_diagnostic; return 2; }
     peer_id=$worker_created_id
@@ -380,13 +362,15 @@ compose_witness_main() {
     worker_retirement_command start "$scratch/peer" "${engine[@]}" start "$peer_id" || return $?
     compose_witness_wait "$peer_data/ready.json" 15 || return $?
     cp -- "$peer_data/provider.toml" "$peer_data/deployment.toml" "$public/" || return $?
-    for input in signing.private.json interpreter.key api-ca.pem model-ca.pem store-ca.pem; do
+    for input in interpreter.key model-ca.pem store-ca.pem; do
         cp -- "$peer_data/configuration/$input" "$private/$input" || return $?
         chmod 600 -- "$private/$input" || return $?
     done
-    compose_witness_provider install --delivery-project "$delivery_project" || return $?
+    qualification_api_origin=$(jq -er '.api_origin' "$peer_data/ready.json") || return $?
+    qualification_provider_ref=$(jq -er '.provider_ref' "$peer_data/ready.json") || return $?
+    compose_witness_provider install || return $?
     deployment_installed=true
-    qualification_delivery_prepare "$private" "$scratch/delivery" "$delivery_project" "$provider_image_id" || return $?
+    qualification_delivery_prepare "$scratch/delivery" "$delivery_project" "$peer_data/bindings.toml" || return $?
     qualification_delivery_up || return $?
     compose_witness_provider up || return $?
     if [[ $scientific_case == recovery ]]; then

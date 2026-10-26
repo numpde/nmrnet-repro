@@ -4,7 +4,6 @@ import os
 import shlex
 import subprocess
 import unittest
-from pathlib import Path
 
 
 class NetworkGateTests(unittest.TestCase):
@@ -15,6 +14,7 @@ class NetworkGateTests(unittest.TestCase):
         # silent-defaults: allow-pop-default -- Remove the ambient interface before checking that routing requires an explicit selector; proof=tests/test_network_gate.py::NetworkGateTests.test_networked_lanes_require_an_explicit_interface
         environment.pop("WLAN_INTERFACE", None)
         environment["NMRNET_ARCHIVE_INPUT"] = "weight.zip"
+        environment["NMRNET_SHARED_RUNTIME_IMAGE_INPUT"] = "sha256:" + "a" * 64
         if interface is not None:
             environment["NMRNET_WLAN_INTERFACE_INPUT"] = interface
         return subprocess.run(
@@ -69,19 +69,17 @@ class NetworkGateTests(unittest.TestCase):
             self.assertEqual(f"{os.getuid()}:{os.getgid()}", command[command.index("--user") + 1])
             self.assertEqual("ALL", command[command.index("--cap-drop") + 1])
             self.assertEqual("never", command[command.index("--pull") + 1])
-            self.assertIn("NMRNET_IN_CONTAINER=1", command)
+            self.assertIn("PROVIDER_CORE_IN_CONTAINER=1" if command is proxy else "NMRNET_IN_CONTAINER=1", command)
             for limit in ("--cpus", "--memory", "--memory-swap", "--pids-limit"):
                 self.assertIn(limit, command)
             mounts = [command[i + 1] for i, arg in enumerate(command) if arg == "--mount"]
             self.assertFalse(any("docker.sock" in mount or "dst=/home" in mount for mount in mounts))
-        self.assertIn("python3", proxy)
-        self.assertEqual("tools.bound_http_proxy", proxy[proxy.index("-m") + 1])
-        self.assertEqual("/workspace", proxy[proxy.index("--workdir") + 1])
+        self.assertIn("/opt/provider-core/environment/bin/python", proxy)
+        self.assertEqual("provider_core.bound_http_proxy", proxy[proxy.index("-m") + 1])
+        self.assertEqual("/tmp", proxy[proxy.index("--workdir") + 1])
         proxy_mounts = [proxy[i + 1] for i, arg in enumerate(proxy) if arg == "--mount"]
         self.assertEqual(
             {
-                f"type=bind,src={Path.cwd()}/tools/bound_http_proxy.py,dst=/workspace/tools/bound_http_proxy.py,readonly",
-                f"type=bind,src={Path.cwd()}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly",
                 "type=bind,src=/tmp/nmrnet-proxy.PRINT/ready,dst=/ready",
             },
             set(proxy_mounts),

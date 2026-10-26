@@ -33,11 +33,10 @@ class ProviderRuntimeTests(unittest.TestCase):
         # rows independently qualify the complete installed distribution set.
         expected = sorted(
             (match[1], match[2])
-            for line in Path("/opt/provider/provider-core.lock").read_text().splitlines()
+            for line in Path("/opt/provider/provider-core-install.lock").read_text().splitlines()
             if (match := re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s;]+) \\", line))
         )
-        self.assertEqual(len(expected), 11)
-        expected.append(("provider-core", "0.1.0"))
+        self.assertIn(("provider-core", "0.2.0"), expected)
         observed = sorted(
             (re.sub(r"[-_.]+", "-", item.metadata["Name"]).lower(), item.version) for item in importlib.metadata.distributions()
         )
@@ -58,8 +57,8 @@ class ProviderRuntimeTests(unittest.TestCase):
             "nmrnet_inference.predict",
             "tools.artifacts",
             "tools.container_guard",
-            "tools.provider_proxy",
-            "tools.bound_http_proxy",
+            "provider_core.provider_proxy",
+            "provider_core.bound_http_proxy",
         ):
             with self.subTest(module=name):
                 origin = Path(importlib.import_module(name).__file__).resolve(strict=True)
@@ -108,9 +107,9 @@ class ProviderRuntimeTests(unittest.TestCase):
 
     def test_consumed_dependency_inventory_is_retained_in_the_image(self):
         evidence = json.loads(Path("/opt/provider/dependency-inputs.json").read_bytes())
-        self.assertEqual(set(evidence), {"build", "runtime"})
-        self.assertEqual(len(evidence["build"]["files"]), 1)
-        self.assertEqual(len(evidence["runtime"]["files"]), 11)
+        self.assertEqual(set(evidence), {"runtime"})
+        self.assertEqual(evidence["runtime"]["files"]["provider_core-0.2.0-py3-none-any.whl"],
+                         "248bcf548a25edb5d3b349e024d2ace568a5f9d2d01474d7a14d2c1d0394f6da")
         self.assertEqual(
-            evidence["runtime"]["lock_sha256"], hashlib.sha256(Path("/opt/provider/provider-core.lock").read_bytes()).hexdigest()
+            evidence["runtime"]["lock_sha256"], hashlib.sha256(Path("/opt/provider/provider-core-install.lock").read_bytes()).hexdigest()
         )

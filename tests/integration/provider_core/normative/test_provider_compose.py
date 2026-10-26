@@ -1,6 +1,7 @@
 """The deployment plan grants each fixed role only its actual runtime inputs."""
 
 import unittest
+import os
 from dataclasses import replace
 from tests.integration.nmrnet.compose_ports import ComposeFixture
 from provider_core.delivery_client import delivery_volume_name
@@ -50,7 +51,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         self.assertEqual(ipc, {"type": "volume", "source": delivery_volume_name(
             self.config.api.identity.origin, self.config.lifecycle.scope.provider_ref),
             "target": str(self.config.delivery.endpoint.socket_path.parent), "read_only": True, "volume": {"nocopy": True}})
-        self.assertEqual(provider["group_add"], ["1001"])
+        self.assertEqual(provider["group_add"], [str(os.getegid())])
         self.assertEqual(plan["volumes"], {name: {"name": name, "external": True}
                                          for name in (control["source"], ipc["source"])})
         for role, service in services.items():
@@ -82,7 +83,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         second = self.plan(bundle=self.bundle.parent / "generation-second")
         self.assertEqual(first["name"], second["name"])
         self.assertNotEqual(first["services"]["provider"]["labels"], second["services"]["provider"]["labels"])
-        self.routes["api"] = {"mode": "mapped", "interface": "eno1", "addresses": ["api.example=192.0.2.12"]}
+        self.routes["api"] = {"mode": "mapped", "interface": "eno1", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"]}
         api = self.plan()["services"]["api"]
         self.assertEqual(api["network_mode"], "host")
         self.assertIn("api.example:443", api["command"])
@@ -91,7 +92,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         self.assertNotIn("192.0.2.12:443", api["command"])
 
     def test_local_proxy_joins_only_its_explicit_network_without_host_network_fallback(self):
-        self.routes["api"] = {"mode": "local", "interface": "eth0", "addresses": ["api.example=192.0.2.12"], "network": "a" * 64}
+        self.routes["api"] = {"mode": "local", "interface": "eth0", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"], "network": "a" * 64}
         plan = self.plan()
         api = plan["services"]["api"]
         self.assertNotIn("network_mode", api)

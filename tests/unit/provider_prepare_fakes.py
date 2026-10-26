@@ -60,6 +60,7 @@ report_next_actions 'NEXT_FROM_CHILD'
             "provider/prepare",
             f"WHEELHOUSE={selection}",
             "WLAN_INTERFACE=lo",
+            "SHARED_RUNTIME_IMAGE=sha256:" + "a" * 64,
         ]
 
     def run(self, selection):

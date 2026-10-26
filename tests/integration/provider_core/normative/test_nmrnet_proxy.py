@@ -16,8 +16,8 @@ import httpx
 from tests.fakes.tls_peer import TlsPeer
 
 from provider_core.transport import HttpTransport
-from tools import bound_http_proxy
-from tools.provider_proxy import ServicePolicy, ServiceProxyServer
+from provider_core import bound_http_proxy
+from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
 class ActualServiceProxyTests(unittest.IsolatedAsyncioTestCase):

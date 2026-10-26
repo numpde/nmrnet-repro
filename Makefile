@@ -3,7 +3,7 @@ override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
-.PHONY: packages/base-images/proxy/download packages/base-images/python/download
+.PHONY: packages/base-images/python/download
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
 .PHONY: test/unit/provider test/unit/provider/pdb test/unit/provider/mol2
 .PHONY: test/unit/provider/worker
@@ -18,22 +18,9 @@ test/unit/smiles-protocol:
 test/unit/smiles-worker:
 	bash tools/container.sh $@
 
-.PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
-.PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
-.PHONY: test/unit/provider-core/credential
-.PHONY: test/unit/provider-core/verbosity test/integration/provider-core/output
-.PHONY: test/unit/provider-core/hello test/integration/provider-core/hello
-.PHONY: test/unit/provider-core/transport test/integration/provider-core/transport
-.PHONY: test/unit/provider-core/api
-.PHONY: test/unit/provider-core/admission
-.PHONY: test/unit/provider-core/uploads
-.PHONY: test/unit/provider-core/diagnostics
-.PHONY: test/unit/provider-core/delivery
-.PHONY: test/unit/provider-core/checkpoints
-.PHONY: test/unit/provider-core/starting test/integration/provider-core/starting
+.PHONY: test/integration/provider-core/prepared-identity
+.PHONY: test/integration/provider-core/output
 .PHONY: test/integration/provider-core/delivery
-.PHONY: test/unit/provider-core/recovery
-.PHONY: test/integration/provider-core/api
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
 .PHONY: test/integration/provider-core/pasted
 .PHONY: test/integration/provider-core/interpreter
@@ -44,8 +31,7 @@ test/unit/smiles-worker:
 .PHONY: test/integration/provider-core/recovery
 .PHONY: test/integration/provider-core/interpreter-ambiguity
 .PHONY: test/integration/provider-core/lifecycle
-.PHONY: test/integration/provider-core/chat
-.PHONY: test/contract/provider-core test/integration/provider-core
+.PHONY: test/integration/provider-core
 
 .PHONY: test/integration/provider/prediction-recovery
 test/integration/provider/prediction-recovery:
@@ -54,9 +40,8 @@ test/integration/provider/prediction-recovery:
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
 .PHONY: provider/image/build
-.PHONY: delivery/image/build
 .PHONY: test/unit/provider/image test/integration/provider-runtime
-.PHONY: test/unit/provider/proxy test/integration/provider/proxy
+.PHONY: test/integration/provider/proxy
 .PHONY: test/integration/rdkit-worker
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
@@ -88,28 +73,18 @@ geometry/image/build:
 provider/image/build:
 	bash tools/container.sh $@
 
-delivery/image/build:
-	bash tools/container.sh $@
-
 test/unit/provider/image test/integration/provider-runtime:
 	bash tools/container.sh $@
 
-test/unit/provider/proxy test/integration/provider/proxy:
+test/integration/provider/proxy:
 	bash tools/container.sh $@
 
 test/integration/rdkit-runtime:
 	bash tools/container.sh $@
 
-.PHONY: test/repository/provider-core test/repository/operator-inputs test/repository/documentation
+.PHONY: test/repository/operator-inputs test/repository/documentation
 .PHONY: test/unit/packages
-.PHONY: packages/provider-core/lock/stage packages/provider-core/lock/apply
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
-
-packages/provider-core/lock/stage:
-	bash tools/packages.sh stage provider-core
-
-packages/provider-core/lock/apply:
-	bash tools/packages.sh apply provider-core
 
 packages/provider-core/wheelhouse:
 	bash tools/wheelhouse.sh download provider-core
@@ -118,9 +93,6 @@ packages/provider-core/wheelhouse/check:
 	bash tools/wheelhouse.sh check provider-core
 
 test/unit/packages:
-	bash tools/container.sh $@
-
-test/repository/provider-core:
 	bash tools/container.sh $@
 
 test/repository/operator-inputs:
@@ -133,45 +105,11 @@ test/repository/documentation:
 test/repository/native-images:
 	bash tools/container.sh $@
 
-test/unit/provider-core:
-	bash tools/container.sh $@
-
-.PHONY: test/unit/provider-core/runner
-test/unit/provider-core/runner:
-	bash tools/container.sh $@
-
 .PHONY: test/integration/provider-core/runner
 test/integration/provider-core/runner:
 	bash tools/container.sh $@
 
-test/unit/provider-core/credential:
-	bash tools/container.sh $@
-
-test/unit/provider-core/verbosity:
-	bash tools/container.sh $@
-
 test/integration/provider-core/output:
-	bash tools/container.sh $@
-
-test/unit/provider-core/hello:
-	bash tools/container.sh $@
-
-test/integration/provider-core/hello:
-	bash tools/container.sh $@
-
-test/unit/provider-core/transport:
-	bash tools/container.sh $@
-
-test/unit/provider-core/api:
-	bash tools/container.sh $@
-
-test/integration/provider-core/api:
-	bash tools/container.sh $@
-
-test/integration/provider-core/transport:
-	bash tools/container.sh $@
-
-test/unit/provider-core/prepared-identity:
 	bash tools/container.sh $@
 
 test/integration/provider-core/prepared-identity:
@@ -219,46 +157,10 @@ test/integration/provider-core/interpreter-ambiguity:
 test/integration/provider-core/process:
 	bash tools/container.sh $@
 
-test/unit/provider-core/admission:
-	bash tools/container.sh $@
-
-test/unit/provider-core/uploads:
-	bash tools/container.sh $@
-
-test/unit/provider-core/diagnostics:
-	bash tools/container.sh $@
-
-test/unit/provider-core/delivery:
-	bash tools/container.sh $@
-
-test/unit/provider-core/checkpoints:
-	bash tools/container.sh $@
-
-test/unit/provider-core/starting:
-	bash tools/container.sh $@
-
-test/integration/provider-core/starting:
-	bash tools/container.sh $@
-
 test/integration/provider-core/delivery:
 	bash tools/container.sh $@
 
-test/unit/provider-core/recovery:
-	bash tools/container.sh $@
-
 test/integration/provider-core/lifecycle:
-	bash tools/container.sh $@
-
-test/integration/provider-core/chat:
-	bash tools/container.sh $@
-
-test/unit/provider-core/normative:
-	bash tools/container.sh $@
-
-test/unit/provider-core/adversarial:
-	bash tools/container.sh $@
-
-test/contract/provider-core:
 	bash tools/container.sh $@
 
 test/integration/provider-core:
@@ -272,6 +174,9 @@ test/unit/packages/wheelhouse:
 	bash tools/container.sh $@
 .PHONY: test/repository/wheelhouse
 test/repository/wheelhouse:
+	bash tools/container.sh $@
+.PHONY: test/repository/provider
+test/repository/provider:
 	bash tools/container.sh $@
 .PHONY: packages/preparation/wheelhouse packages/preparation/wheelhouse/check
 .PHONY: packages/image packages/import baseline/prepare baseline/run prediction/tensor-parity
@@ -291,9 +196,12 @@ override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin W
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
 unexport LOG_LEVEL
 unexport DEPLOYMENT
-unexport DEPLOYMENTS
+unexport DELIVERY_BINDINGS DELIVERY_BINDING SHARED_RUNTIME_IMAGE PROVIDER_TOOLS
+override export NMRNET_PROVIDER_TOOLS_INPUT := $(if $(filter command line,$(origin PROVIDER_TOOLS)),$(value PROVIDER_TOOLS))
+override export NMRNET_DELIVERY_BINDINGS_INPUT := $(if $(filter command line,$(origin DELIVERY_BINDINGS)),$(value DELIVERY_BINDINGS))
+override export NMRNET_DELIVERY_BINDING_INPUT := $(if $(filter command line,$(origin DELIVERY_BINDING)),$(value DELIVERY_BINDING))
+override export NMRNET_SHARED_RUNTIME_IMAGE_INPUT := $(if $(filter command line,$(origin SHARED_RUNTIME_IMAGE)),$(value SHARED_RUNTIME_IMAGE))
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
-override export NMRNET_DELIVERY_DEPLOYMENTS_INPUT := $(if $(filter command line,$(origin DEPLOYMENTS)),$(value DEPLOYMENTS))
 unexport UPLOAD_RECEIPT
 unexport JOB_RECEIPT JOB_IDENTITY
 override export NMRNET_JOB_IDENTITY_INPUT := $(if $(filter command line,$(origin JOB_IDENTITY)),$(value JOB_IDENTITY))
@@ -335,8 +243,6 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 
 help:
 	@printf '%s\n' \
-		'make delivery/deployment/held API_ORIGIN=... PROVIDER_REF=...  List held identity/reason without payloads after explicitly stopping shared delivery.' \
-		'make delivery/deployment/discard API_ORIGIN=... PROVIDER_REF=... EXECUTION_ATTEMPT_REF=... BODY_SHA256=...  Remove one exact held payload after explicitly stopping shared delivery; no API acceptance is inferred.' \
 		'make help                              List maintained commands; also the default goal.' \
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
@@ -354,14 +260,9 @@ help:
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
-		'make delivery/image/build              Build the offline shared API delivery image; no scientific runtime.' \
-		'make provider/prepare                  Acquire dependencies/models and build images; choose cache and interface once.' \
-		'make provider/deployment/install DEPLOYMENT=<name> Freeze public configuration and private inputs into an immutable Compose bundle.' \
-		'make delivery/deployment/install DEPLOYMENTS="name ..." Freeze API-only inputs for the shared host delivery service.' \
-		'make delivery/deployment/up            Start shared delivery and its independent API routes.' \
-		'make delivery/deployment/status        Inspect the shared host delivery containers.' \
-		'make delivery/deployment/logs          Read bounded shared delivery Docker logs.' \
-		'make delivery/deployment/down          Stop shared delivery; retain queued outcomes and IPC volumes.' \
+		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
+		'make provider/prepare SHARED_RUNTIME_IMAGE=sha256:<id> Acquire dependencies/models and build images; choose cache and interface once.' \
+		'make provider/deployment/install DEPLOYMENT=<name> DELIVERY_BINDINGS=<file> DELIVERY_BINDING=<name> SHARED_RUNTIME_IMAGE=sha256:<id> Freeze provider inputs from one shared binding.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
@@ -374,7 +275,6 @@ help:
 		'make test/integration/provider/deployment/recovery Check idle delivery restart and reader-process recovery without scientific work (opt-in).' \
 		'make test/unit/provider/deployment     Check finite deployment and API-client orchestration offline.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
-		'make test/unit/provider/proxy          Check service destination grants and acquisition proxy regressions offline.' \
 		'make test/integration/provider/proxy   Verify destination TLS through the actual Unix service proxy offline.' \
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
@@ -392,12 +292,9 @@ help:
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
 		'make test/integration/native-geometry-worker Check real MOL/SDF parsing across the private worker channel in the recorded RDKit image.' \
-		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
-		'make test/unit/provider-core/runner    Test fresh native children and independent lifecycle retirement offline.' \
 		'make test/integration/provider-core/runner Test native task cancellation and lost-control recovery offline.' \
 		'make test/unit/provider/worker Test prediction worker framing and exchange failures.' \
 		'make test/integration/provider/prediction-recovery Prove one prediction replacement after a real synthetic kernel OOM (opt-in).' \
-		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/integration/provider-core/smiles Test Job-bound SMILES choices with installed core.' \
 		'make test/integration/provider-core/pasted Test exact pasted Job coordinates, units and source mapping.' \
@@ -411,31 +308,10 @@ help:
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
-		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Uploads, Job results and the proposed SECS byte-consumption boundary.' \
-		'make test/unit/provider-core/normative Run required shared-core contracts.' \
-		'make test/unit/provider-core/credential Test API-issued provider credential admission.' \
-		'make test/unit/provider-core/verbosity Check the shared low/medium/max vocabulary in the installed package.' \
 		'make test/integration/provider-core/output Check direct output settings, identity, capacity and signed publication offline.' \
-		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \
-		'make test/unit/provider-core/diagnostics Test protected core error facts and owned causes.' \
-		'make test/unit/provider-core/delivery Test pending delivery storage, limits and payload removal.' \
-		'make test/unit/provider-core/checkpoints Test compact producer control without scientific payload retention.' \
-		'make test/unit/provider-core/starting Test durable START admission and interrupted storage ownership.' \
-		'make test/integration/provider-core/starting Test exact START replay through signed TLS after a lost reply.' \
 		'make test/integration/provider-core/delivery Test actual local delivery handoff and recovery.' \
-		'make test/unit/provider-core/recovery Test retained publication, read-only recovery and claim ownership.' \
-		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
-		'make test/unit/provider-core/transport Test bounded HTTPS exchange and retained failures.' \
-		'make test/unit/provider-core/api Test signed API responses and mutation uncertainty.' \
-		'make test/unit/provider-core/admission Test compact control inventory, metadata capacity and outstanding delivery limits.' \
-		'make test/unit/provider-core/uploads Test Upload input limits, acquisition and cumulative budgets.' \
-		'make test/integration/provider-core/api Test API environment and request correlation over local TLS.' \
-		'make test/integration/provider-core/transport Test received metadata after actual TLS body failures.' \
-		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
-		'make test/contract/provider-core       Check installed package boundaries and pinned API wire contracts.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
-		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
 		'make test/repository/native-images     Check scientific image source/wheel capture and exact metadata admission offline.' \
 		'make test/integration/provider-core/compose WHEELHOUSE=<path> Check fixed Compose deployment grants and role profiles offline.' \
 		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
@@ -445,8 +321,6 @@ help:
 		'make test/repository/wheelhouse        Test selected cache paths, Make inputs and frozen build capture offline.' \
 		'WHEELHOUSE accepts absolute or relative paths (from Make working directory); omitted paths prompt, with no default.' \
 		'Acquisition prompts for an omitted WLAN_INTERFACE; automation must set it explicitly. No interface is selected by default.' \
-		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
-		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \
 		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
 		'make test/unit/prediction-input        Check source coordinate conversion and strict prediction-input admission.' \
@@ -461,7 +335,6 @@ help:
 		'make checks/dependencies/check         Verify retained checker dependencies offline.' \
 		'make checks/image/build                Build and record the offline repository checker image.' \
 		'make packages/base-images/pull         Print required image provisioning guidance; refuses daemon pulls.' \
-		'make packages/base-images/proxy/download Download and load the pinned proxy image into local Docker using Docker default routing.' \
 		'make packages/base-images/python/download Download the pinned Debian Python worker base into local Docker using Docker default routing.' \
 		'make packages/lock/base-images/pull    Print resolver image provisioning guidance; refuses daemon pulls.' \
 		'make packages/lock/stage WLAN_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
@@ -489,9 +362,6 @@ help:
 
 packages/base-images/pull:
 	bash tools/container.sh pull
-
-packages/base-images/proxy/download:
-	bash tools/docker.sh download-proxy
 
 packages/base-images/python/download:
 	bash tools/container.sh download-base-image
@@ -525,10 +395,6 @@ test/integration/provider/deployment/smiles test/integration/provider/deployment
 
 provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
 	bash tools/provider_deployment.sh $(notdir $@)
-
-.PHONY: delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard delivery/deployment/held
-delivery/deployment/install delivery/deployment/up delivery/deployment/status delivery/deployment/logs delivery/deployment/down delivery/deployment/discard delivery/deployment/held:
-	bash tools/delivery_deployment.sh $(notdir $@)
 
 test/unit/provider/deployment:
 	bash tools/container.sh $@
@@ -574,9 +440,9 @@ test/unit/provider/result:
 test/unit/provider/api-stage test/unit/provider/api-client:
 	bash tools/container.sh $@
 
-test: test/unit test/repository test/contract/provider-core test/integration/provider-core
+test: test/unit test/repository test/integration/provider-core
 
-test/unit: test/unit/provider-core
+test/unit:
 	bash tools/container.sh test
 
 test/unit/prediction-input:

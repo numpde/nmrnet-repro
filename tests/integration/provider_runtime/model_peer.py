@@ -1,7 +1,7 @@
 """One scripted interpretation for the real-API witness; no real model claim.
 
-Run only in the controller image with this file and the two core test fakes
-mounted at /fixture, the fixed case read-only, and a separate private /output.
+Run only in the controller image with hash-pinned shared test support,
+the fixed case read-only, and a separate private /output.
 The peer never receives API credentials or the provider's captured configuration.
 The case copies SuppliedLifecycle's authored nm table at d622f27, so the earlier
 retained scientific receipt remains an independent repeatability comparison.
@@ -18,8 +18,8 @@ import os
 import signal
 from pathlib import Path
 
-from conversation import call
-from tls_peer import TlsPeer
+from tests.fakes.conversation import call
+from tests.fakes.tls_peer import TlsPeer
 
 
 async def serve():

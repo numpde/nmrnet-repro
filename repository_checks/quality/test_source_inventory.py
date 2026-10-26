@@ -31,7 +31,7 @@ from .sources import ROOT
 
 REVIEWED_DOCKERFILES = frozenset(
     {"containers/inference/Dockerfile", "containers/packages/Dockerfile.lock", "containers/checker/Dockerfile",
-     "containers/provider/Dockerfile", "containers/geometry/Dockerfile", "containers/delivery/Dockerfile"}
+     "containers/provider/Dockerfile", "containers/geometry/Dockerfile"}
 )
 REVIEWED_CONTAINER_SUPPORT_FILES = frozenset(
     {
@@ -43,8 +43,6 @@ REVIEWED_CONTAINER_SUPPORT_FILES = frozenset(
         "containers/checker/Dockerfile.dockerignore",
         "containers/provider/Dockerfile.dockerignore",
         "containers/geometry/Dockerfile.dockerignore",
-        "containers/delivery/Dockerfile.dockerignore",
-        "containers/delivery/check_runtime.py",
     }
 )
 REVIEWED_CONTAINER_FILES = REVIEWED_DOCKERFILES | REVIEWED_CONTAINER_SUPPORT_FILES
@@ -318,7 +316,7 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
                 self.assertNotIn(users[-1], {"root", "0", "0:0"})
 
     def test_authored_python_roots_are_complete_safe_trees(self):
-        for subtree in ("tools", "tests", "repository_checks", "nmrnet_inference", "nmrnet_provider", "packages"):
+        for subtree in ("tools", "tests", "repository_checks", "nmrnet_inference", "nmrnet_provider"):
             with self.subTest(subtree=subtree):
                 self.assertTrue(discover_source_files(root=ROOT, subtree=subtree))
 
@@ -328,7 +326,7 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
         )
         arguments = shlex.split(result.stdout)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
-        for subtree in ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider", "packages"):
+        for subtree in ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider"):
             self.assertIn(f"type=bind,src={ROOT / subtree},dst=/workspace/{subtree},readonly", mounts)
         for name in ("config/provider.toml.example", "config/deployment.toml.example"):
             self.assertIn(f"type=bind,src={ROOT / name},dst=/workspace/{name},readonly", mounts)

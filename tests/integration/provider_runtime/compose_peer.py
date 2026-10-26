@@ -20,6 +20,7 @@ import math
 import os
 import shutil
 import struct
+import tomllib
 import sys
 from decimal import Decimal
 from dataclasses import asdict, replace
@@ -27,6 +28,8 @@ from fractions import Fraction
 from contextlib import AsyncExitStack
 from pathlib import Path
 from urllib.parse import urlsplit
+
+from binding_inputs import write_deployment_inputs
 
 
 def successive_api_reply(peer, path, body, completed, inputs):
@@ -151,11 +154,11 @@ def require_generated_result(result, fixture):
             "scope": "authored graph, source/parent identities, finite coordinates and shifts; no accuracy claim"}
 
 
-async def serve(root, seconds, case):
-    # Match provider_core_tests' installed-consumer fixture layout. These are
+async def serve(root, seconds, case, delivery_project):
+    # Match the installed-consumer fixture layout. These are
     # explicit read-only qualification inputs; production images import no tests.
     fixture = Path("/tmp/compose-peer")
-    shutil.copytree("/fixture/core-tests", fixture / "tests")
+    shutil.copytree("/fixture/tests", fixture / "tests")
     shutil.copytree("/fixture/binding-tests", fixture / "tests/integration/nmrnet")
     sys.path.insert(0, str(fixture))
     from tests.fakes.api_tls import api_tls_peer
@@ -332,12 +335,17 @@ async def serve(root, seconds, case):
         peer.config = load_provider_config(files.path)
         raw = files.raw.replace(str(files.state).encode(), b"/srv/nmrnet/attempts")
         raw = raw.replace(str(source).encode(), b"/srv/nmrnet/input")
-        (root / "provider.toml").write_bytes(raw)
-        routes = "\n".join(f'[routes.{role}]\nmode = "mapped"\ninterface = "lo"\naddresses = ["127.0.0.1=127.0.0.1"]\n'
-                           for role in ("api", "interpreter", "store"))
-        (root / "deployment.toml").write_text(
-            'maximum_startup_bytes = 4194304\n' + routes)
-        publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin})
+        route = {"mode": "mapped", "interface": "lo", "log_level": "INFO",
+                 "addresses": ["127.0.0.1=127.0.0.1"]}
+        runtime = tomllib.loads(raw.decode())
+        actual_api = tomllib.loads(files.raw.decode())["api"]
+        write_deployment_inputs(
+            root, runtime, api=actual_api, api_route=route,
+            routes={"interpreter": route, "store": route}, project=delivery_project,
+            maximum_startup_bytes=4194304, resolvers=[],
+        )
+        publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin,
+                               "provider_ref": actual_api["provider_ref"]})
         crash = None
         while not (root / "done").exists():
             if case == "recovery" and crash is None and (root / "reader-crash-start").exists():
@@ -360,10 +368,11 @@ async def serve(root, seconds, case):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--delivery-project", required=True)
     parser.add_argument("--seconds", type=float, required=True)
     parser.add_argument("--case", choices=("pasted", "smiles", "references", "capacity", "successive", "recovery"), required=True)
     options = parser.parse_args()
-    asyncio.run(serve(options.root, options.seconds, options.case))
+    asyncio.run(serve(options.root, options.seconds, options.case, options.delivery_project))
 
 
 if __name__ == "__main__":

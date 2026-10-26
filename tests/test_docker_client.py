@@ -32,10 +32,10 @@ class DockerClientTests(unittest.TestCase):
         self.root = Path(temporary.name)
         (self.root / "tools").mkdir()
         (self.root / "tests").mkdir()
-        for name in ("nmrnet_inference", "nmrnet_provider", "packages/provider-core/src/provider_core"):
+        for name in ("nmrnet_inference", "nmrnet_provider", "requirements", "wheelhouse"):
             (self.root / name).mkdir(parents=True)
         (self.root / "bin").mkdir()
-        for name in ("container.sh", "docker.sh", "docker_client.sh", "inference_native.sh"):
+        for name in ("container.sh", "docker.sh", "docker_client.sh", "inference_native.sh", "wheelhouse_path.sh"):
             (self.root / "tools" / name).write_bytes((Path("tools") / name).read_bytes())
         for name in ("docker", "rm", "mv"):
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
@@ -49,6 +49,9 @@ class DockerClientTests(unittest.TestCase):
             "FAKE_PROBE_OWNERSHIP": "0",
             "FAKE_READY_PUBLICATION_FAULT": "none",
             "FAKE_RUN_STATUS": "0",
+            "NMRNET_WHEELHOUSE_INPUT": str(self.root / "wheelhouse"),
+            "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
+            "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
         }
 
     def caller(self, *arguments, environment=None):

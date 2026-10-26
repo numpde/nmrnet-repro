@@ -15,7 +15,7 @@ readonly image_admission_timeout=30
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply} [inference|preparation|provider-core].' >&2
+    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply} [inference|preparation].' >&2
     exit 2
 fi
 # Existing inference targets pass one action. Preparation targets explicitly
@@ -25,8 +25,7 @@ readonly package_profile
 case "$package_profile" in
     inference) dependency_inputs=(inference.in build.in unicore-source.json); apply_target=packages/lock/apply ;;
     preparation) dependency_inputs=(preparation.in); apply_target=packages/preparation/lock/apply ;;
-    provider-core) dependency_inputs=(provider-core.in); apply_target=packages/provider-core/lock/apply ;;
-    *) printf '%s\n' 'Cannot select package profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
+    *) printf '%s\n' 'Cannot select package profile: choose inference or preparation.' >&2; exit 2 ;;
 esac
 run() {
     if "$print_command"; then printf '%q ' "$@"; printf '\n'; else "$@"; fi

@@ -208,7 +208,7 @@ class WheelhouseTests(unittest.TestCase):
         self.assertFalse(destination.exists())
         self.assertEqual(self.wheel_bytes, staged.read_bytes())
 
-    def test_cli_routes_all_provider_core_locks_and_rejects_source_mismatch(self):
+    def test_cli_rejects_source_mismatch_and_keeps_core_out_of_index_acquisition(self):
         common = ["wheelhouse", "download", "--lock", str(self.lock), "--pool", str(self.pool)]
         invalid = (
             [*common, "--profile", "inference"],
@@ -227,38 +227,38 @@ class WheelhouseTests(unittest.TestCase):
             self.assertEqual(2, caught.exception.code)
             populate.assert_not_called()
 
-        build_lock = self.root / "provider-core-build.lock"
-        build_lock.write_text(self.lock.read_text())
-        arguments = [
-            "wheelhouse",
-            "download",
-            "--profile",
-            "provider-core",
-            "--pool",
-            str(self.pool),
-            "--lock",
-            str(self.lock),
-            "--lock",
-            str(build_lock),
-        ]
-        expected = [self.lock.read_bytes(), build_lock.read_bytes()]
+        assets = self.root / "core-assets.in"
+        assets.write_text("pinned release inputs")
+        self.lock.write_text(
+            self.lock.read_text() + "provider-core==0.2.0 \\\n"
+            + "    --hash=sha256:" + "a" * 64 + "\n"
+        )
+        arguments = [*common, "--profile", "provider-core", "--assets", str(assets)]
+        expected = self.lock.read_bytes()
         received = []
 
         def populate(lock, pool, *, inference):
             received.append(lock.read_bytes())
             self.assertEqual(pool, self.pool)
             self.assertFalse(inference)
-            # Both input declarations must already be captured when the first
-            # potentially networked operation starts.
-            self.lock.write_bytes(b"later runtime lock")
-            build_lock.write_bytes(b"later build lock")
+            self.assertNotIn(b"provider-core", lock.read_bytes())
+            self.lock.write_bytes(b"later installation lock")
 
-        with patch.object(wheelhouse.sys, "argv", arguments), patch.object(wheelhouse, "populate_pool", side_effect=populate):
+        with (
+            patch.object(wheelhouse.sys, "argv", arguments),
+            patch.object(wheelhouse, "prepare_core_assets") as prepare,
+            patch.object(wheelhouse, "populate_pool", side_effect=populate),
+            patch.object(wheelhouse, "select_wheels") as select,
+        ):
             wheelhouse.main()
-        self.assertEqual(expected, received)
+        prepare.assert_called_once_with(assets, self.pool, download=True)
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received, [expected.split(b"provider-core==", 1)[0]])
+        self.assertNotEqual(expected, self.lock.read_bytes())
+        select.assert_called_once()
 
     def test_cli_requires_one_lock_for_private_capture(self):
-        build_lock = self.root / "provider-core-build.lock"
+        build_lock = self.root / "second.lock"
         build_lock.write_text(self.lock.read_text())
         arguments = [
             "wheelhouse",
