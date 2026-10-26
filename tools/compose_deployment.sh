@@ -236,7 +236,7 @@ if [[ $action == install ]]; then
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
-    printf 'Ensure shared delivery is installed/running through nmr-provider-tools using this binding definition.\n'
+    printf 'Ensure shared delivery is running through nmr-provider-tools using this binding definition.\n'
     printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
     exit 0
 fi

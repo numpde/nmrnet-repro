@@ -22,36 +22,18 @@ marker is not proof that a process is contained.</p>
 <p>Initialize the pinned source:</p>
 <pre><code class="language-sh">git submodule update --init --recursive
 </code></pre>
-<p>The repository uses these pinned images for Python workers and the download proxy:</p>
-<pre><code class="language-text">docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
-docker.io/library/python:3.12.12-alpine3.22@sha256:848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32
-</code></pre>
-<p>The proxy uses Alpine because it needs only Python's standard library: its
-amd64 compressed download is <a href="https://hub.docker.com/layers/library/python/3.12.12-alpine3.22/images/sha256-5c84c59004e6679bc98a33930344c6ea3da9e2434869b29bc950e46902b6c383">17.12 MB</a>,
-compared with <a href="https://hub.docker.com/layers/library/python/3.12.12-slim-bookworm/images/sha256-2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301">43.32 MB for Debian slim</a>
-(registry metadata checked 2026-10-19). Scientific workers retain Debian because
-the downloaded <code>manylinux</code> packages require glibc; Alpine uses musl.
-See the <a href="https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/">wheel compatibility specification</a>.</p>
-<p>To download the proxy image and Debian Python worker base into local Docker, run:</p>
-<pre><code class="language-sh">make packages/base-images/proxy/download
-make packages/base-images/python/download
-</code></pre>
-<p>These bootstrap commands use the Docker daemon's network settings and default
-routing. They do not force traffic onto a particular interface; <code>WLAN_INTERFACE</code>
-does not control either command. Docker must be running and accessible. These are
-explicit bootstrap exceptions to interface-bound acquisition: the proxy cannot
-download its own starting image, and a daemon pull preserves the Debian image's
-exact registry digest reference for subsequent offline workers. Package and
-artifact downloads still require
-<code>WLAN_INTERFACE</code>. See <a href="https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier">digest pulls</a>
-and <a href="https://docs.docker.com/engine/daemon/proxy/">daemon proxy settings</a>.</p>
-<p>A failed or interrupted download can leave layers or a complete image in Docker;
-stopping the client does not establish that daemon work stopped. Rerun the same
-target to ensure the pinned image is available. Neither command removes images.
-The generic base-image pull targets still print guidance and refuse downloads.</p>
+<p>Python workers use this pinned Debian base:</p>
+<pre><code>docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c</code></pre>
+<pre><code class="language-sh">make packages/base-images/python/download</code></pre>
+<p>This explicit bootstrap target uses Docker daemon routing; <code>WLAN_INTERFACE</code>
+does not control daemon pulls. Package and artifact acquisition then uses the
+interface-bound proxy installed in the selected shared runtime image. Build or load
+that image through <a href="https://github.com/numpde/nmr-provider-tools#readme">nmr-provider-tools</a>
+and pass its immutable ID as <code>SHARED_RUNTIME_IMAGE</code> on acquisition commands.
+Ordinary builds use local inputs with networking disabled; they do not pull missing images.</p>
 <p>Repository checks use a separate image containing pinned Git, Make and Ruff.
 Prepare it explicitly after provisioning that base image:</p>
-<pre><code class="language-sh">make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE
+<pre><code class="language-sh">make checks/dependencies/download WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make checks/dependencies/check
 make checks/image/build
 </code></pre>
@@ -88,10 +70,10 @@ inspecting images or acquiring files. The selected interface is passed through
 the preflight and execution owners, so they do not ask again. The menu follows
 <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/provider-deployment.sh#L905-L923">the sibling interface inventory</a>
 and its <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L92">controlling-terminal choice owner</a>.
-The existing <code>packages/base-images/proxy/download</code> bootstrap remains
-separate: Docker daemon pulls use default routing, as described above.</p>
+The explicit Python-base bootstrap uses Docker daemon routing, as described above.</p>
 <p>Use the checked-in dependency lock:</p>
-<pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE
+<pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make packages/provider-core/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make packages/image WHEELHOUSE=/absolute/cache/root
 make packages/import
 </code></pre>

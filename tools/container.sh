@@ -372,7 +372,7 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse || "$1" == test/repository/provider ]]; then
+        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse || "$1" == test/repository/provider ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
@@ -697,7 +697,7 @@ case "$1" in
                 require_source_directory tools
                 require_source_directory repository_checks
                 # Admit optional authored roots before inspecting the engine.
-                for package in nmrnet_inference nmrnet_provider packages; do
+                for package in nmrnet_inference nmrnet_provider; do
                     if [[ -e "$repository_root/$package" || -L "$repository_root/$package" ]]; then
                         require_source_directory "$package"
                         command+=(--mount "type=bind,src=$repository_root/$package,dst=/workspace/$package,readonly")

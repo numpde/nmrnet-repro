@@ -16,38 +16,44 @@ qualification_shared_tools() {
 qualification_delivery_command() {
     local action=$1
     shift
+    local -a selection
+    case $action in
+        up|held|discard)
+            selection=("DELIVERY_BINDINGS=$qualification_delivery_definition" "SHARED_RUNTIME_IMAGE=$qualification_shared_image") ;;
+        down|status|logs) selection=("PROJECT=$qualification_delivery_project") ;;
+        *) return 2 ;;
+    esac
     controller_native 'shared delivery qualification lifecycle' untimed stdio \
         env -u MAKEFLAGS -u MFLAGS -u MAKEOVERRIDES make --no-print-directory -s \
         -C "$qualification_provider_tools" "delivery/deployment/$action" \
-        "DELIVERY_ROOT=$qualification_delivery_root" "$@"
+        "${selection[@]}" "$@"
 }
 
-qualification_delivery_prepare() {
+qualification_delivery_select() {
     local output=$1 project=$2 definition=$3
     [[ $project == nmrnet-qualification-* ]] || return 2
-    qualification_delivery_root=$output qualification_delivery_project=$project
-    qualification_delivery_prepared=false qualification_delivery_started=false
-    qualification_delivery_command install "DELIVERY_BINDINGS=$definition" \
-        "SHARED_RUNTIME_IMAGE=$qualification_shared_image" || return $?
-    qualification_delivery_prepared=true
+    qualification_delivery_output=$output qualification_delivery_project=$project
+    qualification_delivery_definition=$definition qualification_delivery_up_attempted=false
+    mkdir -m 700 -- "$output" || return $?
+    qualification_delivery_selected=true
 }
 
 qualification_delivery_up() {
-    qualification_delivery_started=true
+    qualification_delivery_up_attempted=true
     qualification_delivery_command up
 }
 
 qualification_delivery_down() {
-    [[ ${qualification_delivery_prepared-false} == true ]] || return 0
+    [[ ${qualification_delivery_selected-false} == true ]] || return 0
     qualification_delivery_command down || return $?
-    qualification_delivery_started=false
+    qualification_delivery_up_attempted=false
 }
 
 qualification_delivery_empty() {
     qualification_delivery_command held "API_ORIGIN=$qualification_api_origin" \
-        "PROVIDER_REF=$qualification_provider_ref" > "$qualification_delivery_root/held.json" || return $?
+        "PROVIDER_REF=$qualification_provider_ref" > "$qualification_delivery_output/held.json" || return $?
     jq -e 'type == "object" and .outstanding_items == 0' \
-        "$qualification_delivery_root/held.json" > /dev/null || {
+        "$qualification_delivery_output/held.json" > /dev/null || {
         printf '%s\n' 'Private delivery is not confirmed empty; retain its configuration and volumes.' >&2
         return 2
     }
@@ -56,12 +62,12 @@ qualification_delivery_empty() {
 qualification_delivery_release() {
     # Shared down preserves volumes. This fixture has no second lifecycle or
     # destructive storage owner; the explicit evidence directory identifies them.
-    printf 'Stopped shared qualification storage retained at %s.\n' "$qualification_delivery_root" >&2
-    qualification_delivery_prepared=false
+    printf 'Stopped shared qualification volumes retained for project %s.\n' "$qualification_delivery_project" >&2
+    qualification_delivery_selected=false
 }
 
 qualification_delivery_daemon() {
-    local output=$qualification_delivery_root/daemon-id
+    local output=$qualification_delivery_output/daemon-id
     inference_native 'query private delivery container' 10 stdio bash -eu -c \
         'output=$1; shift; exec "$@" > "$output"' bash "$output" "${engine[@]}" ps --quiet --no-trunc \
         --filter "label=com.docker.compose.project=$qualification_delivery_project" \
@@ -244,7 +250,7 @@ compose_witness_finish() {
             exit 2
         }
     fi
-    if [[ ${qualification_delivery_prepared-false} == true ]]; then
+    if [[ ${qualification_delivery_selected-false} == true ]]; then
         qualification_delivery_down || {
             [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
             printf 'Private delivery shutdown is unconfirmed; its fixture peer remains: %s\n' "$scratch" >&2
@@ -299,7 +305,7 @@ compose_witness_main() {
     docker_client_directory= pending_diagnostic= inference_diagnostic= worker_retirement_diagnostic=
     inference_retirement_confirmed=true inference_cancellation_status=0
     peer_id= deployment_installed=false peer_creation_attempted=false print_command=false
-    qualification_delivery_prepared=false qualification_delivery_started=false
+    qualification_delivery_selected=false qualification_delivery_up_attempted=false
     scratch=$(mktemp -d /tmp/nmrnet-compose-XXXXXXXX)
     deployment=qualification-${scratch##*-}
     public=$repository_root/config/deployments/$deployment
@@ -370,7 +376,7 @@ compose_witness_main() {
     qualification_provider_ref=$(jq -er '.provider_ref' "$peer_data/ready.json") || return $?
     compose_witness_provider install || return $?
     deployment_installed=true
-    qualification_delivery_prepare "$scratch/delivery" "$delivery_project" "$peer_data/bindings.toml" || return $?
+    qualification_delivery_select "$scratch/delivery" "$delivery_project" "$peer_data/bindings.toml" || return $?
     qualification_delivery_up || return $?
     compose_witness_provider up || return $?
     if [[ $scientific_case == recovery ]]; then

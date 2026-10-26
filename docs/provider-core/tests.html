@@ -15,134 +15,33 @@
     <a href="../notes/index.html">Design records</a>
   </nav>
   <main id="main">
-    <h1 id="test-organization">Provider-core tests</h1>
-    <p>Choose the smallest maintained command that exercises the behavior you
-      changed. A protocol test, native calculation and deployed API Job establish
-      different facts. Reuse existing numerical evidence when the model and
-      scientific path have not changed.</p>
-
-    <h2 id="layout">Test layout and isolation</h2>
-    <p>The reusable package tests live in
-      <code>packages/provider-core/tests</code>. Unit tests exercise contracts and
-      controlled failure boundaries; contract tests inspect the installed wheel
-      and pinned API artifacts; integration tests join real local transports,
-      SQLite storage and process owners. Normative tests state required behavior;
-      adversarial tests challenge identity substitution, limits, privacy and
-      interruption. Tests of a failure must preserve its actual effect and
-      uncertainty, rather than merely expect an exception.</p>
-    <p>NMRNet binding tests live separately under
-      <code>tests/integration/provider_core</code>. They consume the installed core
-      together with the binding's source. Both test groups run through Docker-backed
-      Make commands and isolated installed environments. Package tests do not
-      acquire consumer source imports. Tests are excluded from the runtime wheel.</p>
-
-    <h2 id="focused-core">Focused package checks</h2>
-    <table>
-      <thead><tr><th>Command</th><th>Behavior exercised</th></tr></thead>
-      <tbody>
-        <tr><td><code>make test/unit/provider-core/credential</code></td>
-          <td>API-issued credential admission and signing identity.</td></tr>
-        <tr><td><code>make test/unit/provider-core/transport</code><br>
-          <code>make test/integration/provider-core/transport</code></td>
-          <td>Bounded HTTP, original exchange ownership, late evidence and retirement.
-            Local TLS peers do not establish deployed API behavior.</td></tr>
-        <tr><td><code>make test/unit/provider-core/api</code><br>
-          <code>make test/integration/provider-core/api</code></td>
-          <td>API response identity, topology, correlation, wire contracts and
-            operation-specific effect/retry decisions.</td></tr>
-        <tr><td><code>make test/unit/provider-core/hello</code><br>
-          <code>make test/integration/provider-core/hello</code></td>
-          <td>Complete directory announcements, matching acceptance and uncertain
-            replies. Hello acceptance does not establish scientific readiness.</td></tr>
-        <tr><td><code>make test/unit/provider-core/admission</code></td>
-          <td>Non-consuming compact control inventory, original read ownership,
-            checkpoint metadata capacity and outstanding delivery item/byte limits.
-            This lane has no file archive, history expiry or full-result reservation.</td></tr>
-        <tr><td><code>make test/unit/provider-core/checkpoints</code></td>
-          <td>Compact producer decisions, scoped conditional transitions,
-            metadata limits and settlement of original disk operations.</td></tr>
-        <tr><td><code>make test/unit/provider-core/delivery</code><br>
-          <code>make test/integration/provider-core/delivery</code></td>
-          <td>Exact queued bytes, capacity, handoff independent of cleanup,
-            scoped IPC, publication receipts, payload deletion and protected
-            diagnostics. Held-item disposition must preserve pending rows and
-            other bindings.</td></tr>
-        <tr><td><code>make test/unit/provider-core/starting</code><br>
-          <code>make test/integration/provider-core/starting</code></td>
-          <td>Retention before START, actual admission and unchanged request
-            replay without scientific execution.</td></tr>
-        <tr><td><code>make test/unit/provider-core/recovery</code><br>
-          <code>make test/integration/provider-core/recovery</code></td>
-          <td>Lifecycle reconciliation and original ownership across interruption.
-            A recovered checkpoint cannot recreate a live scientific handle.</td></tr>
-        <tr><td><code>make test/unit/provider-core/diagnostics</code></td>
-          <td>Protected owner facts and causal relationships, without public
-            disclosure of scientific or credential payloads.</td></tr>
-        <tr><td><code>make test/contract/provider-core</code></td>
-          <td>Installed-package boundaries, container guard and the
-            <a href="fixtures.html">pinned API bundle</a>, including signing vectors.
-            A fixture hash identifies content; it does not authenticate a live server.</td></tr>
-      </tbody>
-    </table>
-    <p><code>make test/unit/provider-core</code>,
-      <code>make test/unit/provider-core/normative</code>,
-      <code>make test/unit/provider-core/adversarial</code> and
-      <code>make test/integration/provider-core</code> select broader groups.
-      Run them when the change justifies that scope, rather than repeatedly
-      running every group while editing one boundary.</p>
-
-    <h2 id="binding-checks">NMRNet binding checks</h2>
-    <table>
-      <thead><tr><th>Command suffix after <code>make test/integration/provider-core/</code></th>
-        <th>Behavior exercised</th></tr></thead>
-      <tbody>
-        <tr><td><code>config</code></td><td>Startup TOML, credential/file grants and
-          configured API trust before scientific allocation.</td></tr>
-        <tr><td><code>interpreter</code></td><td>Input selection and correction through
-          local model/source peers. These are not external-model or native-science tests.</td></tr>
-        <tr><td><code>admission</code></td><td>Complete scoped checkpoint, relay and API
-          observations before selecting fresh work; no scientific replay from missing state.</td></tr>
-        <tr><td><code>service</code></td><td>Admission before allocation, independent
-          Hello, stop/drain/settlement and paced availability recovery.
-          Recording scientific sessions establish ordering, not numerical capacity.</td></tr>
-        <tr><td><code>runtime</code></td><td>Configured API, interpreter, preparation
-          and lifecycle assembly with controlled peers.</td></tr>
-        <tr><td><code>compose</code></td><td>Actual deployment configuration and
-          declared container grants. Removed Engine-inspection checker behavior
-          is not a supported test subject.</td></tr>
-        <tr><td><code>native-factory</code>, <code>runner</code></td><td>Setup ownership,
-          native connections, interruption and original worker retirement.</td></tr>
-        <tr><td><code>lifecycle</code></td><td>Supplied-format handling, source
-          correspondence and scientific reference/capacity fixtures.</td></tr>
-      </tbody>
-    </table>
-    <p>Use <code>make test/unit/provider/api-client</code> for the qualification
-      client's readback behavior, including fresh GET signing after a verified
-      replay-window refusal. This checks the client without creating a Job.
-      <code>make test/repository/provider-core</code> checks repository-owned
-      package, guard, source-inventory and Make conventions.</p>
-
-    <h2 id="scientific-and-live-evidence">Scientific and deployed API evidence</h2>
-    <p>The opt-in <code>make test/integration/provider/deployment</code> commands
-      exercise installed serial runners and the production factory in Compose.
-      Scientific cases use RDKit and released NMRNet inference; model/API peers
-      can be scripted and local. Read the
-      <a href="../provider.html">operator guide</a> for each command's actual
-      inputs, resource needs and proof boundary before starting it.</p>
-    <p>A real API qualification creates a persistent Job and runs science.
-      When a Job already exists and only result readback failed, use the maintained
-      paired <code>JOB_RECEIPT</code> and <code>JOB_IDENTITY</code> readback mode for that same Job. Do not create another
-      Job or repeat a model run to repair observation or delivery.
-      GUI rendering is outside this repository's system under test.</p>
-    <p>The <a href="../notes/021_compose_runner_architecture_20261023.html#shared-delivery-deployed">deployment record</a>
-      identifies the actual source, images, Job and result bytes behind the
-      shared-delivery witness. The
-      <a href="../notes/022_shared_delivery_deferred_20261024.txt">follow-up record</a>
-      distinguishes resolved work from deferred qualification. A command listed
-      here describes its intended test boundary; dated run results establish
-      which revision passed. No single green lane qualifies every interruption,
-      workload or multi-provider deployment.</p>
-  </main>
+<h1>Provider consumer tests</h1>
+<p>NMRNet tests its use of the released shared package. Generic core, proxy,
+queue and host delivery tests belong to
+<a href="https://github.com/numpde/nmr-provider-tools">nmr-provider-tools</a>.</p>
+<h2 id="consumer">Installed consumer</h2>
+<pre><code>make test/integration/provider-core WHEELHOUSE=/path/to/shared-wheelhouse
+make test/integration/provider-core/config WHEELHOUSE=/path/to/shared-wheelhouse
+make test/integration/provider-core/compose WHEELHOUSE=/path/to/shared-wheelhouse
+make test/integration/provider-core/runtime WHEELHOUSE=/path/to/shared-wheelhouse
+make test/integration/provider-core/delivery WHEELHOUSE=/path/to/shared-wheelhouse</code></pre>
+<p>These offline lanes install the pinned wheel into an ephemeral environment and
+load NMRNet's scientific bindings. Reusable fake peers come from selected regular
+files in the hash-pinned source archive. Core source and generic test cases do not
+enter consumer discovery. The selected wheelhouse is mounted read-only.</p>
+<h2 id="images">Image and scientific proof</h2>
+<p><code>make test/integration/provider-runtime</code> checks the built controller's
+distribution inventory, signing support, isolated imports and dependency evidence.
+Geometry, prediction and numerical reference qualification have their own
+<a href="../reproduction.html">reproduction commands</a>. A passing controller test
+does not establish model accuracy or successful delivery on a deployed API.</p>
+<h2 id="live">API qualification</h2>
+<p>The <a href="../provider.html#checking-api-delivery">opt-in API targets</a> exercise
+the normal deployment owners. They require explicit API credentials, routes and
+private output. A target that creates a Job produces a persistent API record;
+it is excluded from offline aggregates. GUI behavior is outside this repository's
+test boundary.</p>
+</main>
   <footer><p><a href="index.html">Provider-core reference</a> ·
     <a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
 </body>

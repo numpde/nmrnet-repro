@@ -46,7 +46,14 @@ configured credential, interpreter keys and TLS roots before any HTTP request,
 native operation or network acquisition.
 Run its focused, offline container tests with
 <code>make test/integration/provider-core/config</code>.</p>
-<p>The file requires <code>schema_id = "nmrnet.provider.runtime_config.v1"</code> and these
+<p>Deployment installation derives <code>api</code>, <code>delivery.socket_path</code>
+and <code>delivery.socket_group_id</code> from the selected shared binding.
+The table below describes the generated runtime configuration; keep those derived
+fields out of the authored provider definition.</p>
+<p>Installation writes that runtime file under
+<code>secrets/deployments/&lt;name&gt;/bundles/generation-*/config/provider.toml</code>.
+Change the authored inputs and reinstall; do not edit a sealed generation.</p>
+<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v1"</code> and these
 closed tables; unknown fields fail startup:</p>
 <table>
 <thead>
@@ -89,7 +96,7 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>delivery</code></td>
-<td><code>socket_path</code>, <code>request_seconds</code>, <code>retirement_seconds</code>, <code>retry_initial_seconds</code>, <code>retry_max_seconds</code></td>
+<td><code>socket_path</code>, <code>socket_group_id</code>, <code>request_seconds</code>, <code>retirement_seconds</code>, <code>retry_initial_seconds</code>, <code>retry_max_seconds</code></td>
 <td>none</td>
 </tr>
 <tr>
@@ -157,27 +164,21 @@ Results contain only dictionary and H/C checkpoint/scaler member names, positive
 sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is excluded;
 other unknown fields are refused. Scientific model-byte verification stays with
 the native owner.</p>
-<p>Named deployments declare <code>routes.api</code>, <code>routes.interpreter</code> and
-<code>routes.store</code> in their private settings. Each selects <code>local</code>
-(an observed peer on an internal network), <code>external</code> (interface-bound DNS), or
-<code>mapped</code> (an explicit IPv4 destination on the host network). Mapped routes require
-<code>interface</code> and <code>addresses = ["hostname=IPv4", ...]</code>, with exactly the
-hosts used by those routes. They preserve the configured HTTPS origin and port
-for TLS and signing and never fall back to DNS. A host-gateway name is not an
-address: inspect the actual host publication and supply its literal address.
-Setup downloads and deployment traffic have separate, explicit interface choices.
-Use <code>WLAN_INTERFACE</code> for acquisition commands, and each route's
-<code>interface</code> in <code>deployment.toml</code> for running services.
-They may select the same interface or different ones; neither setting supplies
-the other, and deployment does not select the host's default route automatically.
-See the <a href="https://github.com/numpde/nmrnet-repro/blob/4d14863/tools/compose_deployment.sh">deployment launcher</a>
-and <a href="https://github.com/numpde/nmrnet-repro/blob/4d14863/config/deployment.toml.example">route settings example</a>.
-Every route requires an explicit <code>interface</code>; only <code>external</code>
-requires top-level <code>resolvers</code>. External routes may use a different
-interface from the mapped host publication. This follows Magnet's host-gateway
-<a href="https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/compose/provider-localhost.yml">localhost route</a>,
-using this repository's existing interface-bound proxy instead of an ambient host
-name override. A configured launch profile is distinct from a completed API run.</p>
+<p>The provider's private <code>deployment.toml</code> declares interpreter and Upload-store
+routes. The shared binding supplies the API route. Each route selects
+<code>local</code> (a frozen address on an observed internal Docker network),
+<code>mapped</code> (an explicit host-network IPv4 destination), or <code>external</code>
+(interface-bound DNS). Each requires an explicit interface and
+<code>log_level</code>: <code>INFO</code>, <code>DEBUG</code> or <code>WARNING</code>.
+Mapped/local addresses preserve the configured hostname and port for TLS and signing;
+they do not fall back to DNS. External interpreter/store routes use the provider
+settings' <code>resolvers</code>; an external API route uses the binding's
+<code>resolver_file</code>.</p>
+<p>Setup downloads use <code>WLAN_INTERFACE</code>. Running services use the explicit
+interfaces in their route definitions. The choices may be the same or different;
+neither supplies the other. See the
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">provider route example</a>
+and <a href="https://github.com/numpde/nmr-provider-tools/blob/main/config/delivery.example.toml">shared binding example</a>.</p>
 <h2 id="persistent-user-service">Persistent deployment</h2>
 <p>A named deployment uses Docker Compose and <code>unless-stopped</code> restart
 policy. Its seven containers are the provider, three serial native runners
@@ -199,80 +200,70 @@ Keep the public provider definition in
 Keep the path and network settings in that private deployment definition.
 The producer's checkpoint database uses a provider-only Docker volume; final
 request bodies use the delivery service's separate queue volume.</p>
-<p>Put the credential, interpreter keys and CA files directly in
-<code>secrets/deployments/&lt;name&gt;/</code>, named as in the public definition.
-Private directories require mode 0700; secret source files require 0400 or 0600
-and must belong to the deployment caller. Images must already be built or loaded;
-these commands never pull them implicitly.</p>
-<pre><code class="language-sh">make provider/deployment/install DEPLOYMENT=&lt;name&gt;
-make delivery/deployment/install DEPLOYMENTS=&lt;name&gt;
-make delivery/deployment/up
+<p>Keep interpreter keys and provider TLS files in
+<code>secrets/deployments/&lt;name&gt;/</code>, named as in the provider definition.
+Keep the host's binding definition as an operator-owned configuration file and
+its credentials as separate secret files, following the
+<a href="https://github.com/numpde/nmr-provider-tools#readme">shared deployment instructions</a>.
+The binding names the exact API credential and optional CA files.
+Private directories require mode 0700 and secret files 0400 or 0600, owned by
+the deployment caller. Shared delivery mounts only the exact configuration,
+credential and trust inputs it needs, read-only. Its queue, IPC sockets and proxy
+runtime directories use Docker volumes. It creates no persistent host deployment
+directory or generated configuration tree.</p>
+<p>Build or load the NMRNet controller, geometry and inference images and the shared
+runtime image first. Use the same binding definition for both deployment owners;
+select NMRNet's binding by name. No separate API block or socket grant belongs in
+the provider definition.</p>
+<p><code>provider/prepare</code> records the three NMRNet image IDs under
+<code>.work/provider/</code>, <code>.work/preparation/</code> and <code>.work/inference/</code>.
+Install admits those image records and captures the model selection from
+<code>artifacts/prediction-models.json</code>; up uses the frozen generation.</p>
+<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+
+make provider/deployment/install DEPLOYMENT=&lt;name&gt; DELIVERY_BINDINGS=/private/bindings.toml DELIVERY_BINDING=&lt;binding-name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;
 make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
-make provider/deployment/down DEPLOYMENT=&lt;name&gt;
-</code></pre>
-<p>Build or load both the controller and delivery images before installation;
-<code>make delivery/image/build WHEELHOUSE=&lt;path&gt;</code> uses the same selected
-wheelhouse as the other image builds. Install each provider's inputs before
-installing the shared service. For several providers, supply their profile names
-as <code>DEPLOYMENTS="name1 name2"</code>. The shared project has one stable host
-identity, independent of the provider's project or checkout.</p>
-<p>Install freezes a new input generation through an offline setup helper.
-It does not start the
-seven runtime containers. It refuses live work owned by an earlier generation.
-Next, run up: it starts the declared proxies and serial native runners before the
-provider, and waits for current readiness. Provider readiness includes an accepted
-API Hello; it does not establish scientific accuracy or successful model
-interpretation. The ready provider then polls for matching Jobs. Use status/logs
-to inspect it. Repeated up observes an already-running stack; after down, up
-restarts matching stopped containers. Down stops the provider first, native
-runners second and its proxies last. It does not stop the shared delivery
-service or delete its queue.</p>
-<p>Inspect the shared service separately:</p>
-<pre><code class="language-sh">make delivery/deployment/status
-make delivery/deployment/logs
-make delivery/deployment/down
-</code></pre>
-<p>Stopping the shared service retains its queue and socket volumes. Its API
-proxies belong to that shared project, so stopping a producer does not remove
-delivery's route to the API. Architecture and qualification are recorded in
-<a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>.
-The superseded systemd design remains a historical record in
-<a href="notes/004_persistent_local_service_20261023.html">note 004</a>.</p>
+make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code></pre>
+<p>Install freezes a new input generation and refuses replacement while that
+provider is running. Up initializes the producer's checkpoint volume, starts the
+proxies and serial native runners, then waits for provider readiness, including
+an accepted API Hello. This establishes readiness, not scientific accuracy or
+successful model interpretation. Down stops that provider and its dependencies;
+it leaves shared delivery and its queue available.</p>
+<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/status PROJECT=&lt;project-name&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/logs PROJECT=&lt;project-name&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;</code></pre>
+<p><code>PROJECT</code> is the <code>project</code> value in the binding definition.
+Status, logs and down inspect that project's actual Docker containers; they do not
+need a generated host recipe. Up derives the recipe from the operator's inputs
+and requires the project to be stopped. Keep its referenced input files available.</p>
+<p>One shared service can serve several providers. Its complete binding definition
+and stable project identify the host service. Stopping it retains its queue and
+IPC volumes; its API routes belong to that shared deployment.</p>
 <h2 id="update-and-redeploy">Update and redeploy</h2>
 <p>From a clean checkout on the Docker host, using the deployment owner's account:</p>
 <pre><code class="language-sh">git switch main
 git pull --ff-only
 git submodule update --init --recursive
 </code></pre>
-<p>Use the existing deployment profile and credentials. Prepare images and models
-with the shared wheelhouse and an explicit download interface; runtime interfaces
-remain in <code>config/deployments/&lt;name&gt;/deployment.toml</code>.</p>
-<pre><code class="language-sh">deployment=YOUR_DEPLOYMENT
-make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse WLAN_INTERFACE=YOUR_SETUP_INTERFACE
-</code></pre>
-<p>Docker, Compose and the pinned base images must already be available; see
-<a href="#images-and-network-isolation">Images and network isolation</a>.
-Preparation reuses cached inputs and builds all four images.</p>
-<p>This sequence assumes delivery serves only this profile.
-<code>down</code> preserves checkpoint and queue volumes but removes container logs;
-read any needed <a href="#routine-logs-and-private-diagnostics">logs</a> first.</p>
-<pre><code class="language-sh">make provider/deployment/down DEPLOYMENT="$deployment"
-make delivery/deployment/down
-make provider/deployment/install DEPLOYMENT="$deployment"
-make delivery/deployment/install DEPLOYMENTS="$deployment"
-make delivery/deployment/up
-make provider/deployment/up DEPLOYMENT="$deployment"
-make delivery/deployment/status
-make provider/deployment/status DEPLOYMENT="$deployment"
-</code></pre>
-<p>If delivery serves several providers, stop them all before stopping delivery.
-Install changed provider inputs, then supply the complete delivery profile list:
-<code>make delivery/deployment/install DEPLOYMENTS="name1 name2"</code>.
-Start delivery before restarting the providers.</p>
-<p>For an unchanged installation, use only the two <code>up</code> commands.
-For an end-to-end prediction check, see <a href="#checking-api-delivery">Checking API delivery</a>.</p>
+<p>Prepare NMRNet's three images and model files using the selected shared image
+for setup transport. Wheelhouse and setup interface are chosen once:</p>
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
+<p>For a provider-only update, stop NMRNet, install its new generation from the
+existing binding definition, and start it. Shared delivery can continue publishing
+acknowledged results throughout:</p>
+<pre><code class="language-sh">make provider/deployment/down DEPLOYMENT=&lt;name&gt;
+make provider/deployment/install DEPLOYMENT=&lt;name&gt; DELIVERY_BINDINGS=/private/bindings.toml DELIVERY_BINDING=&lt;binding-name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make provider/deployment/up DEPLOYMENT=&lt;name&gt;</code></pre>
+<p>For a shared-service replacement, coordinate all producers using it, inspect
+outstanding work, stop the incumbent owner, then start the shared owner
+with the complete binding definition and existing queue/IPC identities.
+Do not run two delivery owners or discard unresolved data to complete an update.
+Container removal removes its bounded Docker logs; collect needed diagnostics
+before stopping it. See <a href="#result-delivery-and-storage">delivery ownership</a>
+and <a href="#checking-api-delivery">API qualification</a>.</p>
 <h2 id="routine-logs-and-private-diagnostics">Routine logs and private diagnostics</h2>
 <p>The provider, native runners, proxies and shared delivery service send stdout
 and stderr to bounded Docker logs:
@@ -320,9 +311,9 @@ before durable handoff, a result held only in memory can be lost. An absent queu
 row never authorizes another prediction. Preserve unresolved identities and
 diagnose them through the API and Docker logs.</p>
 <p>Storage and recovery owners:
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/delivery_store.py">pending queue</a>,
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/checkpoint_store.py">producer checkpoints</a>,
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/recovery.py">recovery without scientific replay</a>.
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/delivery_store.py">pending queue</a>,
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/checkpoint_store.py">producer checkpoints</a>,
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/recovery.py">recovery without scientific replay</a>.
 The design and existing evidence are in
 <a href="notes/021_compose_runner_architecture_20261023.html#shared-delivery">note 021</a>;
 deferred refinements and further testing are tracked in
@@ -334,10 +325,10 @@ and remote Attempt before deciding to discard its local payload. First explicitl
 stop shared delivery; this affects all bindings on this Docker host. Listing and
 discard run offline under the queue's existing exclusive lock and refuse while
 the daemon owns it. They never stop or restart the service automatically.</p>
-<pre><code class="language-sh">make delivery/deployment/down
-make delivery/deployment/held API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
-make delivery/deployment/discard API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
-make delivery/deployment/up</code></pre>
+<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/held DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/discard DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
 <p>The list shows only the selected binding's held metadata and reason, without
 payload bodies or a dump file. Discard requires that exact binding, Attempt and
 digest and removes only a held row; pending rows remain unchanged. It proves
@@ -346,7 +337,7 @@ have no deletion route. Source:
 <a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_discard.py">offline operator command</a> and
 <a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_store.py">queue disposition owner</a>.</p>
 <h3>One scientific Job</h3>
-<p>Each opt-in target creates one <strong>persistent Job</strong> on the selected API. Pasted
+<p>The prediction targets create one <strong>persistent Job</strong> on the selected API. Pasted
 targets use fixed supplied chloromethane and compare against an existing pinned
 scientific receipt; generated-SMILES targets check received generation
 provenance and H/C coverage without an independent shift-value oracle. These
@@ -406,7 +397,7 @@ prediction. The received result cannot supply its own expected image identity.</
 <ul>
 <li><code>API_ORIGIN</code>, <code>TOPOLOGY</code>, <code>PROJECT_REF</code> and <code>USER_ID</code>: the operator's chosen API,
   expected topology and entitled client/project. Provider identity and credential
-  profile derive from the admitted provider artifact.</li>
+  profile are read from the API-issued JSON file selected by <code>PROVIDER_CREDENTIAL</code>.</li>
 <li><code>PROVIDER_CREDENTIAL</code>, <code>CLIENT_CREDENTIAL_DIRECTORY</code> and <code>CA_FILE</code>: absolute paths
   to the issued provider key, the client's original registration/private pair and
   the API trust certificate. Keys must remain caller-owned and mode 0400/0600.</li>
@@ -415,6 +406,10 @@ prediction. The received result cannot supply its own expected image identity.</
   and signatures. No DNS or direct fallback is attempted.</li>
 <li><code>API_CLIENT_IMAGE</code>: an immutable local API runtime image ID containing the
   API-owned credential validator/signing example. No implicit pull or installation.</li>
+<li><code>PROVIDER_TOOLS</code>, <code>SHARED_RUNTIME_IMAGE</code> and <code>WHEELHOUSE</code>:
+  the shared owner's checkout, its immutable runtime image, and the cache containing
+  the pinned core source archive. Temporary qualification deployments use that
+  owner's normal commands with an isolated binding definition and project.</li>
 <li><code>RETAINED_RESULT</code>: an absolute path to the existing scientific comparison
   receipt; its expected hash remains pinned in the fixture client. It is never
   regenerated from this run's predictions.</li>
@@ -504,23 +499,27 @@ already selected, that setup failure reports its Job reference alone. Source-onl
 setup without Job context leaves those references absent. These fields identify
 affected work; they do not establish dispatch or acceptance of a result.</p>
 <h2 id="images-and-network-isolation">Images and network isolation</h2>
-<p>To acquire the provider dependencies and model files and build all four images
+<p>To acquire the provider dependencies and model files and build its three images
 in one invocation:</p>
-<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_INTERFACE
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 </code></pre>
 <p>Omit either selection to choose it once on the terminal. The command runs the
 existing owners in sequence and stops on failure. It reuses cached downloads and
 keeps existing extraction trees with their receipts; selected model bytes are
 checked against pinned hashes by the provider before decoding. It requires the initialized
-upstream submodule and locally provisioned pinned base images. API/interpreter
+upstream submodule and the pinned Python base, provisioned with
+<code>make packages/base-images/python/download</code>. That explicit bootstrap
+uses Docker daemon routing. Build/load the shared runtime through
+<a href="https://github.com/numpde/nmr-provider-tools#readme">nmr-provider-tools</a>.
+API/interpreter
 credentials and service configuration are subsequent steps.</p>
 <p>Build and check the installed controller offline:</p>
 <pre><code class="language-sh">make test/unit/provider/image
-make provider/image/build
+make provider/image/build WHEELHOUSE=/path/to/shared-pool
 make test/integration/provider-runtime
 </code></pre>
-<p>The build uses committed input bytes and the runtime and build wheels selected
-from the shared <code>WHEELHOUSE</code> root by their respective locks. It first requires the pinned Python base locally;
+<p>The build uses committed input bytes and the released core wheel and locked runtime dependencies selected
+from the shared <code>WHEELHOUSE</code> root. It first requires the pinned Python base locally;
 it never downloads a missing base. The resulting image contains a wheel-installed
 provider-core and image-owned binding modules in an isolated, pip-free environment.
 Startup requires no source or wheel mounts and installs nothing. The recorded
@@ -531,8 +530,7 @@ Installed-image checks cover the full dependency set, native signing, import
 origins and isolated CLI startup. They contact no API or model and perform no
 prediction.</p>
 <p>The service network components have focused offline checks:</p>
-<pre><code class="language-sh">make test/unit/provider/proxy
-make test/integration/provider/proxy
+<pre><code class="language-sh">make test/integration/provider/proxy WHEELHOUSE=/path/to/shared-pool
 </code></pre>
 <p>The controller's HTTPS transport can use a fixed Unix CONNECT socket. The service
 proxy admits only explicitly granted DNS-name/IPv4 authorities before resolution
@@ -600,8 +598,8 @@ Repeated refusals remain visible in Docker logs: check the reported credentials,
 clock or API permissions. A matching API receipt clears the queued body; durable local
 acceptance alone does not establish API publication. Conflicting outcomes remain held;
 trust, storage and ownership failures require operator attention. Sources:
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/api.py">terminal replay permissions</a>,
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/delivery_worker.py">delivery pacing and receipts</a> and
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/api.py">terminal replay permissions</a>,
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/delivery_worker.py">delivery pacing and receipts</a> and
 <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3">HTTP Retry-After</a>.</p>
 <p>Active Attempt observations also recover within the required finite
 <code>lifecycle.observation_gap_seconds</code> window. Each fresh-observation wait includes
@@ -642,8 +640,12 @@ If reporting fails, these notices use the same bounded in-memory diagnostic owne
 This observation recovery does not retry mutations. Final request delivery belongs
 to the shared service after durable handoff. It follows the existing API owner's
 exact-request replay policy, freshly signing the same body and retiring each
-original exchange before a permitted retry. Permanent binding failures pause
-that binding; an item-specific conflict holds its request. These facts remain
+original exchange before a permitted retry. Reviewed authentication/rate-limit
+responses remain in paced retry with fresh signatures; repeated refusals require
+credential, clock or permission investigation. Explicit environment/identity
+mismatches and unrecognized binding failures pause that binding; correct its
+definition or trust settings, then stop and start shared delivery. An item-specific
+conflict holds its request. These facts remain
 visible in Docker logs, without repeating interpretation, geometry generation
 or prediction. The replay authority is the
 <a href="provider-core/fixtures.html">API contract fixture</a> and
@@ -675,8 +677,8 @@ No model call or science is retried. Authentication, conflicting state, malforme
 receipts, cancellation and unsettled cleanup remain operational failures.
 Configure only one progress writer for an Attempt: local store/claim locks do not
 fence an independently deployed provider. Source:
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/execution.py"><code>ConditionRecovery</code> and <code>AttemptExecutor</code></a>,
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/api.py"><code>can_retry_condition</code></a>, and
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/execution.py"><code>ConditionRecovery</code> and <code>AttemptExecutor</code></a>,
+<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/api.py"><code>can_retry_condition</code></a>, and
 the same pinned progress PUT recovery contract above.</p>
 <p>Native prediction can recover once within the same Attempt. After an admitted
 prediction fails or its response is lost, the provider confirms exact old-worker

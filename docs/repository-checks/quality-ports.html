@@ -271,9 +271,9 @@ help inventory equality, hierarchical targets, supported aggregate campaigns,
 one root Makefile, exact phony inventory, explicit help default, and unique
 targets. The forbidden-text method's secret patterns remain a separate tenth
 method. Names map from <code>tests</code>/dapp campaigns to the local <code>test</code> aggregate's
-exact <code>test/unit test/repository test/contract/provider-core test/integration/provider-core</code>
-prerequisites; its recipe must remain empty. Core unit tests are a prerequisite of
-<code>test/unit</code>; contract and consumer evidence retain their own lanes.
+exact <code>test/unit test/repository test/integration/provider-core</code>
+prerequisites; its recipe must remain empty. Generic core unit and contract tests
+belong to nmr-provider-tools; NMRNet retains installed consumer evidence.
 Dapp external-network/disposable live scenario disclosures have no counterpart
 in this local offline aggregate.</p>
 <p>The remaining dapp methods are domain-specific: Foundry input permissions,

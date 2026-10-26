@@ -1,58 +1,28 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider-core dependencies — NMRNet++</title><meta name="original-source-path" content="requirements/provider-core.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="863b0d863089466a024ff42a9665a6193d9a61be57444e88efbd7c2ddbaa474d"><link rel="stylesheet" href="../site.css"></head>
-<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="provider-core-requirements">Provider-core dependencies</h1>
-<p>The package requires Python &gt;=3.12; the maintained contained runtime uses Python
-3.12.12 on Linux x86-64. Its default installation includes all four direct runtime
-dependencies in <a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/pyproject.toml">the package metadata</a>:
-<code>cryptography==50.0.0</code>, <code>http-sf==1.2.1</code>, <code>httpx==0.28.1</code> and <code>httpcore==1.0.9</code>. The
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core.lock">runtime lock</a> pins their complete dependency closure and
-allowed hashes. The <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-build.lock">build lock</a> pins <code>setuptools==84.0.0</code>.
-There is no reduced-dependency installation mode.</p>
-<p>Acquire both locks with
-<code>make packages/provider-core/wheelhouse WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_INTERFACE</code>.
-Runtime and build wheels share this one flat root with other projects. Image
-builds copy the selected compatible wheels into private captures and install
-them offline with hash verification. See the
-<a href="../reproduction.html#acquire-and-prepare">shared-pool workflow</a>.</p>
-<p>The launcher must establish actual container isolation and set
-<code>PROVIDER_CORE_IN_CONTAINER=1</code>; that marker alone does not establish isolation.
-Lifecycle, storage and shared claims require one asyncio event loop. See the
-<a href="../provider-core/index.html">package requirements</a> for the runtime
-contract; the dated review below records the dependency-selection rationale.</p>
-<p>The contained offline package build uses setuptools 84.0.0, checked against
-provider-core-build.lock before installation. No wheel package is needed by this
-modern backend. The <a href="index.html">inference dependency record</a> documents
-the base image's inherited pip advisory findings and the limits of offline-build
-mitigations.</p>
-<p>The controller image installs both locked sets offline with
-<code>--require-hashes</code>. Its <code>dependency-inputs.json</code> records the
-lock and wheel hashes from pip's actual installation reports; the public report
-format is documented by <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip</a>.</p>
-<p>Reviewed 2026-10-18:
-- https://github.com/pypa/setuptools/security/advisories/GHSA-5rjg-fvgr-3xxf
-  concerns PackageIndex download path traversal; 84.0.0 is beyond the affected range.
-- https://github.com/pypa/setuptools/security/advisories/GHSA-h35f-9h28-mq5c
-  lists &lt;=82.0.1 and no patched version. This review does not infer a universal
-  fix from that range: the lane builds an allowlisted pure-Python wheel on Linux,
-  not an sdist using Unicode MANIFEST exclusions on macOS.
-- https://setuptools.pypa.io/en/latest/history.html (84.0.0 at review)
-  establishes the selected backend version; native compiler regressions do not
-  exercise this pure-Python build.</p>
-<p>These are scoped advisory observations, not a claim of complete security.</p>
-<h2 id="runtime-dependency-selection">Runtime dependency selection</h2>
-<p>The async client uses Ed25519 signing. Exact-version resolution on 2026-10-18 reported
-GHSA-g6cj-pr64-35w5 (also PYSEC-2026-3552) for 49.0.0. The maintainer advisory
-https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
-identifies PKCS#7 RSA decryption and names 50.0.0 as the patched release. Our
-provider operation is Ed25519 signing; the package selects 50.0.0 to avoid carrying
-an affected dependency.
-The replacement closure's exact-version PyPI report is retained in
-provider-core-advisories.json, with the input and lock hashes. All 11 resolved
-versions returned empty advisory lists on 2026-10-18. This is a bounded metadata
-review, not proof that the dependencies have no vulnerabilities. Wheels are
-acquired separately and checked against provider-core.lock; the installed test
-lane exercises native Ed25519 signing before transport qualification.</p>
-<p>The transport now directly declares httpcore 1.0.9 in the package metadata to use
-its public network-backend interface. That exact version is already in the
-reviewed hash-locked closure through HTTPX 0.28.1; no dependency version, wheel,
-acquisition input or advisory receipt changed for the socket-ownership fix.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>
+<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main">
+<h1>Shared runtime dependencies</h1>
+<p>NMRNet consumes <code>provider-core==0.2.0</code> from the
+<a href="https://github.com/numpde/nmr-provider-tools/releases/tag/v0.2.0">shared owner's GitHub release</a>.
+The <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-install.lock">installation lock</a>
+pins its wheel and complete runtime dependency closure. The
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-release.json">release record</a>
+identifies source revision, consumed dependency bytes and artifact hashes.</p>
+<p>The shared owner maintains dependency selection, advisory review and package
+builds. NMRNet acquires the private wheel and source archive directly from the
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-assets.in">pinned GitHub URLs</a>.
+Only third-party requirements go through PyPI. The wheelhouse is one operator-selected
+flat cache, shared with the scientific images.</p>
+<pre><code>make packages/provider-core/wheelhouse WHEELHOUSE=/path/to/shared-wheelhouse WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make packages/provider-core/wheelhouse/check WHEELHOUSE=/path/to/shared-wheelhouse</code></pre>
+<p>Build or load the shared runtime image through
+<a href="https://github.com/numpde/nmr-provider-tools#readme">nmr-provider-tools</a>
+before acquisition. Setup traffic uses the selected interface; deployment routes
+are separate explicit inputs.</p>
+<p>Controller, geometry and inference images install the released closure offline,
+without rebuilding core or resolving replacement scientific dependencies.
+An existing scientific package with a different version blocks that installation.
+The image records the lock and actual consumed wheel hashes. See
+<a href="../provider-core/tests.html">installed consumer checks</a> and the
+<a href="index.html">inference dependency record</a>.</p>
+</main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>

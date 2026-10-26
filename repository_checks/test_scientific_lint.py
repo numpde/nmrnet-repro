@@ -89,7 +89,7 @@ class ScientificLintTests(unittest.TestCase):
     def test_guard_exception_retains_late_module_import_rejection(self):
         findings = [
             f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
-            for name in ("tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider", "packages")
+            for name in ("tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider")
             for path in sorted((ROOT / name).rglob("*.py"))
             for line in late_module_imports(path.read_text())
         ]
@@ -106,7 +106,7 @@ class ScientificLintTests(unittest.TestCase):
         for path in paths:
             self.assertTrue(path.is_dir() and not path.is_symlink(), msg=f"Authored lint root is missing or a symlink: {path}")
             self.assertTrue(list(path.rglob("*.py")), msg=f"Authored lint inventory is empty: {path}")
-        for name in ("nmrnet_inference", "nmrnet_provider", "packages"):
+        for name in ("nmrnet_inference", "nmrnet_provider"):
             package = ROOT / name
             if package.exists() or package.is_symlink():
                 self.assertTrue(

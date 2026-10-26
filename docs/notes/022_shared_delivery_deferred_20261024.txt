@@ -1142,3 +1142,191 @@ https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3.
 No deployment, live Job, model execution or credential/network-policy change
 was performed. Magnet's handoff and relay-aware reconciliation remain separate
 work with its owner; shared API retry support alone does not complete that work.
+
+26 October 2026 - Shared-tools extraction in progress
+
+The maintainer requested end-to-end completion with continuous U/A QA/QC.
+Shared package, delivery/proxy implementation, GitHub release and host deployment
+are owned by nmr-provider-tools (session 01a1769b-a54e-7371-ae9a-4cf56c888228).
+This session owns the NMRNet consumer; Magnet's owner is
+01a1644e-f84a-7ad1-9749-198734febb41. Donor source is d09b77b.
+
+Agreed release is provider-core 0.2.0 from GitHub, with wheel, normal source
+distribution, runtime installation lock and exact artifact hashes. The flat
+wheelhouse is a cache, not the release origin. Consumers must not build core,
+resolve the private package through PyPI, import sibling source or retain a
+second shared implementation. The source distribution supplies only needed
+generic test fakes inside isolated consumer-test temporary storage.
+
+One operator-owned neutral binding TOML supplies API identity/trust, API route
+and IPC grants to host delivery and provider deployment. NMRNet derives its
+frozen API/socket settings from the selected binding. Its IPC intake/retirement
+budgets, interpreter/store routes and execution checkpoints retain their own
+local owners. No generated handoff descriptor or payload spool is introduced.
+
+Current edits replace the local core builder in the NMRNet installer and three
+image recipes/capture plans with the released installation lock. The exact lock
+and artifact pins arrived from the shared owner's qualified candidate below.
+The full extraction is not yet committed or deployed. Remaining work includes
+release acquisition, proxy/deployment/test wiring, displaced-copy removal,
+focused checks and coordinated operational qualification.
+
+The shared owner's advisory refresh identified certifi 2026.7.22 as affected and
+selected 2026.10.23. NMRNet's inference lock now explicitly uses the reviewed
+replacement wheel/sdist hashes, preserving numerical/model pins and its own
+setuptools 84.0.0. Shared builder setuptools is a separate build-only concern.
+PyPI evidence: https://pypi.org/pypi/certifi/2026.10.23/json, checked by the shared
+owner at 2026-10-26T08:37:21.346511+00:00, vulnerabilities empty. Only certifi's
+entry is refreshed in the inference advisory record; other entries retain the
+old baseline date. Inference lock SHA256 is
+59883cfc16a56f0532385254920011918db3c3eab70ccd9b39747030bbaf3906.
+
+Preparation audits found hidden consumer dependencies on the in-tree core in
+ordinary unit lanes and on 22 reusable fake modules in consumer integration
+tests. These are actual extraction dependencies, not a reason to rerun models
+or copy permanent fake owners. The Git-dependent provider aggregate must retain
+its NMRNet checker image; the shared production image does not gain Git merely
+to support these tests.
+
+Further source review during the extraction (not runtime qualification):
+
+NMRNet's provider startup now has a finite checkpoint initializer rather than
+depending on shared delivery to initialize producer storage. Its root helper
+gets only the selected named volume, read-only implementation and CHOWN; an
+already matching UID/GID/0700 root is untouched, and unexpected nonempty data
+is refused. External volume naming/labels remain unchanged. Independent review
+caught an uninitialized temporary-query variable in EXIT cleanup that could
+have accepted an inherited filename as deletion authority. It is now explicitly
+initialized before traps, like the existing Docker-client resource owner.
+
+Magnet's source reviews caught (a) an intake pause checked before awaited input
+and readiness, allowing another lane to block delivery before START without
+a final admission check, and (b) retry-cutoff/control-error exits losing the
+pending Attempt/digest and last IPC cause. The owner moved the gate immediately
+before the first START, outside its exact replay campaign, and is preserving
+bounded unresolved-handoff evidence. Its adapter also stopped suppressing the
+original IPC cause; safe core diagnostics now retain native errno/cleanup facts.
+A secondary diagnostic failure must remain secondary, with the IPC refusal as
+explicit cause. These are concrete U08/U14/U23/U27/A11 findings, not evidence
+that composed/installed handoff or production recovery already works.
+
+Qualified shared candidate received: source a30ec2ff8f5cf60a464408309781b7996baae3ad,
+provider_core-0.2.0-py3-none-any.whl SHA256
+248bcf548a25edb5d3b349e024d2ace568a5f9d2d01474d7a14d2c1d0394f6da,
+installation lock 7833b80727a2c58699f9f0a60ec5c8fc39b5d3aa9a3903c14ffdd757911fd671,
+source distribution 7b872bc620f56417eeab7fb0a16b5dd30e200dd18f8c3a84074996860c8d9867.
+Exact owner release record and installation lock are copied under requirements;
+wheel and source were admitted additively into the selected flat wheelhouse.
+GitHub publication has not yet been verified. Shared image supplied by its owner:
+sha256:077a09997c8975e42afe3022a3d252f466e61bb7c038712c28313670155c3889.
+
+NMRNet contained checks against that installed wheel: configuration 24 passed,
+composition/scientific-fixture wiring 18 passed, configured runtime 16 passed,
+idle delivery retry 4 passed. Image capture/offline installer tests 11 passed.
+These are focused consumer boundaries; no scientific models or live API Jobs
+were run and none establishes deployment or remote receipt. The first broader
+service selection was interrupted after repeated setup errors rather than run
+to completion. Cause found in the test fixture: explicit socket GID differed
+from its daemon's actual GID and its shared-group parent was mode 0700 instead
+of 0710. Fixture grants now match the real daemon. The interrupted container
+was confirmed absent. The larger service selection remains unqualified until
+rerun if warranted; runtime and narrow delivery checks above passed afterward.
+
+Source audit removed stale generic-test patterns from consumer selectors and
+moved shared-only deployment qualification out of the consumer test modules.
+The consumer support runner selects only 25 approved regular fake/package files
+from the hash-pinned source archive, changes into the isolated test tree before
+fake subprocesses start, and discovers no generic core cases. Core is installed
+offline into a pip-free ephemeral environment; no sibling or donor core source
+enters its import path. Normal source-unit lanes use the same released wheel.
+
+26 October 2026 - Released artifacts and consumer image boundary
+
+Shared release v0.2.0 is public at
+https://github.com/numpde/nmr-provider-tools/releases/tag/v0.2.0.
+Anonymous acquisition through the maintained packages/provider-core/wheelhouse
+target, explicit interface wlp1s0 and shared image
+sha256:c801a505abbbef79ae60d51f33bb339ee03b782104197615517296b44da4f7f3
+downloaded the exact wheel/source hashes above into a fresh temporary cache.
+The third-party pip invocation selected 12 dependencies; provider-core was
+excluded from that index input. Its immutable GitHub URLs are in
+requirements/provider-core-assets.in. Offline verification selects the complete
+installation lock; check with the assets input also verifies the source archive.
+
+Local unpublished source slices e12297b and 5cf1a5d establish released-wheel
+image installation and ephemeral installed-consumer testing. They are intermediate
+commits, not completion or a deployment claim. Source copy and generic proxy/
+delivery-owner deletion, maintained consumer caller ports and end-state docs are
+being integrated. No branch was changed and the incumbent services remain live.
+
+Actual offline image builds completed: controller
+sha256:0ed2d5b1588b63f58d3ec11ce625e82aec46c8fbd173eaf305c109b9e7e7d1a8,
+geometry sha256:ea4ddb2237ecad43ecf5b49e5b493031a29d471b5439aea6f7ee36fed67bc2dc,
+inference sha256:8cc77cbacec80193f58620e4cb871b367eeb8da9d039a318682213c7dca01da3.
+Controller installed-image checks: 4 passed. API configuration staging using the
+pinned source support in that controller: 13 passed. Inference imports passed.
+Further captured-source changes may require rebuilding an affected image before
+deployment; these identities are proof snapshots, not a release recommendation.
+
+Focused maintained checks: provider host/qualification caller composition 24
+passed; API-owned client carrier/scientific-result checks 44 passed without
+network or Jobs; wheel/cache acquisition and capture 52 passed; documentation
+3 passed; extraction-owned source/Make/inventory/import/grant checks 45 passed.
+The finite API client now opens its already-admitted literal IPv4 address and
+binds its explicit interface with standard sockets, retaining TLS authority and
+the existing close/error owner. It does not import a generic DNS proxy into the
+separately maintained API-client image. Source review accepted that boundary.
+
+Independent reviews corrected two real fixture startup blockers: neutral queue
+keys must be total_items/total_bytes, and scripted peers import staged support
+through tests.fakes. Newly executed support driver, binding fixture and release
+record were added to the existing qualification source hash list. Generic shared
+host/proxy tests moved with their owner rather than remaining copied consumer
+tests. tools/docker.sh executes the installed shared bound_http_proxy from the
+selected image, so preparation and subsequent acquisition commands carry that
+same explicit image selection.
+
+Deferred testing and baseline debt: the broad repository campaign was interrupted
+after repeated stale acquisition-fixture selector failures; that common fixture
+now supplies the selected shared image. Its unchanged large cancellation/fault
+matrix has not been rerun. Full lint/format checks also report broader existing
+debt (93 files needing formatting and late imports in prediction test modules).
+Representative unchanged files interpreter.py, geometry_protocol.py and
+tests/test_prediction_model.py match d09b77b. No broad formatting sweep or new
+waiver was introduced. The focused consumer source target retains guard, import,
+Make, exact inventory and read-only-grant checks; the broader gates remain
+available and their failure is not reported as success. Ruff's target Python is
+explicitly 3.12, matching the declared/runtime version rather than its implicit
+older default. No expensive numerical repetitions or live fault campaigns ran.
+
+Shared owner's read-only incumbent observation: local delivery IPC root is
+UID/GID 1000:1000 mode 0710, lock mode 0600, socket mode 0660, pending_items 0.
+Thus no hypothetical 0700 migration or permission compatibility mechanism is
+needed for that actual instance. Queue/IPC identities are retained for handoff.
+The shared host owner and supervisor are revising deployment composition to
+honor the maintainer's no-managed-host-state-directory requirement. Existing
+Docker volumes and actual outstanding work remain protected; no live cutover
+has occurred during this consumer work.
+
+26 October 2026 - Stateless shared-host composition closure
+
+Commit 4ae594c removes the extracted core source, generic proxy/deployment copies
+and their duplicated tests from NMRNet. Shared delivery up now takes only the
+operator binding definition and immutable shared image; down/status/logs select
+PROJECT. Config and secret files remain exact read-only inputs. No shared install,
+managed deployment tree, persistent recipe, registry or handoff file is required.
+Docker volumes own queue, IPC and proxy runtime state. Qualification callers use
+that same public owner; their 24 focused composition checks passed after the port.
+The final HTML/link/historical-record checks passed all 3 cases. Neither result
+is a live deployment or remote result-receipt claim.
+
+Latest built NMRNet image identities (replace the earlier proof snapshots):
+controller sha256:d00cb362f56d131c75a00dc6f27bec234c528ae0017b68ce6a45b0938870819e
+geometry sha256:1b1b384ba90857c795c92fd126d97307e9a67a8ae6ecd2afc3d80e68ffd7e577
+inference sha256:8cc77cbacec80193f58620e4cb871b367eeb8da9d039a318682213c7dca01da3
+
+The shared owner added a local-intake healthcheck using existing bounded IPC
+status requests for all bindings concurrently. It does not depend on remote API
+availability and Docker unhealthy status alone does not restart the publisher.
+The owner's updated deployment/proxy lane passed 34 cases; actual lifecycle proof
+and coordinated incumbent retirement remain required before rollout completion.

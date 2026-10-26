@@ -31,10 +31,10 @@ api_witness_stop_deployment() {
         NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
         api_deployment_active=false
     fi
-    if [[ ${qualification_delivery_started-false} == true ]]; then
+    if [[ ${qualification_delivery_up_attempted-false} == true ]]; then
         if (( invocation_status != 0 )); then
-            printf 'Private delivery project %s was retained; inspect status/logs using %s/current/compose.json. Any queued outcome remains owned there. Do not repeat the Job.\n' \
-                "$qualification_delivery_project" "$qualification_delivery_root" >&2
+            printf 'Private delivery project %s was retained; inspect nmr-provider-tools status/logs using PROJECT=%s. Any queued outcome remains owned there. Do not repeat the Job.\n' \
+                "$qualification_delivery_project" "$qualification_delivery_project" >&2
             return 0
         fi
         qualification_delivery_down || {
@@ -455,7 +455,7 @@ api_witness_main() {
         --mount "type=bind,src=$qualification_source_root/requirements/provider-core-release.json,dst=/fixture/core-release.json,readonly"
         --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly")
-    qualification_delivery_prepared=false qualification_delivery_started=false
+    qualification_delivery_selected=false qualification_delivery_up_attempted=false
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -561,7 +561,7 @@ api_witness_main() {
     NMRNET_DELIVERY_BINDINGS_INPUT=$provider_host_root/deployment/bindings.toml \
     NMRNET_DELIVERY_BINDING_INPUT=nmrnet NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
         bash "$repository_root/tools/provider_deployment.sh" install || return $?
-    qualification_delivery_prepare "$provider_host_root/deployment/delivery" "$delivery_project" \
+    qualification_delivery_select "$provider_host_root/deployment/delivery" "$delivery_project" \
         "$provider_host_root/deployment/bindings.toml" || return $?
     qualification_delivery_up || return $?
     # Up can dispatch effects before returning failure. Its original receipts

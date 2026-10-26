@@ -37,7 +37,7 @@
         <tbody>
           <tr><td><code>make test/repository/documentation</code></td><td>HTML ownership, unique anchors, local links and stylesheet references.</td></tr>
           <tr><td><code>make test/repository/operator-inputs</code></td><td>Literal Make inputs and the environment admitted to engine commands.</td></tr>
-          <tr><td><code>make test/repository/provider-core</code></td><td>Package and launcher conventions, import ordering, reviewed source inventories, Make hygiene and cache policy.</td></tr>
+          <tr><td><code>make test/repository/provider</code></td><td>Consumer source and launcher conventions, import ordering, source inventories, Make hygiene and cache policy.</td></tr>
           <tr><td><code>make test/repository</code></td><td>The complete <code>repository_checks</code> suite, including scientific provenance and build/source checks.</td></tr>
         </tbody>
       </table>
@@ -63,7 +63,7 @@
       a placeholder for the recorded checker image; actual image admission occurs
       when the checks run. Read-only mounts prevent container writes, but the host
       can still edit those files. Keep the inspected source stable during a run.</p>
-    <p><code>make test</code> also runs unit tests and provider-core contract and
+    <p><code>make test WHEELHOUSE=/path/to/shared-wheelhouse</code> also runs unit tests and NMRNet consumer
       integration suites. The focused repository targets above do not include those
       other suites. Consult the <a href="../provider-core/tests.html">package test guide</a>
       for their purposes and the <a href="../reproduction.html">reproduction guide</a>

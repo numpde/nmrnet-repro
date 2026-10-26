@@ -146,17 +146,17 @@ SHARED_OWNER = r'''#!/usr/bin/env bash
 set -eu
 action=$1
 case $action in
-    install)
-        [[ -f $DELIVERY_BINDINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
-        mkdir -p "$DELIVERY_ROOT/current"
-        printf 'delivery-prepare\n' >> "$TEST_RECORDS/events"
-        ;;
     held)
+        [[ -f $DELIVERY_BINDINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
         printf 'delivery-empty\n' >> "$TEST_RECORDS/events"
         [[ ${TEST_FAIL-} != inspection ]] || exit 7
         printf '%s\n' '{"outstanding_items":0}'
         ;;
-    up|down) printf 'delivery-%s\n' "$action" >> "$TEST_RECORDS/events" ;;
+    up)
+        [[ -f $DELIVERY_BINDINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
+        printf 'delivery-up\n' >> "$TEST_RECORDS/events"
+        ;;
+    down) [[ $PROJECT == nmrnet-qualification-* ]]; printf 'delivery-down\n' >> "$TEST_RECORDS/events" ;;
     *) exit 96 ;;
 esac
 '''
@@ -171,7 +171,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
 source /workspace/tools/compose_qualification.sh
 scratch=$TEST_ROOT
 deployment_installed=false
-qualification_delivery_prepared=false
+qualification_delivery_selected=false
 qualification_delivery_helper=
 qualification_delivery_project=nmrnet-qualification-fixture
 qualification_delivery_root=$TEST_ROOT
@@ -194,7 +194,7 @@ inference_native() {
 }
 sleep() { : > "$TEST_ROOT/held"; command sleep "$@"; }
 case $TEST_PHASE in
-    inspection) qualification_delivery_prepared=true ;;
+    inspection) qualification_delivery_selected=true ;;
     helper) qualification_delivery_helper=original-helper ;;
     logs) (exit 7) ;;
 esac
@@ -223,7 +223,7 @@ compose_witness_finish
         script = r'''
 source /fixture/provider_api_qualification.sh
 api_deployment_active=false
-qualification_delivery_started=true
+qualification_delivery_up_attempted=true
 inference_retirement_confirmed=true
 effect() {
     printf '%s\n' "$1"
@@ -635,15 +635,14 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(calls[0][1], deployment_names)
                 deployment_names.add(calls[0][1])
                 events = (records / "events").read_text().splitlines()
-                self.assertLess(events.index("install"), events.index("delivery-prepare"))
-                self.assertLess(events.index("delivery-prepare"), events.index("delivery-up"))
+                self.assertLess(events.index("install"), events.index("delivery-up"))
                 self.assertLess(events.index("delivery-up"), events.index("up"))
                 self.assertLess(events.index("up"), events.index("create-client"))
                 self.assertLess(events.index("client"), events.index("down"))
                 self.assertLess(events.index("down"), events.index("delivery-down"))
                 self.assertLess(events.index("delivery-down"), events.index("delivery-empty"))
                 self.assertNotIn("delivery-remove", events)
-                self.assertIn("Stopped shared qualification storage retained", result.stderr)
+                self.assertIn("Stopped shared qualification volumes retained", result.stderr)
                 if mode == "scripted-pasted":
                     self.assertLess(events.index("down"), events.index("signal-peer"))
                     self.assertLess(events.index("signal-peer"), events.index("peer"))
