@@ -241,8 +241,6 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 "wheelhouse=" + str(fixture.root / ".work/wheelhouse"),
                 "--build-context",
                 "runtime-wheels=" + str(fixture.root / ".work/wheelhouse"),
-                "--build-context",
-                "build-wheels=" + str(fixture.root / ".work/wheelhouse"),
                 str(fixture.root),
             ]
             registry = fixture.root / "containers.json"

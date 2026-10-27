@@ -9,7 +9,7 @@ For supported inputs today, use the <a href="../index.html">scientific guide</a>
 declares the separate RDKit closure for SMILES embedding and
 structure-file reading. It does not change <code>inference.in</code>, its lock, or the
 qualified prediction image. The existing package owner stages and applies this
-closure through <code>make packages/preparation/lock/stage WLAN_INTERFACE=YOUR_INTERFACE</code>
+closure through <code>make packages/preparation/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE</code>
 and <code>make packages/preparation/lock/apply STAGE=lock.ID</code>. Review the complete
 <code>preparation.lock</code> and <code>preparation-advisories.json</code> pair before applying it.
 Application validates the selected input filenames and hashes as well as the lock
@@ -84,7 +84,7 @@ scope: the RDKit native-parser record above is not negated by this receipt.</p>
 Native molecular readers and conformer generation have separate behavioral
 checks described below.</p>
 <p>Preparation wheels live directly in the selected <code>WHEELHOUSE</code> root, acquired with
-<code>make packages/preparation/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE</code>
+<code>make packages/preparation/wheelhouse WHEELHOUSE=/absolute/cache/root NETWORK_INTERFACE=YOUR_INTERFACE</code>
 and verified offline with <code>make packages/preparation/wheelhouse/check WHEELHOUSE=/absolute/cache/root</code>.
 Acquisition grants that root writable to publish complete files without replacing
 existing files; checks select only compatible, hash-locked wheels and installers read private copies offline.

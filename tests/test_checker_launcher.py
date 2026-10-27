@@ -73,7 +73,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         # silent-defaults: allow-contract -- Omitted additions supply no per-call overrides; supplied entries override the fixture environment and poison stimulus; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
         environment = {
             **self.environment,
-            "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+            "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
             "DOCKER_HOST": "ambient-sentinel",
             "DOCKER_CONTEXT": "ambient-sentinel",
             "BUILDX_BUILDER": "ambient-sentinel",

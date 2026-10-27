@@ -46,7 +46,7 @@ class ProxyResolverInputTests(unittest.TestCase):
             fixture, resolver = self.mapped_fixture(Path(directory))
             resolver.write_text("private-resolver-content-canary\n")
             result = fixture.run(
-                "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+                "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
             )
             self.assertEqual(0, result.returncode, msg=result.stderr)
             proxy, worker = self.proxy_and_worker(fixture)
@@ -67,7 +67,7 @@ class ProxyResolverInputTests(unittest.TestCase):
             fixture, resolver = self.mapped_fixture(Path(directory))
             self.assertFalse(resolver.exists())
             result = fixture.run(
-                "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+                "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
             )
             self.assertEqual(0, result.returncode, msg=result.stderr)
             proxy, worker = self.proxy_and_worker(fixture)
@@ -94,7 +94,7 @@ class ProxyResolverInputTests(unittest.TestCase):
                     resolver.write_text("private-resolver-content-canary\n")
                     resolver.chmod(0)
                 result = fixture.run(
-                    "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+                    "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
                 )
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("readable regular file without a symlink", result.stderr)
@@ -105,9 +105,9 @@ class ProxyResolverInputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture, resolver = self.mapped_fixture(Path(directory))
             resolver.write_text("private-resolver-content-canary\n")
-            result = fixture.run("docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_WLAN_INTERFACE_INPUT": ""})
+            result = fixture.run("docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_NETWORK_INTERFACE_INPUT": ""})
             self.assertEqual(2, result.returncode)
-            self.assertIn("supply WLAN_INTERFACE=", result.stderr)
+            self.assertIn("supply NETWORK_INTERFACE=", result.stderr)
             self.assertEqual([], fixture.calls())
 
     def test_production_host_input_is_one_fixed_literal_without_an_operator_override(self):

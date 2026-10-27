@@ -27,7 +27,7 @@ build_provider_image() {
     if "$print_command"; then return; fi
     source "$repository_root/tools/operator_guidance.sh"
     local -a acquisition_interface=()
-    if [[ -n ${NMRNET_WLAN_INTERFACE_INPUT-} ]]; then acquisition_interface=("WLAN_INTERFACE=$NMRNET_WLAN_INTERFACE_INPUT"); fi
+    if [[ -n ${NMRNET_NETWORK_INTERFACE_INPUT-} ]]; then acquisition_interface=("NETWORK_INTERFACE=$NMRNET_NETWORK_INTERFACE_INPUT"); fi
     next_actions=$(
         next_make_command 'If the model archives are not prepared yet:' weights/download ARCHIVE=weight.zip "${acquisition_interface[@]}"
         printf '%s\n' 'Starting the provider requires controller, prediction, geometry and delivery images and both prepared model archives.' \

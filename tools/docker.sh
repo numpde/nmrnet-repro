@@ -162,7 +162,7 @@ require_images() {
                 'Build or load the selected shared runtime image through nmr-provider-tools before retrying acquisition.'
         else
             printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
-                'If the image is missing, preload it through an independently interface-bound process; this launcher cannot bind daemon pulls to WLAN_INTERFACE.'
+                'If the image is missing, preload it through an independently interface-bound process; this launcher cannot bind daemon pulls to NETWORK_INTERFACE.'
         fi
         exit 2
     done

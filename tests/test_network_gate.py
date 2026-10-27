@@ -10,13 +10,13 @@ class NetworkGateTests(unittest.TestCase):
     def invoke(self, script, lane, interface=None):
         environment = dict(os.environ)
         # silent-defaults: allow-pop-default -- Remove an inherited forwarded interface so omission cannot authorize routing; proof=tests/test_network_gate.py::NetworkGateTests.test_networked_lanes_require_an_explicit_interface
-        environment.pop("NMRNET_WLAN_INTERFACE_INPUT", None)
+        environment.pop("NMRNET_NETWORK_INTERFACE_INPUT", None)
         # silent-defaults: allow-pop-default -- Remove the ambient interface before checking that routing requires an explicit selector; proof=tests/test_network_gate.py::NetworkGateTests.test_networked_lanes_require_an_explicit_interface
-        environment.pop("WLAN_INTERFACE", None)
+        environment.pop("NETWORK_INTERFACE", None)
         environment["NMRNET_ARCHIVE_INPUT"] = "weight.zip"
         environment["NMRNET_SHARED_RUNTIME_IMAGE_INPUT"] = "sha256:" + "a" * 64
         if interface is not None:
-            environment["NMRNET_WLAN_INTERFACE_INPUT"] = interface
+            environment["NMRNET_NETWORK_INTERFACE_INPUT"] = interface
         return subprocess.run(
             ["bash", f"tools/{script}.sh", "--print", lane],
             env=environment,
@@ -30,7 +30,7 @@ class NetworkGateTests(unittest.TestCase):
             with self.subTest(script=script, lane=lane):
                 result = self.invoke(script, lane)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("WLAN_INTERFACE", result.stderr)
+                self.assertIn("NETWORK_INTERFACE", result.stderr)
                 self.assertEqual("", result.stdout)
 
     def test_networked_lanes_reject_an_unavailable_interface(self):

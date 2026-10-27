@@ -55,7 +55,7 @@ class PackageInputCaptureTests(unittest.TestCase):
 
     def stage_packages(self, *, additions=None):
         # silent-defaults: allow-contract -- Omitted additions leave the stage environment unchanged; supplied entries override its interface input; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair
-        return self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"} | (additions or {}))
+        return self.caller("stage", environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"} | (additions or {}))
 
     def apply_packages(self, stage, *, additions=None):
         # silent-defaults: allow-contract -- Omitted additions leave the apply environment unchanged; supplied entries select per-call faults and mutations; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair
@@ -117,7 +117,7 @@ class PackageInputCaptureTests(unittest.TestCase):
         result = self.caller(
             "stage",
             "preparation",
-            environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_CAPTURE_MUTATE_LIVE": "1"},
+            environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_CAPTURE_MUTATE_LIVE": "1"},
         )
         self.assertEqual(0, result.returncode, result.stderr)
         stage = self.captured_stage()
@@ -191,7 +191,7 @@ class PackageInputCaptureTests(unittest.TestCase):
                     else:
                         tree = probe.root / ".fake-git/parent/package-stage.tree"
                         tree.write_bytes(b"\0".join(tree.read_bytes().split(b"\0")[:-2]) + b"\0")
-                    result = probe.caller("stage", environment=probe.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+                    result = probe.caller("stage", environment=probe.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
                     self.assertEqual(2, result.returncode, msg=result.stderr)
                     self.assertIn("Cannot complete inference package input capture", result.stderr)
                     evidence = re.search(
@@ -311,7 +311,7 @@ class PackageInputCaptureTests(unittest.TestCase):
                             ["bash", str(self.root / "tools/packages.sh"), action],
                             env=self.environment
                             | {
-                                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                                "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                                 "NMRNET_STAGE_INPUT": "lock.fixture",
                                 "NMRNET_CAPTURE_UTILITY_READY": str(ready),
                                 "NMRNET_CAPTURE_CONFIG_READY": str(config_ready),

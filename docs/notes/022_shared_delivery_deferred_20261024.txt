@@ -346,7 +346,7 @@ volumes and existing credentials; no new Job, model call or scientific run.
 The explicit end-state rule is two independent choices: setup/acquisition uses
 an explicitly selected interface; deployment also uses explicitly selected
 interfaces. They may be the same or different. The mistake was conflating those
-choices, not requiring interface binding. Runtime must not inherit WLAN_INTERFACE
+choices, not requiring interface binding. Runtime must not inherit NETWORK_INTERFACE
 or select a default-route fallback.
 
 Supervisor backlog, 25 October 2026: residue closure

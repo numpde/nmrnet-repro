@@ -264,7 +264,7 @@ case "$1" in
         ;;
     download-base-image)
         # Explicit bootstrap exception: the daemon pulls the same pinned base
-        # used below; WLAN_INTERFACE still governs package/artifact acquisition.
+        # used below; NETWORK_INTERFACE still governs package/artifact acquisition.
         # https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
         # https://docs.docker.com/engine/daemon/proxy/
         if "$print_command"; then
@@ -289,7 +289,7 @@ case "$1" in
         exit "$download_status"
         ;;
     pull)
-        printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to WLAN_INTERFACE.' >&2
+        printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to NETWORK_INTERFACE.' >&2
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;

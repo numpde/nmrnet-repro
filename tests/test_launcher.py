@@ -64,7 +64,7 @@ class LauncherTests(unittest.TestCase):
         environment.pop("ARCHIVE", None)
         # silent-defaults: allow-pop-default -- Revoke inherited forwarded selection before omission and explicit archive cases; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads
         environment.pop("NMRNET_ARCHIVE_INPUT", None)
-        environment["NMRNET_WLAN_INTERFACE_INPUT"] = "lo"
+        environment["NMRNET_NETWORK_INTERFACE_INPUT"] = "lo"
         environment["NMRNET_SHARED_RUNTIME_IMAGE_INPUT"] = "sha256:" + "a" * 64
         environment["NMRNET_WHEELHOUSE_INPUT"] = "/tmp"
         environment["NMRNET_WHEELHOUSE_INPUT_ORIGIN"] = "command line"
@@ -450,7 +450,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual([f"type=bind,src={Path.cwd()}/.work/downloads,dst=/downloads"], writable)
 
     def test_ambient_archive_does_not_select_a_download(self):
-        environment = {**os.environ, "ARCHIVE": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+        environment = {**os.environ, "ARCHIVE": "weight.zip", "NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
         # silent-defaults: allow-pop-default -- Revoke forwarded selection so ambient ARCHIVE alone cannot select a download; proof=tests/test_launcher.py::LauncherTests.test_ambient_archive_does_not_select_a_download
         environment.pop("NMRNET_ARCHIVE_INPUT", None)
         result = subprocess.run(
@@ -502,7 +502,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "download"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"},
+                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
                 text=True,
                 capture_output=True,
                 check=False,

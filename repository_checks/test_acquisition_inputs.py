@@ -57,17 +57,17 @@ class AcquisitionInputTests(unittest.TestCase):
                     *arguments,
                     additions={
                         "NMRNET_ARCHIVE_INPUT": "weight.zip",
-                        "NMRNET_WLAN_INTERFACE_INPUT": "",
-                        "NMRNET_WLAN_INTERFACE_INPUT_ORIGIN": "undefined",
-                        "WLAN_INTERFACE": "lo",
+                        "NMRNET_NETWORK_INTERFACE_INPUT": "",
+                        "NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN": "undefined",
+                        "NETWORK_INTERFACE": "lo",
                     },
                 )
                 self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn("supply WLAN_INTERFACE=", result.stderr)
+                self.assertIn("supply NETWORK_INTERFACE=", result.stderr)
                 self.assertFalse(self.fixture.calls())
 
     def test_explicit_empty_interface_is_refused_without_prompting(self):
-        result = self.fixture.make("packages/wheelhouse", "WLAN_INTERFACE=")
+        result = self.fixture.make("packages/wheelhouse", "NETWORK_INTERFACE=")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("not an available network interface", result.stderr)
         self.assertNotIn("interactive terminal", result.stderr)
@@ -91,7 +91,7 @@ class AcquisitionInputTests(unittest.TestCase):
                     ],
                     cwd=self.root,
                     env=self.fixture.environment
-                    | {"NMRNET_WLAN_INTERFACE_INPUT": "", "NMRNET_WLAN_INTERFACE_INPUT_ORIGIN": "undefined"},
+                    | {"NMRNET_NETWORK_INTERFACE_INPUT": "", "NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN": "undefined"},
                     stdin=slave,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -157,8 +157,8 @@ class AcquisitionInputTests(unittest.TestCase):
             os.write(master, choice + b"\n")
             stdout, stderr = process.communicate(timeout=15)
             self.assertEqual(process.returncode, 0, stdout + stderr + bytes(received).decode())
-            self.assertEqual(bytes(received).count(b"Select WLAN_INTERFACE"), 1)
-            self.assertNotIn("Select WLAN_INTERFACE", stdout + stderr)
+            self.assertEqual(bytes(received).count(b"Select NETWORK_INTERFACE"), 1)
+            self.assertNotIn("Select NETWORK_INTERFACE", stdout + stderr)
             creates = [call["arguments"] for call in self.fixture.calls() if call["arguments"][:1] == ["create"]]
             proxy, worker = creates
             self.assertEqual(proxy[proxy.index("--interface") + 1], "lo")

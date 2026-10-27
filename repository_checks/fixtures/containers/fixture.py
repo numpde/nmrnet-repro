@@ -126,6 +126,8 @@ class LauncherFixture:
         for name in ("inference.in", "build.in", "unicore-source.json"):
             (root / "requirements" / name).write_text("fixture\n")
         (root / "requirements/inference.lock").write_text("fixture==1\n")
+        for name in ("preparation.lock", "provider-core-install.lock", "provider-core-assets.in"):
+            shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
         (root / "artifacts").mkdir()
         (root / "artifacts/nmrnet-source.paths").write_text("source_revision " + "a" * 40 + "\nLICENSE\nuninmr\n")
         manifest = "".join(

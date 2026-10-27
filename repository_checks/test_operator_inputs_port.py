@@ -99,7 +99,7 @@ class OperatorInputTests(unittest.TestCase):
     def test_acquisition_requires_explicit_interface_before_engine(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
-            for additions in ({}, {"WLAN_INTERFACE": "lo"}, {"NMRNET_WLAN_INTERFACE_INPUT": "../escape"}):
+            for additions in ({}, {"NETWORK_INTERFACE": "lo"}, {"NMRNET_NETWORK_INTERFACE_INPUT": "../escape"}):
                 with self.subTest(additions=additions):
                     result = fixture.run("container.sh", "download", additions=additions | {"NMRNET_ARCHIVE_INPUT": "weight.zip"})
                     self.assertEqual(2, result.returncode)
@@ -123,7 +123,7 @@ class OperatorInputTests(unittest.TestCase):
                 ("packages/lock/apply", {"STAGE": "lock.fixture"}),
             ):
                 with self.subTest(target=target):
-                    result = fixture.make(target, "WLAN_INTERFACE=lo", additions=additions)
+                    result = fixture.make(target, "NETWORK_INTERFACE=lo", additions=additions)
                     self.assertEqual(2, result.returncode, msg="Ambient write selectors must not authorize " + target)
                     self.assertFalse(fixture.calls(), msg="An unowned write selector reached the engine.")
 
@@ -131,7 +131,7 @@ class OperatorInputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             sentinel = fixture.root / "expanded"
-            result = fixture.make("weights/download", "ARCHIVE=weight.zip", "WLAN_INTERFACE=$(shell touch " + str(sentinel) + ")")
+            result = fixture.make("weights/download", "ARCHIVE=weight.zip", "NETWORK_INTERFACE=$(shell touch " + str(sentinel) + ")")
             self.assertEqual(2, result.returncode)
             self.assertFalse(sentinel.exists(), msg="GNU Make executed literal operator input.")
             self.assertFalse(fixture.calls())
@@ -141,7 +141,7 @@ class OperatorInputTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             sentinel = fixture.root / "expanded"
             result = fixture.make(
-                "weights/download", "WLAN_INTERFACE=lo", "ARCHIVE=$(shell touch " + str(sentinel) + ")weight.zip"
+                "weights/download", "NETWORK_INTERFACE=lo", "ARCHIVE=$(shell touch " + str(sentinel) + ")weight.zip"
             )
             self.assertEqual(2, result.returncode)
             self.assertFalse(sentinel.exists(), msg="GNU Make executed literal artifact selector syntax.")
@@ -188,7 +188,7 @@ class OperatorInputTests(unittest.TestCase):
             for name in (
                 "ARCHIVE",
                 "STAGE",
-                "WLAN_INTERFACE",
+                "NETWORK_INTERFACE",
                 "LABEL_ATOL",
                 "ATOL",
                 "RTOL",
@@ -224,7 +224,7 @@ class OperatorInputTests(unittest.TestCase):
             public_inputs = {
                 "ARCHIVE": "weight.zip",
                 "STAGE": "lock.fixture",
-                "WLAN_INTERFACE": "lo",
+                "NETWORK_INTERFACE": "lo",
                 "LABEL_ATOL": "0.001",
                 "ATOL": "0",
                 "RTOL": "0.001",
@@ -282,7 +282,7 @@ class OperatorInputTests(unittest.TestCase):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 sentinel = fixture.root / "expanded"
-                result = fixture.make(target, "WLAN_INTERFACE=lo", name + "=$(shell touch " + str(sentinel) + ")" + suffix)
+                result = fixture.make(target, "NETWORK_INTERFACE=lo", name + "=$(shell touch " + str(sentinel) + ")" + suffix)
                 self.assertEqual(2, result.returncode)
                 self.assertFalse(sentinel.exists())
                 self.assertFalse(fixture.calls())
@@ -465,7 +465,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
                     "docker.sh",
                     "run",
                     "sha256:" + "b" * 64,
-                    additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_FAKE_NUL_RECEIPT_ROLE": role},
+                    additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_NUL_RECEIPT_ROLE": role},
                 )
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 calls = [call["arguments"] for call in fixture.calls()]
@@ -493,7 +493,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
                     "docker.sh",
                     "run",
                     "sha256:" + "b" * 64,
-                    additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_FAKE_HOLD_ATTACH": "1"},
+                    additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_HOLD_ATTACH": "1"},
                     corrupt_worker_receipt=damaged,
                     timeout=3,
                 )
@@ -525,7 +525,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
                 "never",
                 "--read-only",
                 "sha256:" + "b" * 64,
-                additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo"},
+                additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
             )
             self.assertEqual(0, result.returncode, msg=result.stderr)
             calls = [call["arguments"] for call in fixture.calls()]
@@ -552,7 +552,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
                 "run",
                 "sha256:" + "b" * 64,
                 additions={
-                    "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                    "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "NMRNET_FAKE_WORKER_STATUS": "7",
                     "NMRNET_FAKE_REMOVE_STATUS": "9",
                 },
@@ -576,7 +576,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
                 "docker.sh",
                 "run",
                 "sha256:" + "b" * 64,
-                additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_FAKE_PROXY_CID": "foreign-container-name"},
+                additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_PROXY_CID": "foreign-container-name"},
             )
             self.assertNotEqual(result.returncode, 0)
             calls = [call["arguments"] for call in fixture.calls()]
@@ -766,7 +766,7 @@ class NativeCommandPostureTests(unittest.TestCase):
                     "run",
                     "sha256:" + "b" * 64,
                     additions={
-                        "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                        "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                         "NMRNET_FAKE_WORKER_STATUS": str(status),
                         "NMRNET_FAKE_REMOVE_STATUS": "9",
                     },

@@ -88,8 +88,8 @@ if command == "build":
         sys.stderr.write("unexpected fake docker invocation: named context has no name/path separator\n")
         raise SystemExit(97)
     contexts = dict(value.split("=", 1) for value in named_contexts)
-    if len(named_contexts) != 3 or set(contexts) != {"wheelhouse", "runtime-wheels", "build-wheels"}:
-        sys.stderr.write("unexpected fake docker invocation: exact science/core-runtime/core-build wheel contexts are required" + "\n")
+    if len(named_contexts) != 2 or set(contexts) != {"wheelhouse", "runtime-wheels"}:
+        sys.stderr.write("unexpected fake docker invocation: exact science and released-core wheel contexts are required" + "\n")
         raise SystemExit(97)
     wheelhouse = Path(contexts["wheelhouse"])
     dockerfile = Path(arguments[arguments.index("--file") + 1])

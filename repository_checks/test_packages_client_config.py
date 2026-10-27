@@ -110,7 +110,7 @@ class PackagesClientTests(unittest.TestCase):
             target.unlink()
             target.symlink_to(Path("/bin") / name)
         return self.environment | {
-            "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+            "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
             "NMRNET_PACKAGE_ENGINE_MODE": "preflight",
             "NMRNET_PACKAGE_PREFLIGHT_HOLD": "0",
         }
@@ -407,7 +407,7 @@ class PackagesClientTests(unittest.TestCase):
             "stage",
             environment=self.environment
             | {
-                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                 "NMRNET_PACKAGE_EVIDENCE_ATTEMPT": str(attempted),
                 "BASH_FUNC_rm%%": (
                     '() { if [[ -v operation && "$operation" == "package stage controller" '
@@ -452,7 +452,7 @@ class PackagesClientTests(unittest.TestCase):
             "stage",
             environment=self.environment
             | {
-                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                 "NMRNET_PACKAGE_ALLOCATION_OBSERVATION": str(allocation),
                 # The held preflight needs its own control scratch before the
                 # exact pinned-pair shim runs; package allocations stay faults.
@@ -521,7 +521,7 @@ class PackagesClientTests(unittest.TestCase):
             | {
                 "DOCKER_CONFIG": str(poison),
                 "DOCKER_BUILDKIT": "0",
-                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
             }
         )
         for action in ("stage", "apply"):
@@ -563,7 +563,7 @@ class PackagesClientTests(unittest.TestCase):
 
     def test_build_failure_preserves_status_evidence_and_blocks_controller(self):
         (self.root / "native-status").write_text("37")
-        result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+        result = self.caller("stage", environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
         self.assertEqual(37, result.returncode, msg=result.stderr)
         self.assertIn("native client exited with status 37", result.stderr)
         self.assertFalse((self.root / "controller-returned").exists())
@@ -590,7 +590,7 @@ class PackagesClientTests(unittest.TestCase):
 
     def test_unconfirmed_startup_keeps_config_and_never_starts_another_owner(self):
         result = self.caller(
-            "stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_READY_FAULT": "1"}
+            "stage", environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_READY_FAULT": "1"}
         )
         self.assertEqual(1, result.returncode, msg=result.stderr)
         self.assertEqual("ready-failure\n", (self.root / "ready-fault").read_text())
@@ -605,7 +605,7 @@ class PackagesClientTests(unittest.TestCase):
         for body in (self.identity[:-1], self.identity + b"extra\n", b"mutable:tag\n", self.identity[:-1] + b"\0\n"):
             with self.subTest(body=body):
                 (self.root / "build-output").write_bytes(body)
-                result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+                result = self.caller("stage", environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertFalse((self.root / "controller-returned").exists())
                 for stage in (self.root / ".work/packages-stage").iterdir():
@@ -619,7 +619,7 @@ class PackagesClientTests(unittest.TestCase):
             target = self.root / "bin" / name
             target.unlink()
             target.symlink_to(Path("/bin") / name)
-        result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+        result = self.caller("stage", environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
         self.assertEqual(0, result.returncode, msg=result.stderr)
         calls = self.fixture.calls()
         inspections = [call for call in calls if call["arguments"][:4] == ["image", "inspect", "--format", "{{.Id}}"]]
@@ -652,7 +652,7 @@ class PackagesClientTests(unittest.TestCase):
             with self.subTest(body=body, native_status=native_status):
                 (self.root / "observed-output").write_bytes(body)
                 (self.root / "inspect-status").write_text(str(native_status))
-                result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+                result = self.caller("stage", environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
                 self._remember(result.stderr)
                 self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                 self.assertFalse((self.root / "controller-returned").exists())
@@ -671,7 +671,7 @@ class PackagesClientTests(unittest.TestCase):
     def test_unconfirmed_admission_startup_retains_config_without_publication(self):
         result = self.caller(
             "stage",
-            environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_ADMISSION_READY_FAULT": "1"},
+            environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_ADMISSION_READY_FAULT": "1"},
         )
         self.assertEqual(1, result.returncode, msg=result.stderr)
         self.assertEqual("ready-failure\n", (self.root / "ready-fault").read_text())
@@ -691,7 +691,7 @@ class PackagesClientTests(unittest.TestCase):
                 ready.unlink(missing_ok=True)
                 process = subprocess.Popen(
                     ["bash", str(self.root / "tools/packages.sh"), "stage"],
-                    env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_INSPECT_HOLD": "1"},
+                    env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_INSPECT_HOLD": "1"},
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -752,7 +752,7 @@ class PackagesClientTests(unittest.TestCase):
                 start = len(self.fixture.calls())
                 stages_before = set(self.stage.parent.iterdir())
                 environment = self.environment | {
-                    "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                    "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "NMRNET_PACKAGE_ENGINE_MODE": "composition",
                     "NMRNET_PACKAGE_REMOVE_MODE": remove_mode,
                     "NMRNET_FAKE_HOLD_ATTACH": hold_attach,
@@ -1006,7 +1006,7 @@ class PackagesClientTests(unittest.TestCase):
         earlier_call = self.fixture.calls()[-1]
         current = subprocess.Popen(
             ["bash", str(self.root / "tools/packages.sh"), "stage"],
-            env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_INSPECT_HOLD": "1"},
+            env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_INSPECT_HOLD": "1"},
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -1062,7 +1062,7 @@ class PackagesClientTests(unittest.TestCase):
                     (self.root / name).unlink(missing_ok=True)
                 process = subprocess.Popen(
                     ["bash", str(self.root / "tools/packages.sh"), "stage"],
-                    env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_FILL_STDOUT": "1"},
+                    env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_FILL_STDOUT": "1"},
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -1135,7 +1135,7 @@ class PackagesClientTests(unittest.TestCase):
                     os.set_blocking(write_fd, True)
                     process = subprocess.Popen(
                         ["bash", str(self.root / "tools/packages.sh"), "stage"],
-                        env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"},
+                        env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
                         stdout=subprocess.PIPE,
                         stderr=write_fd,
                         start_new_session=True,

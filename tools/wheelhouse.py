@@ -264,44 +264,46 @@ def populate_pool(lock, pool, *, inference):
     else:
         sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
         return selected
-    # Same-filesystem staging permits no-replace link publication. Cleanup is
-    # success-only: a failure keeps its downloaded evidence and original cause.
-    stage = Path(tempfile.mkdtemp(prefix=".nmrnet-wheel-download-", dir=pool))
-    sys.stdout.write(
-        f"Downloading locked wheels. Temporary directory under your selected WHEELHOUSE: {stage.name}/ (kept on failure).\n"
-    )
-    sys.stdout.flush()
-    indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
-    subprocess.run(
-        [
-            sys.executable,
-            "-I",
-            "-m",
-            "pip",
-            "--isolated",
-            "download",
-            "--require-hashes",
-            "--only-binary=:all:",
-            "--no-deps",
-            "--cache-dir",
-            str(pool / ".pip-cache"),
-            "--disable-pip-version-check",
-            "--index-url",
-            "https://pypi.org/simple",
-            "--find-links",
-            str(pool),
-            *indexes,
-            "--dest",
-            str(stage),
-            "-r",
-            str(lock),
-        ],
-        check=True,
-    )
-    selected = select_wheels(lock, stage)
-    for name, checksum in selected["files"].items():
-        publish_file(stage / name, pool / name, checksum)
-    shutil.rmtree(stage)
+    # Pip reuses files in --dest even when an index link outranks find-links.
+    # Aliases avoid copying large cached wheels; a rejected alias can be
+    # unlinked without changing the original. Only new bytes are published.
+    with tempfile.TemporaryDirectory(prefix=".nmrnet-wheel-download-", dir=pool) as temporary:
+        stage = Path(temporary)
+        for cached in pool.glob("*.whl"):
+            if cached.is_file() and not cached.is_symlink():
+                (stage / cached.name).symlink_to(cached.absolute())
+        print("Acquiring missing locked wheels using temporary staging in WHEELHOUSE.", flush=True)
+        indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
+        subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-m",
+                "pip",
+                "--isolated",
+                "download",
+                "--require-hashes",
+                "--only-binary=:all:",
+                "--no-deps",
+                "--cache-dir",
+                str(pool / ".pip-cache"),
+                "--disable-pip-version-check",
+                "--index-url",
+                "https://pypi.org/simple",
+                "--find-links",
+                str(pool),
+                *indexes,
+                "--dest",
+                str(stage),
+                "-r",
+                str(lock),
+            ],
+            check=True,
+        )
+        selected = select_wheels(lock, stage)
+        for name, checksum in selected["files"].items():
+            if not (stage / name).is_symlink():
+                publish_file(stage / name, pool / name, checksum)
     return selected
 
 
@@ -312,15 +314,12 @@ def prepare_source(source_path, directory):
     if destination.exists() or destination.is_symlink():
         verified_source(destination, source)
         return
-    stage = Path(tempfile.mkdtemp(prefix=".unicore-source-", dir=directory))
-    sys.stdout.write(
-        f"Downloading Uni-Core source. Temporary directory under your selected WHEELHOUSE: {stage.name}/ (kept on failure).\n"
-    )
-    sys.stdout.flush()
-    acquire_source(source, stage)
-    verified_source(stage / SOURCE_NAME, source)
-    publish_file(stage / SOURCE_NAME, destination, source["sha256"])
-    shutil.rmtree(stage)
+    with tempfile.TemporaryDirectory(prefix=".unicore-source-", dir=directory) as temporary:
+        stage = Path(temporary)
+        print("Acquiring Uni-Core source using temporary staging in WHEELHOUSE.", flush=True)
+        acquire_source(source, stage)
+        verified_source(stage / SOURCE_NAME, source)
+        publish_file(stage / SOURCE_NAME, destination, source["sha256"])
 
 
 def prepare_core_assets(inputs, pool, *, download):
@@ -406,20 +405,24 @@ def main():
             if args.profile == "provider-core":
                 if args.assets is None or len(locks) != 1:
                     parser.error("provider-core acquisition requires --assets and one released installation lock")
+            if args.assets is not None:
                 prepare_core_assets(args.assets, args.pool, download=True)
-                third_party = root / "third-party.lock"
-                core_dependencies(locks[0], third_party)
-                populate_pool(third_party, args.pool, inference=False)
-                select_wheels(locks[0], args.pool)
-                return
-            for lock in locks:
-                populate_pool(lock, args.pool, inference=args.profile == "inference")
+            for index, lock in enumerate(locks):
+                if any(name == "provider-core" for name, _version in requirements(lock)):
+                    if args.assets is None:
+                        parser.error("the provider-core installation lock requires --assets for its GitHub release pins")
+                    third_party = root / f"third-party-{index}.lock"
+                    core_dependencies(lock, third_party)
+                    populate_pool(third_party, args.pool, inference=False)
+                    select_wheels(lock, args.pool)
+                else:
+                    populate_pool(lock, args.pool, inference=args.profile == "inference")
             if source_path is not None:
                 prepare_source(source_path, args.pool)
         elif args.action == "capture":
             capture(locks[0], source_path, args.pool, args.output)
         else:
-            if args.profile == "provider-core" and args.assets is not None:
+            if args.assets is not None:
                 prepare_core_assets(args.assets, args.pool, download=False)
             files = set()
             for lock in locks:

@@ -19,8 +19,8 @@ class ProviderPreparationRefusalTests(unittest.TestCase):
         result = fixture.run("../cache")
         self.assertNotEqual(0, result.returncode)
         self.assertEqual([call[0] for call in fixture.calls()], [
-            "wheelhouse.sh:download", "wheelhouse.sh:download provider-core", "inference_image.sh:build",
-            "inference_image.sh:import", "wheelhouse.sh:download preparation", "container.sh:geometry/image/build",
+            "wheelhouse.sh:download", "inference_image.sh:build",
+            "inference_image.sh:import", "container.sh:geometry/image/build",
         ])
         self.assertNotIn("Preparation steps finished", result.stderr)
 
@@ -42,7 +42,7 @@ class ProviderPreparationRefusalTests(unittest.TestCase):
             self.assertNotEqual(0, process.returncode)
             self.assertEqual("settled", (fixture.root / "settled").read_text())
             self.assertEqual([call[0] for call in fixture.calls()], [
-                "wheelhouse.sh:download", "wheelhouse.sh:download provider-core", "inference_image.sh:build",
+                "wheelhouse.sh:download", "inference_image.sh:build",
             ])
         finally:
             if process.poll() is None:

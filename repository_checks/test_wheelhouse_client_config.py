@@ -62,7 +62,7 @@ class WheelhouseClientTests(unittest.TestCase):
         lock.write_text("fixture==1\n")
         (self.root / ".work/preparation").mkdir()
         (self.root / "requirements/unicore-source.json").unlink()
-        environment = self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+        environment = self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
         for action in ("download", "check"):
             result = self.caller("--print", action, "preparation", environment=environment)
             self.assertEqual(0, result.returncode, result.stderr)
@@ -70,7 +70,11 @@ class WheelhouseClientTests(unittest.TestCase):
             command = next(command for command in commands if "tools.wheelhouse" in command)
             mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
             inputs = [mount for mount in mounts if ",dst=/input/" in mount]
-            self.assertEqual([f"type=bind,src={lock},dst=/input/preparation.lock,readonly"], inputs)
+            self.assertEqual([
+                f"type=bind,src={lock},dst=/input/preparation.lock,readonly",
+                f"type=bind,src={self.root}/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly",
+                f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
+            ], inputs)
             self.assertNotIn("--source", command)
             self.assertEqual("preparation", command[command.index("--profile") + 1])
             self.assertEqual("/wheelhouse", command[command.index("--pool") + 1])
@@ -132,7 +136,7 @@ class WheelhouseClientTests(unittest.TestCase):
     def test_print_and_rejected_inputs_do_not_prepare_or_dispatch_client(self):
         ambient = self.root / "ambient-owned-name"
         ambient.mkdir()
-        environment = self.environment | {"docker_client_directory": str(ambient), "NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+        environment = self.environment | {"docker_client_directory": str(ambient), "NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
         for arguments in ((), ("--print",), ("unknown",), ("check", "extra"), ("--print", "check"), ("--print", "download")):
             with self.subTest(arguments=arguments):
                 result = self.caller(*arguments, environment=environment)
@@ -236,7 +240,7 @@ class WheelhouseClientTests(unittest.TestCase):
             ],
             call["arguments"][:27],
         )
-        mounts = call["arguments"][27:39]
+        mounts = call["arguments"][27:45]
         self.assertEqual(
             [
                 "--mount",
@@ -248,7 +252,13 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--mount",
                 f"type=bind,src={self.root}/requirements/inference.lock,dst=/input/inference.lock,readonly",
                 "--mount",
+                f"type=bind,src={self.root}/requirements/preparation.lock,dst=/input/preparation.lock,readonly",
+                "--mount",
                 f"type=bind,src={self.root}/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly",
+                "--mount",
+                f"type=bind,src={self.root}/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly",
+                "--mount",
+                f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
                 "--mount",
                 f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse,readonly",
             ],
@@ -266,12 +276,18 @@ class WheelhouseClientTests(unittest.TestCase):
                 "inference",
                 "--lock",
                 "/input/inference.lock",
+                "--lock",
+                "/input/preparation.lock",
+                "--lock",
+                "/input/provider-core-install.lock",
+                "--assets",
+                "/input/provider-core-assets.in",
                 "--source",
                 "/input/unicore-source.json",
                 "--pool",
                 "/wheelhouse",
             ],
-            call["arguments"][39:],
+            call["arguments"][45:],
         )
 
     def test_native_output_and_failure_status_are_preserved(self):
@@ -283,8 +299,8 @@ class WheelhouseClientTests(unittest.TestCase):
                 self.assertEqual("wheelhouse output\n", result.stdout)
                 self.assertTrue(result.stderr.startswith("wheelhouse diagnostic\n"), result.stderr)
                 if status == 0:
-                    self.assertIn("make packages/provider-core/wheelhouse", result.stderr)
-                    self.assertNotIn("WLAN_INTERFACE=", result.stderr)
+                    self.assertIn("make packages/image", result.stderr)
+                    self.assertNotIn("NETWORK_INTERFACE=", result.stderr)
                 else:
                     self.assertEqual("wheelhouse diagnostic\n", result.stderr)
                 self.assertFalse(Path(self.fixture.calls()[-1]["config"]).parent.exists())

@@ -31,7 +31,7 @@ run() {
     if "$print_command"; then printf '%q ' "$@"; printf '\n'; else "$@"; fi
 }
 if [[ "$1" == pull ]]; then
-    printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to WLAN_INTERFACE.' >&2
+    printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to NETWORK_INTERFACE.' >&2
     printf 'Provision these pinned images through an independently interface-bound process:\n%s\n%s\n' "$python_image" "$uv_image" >&2
     exit 2
 fi

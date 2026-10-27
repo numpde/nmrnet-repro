@@ -18,14 +18,14 @@ fi
 if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
 case "$profile" in
     inference)
-        inputs=(inference.lock unicore-source.json)
+        inputs=(inference.lock preparation.lock unicore-source.json provider-core-install.lock provider-core-assets.in)
         build_target=packages/image
-        worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --pool /wheelhouse)
+        worker_arguments=(--profile inference --lock /input/inference.lock --lock /input/preparation.lock --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --source /input/unicore-source.json --pool /wheelhouse)
         ;;
     preparation)
-        inputs=(preparation.lock)
+        inputs=(preparation.lock provider-core-install.lock provider-core-assets.in)
         build_target=geometry/image/build
-        worker_arguments=(--profile preparation --lock /input/preparation.lock --pool /wheelhouse)
+        worker_arguments=(--profile preparation --lock /input/preparation.lock --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
         ;;
     provider-core)
         inputs=(provider-core-install.lock provider-core-assets.in)
@@ -56,17 +56,7 @@ if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     printf '%s\n' 'Wheelhouse lanes require a nonzero host UID and GID.' >&2
     exit 2
 fi
-following_acquisition_arguments=()
-if [[ $1 == download ]]; then following_acquisition_arguments=("WLAN_INTERFACE=$interface"); fi
-if [[ -n ${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-} ]]; then
-    following_acquisition_arguments+=("SHARED_RUNTIME_IMAGE=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT")
-fi
 next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
-if [[ $profile != provider-core ]]; then
-    next_actions=$(next_make_command 'The scientific images also require shared provider dependencies in this same pool:' \
-        packages/provider-core/wheelhouse "WHEELHOUSE=$wheelhouse_directory" "${following_acquisition_arguments[@]}"; \
-        next_make_command 'Then build the image offline:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
-fi
 if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
     printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2
     exit 2

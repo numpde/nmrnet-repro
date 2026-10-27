@@ -38,7 +38,7 @@ class AcquisitionClientTests(unittest.TestCase):
         self.addCleanup(self._remove_retained)
         self.observed = {}
         self.environment = self.fixture.environment | {
-            "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+            "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
             "NMRNET_ACQUISITION_FIXTURE_ROOT": str(self.root),
         }
         image = "docker.io/library/python"

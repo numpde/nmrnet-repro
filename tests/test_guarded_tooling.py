@@ -120,7 +120,8 @@ class ToolingLauncherTests(unittest.TestCase):
         ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
-        for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock"):
+        for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock",
+                     "preparation.lock", "provider-core-install.lock", "provider-core-assets.in"):
             (self.root / f"requirements/{name}").write_text("fixture")
         (self.root / ".work/wheelhouse").mkdir(parents=True)
         (self.root / ".work/packages-stage/lock.TEST").mkdir(parents=True)
@@ -135,7 +136,7 @@ class ToolingLauncherTests(unittest.TestCase):
                 "NMRNET_IN_CONTAINER": "0",
                 "NMRNET_WHEELHOUSE_INPUT": str(self.root / ".work/wheelhouse"),
                 "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
-                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                 "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
                 "NMRNET_STAGE_INPUT": "lock.TEST",
             },

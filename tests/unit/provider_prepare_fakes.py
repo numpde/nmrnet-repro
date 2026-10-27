@@ -32,7 +32,7 @@ class PreparationFixture:
 set -eu
 root=$TEST_PREPARE_ROOT
 phase=${0##*/}:$*
-printf '%s\0' "$phase" "$NMRNET_WHEELHOUSE_INPUT" "$NMRNET_WLAN_INTERFACE_INPUT" "${NMRNET_ARCHIVE_INPUT-}" >> "$TEST_PREPARE_JOURNAL"
+printf '%s\0' "$phase" "$NMRNET_WHEELHOUSE_INPUT" "$NMRNET_NETWORK_INTERFACE_INPUT" "${NMRNET_ARCHIVE_INPUT-}" >> "$TEST_PREPARE_JOURNAL"
 if [[ ${TEST_WAIT_PHASE-} == "$phase" ]]; then
     trap 'sleep 0.1; printf settled > "$root/settled"; exit 143' TERM INT
     printf ready > "$root/ready"
@@ -59,7 +59,7 @@ report_next_actions 'NEXT_FROM_CHILD'
             str(self.root),
             "provider/prepare",
             f"WHEELHOUSE={selection}",
-            "WLAN_INTERFACE=lo",
+            "NETWORK_INTERFACE=lo",
             "SHARED_RUNTIME_IMAGE=sha256:" + "a" * 64,
         ]
 

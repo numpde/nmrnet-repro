@@ -174,7 +174,7 @@ Mapped/local addresses preserve the configured hostname and port for TLS and sig
 they do not fall back to DNS. External interpreter/store routes use the provider
 settings' <code>resolvers</code>; an external API route uses the binding's
 <code>resolver_file</code>.</p>
-<p>Setup downloads use <code>WLAN_INTERFACE</code>. Running services use the explicit
+<p>Setup downloads use <code>NETWORK_INTERFACE</code>. Running services use the explicit
 interfaces in their route definitions. The choices may be the same or different;
 neither supplies the other. See the
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">provider route example</a>
@@ -256,7 +256,7 @@ git submodule update --init --recursive
 </code></pre>
 <p>Prepare NMRNet's three images and model files using the selected shared image
 for setup transport. Wheelhouse and setup interface are chosen once:</p>
-<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
 <p>For a provider-only update, stop NMRNet, install its new generation from the
 existing binding definition, and start it. Shared delivery can continue publishing
 acknowledged results throughout:</p>
@@ -507,7 +507,7 @@ affected work; they do not establish dispatch or acceptance of a result.</p>
 <h2 id="images-and-network-isolation">Images and network isolation</h2>
 <p>To acquire the provider dependencies and model files and build its three images
 in one invocation:</p>
-<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 </code></pre>
 <p>Omit either selection to choose it once on the terminal. The command runs the
 existing owners in sequence and stops on failure. It reuses cached downloads and

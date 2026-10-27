@@ -93,7 +93,7 @@ class WheelhouseTests(unittest.TestCase):
         self.assertFalse(source.is_symlink())
         self.assertEqual([], list(self.pool.glob(".unicore-source-*")))
 
-    def test_wrong_or_excess_source_bytes_are_rejected_and_staging_is_retained(self):
+    def test_wrong_or_excess_source_bytes_are_rejected_without_retaining_staging(self):
         for body in (b"X" * len(self.source_bytes), self.source_bytes + b"extra"):
             with self.subTest(size=len(body)):
                 with (
@@ -103,11 +103,7 @@ class WheelhouseTests(unittest.TestCase):
                     wheelhouse.prepare_source(self.source, self.pool)
                 source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
                 self.assertFalse(source.exists())
-                (stage,) = self.pool.glob(".unicore-source-*")
-                self.assertTrue((stage / (wheelhouse.SOURCE_NAME + ".part")).is_file())
-                for path in stage.iterdir():
-                    path.unlink()
-                stage.rmdir()
+                self.assertEqual([], list(self.pool.glob(".unicore-source-*")))
 
     def test_conflicting_cached_source_is_preserved_without_network(self):
         source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
@@ -256,6 +252,34 @@ class WheelhouseTests(unittest.TestCase):
         self.assertEqual(received, [expected.split(b"provider-core==", 1)[0]])
         self.assertNotEqual(expected, self.lock.read_bytes())
         select.assert_called_once()
+
+    def test_scientific_acquisition_keeps_sdk_and_scientific_locks_separate(self):
+        sdk = self.root / "sdk.lock"
+        sdk.write_text(self.lock.read_text() + "provider-core==0.2.3 \\\n    --hash=sha256:" + "a" * 64 + "\n")
+        assets = self.root / "assets.in"
+        assets.write_text("owned GitHub release pins")
+        inputs = []
+
+        def acquired(lock, pool, *, inference):
+            inputs.append(lock.read_bytes())
+            self.assertEqual(pool, self.pool)
+            self.assertFalse(inference)
+            self.assertNotIn(b"provider-core", inputs[-1])
+
+        with (
+            patch.object(wheelhouse.sys, "argv", [
+                "wheelhouse", "download", "--profile", "preparation",
+                "--lock", str(self.lock), "--lock", str(sdk),
+                "--assets", str(assets), "--pool", str(self.pool),
+            ]),
+            patch.object(wheelhouse, "prepare_core_assets") as prepare,
+            patch.object(wheelhouse, "populate_pool", side_effect=acquired),
+            patch.object(wheelhouse, "select_wheels") as verify,
+        ):
+            wheelhouse.main()
+        self.assertEqual(inputs, [self.lock.read_bytes(), self.lock.read_bytes()])
+        prepare.assert_called_once_with(assets, self.pool, download=True)
+        verify.assert_called_once()
 
     def test_cli_requires_one_lock_for_private_capture(self):
         build_lock = self.root / "second.lock"

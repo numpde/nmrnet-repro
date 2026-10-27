@@ -2,6 +2,10 @@ override SHELL := bash
 override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
+ifneq ($(origin WLAN_INTERFACE),undefined)
+$(error WLAN_INTERFACE was replaced by NETWORK_INTERFACE; use NETWORK_INTERFACE=<interface>)
+endif
+
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: packages/base-images/python/download
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
@@ -190,7 +194,7 @@ test/repository/provider:
 # a caller-supplied NMRNET_*_INPUT from replacing that filtered copy.
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
-unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
+unexport ARCHIVE STAGE NETWORK_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport WHEELHOUSE
 override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin WHEELHOUSE)),$(value WHEELHOUSE))
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
@@ -216,8 +220,8 @@ unexport LOCAL_NETWORK LOCAL_INTERFACE EXTERNAL_INTERFACE RESOLVERS
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
-override export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
-override export NMRNET_WLAN_INTERFACE_INPUT_ORIGIN := $(origin WLAN_INTERFACE)
+override export NMRNET_NETWORK_INTERFACE_INPUT := $(if $(filter command line,$(origin NETWORK_INTERFACE)),$(value NETWORK_INTERFACE))
+override export NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN := $(origin NETWORK_INTERFACE)
 # tools/baseline.sh consumes explicit choices; ambient tolerances cannot qualify a run.
 override export NMRNET_LABEL_ATOL_INPUT := $(if $(filter command line,$(origin LABEL_ATOL)),$(value LABEL_ATOL))
 override export NMRNET_ATOL_INPUT := $(if $(filter command line,$(origin ATOL)),$(value ATOL))
@@ -321,7 +325,7 @@ help:
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
 		'make test/repository/wheelhouse        Test selected cache paths, Make inputs and frozen build capture offline.' \
 		'WHEELHOUSE accepts absolute or relative paths (from Make working directory); omitted paths prompt, with no default.' \
-		'Acquisition prompts for an omitted WLAN_INTERFACE; automation must set it explicitly. No interface is selected by default.' \
+		'Acquisition prompts for an omitted NETWORK_INTERFACE; automation must set it explicitly. No interface is selected by default.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \
 		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
 		'make test/unit/prediction-input        Check source coordinate conversion and strict prediction-input admission.' \
@@ -332,23 +336,23 @@ help:
 		'make test/unit/baseline-launcher       Run only the contained baseline-launcher tests.' \
 		'make test/repository                   Run strict repository checks; pending policies remain red.' \
 		'make test/probe                        Check contained output ownership.' \
-		'make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
+		'make checks/dependencies/download NETWORK_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
 		'make checks/dependencies/check         Verify retained checker dependencies offline.' \
 		'make checks/image/build                Build and record the offline repository checker image.' \
 		'make packages/base-images/pull         Print required image provisioning guidance; refuses daemon pulls.' \
 		'make packages/base-images/python/download Download the pinned Debian Python worker base into local Docker using Docker default routing.' \
 		'make packages/lock/base-images/pull    Print resolver image provisioning guidance; refuses daemon pulls.' \
-		'make packages/lock/stage WLAN_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
+		'make packages/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
 		'make packages/lock/apply STAGE=lock.ID  Apply the reviewed stage offline.' \
-		'make packages/preparation/lock/stage WLAN_INTERFACE=YOUR_INTERFACE  Resolve preparation dependencies for review.' \
+		'make packages/preparation/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE  Resolve preparation dependencies for review.' \
 		'make packages/preparation/lock/apply STAGE=lock.ID  Apply the reviewed preparation pair offline.' \
-		'make packages/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE  Acquire locked packages and Uni-Core source.' \
+		'make packages/wheelhouse NETWORK_INTERFACE=YOUR_INTERFACE  Acquire inference, geometry and SDK packages plus Uni-Core source.' \
 		'make packages/wheelhouse/check         Verify the retained wheelhouse offline.' \
-		'make packages/preparation/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE  Acquire locked preparation wheels.' \
+		'make packages/preparation/wheelhouse NETWORK_INTERFACE=YOUR_INTERFACE  Acquire locked preparation wheels.' \
 		'make packages/preparation/wheelhouse/check  Verify preparation wheels offline.' \
 		'make packages/image                    Build the contained inference image from verified inputs.' \
 		'make packages/import                   Check inference imports in the recorded image.' \
-		'make weights/download ARCHIVE=weight.zip WLAN_INTERFACE=YOUR_INTERFACE  Acquire one declared archive.' \
+		'make weights/download ARCHIVE=weight.zip NETWORK_INTERFACE=YOUR_INTERFACE  Acquire one declared archive.' \
 		'make weights/check ARCHIVE=weight.zip   Verify one retained complete archive.' \
 		'make weights/inspect ARCHIVE=weight.zip Inspect archive members for selection review.' \
 		'make weights/extract ARCHIVE=weight.zip Extract only declared members; refuses replacement.' \

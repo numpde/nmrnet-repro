@@ -111,7 +111,7 @@ class NetworkCancellationTests(unittest.TestCase):
                 (binary / "docker").symlink_to(Path(__file__).resolve())
                 environment = {
                     **os.environ,
-                    "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                    "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "ENGINE_STATE": str(state),
                     "PATH": str(binary) + ":" + os.environ["PATH"],
                     "PYTHONPATH": str(Path.cwd()),
@@ -172,7 +172,7 @@ class NetworkCancellationTests(unittest.TestCase):
                 (binary / "docker").symlink_to(Path(__file__).resolve())
                 environment = {
                     **os.environ,
-                    "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                    "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "ENGINE_STATE": str(state),
                     "DELAY_IDENTITY": phase,
                     "PATH": str(binary) + ":" + os.environ["PATH"],
@@ -248,7 +248,7 @@ class ContainerIdentityTests(unittest.TestCase):
             (binary / "docker").symlink_to(Path(__file__).resolve())
             environment = {
                 **os.environ,
-                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                 "ENGINE_STATE": str(state),
                 "PATH": str(binary) + ":" + os.environ["PATH"],
                 "PYTHONPATH": str(Path.cwd()),

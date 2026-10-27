@@ -144,7 +144,11 @@ class WheelPoolTests(unittest.TestCase):
         def download(command, **kwargs):
             if "download" in command:
                 self.assertIn(str(self.pool), command)
-                shutil.copyfile(incoming, Path(command[command.index("--dest") + 1]) / incoming.name)
+                destination = Path(command[command.index("--dest") + 1]) / incoming.name
+                # Pip unlinks a bad-hash destination before downloading again.
+                if destination.is_symlink():
+                    destination.unlink()
+                shutil.copyfile(incoming, destination)
                 return subprocess.CompletedProcess(command, 0)
             return run(command, **kwargs)
 
@@ -162,25 +166,26 @@ class WheelPoolTests(unittest.TestCase):
             self.assertEqual((self.pool / incoming.name).read_bytes(), b"conflicting pooled bytes")
         for name, content in before.items():
             self.assertEqual((self.pool / name).read_bytes(), content)
-        (pending,) = self.pool.glob(".nmrnet-wheel-download-*")
-        self.assertEqual((pending / incoming.name).read_bytes(), incoming.read_bytes())
+        self.assertEqual([], list(self.pool.glob(".nmrnet-wheel-download-*")))
         self.assertFalse(any((self.pool / profile).exists() for profile in ("inference", "preparation", "provider-core")))
 
     def test_partial_lock_progress_is_published_and_reused_after_retry(self):
         incoming = self.root / "partial incoming"
         incoming.mkdir()
-        alpha = wheel(incoming, "pool-alpha", "1.0", payload=b"new locked alpha")
+        cached = self.alpha
+        cached_bytes, cached_inode = cached.read_bytes(), cached.stat().st_ino
+        alpha = wheel(incoming, "pool-gamma", "1.0", payload=b"new locked gamma")
         beta = wheel(incoming, "pool-beta", "3.0", payload=b"new locked beta")
-        self.alpha.unlink()
         lock = locked(
             self.root / "partial.lock",
             [
-                ("pool-alpha", "1.0", [alpha]),
+                ("pool-alpha", "1.0", [cached]),
+                ("pool-gamma", "1.0", [alpha]),
                 ("pool-beta", "3.0", [beta]),
             ],
         )
         real_run = subprocess.run
-        file_gets = {alpha.name: 0, beta.name: 0}
+        file_gets = {cached.name: 0, alpha.name: 0, beta.name: 0}
         fail_beta_once = {"value": True}
 
         class LocalIndex(BaseHTTPRequestHandler):
@@ -188,7 +193,7 @@ class WheelPoolTests(unittest.TestCase):
                 path = urlsplit(self.path).path
                 if path.startswith("/simple/"):
                     package = path.strip("/").split("/")[-1]
-                    candidate = alpha if package == "pool-alpha" else beta
+                    candidate = {"pool-alpha": cached, "pool-gamma": alpha, "pool-beta": beta}[package]
                     checksum = hashlib.sha256(candidate.read_bytes()).hexdigest()
                     body = (
                         f'<a href="http://127.0.0.1:{self.server.server_port}/files/{candidate.name}'
@@ -203,7 +208,7 @@ class WheelPoolTests(unittest.TestCase):
                     return
 
                 filename = path.removeprefix("/files/")
-                candidate = {alpha.name: alpha, beta.name: beta}.get(filename)
+                candidate = {cached.name: cached, alpha.name: alpha, beta.name: beta}.get(filename)
                 if candidate is None:
                     self.send_error(404)
                     return
@@ -245,14 +250,14 @@ class WheelPoolTests(unittest.TestCase):
         with patch.object(wheelhouse.subprocess, "run", side_effect=local_pip):
             with self.assertRaises(subprocess.CalledProcessError):
                 wheelhouse.populate_pool(lock, self.pool, inference=False)
-            self.assertEqual({alpha.name: 1, beta.name: 1}, file_gets)
+            self.assertEqual({cached.name: 0, alpha.name: 1, beta.name: 1}, file_gets)
             self.assertFalse((self.pool / alpha.name).exists())
             self.assertFalse((self.pool / beta.name).exists())
-            (pending,) = self.pool.glob(".nmrnet-wheel-download-*")
-            self.assertTrue(pending.is_dir())
+            self.assertEqual([], list(self.pool.glob(".nmrnet-wheel-download-*")))
 
             wheelhouse.populate_pool(lock, self.pool, inference=False)
 
-        self.assertEqual({alpha.name: 1, beta.name: 2}, file_gets)
+        self.assertEqual({cached.name: 0, alpha.name: 1, beta.name: 2}, file_gets)
+        self.assertEqual((cached.read_bytes(), cached.stat().st_ino), (cached_bytes, cached_inode))
         self.assertEqual(alpha.read_bytes(), (self.pool / alpha.name).read_bytes())
         self.assertEqual(beta.read_bytes(), (self.pool / beta.name).read_bytes())

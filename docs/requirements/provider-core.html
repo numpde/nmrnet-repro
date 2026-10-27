@@ -13,7 +13,7 @@ builds. NMRNet acquires the private wheel and source archive directly from the
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-assets.in">pinned GitHub URLs</a>.
 Only third-party requirements go through PyPI. The wheelhouse is one operator-selected
 flat cache, shared with the scientific images.</p>
-<pre><code>make packages/provider-core/wheelhouse WHEELHOUSE=/path/to/shared-wheelhouse WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code>make packages/provider-core/wheelhouse WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make packages/provider-core/wheelhouse/check WHEELHOUSE=/path/to/shared-wheelhouse</code></pre>
 <p>Build or load the shared runtime image through
 <a href="https://github.com/numpde/nmr-provider-tools#readme">nmr-provider-tools</a>

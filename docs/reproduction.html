@@ -5,7 +5,7 @@
 <h2 id="prerequisites">Prerequisites</h2>
 <p>Run <code>make help</code> or simply <code>make</code> to list every maintained command. Command
 discovery uses Make and its shell without starting Docker or Python. Commands
-that acquire packages or scientific artifacts list their required <code>WLAN_INTERFACE</code>.
+that acquire packages or scientific artifacts list their required <code>NETWORK_INTERFACE</code>.
 The proxy and Debian Python base have separate bootstrap download commands using
 Docker's default routing; the two generic base-image pull names still print guidance.
 <code>ARCHIVE</code> and <code>STAGE</code> also require explicit Make command-line assignments.
@@ -25,7 +25,7 @@ marker is not proof that a process is contained.</p>
 <p>Python workers use this pinned Debian base:</p>
 <pre><code>docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c</code></pre>
 <pre><code class="language-sh">make packages/base-images/python/download</code></pre>
-<p>This explicit bootstrap target uses Docker daemon routing; <code>WLAN_INTERFACE</code>
+<p>This explicit bootstrap target uses Docker daemon routing; <code>NETWORK_INTERFACE</code>
 does not control daemon pulls. Package and artifact acquisition then uses the
 interface-bound proxy installed in the selected shared runtime image. Build or load
 that image through <a href="https://github.com/numpde/nmr-provider-tools#readme">nmr-provider-tools</a>
@@ -33,7 +33,7 @@ and pass its immutable ID as <code>SHARED_RUNTIME_IMAGE</code> on acquisition co
 Ordinary builds use local inputs with networking disabled; they do not pull missing images.</p>
 <p>Repository checks use a separate image containing pinned Git, Make and Ruff.
 Prepare it explicitly after provisioning that base image:</p>
-<pre><code class="language-sh">make checks/dependencies/download WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code class="language-sh">make checks/dependencies/download NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make checks/dependencies/check
 make checks/image/build
 </code></pre>
@@ -47,7 +47,7 @@ granted. Test containers use an init process to reap orphaned probe children
 under the existing resource limits.</p>
 <h2 id="acquire-and-prepare">Acquire and prepare</h2>
 <p>Every networked acquisition requires a selected interface. Pass
-<code>WLAN_INTERFACE=YOUR_INTERFACE</code> on the Make command line for automation,
+<code>NETWORK_INTERFACE=YOUR_INTERFACE</code> on the Make command line for automation,
 or omit it to choose from the host's available interfaces on the controlling
 terminal. The numbered menu has no default, even when only one interface is
 listed. It lists available devices without guessing connectivity or a route;
@@ -65,18 +65,27 @@ counts about every five seconds as data arrives, followed by checksum
 verification. Successful download and extraction messages give the host output
 paths.</p>
 <p>For an interactive wheel acquisition, run <code>make packages/wheelhouse</code>.
-It asks first for <code>WHEELHOUSE</code>, then <code>WLAN_INTERFACE</code>, before
+It asks first for <code>WHEELHOUSE</code>, then <code>NETWORK_INTERFACE</code>, before
 inspecting images or acquiring files. The selected interface is passed through
 the preflight and execution owners, so they do not ask again. The menu follows
 <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/provider-deployment.sh#L905-L923">the sibling interface inventory</a>
 and its <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L92">controlling-terminal choice owner</a>.
 The explicit Python-base bootstrap uses Docker daemon routing, as described above.</p>
 <p>Use the checked-in dependency lock:</p>
-<pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
-make packages/provider-core/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make packages/image WHEELHOUSE=/absolute/cache/root
 make packages/import
 </code></pre>
+<p>The wheelhouse workflow applies across repositories: each project supplies its
+locks, target Python/platform and package sources. <code>WHEELHOUSE</code> selects
+the cache; <code>NETWORK_INTERFACE</code> selects acquisition routing. Each project
+uses its own locks to acquire missing packages and consume compatible cached
+files. The pool has no global completeness marker.</p>
+<p><code>make packages/wheelhouse</code> prepares the inference and geometry
+images' locked packages, pinned Uni-Core source and released SDK dependencies in that pool.
+<code>make packages/preparation/wheelhouse</code> prepares the geometry image's
+locked packages and SDK dependencies when only that image is needed. Each target resolves its locks separately;
+the SDK wheel and source distribution come from their pinned GitHub release.</p>
 <p><code>WHEELHOUSE</code> selects a shared dependency cache. There is no default:
 when omitted, Make asks for a path on the controlling terminal.
 Both the prompt and <code>WHEELHOUSE=</code> accept absolute or relative paths,
@@ -103,8 +112,14 @@ including its byte size and SHA-256; it is not treated as a wheel.</p>
 command-line values are passed literally, and environment variables cannot
 choose a cache. Acquisition grants only the selected root writable. Each complete
 verified file is published without replacing an existing file: identical bytes
-reuse the winner; a conflict preserves both the existing file and the failed
-private stage. No other project's files are cleared.</p>
+reuse the winner; a conflict preserves the existing file and reports the failure.
+Temporary download staging is removed after its I/O completes. No other project's
+files are cleared.</p>
+<p>A complete cached lock needs no index query. With a partly populated cache,
+temporary links make existing wheels available in pip's download destination,
+so adding another dependency does not download those wheels again. Pip still
+owns platform compatibility and hash checks; only newly acquired files are
+published into the pool.</p>
 <p>Networked acquisition uses pip's <a href="https://pip.pypa.io/en/stable/topics/caching/">HTTP cache</a>
 at <code>WHEELHOUSE/.pip-cache</code> to reuse completed responses after a failed
 whole-lock download. This can use additional disk space alongside published
@@ -115,7 +130,7 @@ and <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip i
 <p>For the provider, acquire the two model archives and extract their declared
 members:</p>
 <pre><code class="language-sh">for archive in weight.zip checkpoints.zip; do
-    make weights/download ARCHIVE=&quot;$archive&quot; WLAN_INTERFACE=YOUR_INTERFACE || break
+    make weights/download ARCHIVE=&quot;$archive&quot; NETWORK_INTERFACE=YOUR_INTERFACE || break
     make weights/extract ARCHIVE=&quot;$archive&quot; || break
 done
 </code></pre>
@@ -126,7 +141,7 @@ offline inspection. Successful operator commands show the relevant next action
 after cleanup; those hints do not run the suggested command.</p>
 <p>For baseline reproduction, also acquire the reference dataset. This is a
 separate path from running the provider:</p>
-<pre><code class="language-sh">make weights/download ARCHIVE=data.zip WLAN_INTERFACE=YOUR_INTERFACE
+<pre><code class="language-sh">make weights/download ARCHIVE=data.zip NETWORK_INTERFACE=YOUR_INTERFACE
 make weights/extract ARCHIVE=data.zip
 make baseline/prepare
 </code></pre>
@@ -357,7 +372,7 @@ test aggregate. New files under <code>tools/</code>, <code>repository_checks/</c
 <code>nmrnet_inference/</code> enter that inventory automatically. The suite records the
 pinned NMRPeak and Magnet precedents for its organization and source checks.</p>
 <p>For an intentional dependency update, stage a new lock and advisory receipt:</p>
-<pre><code class="language-sh">make packages/lock/stage WLAN_INTERFACE=YOUR_INTERFACE
+<pre><code class="language-sh">make packages/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE
 </code></pre>
 <p>Review them, then apply offline with <code>make packages/lock/apply STAGE=lock.ID</code>,
 using the printed stage ID. Lock resolution also requires the pinned UV image
