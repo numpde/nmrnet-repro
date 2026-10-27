@@ -10,7 +10,7 @@ import hashlib
 import json
 from builtins import BaseExceptionGroup
 from dataclasses import asdict, replace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from tests.fakes.attempt_inventory import attempt as inventory_attempt, response as inventory_response
@@ -26,16 +26,15 @@ from tests.fakes.api_tls import verify_signed_request
 from nmrnet_provider.admission import AdmissionPolicy
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from nmrnet_provider.runtime import assemble_attempt
-from nmrnet_provider.service import Announcement, ProviderService, ServicePolicy
-from provider_core.attempt_record import StartPending, TerminalOperation
-from provider_core.checkpoint_store import CheckpointStore
+from nmrnet_provider.service import Announcement, ProviderService, ServiceFailed, ServicePolicy
+from provider_core.attempt_record import TerminalOperation
 from provider_core.hello import AnalysisOffering
 from provider_core.job_input import verify_job_input
 
 
 class ServicePeers(AdmissionPeers):
-    def __init__(self, *, maximum_records=2):
-        super().__init__(InputPorts(), maximum_records=maximum_records)
+    def __init__(self, *, maximum_live_attempts=2):
+        super().__init__(InputPorts(), maximum_live_attempts=maximum_live_attempts)
         self.inventory_replies = [inventory_response(attempts=[], next_cursor=None)] * 2
         self.remote_attempts = {}
         self.started_jobs = set()
@@ -45,6 +44,7 @@ class ServicePeers(AdmissionPeers):
         self.hellos = []
         self.hello_received = asyncio.Event()
         self.stop = asyncio.Event()
+        self.attempt_stopping = asyncio.Event()
         self.completed = asyncio.Event()
         self.factory_entered = asyncio.Event()
         self.discovery_entered = asyncio.Event()
@@ -75,20 +75,31 @@ class ServicePeers(AdmissionPeers):
         )
         arguments = {
             "config": self.config,
-            "store": self.store,
             "api": self.api,
             "open_attempt": self.open_attempt,
             "claims": self.claims,
-            "retire_native": AsyncMock(),
             "current_announcement": lambda: self.snapshot,
             "policy": policy,
             "on_started": lambda: self.events.append("started"),
             "on_api_retry": lambda kind, failure, seconds: self.api_notices.append(("retry", kind, failure, seconds)),
             "on_api_recovered": lambda kind, failure: self.api_notices.append(("recovered", kind, failure)),
+            "on_observed_crash": lambda crash: self.api_notices.append(("worker_crash", crash)),
         }
         return ProviderService(**(arguments | changes))
 
-    async def open_attempt(self, pending):
+    async def settle_service(self, service):
+        try:
+            await service.settle()
+        except ServiceFailed as failure:
+            self.api_notices.append(("settlement", failure))
+            if not service.shutdown_ready:
+                raise
+
+    def arguments(self, pending):
+        return super().arguments(pending) | {"stopping": self.attempt_stopping}
+
+    async def open_attempt(self, pending, *, stopping):
+        self.attempt_stopping = stopping
         self.events.append("allocate")
         ports = self.scientific_ports(pending)
         ports.host.failure = self.factory_cleanup_failure
@@ -128,13 +139,6 @@ class ServicePeers(AdmissionPeers):
             return controller
         except BaseException as cause:
             failures = [cause]
-            # Assembly's read uses owner=None. Only this serialized factory
-            # invocation owns that setup read; the service must not steal it.
-            if self.store.pending_operation is not None:
-                try:
-                    await self.store.settle()
-                except (Exception, asyncio.CancelledError) as cleanup:
-                    failures.append(cleanup)
             try:
                 if self.factory_cleanup_failure is not None:
                     # Assembly failed before prediction acquisition. Inject the
@@ -213,8 +217,8 @@ class SuccessiveServicePeers(ServicePeers):
     The generator and predictor remain recording ports, not native science.
     """
 
-    def __init__(self, *, maximum_records=4, lose_second_completion=True):
-        super().__init__(maximum_records=maximum_records)
+    def __init__(self, *, maximum_live_attempts=4, lose_second_completion=True):
+        super().__init__(maximum_live_attempts=maximum_live_attempts)
         self.lose_second_completion = lose_second_completion
         self.stop_after_complete = False
         self.jobs = tuple(
@@ -267,15 +271,6 @@ class SuccessiveServicePeers(ServicePeers):
     def failure_receipt(self, _index, _value, _pending):
         raise AssertionError("This successive-Job fixture expects successful science")
 
-    async def reopen_store(self):
-        await self.store.close()
-        settings = self.config.lifecycle
-        self.store = CheckpointStore(
-            settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
-        )
-        self.stack.push_async_callback(self.store.close)
-        await self.store.open()
-
     async def model_reply(self, request, raw):
         messages = json.loads(raw)["messages"]
         users = [message["content"] for message in messages if message["role"] == "user"]
@@ -315,12 +310,10 @@ class SuccessiveServicePeers(ServicePeers):
             index = len(self.start_bodies)
             if index >= len(self.jobs) or json.loads(body)["job_ref"] != self.jobs[index].job_ref:
                 raise AssertionError("A started Job was redispatched or eligibility order changed")
-            inventory = await self.store.inventory()
-            retained = [item for item in inventory if type(item) is StartPending]
-            if len(retained) != 1 or retained[0].body != body or retained[0].input != self.jobs[index].identity:
-                raise AssertionError("Start does not match the exact durable discovered Job")
-            if len(inventory) != 1:
-                raise AssertionError("A successive Job started before prior producer checkpoints were cleared")
+            if not self.claims.owns_job(self.config.lifecycle.scope, self.jobs[index].job_ref):
+                raise AssertionError("START preceded its actual live Job reservation")
+            if len(self.claims.live_owners()) != 1:
+                raise AssertionError("A successive Job started before prior live ownership was released")
             self.start_bodies.append(body)
             self.remote_attempts[self.attempt_refs[index]] = inventory_attempt(
                 analysis_kind_ref=ANALYSIS_KIND_REF,

@@ -32,7 +32,8 @@ from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.checkpoint_store import CheckpointStore
+from provider_core.lifetime import ProviderLifetime
+from provider_core.controller import ControllerFailed, LiveStartPolicy
 from provider_core.delivery_service import DeliveryBinding, DeliveryService
 from provider_core.delivery_client import DeliveryClient
 from provider_core.delivery_store import QueueLimits
@@ -64,11 +65,11 @@ def require_download_credentials(request, body):
 
 
 class RuntimePeers:
-    def __init__(self, ports, route, *, maximum_records=1):
+    def __init__(self, ports, route, *, maximum_live_attempts=2):
         self.ports, self.route = ports, route
         self.allocate_prediction = AsyncMock(side_effect=self._allocate_prediction)
-        self.maximum_records = maximum_records
-        self.claims = AttemptClaims()
+        self.maximum_live_attempts = maximum_live_attempts
+        self.stop = asyncio.Event()
         self.operator_notices = []
         self.progress_notices = []
         self.result = None
@@ -95,17 +96,13 @@ class RuntimePeers:
                 ca_file=Path(self.api_peer.scratch.name) / "cert.pem",
                 model_ca_file=Path(self.model_peer.scratch.name) / "cert.pem",
                 store_ca_file=Path(self.store_peer.scratch.name) / "cert.pem",
-                maximum_records=self.maximum_records,
+                maximum_live_attempts=self.maximum_live_attempts,
             )
             self.config = load_provider_config(self.files.path)
             self.files.state.mkdir(mode=0o700)
-            settings = self.config.lifecycle
-            self.store = CheckpointStore(
-                settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
-            )
-            self.stack.push_async_callback(self.store.close)
-            await self.store.open()
-            self.stack.push_async_callback(self.settle_store)
+            self.lifetime = ProviderLifetime(self.config.lifecycle.lifetime_root).open()
+            self.stack.callback(self.lifetime.close)
+            self.claims = AttemptClaims.live(limits=self.config.lifecycle.live_limits)
             self.api = ProviderAPI(
                 self.config.api.identity,
                 self.config.api.http.new_transport(),
@@ -139,9 +136,15 @@ class RuntimePeers:
     async def __aexit__(self, *error):
         return await self.stack.__aexit__(*error)
 
-    async def settle_store(self):
-        if self.store.pending_operation is not None:
-            await self.store.settle()
+    async def settle_controller(self, controller):
+        try:
+            await controller.settle()
+        except ControllerFailed as failure:
+            # A passive live exclusion can survive cleanup. Keep its diagnostic;
+            # a pending report or physical operation must still fail teardown.
+            self.operator_notices.append(("settlement", failure))
+            if not controller.shutdown_ready:
+                raise
 
     async def close_relay(self):
         self.relay.request_stop()
@@ -170,12 +173,17 @@ class RuntimePeers:
 
     def arguments(self, pending):
         return {
-            "setup_owner": None,
             "config": self.config,
             "pending": pending,
-            "api": self.api,
-            "store": self.store,
             "claims": self.claims,
+            "stopping": self.stop,
+            "start_policy": LiveStartPolicy(
+                cadence_seconds=self.config.lifecycle.poll_seconds,
+                on_retry=lambda *facts: self.operator_notices.append(("start_retry", facts)),
+                on_recovered=lambda *facts: self.operator_notices.append(("start_recovered", facts)),
+                maximum_replays=self.config.lifecycle.start_replays,
+                window_seconds=self.config.lifecycle.start_seconds,
+            ),
             "execution_identity": {"image_id": "fixture"},
             "selected_artifacts": self.ports.worker.artifacts,
             "allocate_prediction": self.allocate_prediction,
@@ -191,9 +199,6 @@ class RuntimePeers:
             ),
             "on_unconfirmed_phase_progress": self.unconfirmed_phase_progress,
             "condition_recovery": None,
-            # Direct assembly keeps the explicit stopped-recovery qualification;
-            # production's factory requires an enabled policy before allocation.
-            "start_recovery": None,
             "on_delivery_retry": lambda attempt, failure, seconds: self.delivery_notices.append(
                 (failure, {"event": "producer_delivery_retry", "retry_seconds": seconds,
                            "execution_attempt_ref": attempt.admission.execution_attempt_ref})

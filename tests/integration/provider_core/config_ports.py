@@ -33,7 +33,7 @@ class ConfigFiles:
         ca_file=None,
         model_ca_file=None,
         store_ca_file=None,
-        maximum_records=1,
+        maximum_live_attempts=2,
     ):
         self.root = Path(root)
         self.credential = self.root / "signing.private.json"
@@ -47,7 +47,7 @@ class ConfigFiles:
         ca = ca_line(ca_file)
         model_ca = ca if model_ca_file is None else ca_line(model_ca_file)
         store_ca = ca if store_ca_file is None else ca_line(store_ca_file)
-        self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v1"
+        self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v2"
 
 [api]
 origin = {json.dumps(api_origin)}
@@ -91,10 +91,12 @@ seconds = 45
 [lifecycle]
 consumer_id = "lane:fixture"
 generation_id = "generation:stable-fixture"
-store_root = {json.dumps(str(self.state))}
-maximum_records = {maximum_records}
-maximum_checkpoint_bytes = 1048576
-store_seconds = 2
+lifetime_root = {json.dumps(str(self.state))}
+maximum_live_attempts = {maximum_live_attempts}
+maximum_control_bytes = 262144
+maximum_pending_terminal_bytes = 4194304
+start_replays = 1
+start_seconds = 90
 allowed_job_states = ["open"]
 poll_seconds = 0.2
 task_settle_seconds = 1

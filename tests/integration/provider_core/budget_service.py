@@ -84,7 +84,7 @@ class InputTimeLimitPeers(SuccessiveServicePeers):
     """The first Job's model reply stalls; later Jobs use the original fixture."""
 
     def __init__(self):
-        super().__init__(maximum_records=1)
+        super().__init__(maximum_live_attempts=1)
         self.failure_bodies = []
 
     async def __aenter__(self):

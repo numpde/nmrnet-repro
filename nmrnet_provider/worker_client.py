@@ -10,6 +10,7 @@ import json
 import re
 
 from nmrnet_inference.predict import require_request_batch
+from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.worker_protocol import (
     MAX_FRAME_BYTES,
     WorkerProtocolError,
@@ -55,12 +56,13 @@ class WorkerClient:
     observation. Their subclasses own operation-specific state and reply admission.
     """
 
-    def __init__(self, reader, writer, *, allocation, operation_seconds):
+    def __init__(self, reader, writer, *, allocation, operation_seconds, native=None):
         require_allocation(allocation)
         require_seconds(operation_seconds)
         self._reader, self._writer = reader, writer
         self._allocation = allocation
         self._seconds = operation_seconds
+        self._native = native
         self._busy = False
         self._closed = False
         self._close_waiter = None
@@ -107,6 +109,17 @@ class WorkerClient:
                     "Scientific exchange exceeded its configured deadline; its response is unconfirmed."
                 ) from cause
             raise
+        except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as cause:
+            primary = cause
+            try:
+                if self._native is not None:
+                    await self._native.observe_failure(cause)
+            except BaseException as failure:
+                primary = failure
+                raise
+            finally:
+                self._close_after_failure(primary)
+            raise
         except (Exception, asyncio.CancelledError):
             self.close()
             raise
@@ -115,8 +128,18 @@ class WorkerClient:
 
     def close(self):
         """Close the local channel only; the host still owns worker retirement."""
+        if self._native is not None:
+            self._native.mark_interruption()
         self._closed = True
         self._writer.close()
+
+    def _close_after_failure(self, primary):
+        try:
+            self.close()
+        except Exception as cleanup:
+            if type(primary) is not NativeWorkerExited:
+                raise
+            primary.retain_cleanup_failure(cleanup)
 
     async def wait_closed(self):
         """Observe the original local close; caller timeout never cancels it."""
@@ -136,8 +159,8 @@ class PredictionClient(WorkerClient):
     worker retirement when this channel closes or an exchange fails.
     """
 
-    def __init__(self, reader, writer, *, allocation, operation_seconds):
-        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds)
+    def __init__(self, reader, writer, *, allocation, operation_seconds, native=None):
+        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds, native=native)
         self._prepared = None
         self._executed = False
 

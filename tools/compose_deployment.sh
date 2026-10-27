@@ -37,7 +37,7 @@ flock --nonblock "$deployment_lock" || { refuse 'another command is active; noth
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
-helper_name= checkpoint_query= binding_inputs_directory=
+helper_name= lifetime_query= binding_inputs_directory=
 finish() {
     local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
@@ -49,8 +49,8 @@ finish() {
         fi
         cleanup_diagnostic=$inference_diagnostic
     fi
-    if [[ $inference_retirement_confirmed == true && -n ${checkpoint_query-} ]]; then
-        rm -f -- "$checkpoint_query" || cleanup=$?
+    if [[ $inference_retirement_confirmed == true && -n ${lifetime_query-} ]]; then
+        rm -f -- "$lifetime_query" || cleanup=$?
     fi
     if [[ $inference_retirement_confirmed == true && -z $helper_name && -n $binding_inputs_directory ]]; then
         rm -f -- "$binding_inputs_directory/definition.toml" "$binding_inputs_directory/paths" || cleanup=$?
@@ -166,34 +166,34 @@ select_binding_inputs() {
         helper_grants+=(--mount "type=bind,src=$input,dst=$input,readonly")
     done
 }
-initialize_checkpoint() {
+initialize_lifetime() {
     image_record provider
     helper_grants=(--mount "type=bind,src=$bundle/compose.json,dst=$bundle/compose.json,readonly"
         --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
     local owner image volume uid gid extra
-    checkpoint_query=$(umask 077; mktemp /tmp/nmrnet-checkpoint-query.XXXXXXXX)
+    lifetime_query=$(umask 077; mktemp /tmp/nmrnet-lifetime-query.XXXXXXXX)
     # Keep the helper in this shell so its retirement fact and container name
     # remain available to finish(); only its small stdout projection is captured.
-    helper "$selected_image" /opt/provider/environment/bin/python /input/provider_deployment.py checkpoint-owner --bundle "$bundle" > "$checkpoint_query"
-    IFS= read -r owner < "$checkpoint_query"
-    rm -- "$checkpoint_query"
-    checkpoint_query=
+    helper "$selected_image" /opt/provider/environment/bin/python /input/provider_deployment.py lifetime-owner --bundle "$bundle" > "$lifetime_query"
+    IFS= read -r owner < "$lifetime_query"
+    rm -- "$lifetime_query"
+    lifetime_query=
     read -r image volume uid gid extra <<< "$owner"
     [[ $image =~ ^sha256:[0-9a-f]{64}$ && $volume =~ ^[a-z0-9][a-z0-9_-]{0,62}-control-[0-9a-f]{64}$ \
         && $uid =~ ^[1-9][0-9]*$ && $gid =~ ^[1-9][0-9]*$ && -z $extra ]] \
-        || { refuse 'the installed checkpoint grant or its image/owner is malformed.'; return 2; }
+        || { refuse 'the installed provider lifetime grant or its image/owner is malformed.'; return 2; }
     IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
-    helper_name=nmrnet-checkpoint-${helper_uuid//-/}
+    helper_name=nmrnet-lifetime-${helper_uuid//-/}
     run 120 run --rm --pull never --name "$helper_name" --init --network none --read-only \
         --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges:true \
         --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=32m,mode=0700 \
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
         --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
-        --mount "type=volume,src=$volume,dst=/checkpoint,volume-nocopy" \
+        --mount "type=volume,src=$volume,dst=/lifetime,volume-nocopy" \
         --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly" \
         --entrypoint /opt/provider/environment/bin/python "$image" -I -B \
-        /input/provider_deployment.py initialize-checkpoint --uid "$uid" --gid "$gid"
+        /input/provider_deployment.py initialize-lifetime --uid "$uid" --gid "$gid"
     helper_name=
 }
 if [[ $action == install ]]; then
@@ -286,7 +286,7 @@ fi
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
 case $action in
     up)
-        initialize_checkpoint
+        initialize_lifetime
         run 180 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120
         ;;
     down) run 120 "${compose[@]}" down --timeout 60 ;;

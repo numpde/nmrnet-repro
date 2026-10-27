@@ -19,9 +19,9 @@ class SmilesClient(WorkerClient):
     host allocation for confirmed retirement before replacement or submission.
     """
 
-    def __init__(self, reader, writer, *, allocation, settings, operation_seconds):
+    def __init__(self, reader, writer, *, allocation, settings, operation_seconds, native=None):
         require_generation_deadline(settings, operation_seconds)
-        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds)
+        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds, native=native)
         self._settings = settings
         self._used = False
 
@@ -30,6 +30,7 @@ class SmilesClient(WorkerClient):
         if self._used:
             raise ValueError("Conformer generation accepts one attempt per worker allocation; retire it before replacement.")
         self._used = True
+        failure = None
         try:
             reply = await self._exchange(smiles_request(source, requested_count))
             if reply.get("kind") == "rejected":
@@ -43,5 +44,8 @@ class SmilesClient(WorkerClient):
                     )
                 raise InputRejected(reply["message"], diagnostic=reply["diagnostic"])
             return prepared_conformers(reply, source, requested_count, **asdict(self._settings))
+        except BaseException as cause:
+            failure = cause
+            raise
         finally:
-            self.close()
+            self._close_after_failure(failure)

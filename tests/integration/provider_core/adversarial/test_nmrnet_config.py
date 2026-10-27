@@ -1,6 +1,5 @@
 """Configuration refusals happen before runtime effects."""
 
-import errno
 import os
 import stat
 import tempfile
@@ -10,14 +9,15 @@ from unittest.mock import patch
 
 from tests.integration.nmrnet.config_ports import ConfigFiles, execution_source_files
 
-from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
+from nmrnet_provider.config import ConfigurationRejected, load_provider_config
 from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.startup_capture import startup_authorities
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
-    def test_checkpoint_limits_are_explicit_positive_integers_before_startup_effects(self):
-        for field, current in (("maximum_records", "1"), ("maximum_checkpoint_bytes", "1048576")):
+    def test_live_limits_are_explicit_positive_integers_before_startup_effects(self):
+        for field, current in (("maximum_live_attempts", "2"), ("maximum_control_bytes", "262144"),
+                               ("maximum_pending_terminal_bytes", "4194304")):
             for value in (None, "0", "-1", "true", '"64"'):
                 with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
                     files = ConfigFiles(directory)
@@ -28,7 +28,8 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     self.assertFalse(files.state.exists())
 
     def test_displaced_history_and_reservation_fields_are_not_accepted_as_compatibility_policy(self):
-        for declaration in (b"confirmed_history_records = 64\n", b"filesystem_reserve_bytes = 0\n"):
+        for declaration in (b"confirmed_history_records = 64\n", b"filesystem_reserve_bytes = 0\n",
+                            b"store_root = \"/legacy\"\n", b"store_seconds = 10\n"):
             with self.subTest(declaration=declaration), tempfile.TemporaryDirectory() as directory:
                 files = ConfigFiles(directory)
                 files.write(files.raw.replace(b"[lifecycle]\n", b"[lifecycle]\n" + declaration))
@@ -125,12 +126,12 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 files.write(files.raw.replace(before, after))
                 with (
                     patch("nmrnet_provider.process.NativeAttemptFactory") as native,
-                    patch("nmrnet_provider.process.CheckpointStore") as store,
+                    patch("nmrnet_provider.process.ProviderLifetime") as lifetime,
                     self.assertRaises(ConfigurationRejected) as caught,
                 ):
                     load_provider_config(files.path)
                 native.assert_not_called()
-                store.assert_not_called()
+                lifetime.assert_not_called()
                 self.assertFalse(files.state.exists())
                 self.assertNotIn("PRIVATE", str(caught.exception))
 
@@ -259,7 +260,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 files.raw.replace(b'provider_ref = "provider:example"', b'provider_ref = "provider:other"'),
                 files.raw.replace(b'profile = "dev-local"', b'profile = "run"'),
                 files.raw.replace(b"https://model.example/chat", b"http://model.example/chat"),
-                files.raw.replace(b'schema_id = "nmrnet.provider.runtime_config.v1"', b'schema_id = "PRIVATE"'),
+                files.raw.replace(b'schema_id = "nmrnet.provider.runtime_config.v2"', b'schema_id = "PRIVATE"'),
                 files.raw.replace(b"[api]", b'PRIVATE = "unrecognised"\n[api]'),
                 files.raw.replace(
                     b'consumer_id = "lane:fixture"', b'analysis_kind_ref = "PRIVATE"\nconsumer_id = "lane:fixture"'

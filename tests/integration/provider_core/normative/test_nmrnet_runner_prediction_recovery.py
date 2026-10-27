@@ -17,7 +17,7 @@ from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.native_session import NativeOperation
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.worker_client import PredictionExecutionFailed
-from provider_core.controller import StartRecovery
+from provider_core.controller import LiveStartPolicy
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.runner import RunningSupervisor
@@ -83,12 +83,12 @@ class RunnerPredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 return owned
 
             factory = NativeAttemptFactory(
-                config=SimpleNamespace(), api=object(), store=SimpleNamespace(pending_owner=None), claims=object(),
+                config=SimpleNamespace(), claims=object(),
                 execution_identity={}, selected_artifacts=ports.worker.artifacts,
                 policy=NativePolicy(allocation_seconds=3, prediction_seconds=3, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-                start_recovery=StartRecovery(1, Mock(), Mock()),
+                start_policy=LiveStartPolicy(cadence_seconds=1, on_retry=Mock(), on_recovered=Mock()),
                 on_delivery_retry=Mock(),
                 on_prediction_retry=Mock(), on_operator_notice=Mock(), on_unconfirmed_phase_progress=Mock(),
             )

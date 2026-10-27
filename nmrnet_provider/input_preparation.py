@@ -21,6 +21,7 @@ from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.input_geometry import InputRejected, UploadMemberSource, UploadSource
+from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.prepared_input import (
     DEFAULT_OUTPUT,
     GeneratedJobInput,
@@ -248,14 +249,15 @@ class InputPreparation:
             raise
         finally:
             try:
-                try:
-                    await self._retire_chooser()
-                except PreparationRetirementFailed as cleanup_failure:
-                    self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
-                except (Exception, asyncio.CancelledError) as cleanup_failure:
-                    self._raise_retirement_failure(
-                        (("interpreter_retirement", cleanup_failure),), operation_failure=operation_failure
-                    )
+                if type(operation_failure) is not NativeWorkerExited:
+                    try:
+                        await self._retire_chooser()
+                    except PreparationRetirementFailed as cleanup_failure:
+                        self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
+                    except (Exception, asyncio.CancelledError) as cleanup_failure:
+                        self._raise_retirement_failure(
+                            (("interpreter_retirement", cleanup_failure),), operation_failure=operation_failure
+                        )
             finally:
                 self._retain_chooser_interruption(operation_failure)
 
@@ -501,6 +503,10 @@ class InputPreparation:
             client, _ = await asyncio.shield(self._worker_task)
             self._require_choosing()
             yield client
+        except NativeWorkerExited:
+            # This allocation task still owns the original grant. Session.retire
+            # performs cleanup after core can admit the proved crash.
+            raise
         except BaseException as operation_failure:
             # Even cancellation must observe the retained allocation. Cleanup
             # uncertainty remains operational and keeps the original cause.
@@ -523,8 +529,13 @@ class InputPreparation:
     async def _retire_worker(self):
         if self._worker_task is None:
             return
-        async with asyncio.timeout(self._seconds):
-            client, host = await asyncio.shield(self._worker_task)
+        try:
+            async with asyncio.timeout(self._seconds):
+                client, host = await asyncio.shield(self._worker_task)
+        except NativeWorkerExited as failure:
+            await failure.native_operation.retire()
+            self._worker_task = None
+            return
         failures = await host.retire_channel(client)
         if failures:
             self._raise_retirement_failure(failures)

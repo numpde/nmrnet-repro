@@ -17,9 +17,6 @@ from tests.integration.nmrnet.process_ports import ProcessPeers, read_process_fa
 from nmrnet_provider.process import _publish
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRejected
-from provider_core.checkpoint_store import CheckpointFailed
-from provider_core.producer_checkpoint import AcknowledgedCheckpoint
-from tests.fakes.attempts import start_response
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
@@ -59,8 +56,8 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn('"errno": 5', rendered)
                         self.assertIn('"requires_host_retirement": true', rendered)
                         self.assertIsNone(process.returncode)
-                        with self.assertRaises(CheckpointFailed):
-                            await fixture.reopen_store()
+                        with self.assertRaises(BlockingIOError):
+                            fixture.assert_lifetime_released()
                         process.kill()
                         await asyncio.wait_for(process.communicate(), 5)
                     else:
@@ -68,20 +65,18 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(process.returncode, 1, stderr.decode())
                         self.assertIn('"requires_host_retirement": false', rendered)
                         self.assertNotIn("PRIVATE", stderr.decode())
-                        (retained,) = await fixture.reopen_store()
-                        self.assertIs(type(retained), AcknowledgedCheckpoint)
+                    fixture.assert_lifetime_released()
 
-    async def test_reporting_stream_failure_does_not_release_held_process_or_store(self):
+    async def test_reporting_stream_failure_does_not_release_held_process_or_lifetime(self):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
             fixture.files.write(
-                fixture.files.raw.replace(b"store_seconds = 2", b"store_seconds = 60")
-                .replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
+                fixture.files.raw.replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
                 .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
             )
             (fixture.diagnostics / "inject-report-stream-failure").write_bytes(b"test-only\n")
             process = await fixture.start(child_script="held_process.py")
-            await fixture.observed("read-entered")
+            await fixture.observed("factory-entered")
             process.send_signal(signal.SIGTERM)
             await fixture.observed("report-stream-failed")
             report = (fixture.diagnostics / "report-stream-failed").read_text()
@@ -90,13 +85,13 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('"errno": 32', report)
             self.assertNotIn("PRIVATE", report)
             self.assertIsNone(process.returncode)
-            with self.assertRaises(CheckpointFailed):
-                await fixture.reopen_store()
-            for absent in ("factory-exited", "factory-cleanup-entered", "store-close-entered", "result.json"):
+            with self.assertRaises(BlockingIOError):
+                fixture.assert_lifetime_released()
+            for absent in ("factory-exited", "factory-cleanup-entered", "lifetime-close-entered", "result.json"):
                 self.assertFalse((fixture.diagnostics / absent).exists(), absent)
             process.kill()
             await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(await fixture.reopen_store(), ())
+            fixture.assert_lifetime_released()
 
     async def test_missing_or_invalid_process_routes_stop_before_journal_network_or_native_work(self):
         for route in ("missing", "relative", "oversize"):
@@ -116,36 +111,36 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse((fixture.diagnostics / "admitted").exists())
                     self.assertNotIn(b"PRIVATE", stdout + stderr)
 
-    async def test_held_work_reports_before_host_kill_and_keeps_its_store_and_original_task(self):
+    async def test_held_setup_reports_before_host_kill_and_keeps_its_lifetime_and_original_task(self):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
             fixture.files.write(
-                fixture.files.raw.replace(b"store_seconds = 2", b"store_seconds = 60")
-                .replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
+                fixture.files.raw.replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
                 .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
             )
             process = await fixture.start(child_script="held_process.py")
-            await fixture.observed("read-entered")
+            await fixture.observed("factory-entered")
             process.send_signal(signal.SIGTERM)
             report = await read_process_failure(process)
             self.assertIn(b'"requires_host_retirement":true', report)
             self.assertIn(b"Original service work is still pending", report)
             self.assertIsNone(process.returncode)
             self.assertTrue((fixture.diagnostics / "original-owner-retained").exists())
-            with self.assertRaisesRegex(CheckpointFailed, "lock|owner|owned|open"):
-                await fixture.reopen_store()
+            self.assertTrue((fixture.diagnostics / "cutoff-before-cancellation").exists())
+            with self.assertRaises(BlockingIOError):
+                fixture.assert_lifetime_released()
             # A second normal stop is not a second task cancellation. The marker
             # is published only by the real process's signal callback.
             process.send_signal(signal.SIGTERM)
             await fixture.observed(f"signal-{signal.SIGTERM}-2")
             self.assertTrue((fixture.diagnostics / "first-cancellation").exists())
-            for absent in ("factory-exited", "factory-cleanup-entered", "store-close-entered", "result.json"):
+            for absent in ("factory-exited", "factory-cleanup-entered", "lifetime-close-entered", "result.json"):
                 self.assertFalse((fixture.diagnostics / absent).exists(), absent)
-            self.assertTrue(all(event in ("execution-attempts", "hello", "jobs") for event in fixture.events))
+            self.assertTrue(all(event in ("hello", "jobs") for event in fixture.events))
             process.kill()
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertNotIn(b"PRIVATE", stderr)
-            self.assertEqual(await fixture.reopen_store(), ())
+            fixture.assert_lifetime_released()
 
     async def test_malformed_or_private_declarations_stop_before_storage_and_network(self):
         for change in (
@@ -222,33 +217,21 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(fixture.files.state.exists())
                     self.assertEqual(fixture.peer.requests, [])
 
-    async def test_retained_terminal_start_replay_preserves_exact_request_and_runs_no_science(self):
+    async def test_legacy_start_blocks_live_startup_until_reviewed_cutover(self):
         async with ProcessPeers() as fixture:
-            pending = await fixture.seed_pending()
-            original = fixture.peer.response_factory
-            replayed = []
-
-            async def terminal_start(request, body):
-                if request.split(b"\r\n", 1)[0] == b"POST /provider/v1/execution-attempts/start HTTP/1.1":
-                    from tests.fakes.api_tls import verify_signed_request
-                    verify_signed_request(request, body, origin=fixture.peer.origin, key=fixture.config.api.identity.private_key)
-                    self.assertEqual(body, pending.body)
-                    replayed.append(body)
-                    return start_response(state="succeeded", replayed=True, analysis_kind_ref="peaks_from_mol")
-                return await original(request, body)
-
-            fixture.peer.response_factory = terminal_start
+            await fixture.seed_legacy_pending()
+            checkpoint = fixture.config.lifecycle.lifetime_root / "checkpoints.sqlite3"
+            retained = checkpoint.read_bytes()
             process = await fixture.start()
-            await asyncio.wait_for(fixture.discovered.wait(), 5)
-            process.send_signal(signal.SIGTERM)
-            _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 0, stderr.decode())
-            self.assertEqual(replayed, [pending.body])
-            self.assertEqual(await fixture.reopen_store(), ())
-            self.assertTrue((fixture.diagnostics / "recording-startup-native-barriers").exists())
-            self.assertNotIn("complete", fixture.events)
-            self.assertNotIn("fail", fixture.events)
+            stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertIn(b'"exception_type":"RuntimeError"', stderr)
+            self.assertIn(b'"requires_host_retirement":false', stderr)
+            self.assertEqual(fixture.peer.requests, [])
+            self.assertEqual(checkpoint.read_bytes(), retained)
+            self.assertFalse((fixture.diagnostics / "admitted").exists())
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
+            self.assertNotIn(b"PRIVATE", stdout + stderr)
 
     async def test_invalid_config_has_no_journal_or_requests_and_no_private_echo(self):
         async with ProcessPeers() as fixture:
@@ -270,8 +253,8 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(b"request:process-proof", stderr)
             self.assertIn(b'"status":200', stderr)
             self.assertNotIn(b"PRIVATE", stderr)
-            self.assertEqual(await fixture.reopen_store(), ())
-            self.assertEqual(fixture.events, ["execution-attempts"])
+            fixture.assert_lifetime_released()
+            self.assertEqual(fixture.events, ["hello"])
             self.assertNotIn(b"PRIVATE", stdout)
 
 

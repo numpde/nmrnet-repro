@@ -27,8 +27,8 @@ class GeometryClient(WorkerClient):
     the native operation's transport closure and supervisor retirement before replacement.
     """
 
-    def __init__(self, reader, writer, *, allocation, operation_seconds):
-        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds)
+    def __init__(self, reader, writer, *, allocation, operation_seconds, native=None):
+        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds, native=native)
         self._used = False
 
     async def read(self, source, *, source_format, source_unit, selection, alternate_location=None):
@@ -91,7 +91,11 @@ class GeometryClient(WorkerClient):
         if self._used:
             raise ValueError("Structure reader accepts one source per worker allocation; retire it before replacement.")
         self._used = True
+        failure = None
         try:
             yield
+        except BaseException as cause:
+            failure = cause
+            raise
         finally:
-            self.close()
+            self._close_after_failure(failure)

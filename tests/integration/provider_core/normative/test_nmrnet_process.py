@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import signal
-import threading
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
@@ -19,25 +18,21 @@ from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
-from tests.integration.nmrnet.startup_process import record_startup_barriers
 from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
-from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.native_session import NativeOperation
-from nmrnet_provider.process import _runtime_facts, _settle_borrowers, _write_api_notice, route_provider_config, run_provider
+from nmrnet_provider.process import _runtime_facts, _write_api_notice, route_provider_config, run_provider
 from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
-from nmrnet_provider.service import ProviderService, ServiceFailed
+from nmrnet_provider.service import ServiceFailed
 from nmrnet_provider.worker_client import PredictionExecutionFailed
 from nmrnet_provider.worker_protocol import WorkerProtocolError
-from provider_core.api import ApiFailure, ProviderAPI
+from provider_core.api import ApiFailure
 from provider_core.attempt_record import acknowledge_start
-from provider_core.checkpoint_store import CheckpointStore
-from provider_core.controller import ControllerFailed, StartRecovery
+from provider_core.controller import ControllerFailed
 from provider_core.conversation import ConversationRetirementFailed
-from provider_core.execution import ConditionRecovery, ExecutionFailed, ObservationRecovery
-from provider_core.ownership import AttemptClaims
+from provider_core.execution import ExecutionFailed
 from provider_core.runner_session import Retirement
 from provider_core.transport import HttpResponse
 
@@ -160,6 +155,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
             class NoticeService:
                 work_task = unconfirmed_hello = None
+                shutdown_ready = True
 
                 def __init__(self, **arguments):
                     if recovery_kind == "native":
@@ -168,10 +164,15 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         self.policy = arguments["open_attempt"].on_prediction_retry
                     elif recovery_kind == "delivery":
                         self.policy = arguments["open_attempt"].on_delivery_retry
+                    elif recovery_kind == "start":
+                        self.policy = arguments["open_attempt"].start_policy
+                        lifecycle = arguments["config"].lifecycle
+                        if (self.policy.cadence_seconds, self.policy.maximum_replays, self.policy.window_seconds) != (
+                            lifecycle.poll_seconds, lifecycle.start_replays, lifecycle.start_seconds
+                        ):
+                            raise AssertionError("Live START bounds differ from the admitted lifecycle policy")
                     else:
                         self.policy = getattr(arguments["open_attempt"], f"{recovery_kind}_recovery")
-                    if recovery_kind == "start" and self.policy.backoff_max_seconds != arguments["config"].service.policy.api_backoff_max_seconds:
-                        raise AssertionError("API retry pacing did not reach its configured policy")
 
                 async def run(self, _stop):
                     if recovery_kind == "native":
@@ -317,8 +318,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
             self.assertEqual(len(model.requests), 1)
 
-    def first_inventory_outage(self, fixture):
-        """Fail startup's first signed GET before Hello or workers can run."""
+    def first_discovery_outage(self, fixture):
+        """Fail the first signed Job read after Hello and before worker allocation."""
         original = fixture.peer.response_factory
         used = False
 
@@ -326,7 +327,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             nonlocal used
             fixture.peer.response_status = 200
             fixture.peer.response_headers = response_headers(request_id=b"request:process-proof")
-            if not used and b"/execution-attempts?" in request.split(b"\r\n", 1)[0]:
+            if not used and b"/jobs?" in request.split(b"\r\n", 1)[0]:
                 verify_signed_request(request, body, origin=fixture.peer.origin, key=fixture.config.api.identity.private_key)
                 used = True
                 fixture.peer.response_status = 503
@@ -338,7 +339,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_foreground_read_retry_and_recovery_reach_protected_operator_output(self):
         async with ProcessPeers() as fixture:
-            self.first_inventory_outage(fixture)
+            self.first_discovery_outage(fixture)
             process = await fixture.start()
             await asyncio.wait_for(fixture.discovered.wait(), 5)
             process.send_signal(signal.SIGTERM)
@@ -353,7 +354,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", rendered)
             self.assertGreater(notices[0]["retry_seconds"], 0)
             self.assertFalse((fixture.diagnostics / "failure.json").exists())
-            self.assertEqual(await fixture.reopen_store(), ())
+            fixture.assert_lifetime_released()
 
     async def test_full_retry_notice_pipe_does_not_prevent_recovery_or_shutdown(self):
         await self.check_full_notice_pipe(fail_after_recovery=False)
@@ -428,7 +429,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", rendered)
             self.assertFalse((fixture.diagnostics / "result.json").exists())
             self.assertEqual(hello_count, 2)
-            self.assertEqual(await fixture.reopen_store(), ())
+            fixture.assert_lifetime_released()
 
     async def test_full_retry_notice_pipe_preserves_failure_in_the_owned_error_without_file_fallback(self):
         await self.check_full_notice_pipe(fail_after_recovery=True)
@@ -436,7 +437,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
     async def check_full_notice_pipe(self, *, fail_after_recovery):
         """Keep actual stderr full through both normal and failed retirement."""
         async with ProcessPeers() as fixture:
-            self.first_inventory_outage(fixture)
+            self.first_discovery_outage(fixture)
             stop = asyncio.Event()
             reader, writer = os.pipe()
             try:
@@ -448,7 +449,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 with (
                     os.fdopen(writer, "w", closefd=False) as output,
                     redirect_stderr(output),
-                    patch.object(NativeAttemptFactory, "prove_previous_retired", record_startup_barriers),
                 ):
                     task = asyncio.create_task(
                         run_provider(
@@ -485,7 +485,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 os.close(reader)
             self.assertFalse((fixture.diagnostics / "result.json").exists())
             self.assertFalse((fixture.diagnostics / "failure.json").exists())
-            self.assertEqual(await fixture.reopen_store(), ())
+            fixture.assert_lifetime_released()
 
     def test_oversized_notice_leaves_no_partial_json_before_the_next_record(self):
         reader, writer = os.pipe()
@@ -555,7 +555,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(b"PRIVATE", stderr)
             self.assertFalse((fixture.diagnostics / "failure.json").exists())
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
-            self.assertEqual(await fixture.reopen_store(), ())
+            fixture.assert_lifetime_released()
             self.assertEqual(
                 sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests),
                 3 if after_outage else 2,
@@ -591,8 +591,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("PRIVATE", rendered)
             self.assertFalse((fixture.diagnostics / "admitted").exists())
             self.assertFalse(fixture.discovered.is_set())
-            self.assertEqual(len(fixture.peer.requests), 2)
-            self.assertEqual(await fixture.reopen_store(), ())
+            self.assertEqual(len(fixture.peer.requests), 1)
+            fixture.assert_lifetime_released()
 
     async def test_required_process_routes_reach_every_http_role_without_changing_owner_settings(self):
         async with ProcessPeers() as fixture:
@@ -629,94 +629,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(new.spec, old.spec)
                 self.assertEqual((new.request_bytes, new.response_bytes), (old.request_bytes, old.response_bytes))
 
-    async def test_factory_owned_storage_can_settle_before_service_releases_its_dependencies(self):
-        async with ProcessPeers() as fixture:
-            fixture.files.state.mkdir(mode=0o700)
-            config = fixture.config
-            store = CheckpointStore(
-                fixture.files.state, scope=config.lifecycle.scope, limits=config.lifecycle.store_limits, operation_seconds=2
-            )
-            await store.open()
-            transport = config.api.http.new_transport()
-            api = ProviderAPI(config.api.identity, transport, expected_topology=config.api.expected_topology)
-            factory = NativeAttemptFactory(
-                config=config,
-                api=api,
-                store=store,
-                claims=AttemptClaims(),
-                execution_identity={},
-                selected_artifacts={},
-                policy=config.service.native,
-                observation_recovery=ObservationRecovery(
-                    config.lifecycle.observation_gap_seconds,
-                    config.service.policy.api_backoff_max_seconds,
-                    lambda _attempt, _failure, _seconds: self.fail("No observation retry expected before admission"),
-                    lambda _attempt, _failure: self.fail("No observation recovery expected before admission"),
-                ),
-                condition_recovery=ConditionRecovery(
-                    config.lifecycle.observation_gap_seconds,
-                    config.service.policy.api_backoff_max_seconds,
-                    lambda _attempt, _phase, _code, _failure, _seconds: self.fail("No condition retry before admission"),
-                    lambda _attempt, _phase, _code, _failure: self.fail("No condition recovery before admission"),
-                ),
-                start_recovery=StartRecovery(
-                    config.service.policy.api_backoff_max_seconds,
-                    lambda _pending, _failure, _seconds: self.fail("No START retry expected before admission"),
-                    lambda _attempt, _failure: self.fail("No START recovery expected before admission"),
-                ),
-                on_unconfirmed_phase_progress=lambda _attempt, _phase, _failure: self.fail(
-                    "No phase-progress outage expected before admission"
-                ),
-                on_prediction_retry=lambda _attempt, _failure, _retired: self.fail("No prediction retry expected before admission"),
-                on_operator_notice=Mock(),
-                on_delivery_retry=lambda _attempt, _failure, _seconds: self.fail("No delivery retry expected before admission"),
-            )
-            service = ProviderService(
-                config=config,
-                store=store,
-                api=api,
-                open_attempt=factory,
-                claims=factory.claims,
-                retire_native=factory.prove_previous_retired,
-                current_announcement=lambda: config.service.announcement,
-                policy=config.service.policy,
-                on_started=lambda: None,
-                on_api_retry=lambda _kind, _failure, _seconds: self.fail("Unexpected API retry during this storage witness"),
-                on_api_recovered=lambda _kind, _failure: self.fail("Unexpected API recovery during this storage witness"),
-            )
-            entered, release = asyncio.Event(), threading.Event()
-            loop = asyncio.get_running_loop()
-            read = store._database.inventory
-
-            def blocked_read():
-                loop.call_soon_threadsafe(entered.set)
-                release.wait()
-                return read()
-
-            try:
-                with patch.object(store._database, "inventory", blocked_read):
-                    task = asyncio.create_task(store.inventory(owner=factory))
-                    await asyncio.wait_for(entered.wait(), 2)
-                    task.cancel()
-                    with self.assertRaises(asyncio.CancelledError):
-                        await task
-                    with self.assertRaises(ServiceFailed):
-                        await service.run(asyncio.Event())
-                    self.assertIs(store.pending_owner, factory)
-                    release.set()
-                    failures = []
-                    self.assertTrue(await _settle_borrowers(service, factory, failures))
-                    self.assertEqual([operation for operation, _ in failures], ["service settlement"])
-                    self.assertIsNone(store.pending_operation)
-                    self.assertEqual(fixture.events, [])
-            finally:
-                release.set()
-                if store.pending_operation is not None:
-                    await store.settle(owner=factory)
-                await service.settle()
-                await transport.retire()
-                await store.close()
-
     async def test_declared_execution_and_selected_members_have_an_explicit_public_projection(self):
         async with ProcessPeers() as fixture:
             models = json.loads(fixture.models.read_bytes())
@@ -743,15 +655,15 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fixture.peer.requests, [])
             self.assertFalse(fixture.files.state.exists())
 
-    async def test_signed_startup_discovery_and_sigterm_release_the_store(self):
+    async def test_signed_startup_discovery_and_sigterm_release_the_lifetime(self):
         async with ProcessPeers() as fixture:
             process = await fixture.start()
             await asyncio.wait_for(fixture.discovered.wait(), 5)
             process.send_signal(signal.SIGTERM)
             stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
-            self.assertEqual(fixture.events[:4], ["execution-attempts", "hello", "execution-attempts", "jobs"])
-            self.assertEqual(await fixture.reopen_store(), ())
+            self.assertEqual(fixture.events[:2], ["hello", "jobs"])
+            fixture.assert_lifetime_released()
             self.assertFalse((fixture.diagnostics / "result.json").exists())
             self.assertNotIn(b"PRIVATE", stdout + stderr)
 

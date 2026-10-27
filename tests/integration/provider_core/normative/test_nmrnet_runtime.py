@@ -18,8 +18,7 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
 from provider_core.attempt_record import AcknowledgedAttempt
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, EnteredCheckpoint, EvidenceDigest
-from provider_core.checkpoint_store import CheckpointStore
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.job_input import verify_job_input
 from provider_core.uploads import UploadInputRejected
 
@@ -30,7 +29,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
-            fixture.stack.push_async_callback(controller.settle)
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
             with patch("tests.integration.nmrnet.runtime_ports.start_response", return_value=start_response(
                 analysis_kind_ref=pending.analysis_kind_ref, state="failed", replayed=True,
             )):
@@ -63,7 +62,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             pending = await fixture.discover()
             arguments = fixture.arguments(pending) | {"allocate_prediction": allocate, "on_prediction_retry": notices}
             controller = await assemble_attempt(**arguments)
-            fixture.stack.push_async_callback(controller.settle)
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
             outcome = await controller.run(pending)
             self.assertIs(type(outcome), DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
@@ -111,7 +110,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             fixture.model_peer.response_factory = model_reply
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
-            fixture.stack.push_async_callback(controller.settle)
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
             prepare = ports.worker.prepare
             durable = []
             execute_session = controller.session.execute
@@ -123,11 +122,8 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 return await execute_session(handle, **kwargs)
 
             async def require_frozen_selection(requests):
-                (entered,) = await fixture.store.inventory()
-                self.assertIs(type(entered), EnteredCheckpoint)
-                self.assertEqual(entered.prepared, EvidenceDigest.from_evidence(selected_identity))
+                self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
                 identity = json.loads(selected_identity.content)
-                self.assertEqual(entered.acknowledgement.start.input, pending.input)
                 self.assertEqual(identity["geometries"][0]["source"]["input_fingerprint"], pending.input.input_fingerprint)
                 durable.append(identity)
                 return await prepare(requests)
@@ -139,7 +135,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 outcome = await controller.run(pending)
             self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
-            self.assertEqual(await fixture.store.inventory(), ())
+            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             self.assertEqual(len(fixture.model_peer.requests), 2)
             self.assertEqual(fixture.result["interpretation"], durable[0]["interpretation"])
             self.assertEqual(fixture.result["output"]["verbosity"], "medium")
@@ -166,7 +162,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
             self.assertTrue(ports.host.confirmed)
 
-    async def test_selected_precision_and_exact_ram_evidence_are_independent_of_reopened_control(self):
+    async def test_selected_precision_and_exact_ram_evidence_need_no_local_checkpoint_storage(self):
         ports = SessionPorts()
         execute = ports.worker.execute
 
@@ -180,7 +176,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
-            fixture.stack.push_async_callback(controller.settle)
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
             execute_session = controller.session.execute
             captured = None
 
@@ -204,14 +200,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(all(row["shift_ppm"] == 32.309967041015625 for row in geometry["prediction"]["predictions"]))
             body, raw_evidence = fixture.api_peer.request_bodies[-1], captured.evidence.content
             self.assertEqual(hashlib.sha256(body).hexdigest(), outcome.selection.body_sha256.removeprefix("sha256:"))
-            await fixture.store.close()
-            settings = fixture.config.lifecycle
-            reopened = CheckpointStore(settings.store_root, scope=settings.scope,
-                limits=settings.store_limits, operation_seconds=settings.store_seconds)
-            fixture.stack.push_async_callback(reopened.close)
-            await reopened.open()
-            self.assertEqual(await reopened.inventory(), ())
-            self.assertNotIn(raw_evidence, (settings.store_root / "checkpoints.sqlite3").read_bytes())
+            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
             alternative = SessionPorts()
 
@@ -297,7 +286,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             fixture.model_peer.response_factory = model_reply
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
-            fixture.stack.push_async_callback(controller.settle)
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
             execute_session = controller.session.execute
             selected = None
 
@@ -329,7 +318,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             fixture.allocate_prediction.assert_not_awaited()
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(len(fixture.api_peer.requests), 1)
-            self.assertEqual(await fixture.store.inventory(), ())
+            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
     async def test_three_routes_consume_discovered_identity_and_publish_a_complete_result(self):
         for route in ("smiles", "pasted", "upload"):
@@ -344,14 +333,14 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     pending = await fixture.discover()
                     fixture.verify_discovery_signature()
                     controller = await assemble_attempt(**fixture.arguments(pending))
-                    fixture.stack.push_async_callback(controller.settle)
+                    fixture.stack.push_async_callback(fixture.settle_controller, controller)
                     self.assertEqual(ports.worker.events, [])
                     ports.allocate_generator.assert_not_awaited()
                     ports.allocate_reader.assert_not_awaited()
                     outcome = await controller.run(pending)
                     self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
                     await fixture.wait_published()
-                    self.assertEqual(await fixture.store.inventory(), ())
+                    self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
                     self.assertTrue(ports.host.confirmed)
                     self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
                     self.assertEqual(fixture.result["input_fingerprint"], pending.input.input_fingerprint)

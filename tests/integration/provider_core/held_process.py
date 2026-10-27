@@ -1,15 +1,15 @@
-"""Hold real factory-owned storage I/O inside the foreground subprocess.
+"""Hold the original factory setup task inside the foreground subprocess.
 
-This child-only fault injection acquires no native worker. It detects event-loop
-teardown cancelling the original work twice, or dependency cleanup while that
-work still borrows the store. Exact subprocess kill belongs to the parent test.
+This child-only port allocates no native worker. It checks that admission stop
+sets this invocation's cutoff before cancellation, that a second signal does not
+cancel the original task again, and that its provider lifetime remains locked.
+Exact subprocess kill belongs to the parent test.
 """
 
 import asyncio
 import errno
 import json
 import sys
-import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,8 +17,10 @@ from nmrnet_provider import process as process_module
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
-from provider_core.checkpoint_store import CheckpointStore
-from tests.integration.nmrnet.startup_process import record_startup_barriers
+from provider_core.lifetime import ProviderLifetime
+
+
+setup_task = None
 
 
 def mark(name):
@@ -40,36 +42,38 @@ def fail_reporting_stream(*args, **options):
             raise
 
 
-async def held_factory(factory, _pending):
+async def held_factory(factory, _pending, *, stopping):
+    global setup_task
+    factory._begin_setup()
+    setup_task = original = asyncio.current_task()
     mark("factory-entered")
-    original = asyncio.current_task()
-    release = threading.Event()
-
-    def held_read():
-        mark("read-entered")
-        release.wait()
-        raise AssertionError("The parent must kill this exact child before the injected read can finish")
-
-    factory.store._database.inventory = held_read
     try:
-        await factory.store.inventory(owner=factory)
+        await asyncio.Event().wait()
     except asyncio.CancelledError:
-        if asyncio.current_task() is original and factory.store.pending_owner is factory:
+        if not stopping.is_set():
+            raise AssertionError("Factory setup was cancelled before its effect cutoff")
+        mark("cutoff-before-cancellation")
+        if asyncio.current_task() is original and factory._operation is original:
             mark("original-owner-retained")
         mark("first-cancellation")
         await asyncio.Event().wait()
     finally:
+        factory._operation = None
         mark("factory-exited")
 
 
-async def forbidden_factory_cleanup(_factory):
-    mark("factory-cleanup-entered")
-    raise AssertionError("Factory cleanup must not run while its original service work is live")
+async def observe_factory_cleanup(factory):
+    if setup_task is not None and not setup_task.done():
+        mark("factory-cleanup-entered")
+        raise AssertionError("Factory cleanup entered before original setup finished")
+    await settle_factory(factory)
 
 
-async def forbidden_store_close(_store):
-    mark("store-close-entered")
-    raise AssertionError("Storage must not close while original work still borrows it")
+def observe_lifetime_close(lifetime):
+    if setup_task is not None and not setup_task.done():
+        mark("lifetime-close-entered")
+        raise AssertionError("Provider lifetime closed before original setup finished")
+    close_lifetime(lifetime)
 
 
 async def observe_signals(*args, **options):
@@ -92,14 +96,15 @@ async def observe_signals(*args, **options):
 if __name__ == "__main__":
     run_signalled = process_module._run_signalled
     failure_report = process_module._failure_report
+    settle_factory = NativeAttemptFactory.settle
+    close_lifetime = ProviderLifetime.close
     diagnostics = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
     if (diagnostics / "inject-report-stream-failure").exists():
         process_module._failure_report = fail_reporting_stream
     with (
         patch.object(NativeAttemptFactory, "__call__", held_factory),
-        patch.object(NativeAttemptFactory, "prove_previous_retired", record_startup_barriers),
-        patch.object(NativeAttemptFactory, "settle", forbidden_factory_cleanup),
-        patch.object(CheckpointStore, "close", forbidden_store_close),
+        patch.object(NativeAttemptFactory, "settle", observe_factory_cleanup),
+        patch.object(ProviderLifetime, "close", observe_lifetime_close),
         patch.object(process_module, "_run_signalled", observe_signals),
     ):
         raise SystemExit(main())

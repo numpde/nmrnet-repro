@@ -1,60 +1,124 @@
-"""Native setup refusal keeps allocations and original store I/O with the factory."""
+"""Retain original native setup and cleanup until their live owners settle."""
 
 import asyncio
 import unittest
 from functools import partial
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, NativeSetupFailed
 from tests.integration.nmrnet.retirement_ports import retire_worker_channel
-from provider_core.controller import StartRecovery
+from provider_core.controller import LiveStartPolicy
+from provider_core.ownership import AttemptClaims
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_restart_barrier_retires_all_roles_without_scientific_clients(self):
+    async def test_failed_controller_assembly_needs_no_native_cleanup(self):
         factory = self.factory(seconds=1)
-        allocations = [self.allocation() for _role in range(3)]
-        for allocation in allocations:
-            allocation.connect_for_retirement = AsyncMock()
+        primary = RuntimeError("PRIVATE_ASSEMBLY_CAUSE")
         with (
-            patch("nmrnet_provider.native_factory.NativeOperation", side_effect=allocations) as created,
-            patch("nmrnet_provider.native_factory.PredictionClient", side_effect=AssertionError("Scientific client created")),
-            patch("nmrnet_provider.native_factory.GeometryClient", side_effect=AssertionError("Scientific client created")),
-            patch("nmrnet_provider.native_factory.SmilesClient", side_effect=AssertionError("Scientific client created")),
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
+            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(side_effect=primary)),
         ):
-            await factory.prove_previous_retired()
-        self.assertEqual([call.kwargs["role"] for call in created.call_args_list], ["prediction", "reader", "smiles"])
-        for allocation in allocations:
-            allocation.connect_for_retirement.assert_awaited_once()
-            allocation.start.assert_not_awaited()
-            allocation.retire.assert_awaited_once()
-            allocation.settle.assert_awaited_once()
-        self.assertEqual(factory.allocations, [])
-        self.assertEqual(factory.clients, {})
+            with self.assertRaises(NativeSetupFailed) as failure:
+                await factory(record(), stopping=asyncio.Event())
+            self.assertIs(failure.exception.cause, primary)
+            self.assertEqual(failure.exception.cleanup_failures, ())
+            self.assertEqual(failure.exception.job_ref, "job:example")
+            self.assertNotIn("PRIVATE_", str(failure.exception))
+            self.assertIsNone(factory.last_failure)
+            self.assertTrue(factory.shutdown_ready)
+            await factory.settle()
+            allocation.assert_not_called()
 
-    async def test_failed_restart_barrier_retains_only_unresolved_cleanup(self):
+    async def test_active_assembly_excludes_another_allocation_and_settlement(self):
+        factory = self.factory(seconds=1)
+        entered, release = asyncio.Event(), asyncio.Event()
+        controller = object()
+
+        async def assembled(**_arguments):
+            entered.set()
+            await release.wait()
+            return controller
+
+        with (
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
+            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(side_effect=assembled)),
+        ):
+            task = asyncio.create_task(factory(record(), stopping=asyncio.Event()))
+            try:
+                await asyncio.wait_for(entered.wait(), 1)
+                self.assertFalse(factory.shutdown_ready)
+                with self.assertRaisesRegex(RuntimeError, "await active setup"):
+                    await factory.allocate_prediction(job_ref="job:example")
+                with self.assertRaisesRegex(RuntimeError, "original invocation is active"):
+                    await factory.settle()
+                allocation.assert_not_called()
+            finally:
+                release.set()
+                self.assertIs(await task, controller)
+        self.assertTrue(factory.shutdown_ready)
+
+    async def test_unsettled_allocation_io_keeps_the_original_grant_until_settlement(self):
         factory = self.factory(seconds=1)
         allocation = self.allocation()
-        primary, cleanup = OSError("barrier refused"), TimeoutError("retirement remains pending")
-        allocation.connect_for_retirement = AsyncMock(side_effect=primary)
-        allocation.retire.side_effect = cleanup
-        with patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation) as created:
-            with self.assertRaises(NativeSetupFailed) as refused:
-                await factory.prove_previous_retired()
-        self.assertIs(refused.exception.cause, primary)
-        created.assert_called_once()
-        self.assertEqual(factory.allocations, [allocation])
-        self.assertEqual(factory.clients, {})
-        allocation.retire.side_effect = None
-        await factory.settle()
-        allocation.connect_for_retirement.assert_awaited_once()
-        self.assertEqual(factory.allocations, [])
+        primary = RuntimeError("PRIVATE_CLIENT_SETUP")
+        pending_io = TimeoutError("PRIVATE_ORIGINAL_ALLOCATION_IO")
+        allocation.settle.side_effect = pending_io
+        with (
+            patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation) as created,
+            patch("nmrnet_provider.native_factory.PredictionClient", side_effect=primary),
+            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock()) as assembled,
+        ):
+            with self.assertRaises(NativeSetupFailed) as failure:
+                await factory.allocate_prediction(job_ref="job:example")
+            self.assertIs(failure.exception.cause, primary)
+            self.assertEqual(failure.exception.cleanup_failures, (("allocation I/O", pending_io),))
+            self.assertEqual(factory.allocations, [allocation])
+            self.assertEqual(factory.clients, {})
+            self.assertFalse(factory.shutdown_ready)
+            with self.assertRaisesRegex(RuntimeError, "original obligations"):
+                await factory(record(), stopping=asyncio.Event())
+            assembled.assert_not_awaited()
+            allocation.settle.side_effect = None
+            await factory.settle()
+            created.assert_called_once()
+        allocation.start.assert_awaited_once()
+        self.assertEqual(allocation.retire.await_count, 2)
+        self.assertEqual(allocation.settle.await_count, 2)
         self.assertIsNone(factory.last_failure)
+        self.assertTrue(factory.shutdown_ready)
+
+    async def test_failed_setup_retains_both_native_retirement_and_allocation_io_failures(self):
+        factory = self.factory(seconds=1)
+        allocation = self.allocation()
+        primary = OSError("PRIVATE_SETUP_IO")
+        retirement = TimeoutError("PRIVATE_NATIVE_RETIREMENT")
+        pending_io = OSError("PRIVATE_ALLOCATION_SETTLEMENT")
+        allocation.start.side_effect = primary
+        allocation.retire.side_effect = retirement
+        allocation.settle.side_effect = pending_io
+        with (
+            patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
+            patch("nmrnet_provider.native_factory.PredictionClient") as client,
+            self.assertRaises(NativeSetupFailed) as failure,
+        ):
+            await factory.allocate_prediction(job_ref="job:example")
+        self.assertIs(failure.exception.cause, primary)
+        self.assertEqual(failure.exception.cleanup_failures, (
+            ("native retirement", retirement), ("allocation I/O", pending_io),
+        ))
+        self.assertEqual(failure.exception.job_ref, "job:example")
+        self.assertEqual(factory.allocations, [allocation])
+        self.assertFalse(factory.shutdown_ready)
+        self.assertNotIn("PRIVATE_", str(failure.exception))
+        client.assert_not_called()
+        allocation.retire.side_effect = allocation.settle.side_effect = None
+        await factory.settle()
+        self.assertTrue(factory.shutdown_ready)
 
     async def test_controller_assembly_does_not_allocate_prediction_before_start(self):
         factory = self.factory(seconds=1)
@@ -63,7 +127,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch.object(factory, "_open_role", new=AsyncMock(side_effect=AssertionError("Prediction allocated before START"))) as opened,
             patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(return_value=controller)) as assembly,
         ):
-            self.assertIs(await factory(record()), controller)
+            self.assertIs(await factory(record(), stopping=asyncio.Event()), controller)
         opened.assert_not_called()
         self.assertEqual(factory.allocations, [])
         self.assertEqual(factory.clients, {})
@@ -80,15 +144,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         ):
             NativeAttemptFactory(
                 config=object(),
-                api=object(),
-                store=object(),
-                claims=object(),
+                claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=None,
-                start_recovery=StartRecovery(1, Mock(), Mock()),
+                start_policy=LiveStartPolicy(1, Mock(), Mock()),
                 on_delivery_retry=Mock(),
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
@@ -103,15 +165,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         ):
             NativeAttemptFactory(
                 config=object(),
-                api=object(),
-                store=object(),
-                claims=object(),
+                claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-                start_recovery=StartRecovery(1, Mock(), Mock()),
+                start_policy=LiveStartPolicy(1, Mock(), Mock()),
                 on_delivery_retry=Mock(),
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
@@ -119,28 +179,38 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             )
         allocation.assert_not_called()
 
-    async def test_missing_start_recovery_is_refused_before_native_allocation(self):
+    async def test_missing_start_policy_is_refused_before_native_allocation(self):
         with (
             patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
-            self.assertRaisesRegex(ValueError, "START recovery"),
+            self.assertRaisesRegex(ValueError, "live START policy"),
         ):
             NativeAttemptFactory(
                 config=object(),
-                api=object(),
-                store=object(),
-                claims=object(),
+                claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-                start_recovery=None,
+                start_policy=None,
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 on_delivery_retry=Mock(),
             )
         allocation.assert_not_called()
+
+    async def test_missing_stop_event_is_refused_before_native_allocation(self):
+        factory = self.factory(seconds=1)
+        with (
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
+            patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock()) as assembled,
+            self.assertRaises(TypeError),
+        ):
+            await factory(record())
+        allocation.assert_not_called()
+        assembled.assert_not_awaited()
+        self.assertTrue(factory.shutdown_ready)
 
     async def test_missing_delivery_retry_observer_is_refused_before_native_allocation(self):
         with (
@@ -149,15 +219,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         ):
             NativeAttemptFactory(
                 config=object(),
-                api=object(),
-                store=object(),
-                claims=object(),
+                claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-                start_recovery=StartRecovery(1, Mock(), Mock()),
+                start_policy=LiveStartPolicy(1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
@@ -204,15 +272,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
     def factory(self, *, seconds):
         return NativeAttemptFactory(
             config=object(),
-            api=object(),
-            store=SimpleNamespace(pending_operation=None, pending_owner=None, settle=AsyncMock()),
-            claims=object(),
+            claims=AttemptClaims.live(),
             execution_identity={},
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=seconds, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-            start_recovery=StartRecovery(1, Mock(), Mock()),
+            start_policy=LiveStartPolicy(1, Mock(), Mock()),
             on_prediction_retry=Mock(),
             on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
@@ -248,147 +314,3 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await factory.settle()
         self.assertEqual(factory.last_failure.job_ref, "job:example")
-
-    async def test_owned_store_read_without_native_entries_blocks_setup_until_explicit_settlement(self):
-        factory = self.factory(seconds=1)
-        store = SimpleNamespace(pending_operation="original read", pending_owner=factory, settle=AsyncMock())
-        factory.store = store
-
-        async def settled(*, owner):
-            self.assertIs(owner, factory)
-            store.pending_operation = store.pending_owner = None
-
-        store.settle.side_effect = settled
-        with patch.object(factory, "_open_role") as allocate, self.assertRaisesRegex(RuntimeError, "settle"):
-            await factory(record())
-        allocate.assert_not_called()
-        await factory.settle()
-        store.settle.assert_awaited_once_with(owner=factory)
-        self.assertEqual(factory.allocations, [])
-
-    async def test_failed_assembly_settles_owned_setup_read_without_allocating_prediction(self):
-        events = []
-        store = SimpleNamespace(pending_operation=None, pending_owner=None, settle=AsyncMock())
-        allocation = Mock(metadata=b'{"runtime":{}}', retire=AsyncMock(), settle=AsyncMock())
-        allocation.retirement = allocation
-        allocation.retire_channel = partial(retire_worker_channel, native_retirement=allocation)
-        worker = Mock(close=Mock(), wait_closed=AsyncMock())
-        primary = RuntimeError("PRIVATE_ASSEMBLY_CAUSE")
-        factory = NativeAttemptFactory(
-            config=object(),
-            api=object(),
-            store=store,
-            claims=object(),
-            execution_identity={},
-            selected_artifacts={},
-            policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
-            observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
-            condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-            start_recovery=StartRecovery(1, Mock(), Mock()),
-            on_prediction_retry=Mock(),
-            on_operator_notice=Mock(),
-            on_unconfirmed_phase_progress=Mock(),
-            on_delivery_retry=Mock(),
-        )
-
-        async def opened(_role, *, job_ref):
-            self.assertEqual(job_ref, "job:example")
-            factory.allocations.append(allocation)
-            factory.clients[allocation] = worker
-            return worker, allocation
-
-        async def settle_store(*, owner):
-            self.assertIs(owner, factory)
-            events.append("store")
-            store.pending_operation = store.pending_owner = None
-
-        async def failed_assembly(**arguments):
-            self.assertIs(arguments["setup_owner"], factory)
-            store.pending_operation, store.pending_owner = object(), factory
-            raise primary
-
-        store.settle.side_effect = settle_store
-        with (
-            patch.object(factory, "_open_role", side_effect=opened) as acquire,
-            patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=failed_assembly),
-            self.assertRaises(RuntimeError) as failure,
-        ):
-            await factory(record())
-        self.assertIs(failure.exception.cause, primary)
-        self.assertNotIn("PRIVATE_ASSEMBLY_CAUSE", str(failure.exception))
-        self.assertEqual(events, ["store"])
-        acquire.assert_not_called()
-        allocation.retire.assert_not_awaited()
-        allocation.settle.assert_not_awaited()
-        worker.close.assert_not_called()
-        worker.wait_closed.assert_not_called()
-
-    async def test_refused_assembly_and_later_settlement_never_steal_an_unrelated_unowned_read(self):
-        factory = self.factory(seconds=1)
-        original = object()
-        factory.store.pending_operation = original
-        allocation = self.allocation()
-        allocation.metadata = b'{"runtime":{}}'
-        worker = Mock(close=Mock(), wait_closed=AsyncMock())
-
-        async def opened(_role, *, job_ref):
-            self.assertEqual(job_ref, "job:example")
-            factory.allocations.append(allocation)
-            factory.clients[allocation] = worker
-            return worker, allocation
-
-        with (
-            patch.object(factory, "_open_role", side_effect=opened),
-            patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=RuntimeError("store already busy")),
-            self.assertRaises(RuntimeError),
-        ):
-            await factory(record())
-        await factory.settle()
-        factory.store.settle.assert_not_awaited()
-        self.assertIs(factory.store.pending_operation, original)
-        self.assertIsNone(factory.store.pending_owner)
-        self.assertEqual(factory.allocations, [])
-
-    async def test_held_store_read_does_not_acquire_prediction(self):
-        factory = self.factory(seconds=1)
-        allocation = self.allocation()
-        allocation.metadata = b'{"runtime":{}}'
-        worker = Mock(close=Mock(), wait_closed=AsyncMock())
-        original_read = object()
-        store_failure = OSError("PRIVATE_STORE_SETTLEMENT")
-
-        async def opened(_role, *, job_ref):
-            self.assertEqual(job_ref, "job:example")
-            factory.allocations.append(allocation)
-            factory.clients[allocation] = worker
-            return worker, allocation
-
-        async def interrupted_assembly(**arguments):
-            self.assertIs(arguments["setup_owner"], factory)
-            factory.store.pending_operation, factory.store.pending_owner = original_read, factory
-            raise RuntimeError("PRIVATE_ASSEMBLY")
-
-        factory.store.settle.side_effect = store_failure
-        with (
-            patch.object(factory, "_open_role", side_effect=opened),
-            patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=interrupted_assembly),
-            self.assertRaises(RuntimeError) as failure,
-        ):
-            await factory(record())
-        self.assertEqual(failure.exception.cleanup_failures, (("setup storage read", store_failure),))
-        self.assertIs(factory.store.pending_operation, original_read)
-        self.assertEqual(factory.allocations, [])
-        self.assertEqual(factory.clients, {})
-        allocation.retire.assert_not_awaited()
-        with self.assertRaisesRegex(RuntimeError, "settle"):
-            await factory(record())
-
-        async def settled(*, owner):
-            self.assertIs(owner, factory)
-            self.assertIs(factory.store.pending_operation, original_read)
-            factory.store.pending_operation = factory.store.pending_owner = None
-
-        factory.store.settle.side_effect = settled
-        await factory.settle()
-        self.assertIsNone(factory.last_failure)
-        allocation.retire.assert_not_awaited()

@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 import httpcore
 from tests.integration.nmrnet.smiles_ports import SessionPorts
-from tests.integration.nmrnet.startup_process import record_startup_barriers
 
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
@@ -32,51 +31,54 @@ async def forbidden_science(*_args):
     raise AssertionError("Interrupted interpretation must not prepare or execute prediction")
 
 
-async def recording_factory(factory, pending):
-    ports = SessionPorts()
-    ports.worker.prepare = forbidden_science
-    ports.worker.execute = forbidden_science
-    root = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
-    controller = await assemble_attempt(
-        config=factory.config,
-        pending=pending,
-        api=factory.api,
-        store=factory.store,
-        setup_owner=factory,
-        claims=factory.claims,
-        execution_identity=factory.execution_identity,
-        selected_artifacts=factory.selected_artifacts,
-        allocate_prediction=ports.allocate_prediction,
-        on_prediction_retry=None,
-        on_interpreter_failure=lambda index, failure: factory.on_operator_notice(
-            failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
-        ),
-        allocate_reader=ports.allocate_reader,
-        allocate_generator=ports.allocate_generator,
-        observation_recovery=factory.observation_recovery,
-        condition_recovery=factory.condition_recovery,
-        start_recovery=factory.start_recovery,
-        on_unconfirmed_phase_progress=factory.on_unconfirmed_phase_progress,
-        on_delivery_retry=factory.on_delivery_retry,
-    )
-    if (root / "inject-input-cleanup-failure").exists():
-        retire = controller.session._input_preparation.retire
+async def recording_factory(factory, pending, *, stopping):
+    factory._begin_setup()
+    try:
+        ports = SessionPorts()
+        ports.worker.prepare = forbidden_science
+        ports.worker.execute = forbidden_science
+        root = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
+        controller = await assemble_attempt(
+            config=factory.config,
+            pending=pending,
+            claims=factory.claims,
+            stopping=stopping,
+            start_policy=factory.start_policy,
+            execution_identity=factory.execution_identity,
+            selected_artifacts=factory.selected_artifacts,
+            allocate_prediction=ports.allocate_prediction,
+            on_prediction_retry=factory.on_prediction_retry,
+            on_interpreter_failure=lambda index, failure: factory.on_operator_notice(
+                failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
+            ),
+            allocate_reader=ports.allocate_reader,
+            allocate_generator=ports.allocate_generator,
+            observation_recovery=factory.observation_recovery,
+            condition_recovery=factory.condition_recovery,
+            on_unconfirmed_phase_progress=factory.on_unconfirmed_phase_progress,
+            on_delivery_retry=factory.on_delivery_retry,
+        )
+        if (root / "inject-input-cleanup-failure").exists():
+            retire = controller.session._input_preparation.retire
 
-        async def failed_input_retirement():
-            await retire()
-            raise OSError(errno.EIO, "PRIVATE_INPUT_CLEANUP")
+            async def failed_input_retirement():
+                await retire()
+                raise OSError(errno.EIO, "PRIVATE_INPUT_CLEANUP")
 
-        controller.session._input_preparation.retire = failed_input_retirement
-    if (root / "inject-condition-before-input").exists():
-        prepare = controller.session.prepare
+            controller.session._input_preparation.retire = failed_input_retirement
+        if (root / "inject-condition-before-input").exists():
+            prepare = controller.session.prepare
 
-        async def after_condition_receipt(*args, report_condition, **kwargs):
-            await report_condition("waiting_capacity")
-            mark("condition-ack-received")
-            return await prepare(*args, report_condition=report_condition, **kwargs)
+            async def after_condition_receipt(*args, report_condition, **kwargs):
+                await report_condition("waiting_capacity")
+                mark("condition-ack-received")
+                return await prepare(*args, report_condition=report_condition, **kwargs)
 
-        controller.session.prepare = after_condition_receipt
-    return controller
+            controller.session.prepare = after_condition_receipt
+        return controller
+
+    finally:
+        factory._operation = None
 
 
 async def observed_head(pool, request):
@@ -94,7 +96,6 @@ if __name__ == "__main__":
     original_head = httpcore.AsyncHTTPProxy.handle_async_request
     with (
         patch.object(NativeAttemptFactory, "__call__", recording_factory),
-        patch.object(NativeAttemptFactory, "prove_previous_retired", record_startup_barriers),
         patch.object(httpcore.AsyncHTTPProxy, "handle_async_request", observed_head),
     ):
         raise SystemExit(main())

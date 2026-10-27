@@ -47,13 +47,15 @@ def _provider_stop_seconds(config):
     retirement, never a receipt for durable Attempt completion (note 021).
     """
     lifecycle, policy, native = config.lifecycle, config.service.policy, config.service.native
-    store, retirement = lifecycle.store_seconds, config.api.http.retirement_seconds
-    settlement = 4 * policy.settle_seconds + 2 * retirement + store
+    retirement = config.api.http.retirement_seconds
+    settlement = ((2 + lifecycle.live_limits.maximum_attempts) * policy.settle_seconds
+                  + 2 * retirement + config.delivery.retirement_seconds)
     draining_shutdown = 2 * policy.drain_seconds + settlement
-    setup_settlement = store + 2 * native.allocation_seconds + max(
+    setup_settlement = 2 * native.allocation_seconds + max(
         native.prediction_seconds, native.source_seconds, config.preparation.generation_seconds)
-    startup = store + policy.admission.maximum_pages * (config.api.http.exchange_seconds + retirement) + retirement
-    final_dependencies = store + retirement + store
+    startup = max(config.api.http.exchange_seconds + retirement,
+                  config.delivery.request_seconds + config.delivery.retirement_seconds)
+    final_dependencies = retirement
     return sum((startup, draining_shutdown, 2 * settlement, setup_settlement, final_dependencies))
 
 
@@ -74,7 +76,7 @@ def _service(image, interpreter, module, *, uid, gid, labels, stop_seconds, memo
 
 def _disjoint(first, second):
     if first.is_relative_to(second) or second.is_relative_to(first):
-        raise ConfigurationRejected("independent deployment grants overlap; keep store, frozen inputs and runtime leaves separate.")
+        raise ConfigurationRejected("independent deployment grants overlap; keep the lifetime lock, frozen inputs and runtime leaves separate.")
 
 
 # silent-defaults: allow-contract -- The installed production relay namespace remains unchanged unless a contained recipe explicitly selects a private project.
@@ -84,7 +86,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
 
     Role locks and directory privacy are admitted/created by the finite host owner.
     Only the matching runtime leaf enters each native runner; only the provider
-    receives frozen credentials and the writable Attempt store. Native scratch and
+    receives frozen credentials and the writable lifetime-lock volume. Native scratch and
     per-start process diagnostics are private tmpfs, never host log dump paths.
     """
     if type(delivery_project) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", delivery_project) is None:
@@ -99,22 +101,22 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     if bundle.parent.name != "bundles" or bundle.parent.parent.name != deployment:
         raise ConfigurationRejected("frozen bundle must belong to this deployment's bundles directory.")
     runtime = bundle.parent.parent / "runtime"
-    store = _bind_path(config.lifecycle.store_root)
+    lifetime_root = _bind_path(config.lifecycle.lifetime_root)
     for other in (bundle, runtime, prepared, checkout):
-        _disjoint(store, other)
-    for root in (bundle, store):
+        _disjoint(lifetime_root, other)
+    for root in (bundle, lifetime_root):
         if root == root.parent or str(root) in ("/tmp", "/run") or str(root).split("/")[1] in (
             "bin", "sbin", "lib", "lib64", "usr", "opt", "etc", "proc", "sys", "dev", "native", "routes", "input", "diagnostics", "run"
         ):
-            raise ConfigurationRejected("deployment input/store mounts must not mask image software, trust or fixed runtime grants.")
+            raise ConfigurationRejected("deployment input/lifetime mounts must not mask image software, trust or fixed runtime grants.")
     socket_root = _bind_path(config.delivery.endpoint.socket_path.parent)
-    protected = (bundle, store, *(Path("/") / name for name in (
+    protected = (bundle, lifetime_root, *(Path("/") / name for name in (
         "bin", "sbin", "lib", "lib64", "usr", "opt", "etc", "proc", "sys", "dev", "native", "routes", "input"
     )), Path("/run/status.json"))
     if socket_root == Path("/tmp") or any(
         socket_root.is_relative_to(path) or path.is_relative_to(socket_root) for path in protected
     ):
-        raise ConfigurationRejected("delivery socket directory must not overlap provider software, frozen inputs, checkpoints or runtime grants.")
+        raise ConfigurationRejected("delivery socket directory must not overlap provider software, frozen inputs, lifetime lock or runtime grants.")
     identity = _declared_execution(execution)
     if type(routes) is not dict or set(routes) != {"api", "interpreter", "store"}:
         raise ConfigurationRejected("deployment requires exactly the api, interpreter and store routes.")
@@ -128,10 +130,12 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     provider["depends_on"] = {role: {"condition": "service_started"} for role in ("prediction", "reader", "smiles", "api", "interpreter", "store")}
     provider["command"] = ["--config", str(bundle / "config/provider.toml"), "--execution", "/input/execution.json",
                            "--models", "/input/prediction-models.json", "--diagnostics", "/run"]
+    # Keep this scope's physical volume identity: a new volume would bypass the
+    # same-root lock that also excludes an old checkpoint owner.
     control_volume = checkpoint_volume_name(config.lifecycle.scope, namespace=delivery_project)
     provider["volumes"] = [_bind(bundle, bundle), _bind(bundle / "execution.json", "/input/execution.json"),
                            _bind(bundle / "prediction-models.json", "/input/prediction-models.json"),
-                           {"type": "volume", "source": control_volume, "target": str(store), "read_only": False,
+                           {"type": "volume", "source": control_volume, "target": str(lifetime_root), "read_only": False,
                             "volume": {"nocopy": True}}]
     delivery_volume = delivery_volume_name(config.delivery.endpoint.api_origin, config.delivery.endpoint.provider_ref, namespace=delivery_project)
     provider["volumes"].append({"type": "volume", "source": delivery_volume,
@@ -229,8 +233,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         if status_role == "proxy":
             startup = 5
         if role == "provider":
-            startup = config.lifecycle.store_seconds + (config.service.policy.admission.maximum_pages + 1) * (
-                config.api.http.exchange_seconds + config.api.http.retirement_seconds)
+            startup = (config.delivery.request_seconds + config.delivery.retirement_seconds
+                       + config.api.http.exchange_seconds + config.api.http.retirement_seconds)
         service["healthcheck"] = {"test": ["CMD", service["entrypoint"][0], "-I", "-B", "-m",
                                                   "provider_core.process_status", status_path, status_role],
                                   "interval": "5s", "timeout": "2s", "retries": 3,

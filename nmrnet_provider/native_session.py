@@ -21,6 +21,27 @@ from provider_core.runner_protocol import LifecycleRejected
 from provider_core.runner_session import RunnerSession, RunnerStartupStopped, RunnerStartupUnavailable
 
 
+class NativeWorkerExited(RuntimeError):
+    """Carry the original native owner to the Attempt's scientific session.
+
+    This observation does not authorize FAIL. Core checks the analysis owner,
+    acknowledgement, active phase and original exit before selecting a report.
+    """
+
+    def __init__(self, operation, cause):
+        super().__init__("Native worker exited before local interruption; retain its original session and cause.")
+        self.native_operation, self.cause = operation, cause
+
+    @property
+    def runner(self):
+        return self.native_operation.session
+
+    def retain_cleanup_failure(self, failure):
+        """Preserve an independent close error without masking the observed exit."""
+        previous = self.__cause__ if self.__cause__ is not None else self.cause
+        self.__cause__ = BaseExceptionGroup("Native exit and cleanup failed", (previous, failure))
+
+
 class NativeOperation:
     """Retain setup before its first await; transfer this owner with its client."""
 
@@ -125,7 +146,11 @@ class NativeOperation:
         if self._opening is None:
             self._opening = asyncio.create_task(self._open())
             self._opening.add_done_callback(self._observe)
-        await self._wait(self._opening, time.monotonic() + self._seconds)
+        try:
+            await self._wait(self._opening, time.monotonic() + self._seconds)
+        except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as cause:
+            await self.observe_failure(cause)
+            raise
         if self._stop_requested:
             raise LifecycleRejected("Native operation was retired during startup; do not adopt its channel.")
         return self.reader, self.writer
@@ -144,7 +169,7 @@ class NativeOperation:
         await self._wait(self._opening, time.monotonic() + self._seconds)
 
     def _request_stop(self):
-        self._stop_requested = True
+        self.mark_interruption()
         if self.session is not None:
             try:
                 self.session.request_stop()
@@ -158,6 +183,36 @@ class NativeOperation:
             except Exception as cause:
                 # Local close failure must not skip independent child retirement.
                 self._close_failure = cause
+
+    def mark_interruption(self):
+        """Record intent before closing either of this operation's channels."""
+        if self.session is not None:
+            self.session.mark_interruption()
+        self._stop_requested = True
+
+    async def observe_failure(self, cause):
+        """Observe the original runner after unexpected scientific channel loss.
+
+        The same retained reader supplies cleanup later. An expired or failed
+        observation remains with that task; it never proves a worker crash.
+        """
+        if self.session is None or self.session.operation is None:
+            return
+        deadline = time.monotonic() + self._seconds
+        if self._control_retirement is None:
+            self._control_retirement = asyncio.create_task(
+                asyncio.to_thread(self.session.observe_retirement, deadline=deadline)
+            )
+            self._control_retirement.add_done_callback(self._observe)
+        try:
+            await self._wait(self._control_retirement, deadline)
+        except (OSError, LifecycleRejected):
+            # Retirement observes this same task and reports its original error.
+            # Cleanup can fail after an original exit was positively observed.
+            if self.session.original_exit is None:
+                return
+        if self.session.original_exit is not None:
+            raise NativeWorkerExited(self, cause) from cause
 
     def _prove_retirement(self, deadline):
         remaining = deadline - time.monotonic()
@@ -262,7 +317,7 @@ class NativeOperation:
     async def retire_channel(self, worker):
         failures = []
         # Closing science can make the child exit before the control stop arrives.
-        self._stop_requested = True
+        self.mark_interruption()
         try:
             worker.close()
         except Exception as cause:

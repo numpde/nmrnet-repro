@@ -12,11 +12,9 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
-import hashlib
 import ipaddress
 import json
 import os
-import re
 import stat
 import sys
 from pathlib import Path
@@ -127,9 +125,9 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         return retain_input(path, leaf, **limits)
 
     admitted = _read_provider_config(definition, retain_provider, read_api_file=retain_api)
-    if Path(admitted.lifecycle.store_root) != Path("/srv/nmrnet/attempts"):
+    if Path(admitted.lifecycle.lifetime_root) != Path("/srv/nmrnet/attempts"):
         raise ConfigurationRejected(
-            "the public deployment store_root must be /srv/nmrnet/attempts, the producer checkpoint volume's container path."
+            "the public deployment lifetime_root must be /srv/nmrnet/attempts, the provider lifetime volume's container path."
         )
     # Only admitted input paths change; the writer preserves the parsed scientific
     # values without imposing scalar-line or table-layout restrictions on TOML.
@@ -205,31 +203,31 @@ def creation_plan(bundle):
         raise ConfigurationRejected("original Compose plan requires strict retained JSON.", cause=cause) from None
 
 
-def checkpoint_owner(bundle):
+def lifetime_owner(bundle):
     """Select the existing producer grant, without deriving a second volume name."""
     provider = creation_plan(bundle)["services"]["provider"]
     grants = [grant for grant in provider["volumes"] if grant["target"] == "/srv/nmrnet/attempts"]
     if len(grants) != 1 or grants[0]["type"] != "volume" or grants[0]["read_only"]:
-        raise ConfigurationRejected("the installed provider must have one writable checkpoint volume grant.")
+        raise ConfigurationRejected("the installed provider must have one writable provider lifetime volume grant.")
     uid, gid = provider["user"].split(":")
     return provider["image"], grants[0]["source"], uid, gid
 
 
-def initialize_checkpoint(uid, gid):
+def initialize_lifetime(uid, gid):
     """Initialize only a fresh volume root; an existing producer owns its data."""
     if os.geteuid() != 0 or uid <= 0 or gid <= 0:
-        raise ConfigurationRejected("checkpoint initialization requires root with CHOWN and nonzero target UID/GID.")
-    path = Path("/checkpoint")
+        raise ConfigurationRejected("provider lifetime initialization requires root with CHOWN and nonzero target UID/GID.")
+    path = Path("/lifetime")
     observed = path.lstat()
     if not stat.S_ISDIR(observed.st_mode):
-        raise ConfigurationRejected("the checkpoint volume root must be a real directory.")
+        raise ConfigurationRejected("the provider lifetime volume root must be a real directory.")
     if (observed.st_uid, observed.st_gid, stat.S_IMODE(observed.st_mode)) == (uid, gid, 0o700):
         return
     if observed.st_uid != 0:
-        raise ConfigurationRejected("refusing to change a checkpoint volume with unexpected ownership or mode.")
+        raise ConfigurationRejected("refusing to change a provider lifetime volume with unexpected ownership or mode.")
     with os.scandir(path) as entries:
         if next(entries, None) is not None:
-            raise ConfigurationRejected("refusing to change a nonempty checkpoint volume with unexpected ownership or mode.")
+            raise ConfigurationRejected("refusing to change a nonempty provider lifetime volume with unexpected ownership or mode.")
     descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
         os.fchmod(descriptor, 0o700)
@@ -291,9 +289,9 @@ def main(arguments=None):
     client.add_argument("--bundle", type=Path, required=True)
     client.add_argument("--prediction-image-id", required=True)
     client.add_argument("--client-root", type=Path, required=True)
-    checkpoint = operations.add_parser("checkpoint-owner", help="Print the installed checkpoint grant and its image/owner.")
-    checkpoint.add_argument("--bundle", type=Path, required=True)
-    initialize = operations.add_parser("initialize-checkpoint", help="Initialize a fresh mounted producer checkpoint volume.")
+    lifetime = operations.add_parser("lifetime-owner", help="Print the installed provider lifetime grant and its image/owner.")
+    lifetime.add_argument("--bundle", type=Path, required=True)
+    initialize = operations.add_parser("initialize-lifetime", help="Initialize a fresh mounted provider lifetime volume.")
     initialize.add_argument("--uid", type=int, required=True)
     initialize.add_argument("--gid", type=int, required=True)
     options = parser.parse_args(arguments)
@@ -305,12 +303,12 @@ def main(arguments=None):
         elif operation == "client-inputs":
             client_inputs(**values)
             return 0
-        elif operation == "checkpoint-owner":
-            sys.stdout.write(" ".join(checkpoint_owner(**values)) + "\n")
+        elif operation == "lifetime-owner":
+            sys.stdout.write(" ".join(lifetime_owner(**values)) + "\n")
             return 0
-        elif operation == "initialize-checkpoint":
-            initialize_checkpoint(**values)
-            sys.stdout.write("Producer checkpoint volume ready.\n")
+        elif operation == "initialize-lifetime":
+            initialize_lifetime(**values)
+            sys.stdout.write("Provider lifetime volume ready.\n")
             return 0
     except (ConfigurationRejected, OSError) as failure:
         # Protected Docker-stderr projection for this finite receiving boundary:

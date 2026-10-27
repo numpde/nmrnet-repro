@@ -18,14 +18,15 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
+from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.worker_client import PredictionExecutionFailed, WorkerExchangeTimedOut
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
+from provider_core.analysis import AnalysisFailure, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
 
@@ -204,6 +205,7 @@ class NMRNetSession:
         self._allocate_prediction = allocate_prediction
         self._on_prediction_retry = on_prediction_retry
         self._worker = self._retirement = None
+        self._prediction_setup = None
         self._input_preparation = input_preparation
         self._prediction_pending = False
         self.prediction_failure = None
@@ -234,6 +236,13 @@ class NMRNetSession:
         self._acknowledged = acknowledged
         try:
             prepared = await self._input_preparation.prepare(instructions)
+        except (NativeWorkerExited, PreparationRetirementFailed) as cause:
+            original = cause
+            while type(original) is PreparationRetirementFailed:
+                original = original.operation_failure
+            if type(original) is not NativeWorkerExited:
+                raise
+            raise self._worker_crash(original, cause=cause) from None
         except (
             InputRejected,
             ConformerShortfall,
@@ -247,7 +256,10 @@ class NMRNetSession:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
         if type(prepared) not in (PreparedJobInput, GeneratedJobInput):
             raise TypeError("Scientific preparation requires the input owner's frozen supplied or generated geometry collection.")
-        self._facts["runtime_expectations"] = await self._acquire_prediction(_Phase.PREPARING)
+        try:
+            self._facts["runtime_expectations"] = await self._acquire_prediction(_Phase.PREPARING)
+        except NativeWorkerExited as cause:
+            raise self._worker_crash(cause, cause=cause) from None
         plan = ResultPlan(
             prepared,
             job_ref=instructions.job_ref,
@@ -363,6 +375,10 @@ class NMRNetSession:
                     self.prediction_failure = cause
                     await self._replace_prediction()
             raise AssertionError("Prediction execution bound was exhausted without an outcome")
+        except NativeWorkerExited as cause:
+            # A proved exit must reach core before the old prediction retry or
+            # recovery wrapper can turn it into another scientific execution.
+            raise self._worker_crash(cause, cause=cause) from None
         except (Exception, asyncio.CancelledError) as cause:
             if self.prediction_failure is None:
                 raise
@@ -370,6 +386,25 @@ class NMRNetSession:
             if isinstance(cause, asyncio.CancelledError):
                 raise cause from failure
             raise failure from None
+
+    def _worker_crash(self, failure, *, cause):
+        if self._phase is _Phase.PREPARING:
+            phase = "preparing"
+        elif self._phase is _Phase.EXECUTING:
+            phase = "running"
+        else:
+            raise ValueError("Native exit arrived outside active scientific preparation or execution.") from failure
+        runner = failure.runner
+        return ObservedWorkerCrash.from_session(
+            self._acknowledged,
+            phase=phase,
+            owner=self,
+            runner=runner,
+            evidence=_evidence({"native_operation": {
+                "role": runner.role, "generation": runner.generation, "operation": runner.operation,
+            }}),
+            cause=cause,
+        )
 
     async def _replace_prediction(self):
         self._require_prediction_active()
@@ -395,6 +430,9 @@ class NMRNetSession:
             if self._phase is not phase:
                 raise ValueError("Prediction acquisition finished after retirement began; scientific dispatch is blocked.")
             return copy.deepcopy(runtime)
+        except NativeWorkerExited as cause:
+            self._prediction_setup = cause.native_operation
+            raise
         finally:
             self._prediction_pending = False
 
@@ -408,10 +446,18 @@ class NMRNetSession:
             await self._input_preparation.retire()
         except (Exception, asyncio.CancelledError) as cause:
             failures.append(("input_retirement", cause))
+        if self._prediction_setup is not None:
+            try:
+                await self._prediction_setup.retire()
+            except (Exception, asyncio.CancelledError) as cause:
+                failures.append(("prediction_setup_retirement", cause))
+            else:
+                self._prediction_setup = None
         worker, retirement = self._worker, self._retirement
         if retirement is not None:
             failures.extend(await retirement.retire_channel(worker))
-        if self._prediction_pending or self._worker is not worker or self._retirement is not retirement:
+        if (self._prediction_pending or self._prediction_setup is not None
+                or self._worker is not worker or self._retirement is not retirement):
             failures.append(
                 (
                     "prediction_acquisition",

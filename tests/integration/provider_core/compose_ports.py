@@ -50,7 +50,7 @@ def deployment_inputs(root):
     api = document.pop("api")
     socket_path = document["delivery"].pop("socket_path")
     document["delivery"].pop("socket_group_id")
-    document["lifecycle"]["store_root"] = "/srv/nmrnet/attempts"
+    document["lifecycle"]["lifetime_root"] = "/srv/nmrnet/attempts"
     document["interpreter"]["endpoints"][0]["key_file"] = "/srv/nmrnet/input/interpreter.key"
     definition.write_text(tomli_w.dumps(document))
     api_resolver = root / "api-resolv.conf"

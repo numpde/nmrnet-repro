@@ -15,7 +15,6 @@ import json
 import re
 
 from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES
-from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
@@ -100,7 +99,6 @@ def _safe_owner_details(error):
     if type(error) not in (
         ProviderProcessFailed,
         DiagnosticOutputRefused,
-        AdmissionHeld,
         ConfigurationRejected,
         ServiceFailed,
         ServiceRefused,

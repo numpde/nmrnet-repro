@@ -1,336 +1,159 @@
-"""Restart observes compact control and exact relay ownership without new science."""
+"""Live exclusions and delivery duties survive waits; restart grants no action."""
 
 import asyncio
-import threading
 import unittest
-from contextlib import suppress
 from dataclasses import replace
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-from tests.fakes.attempts import observation, start_response
+from tests.fakes.attempt_inventory import attempt
 from tests.integration.nmrnet.service_ports import ServicePeers
+from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.config import ANALYSIS_KIND_REF
+from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.service import ServiceFailed
-from provider_core.api import ProviderAPI
-from provider_core.attempt_record import StartPending, TerminalOperation
-from provider_core.attempt_request import fail_body, start_body
-from provider_core.attempt_response import read_start
-from provider_core.checkpoint_store import CheckpointStore
-from provider_core.delivery_store import DeliveryOutcome
-from provider_core.ownership import OwnershipRefused
-from provider_core.producer_checkpoint import AcknowledgedCheckpoint, DeliveryAcceptedCheckpoint, EnteredCheckpoint, EvidenceDigest
-from provider_core.recovery import AttemptRecovery, RecoveryFailed, RecoveryRefused
+from provider_core.attempt_record import StartPending
+from provider_core.attempt_request import start_body
+from provider_core.controller import LiveStartPolicy, StartDeferred
+from provider_core.delivery_client import DeliveryUnavailable
 
 
-async def retain_ack(fixture, key="recovery:one"):
-    pending = StartPending(fixture.store.scope, ANALYSIS_KIND_REF, fixture.ports.instructions.identity,
-                           start_body(fixture.ports.instructions.job_ref, key))
-    await fixture.store.retain_start(pending)
-    admitted = read_start(start_response(analysis_kind_ref=ANALYSIS_KIND_REF), job_ref=pending.input.job_ref,
-                          analysis_kind_ref=pending.analysis_kind_ref, provider_ref=pending.scope.provider_ref)
-    return await fixture.store.acknowledge_start(pending, admitted)
-
-
-async def retain_selection(fixture):
-    # Leave the real inbox available but stop its API worker, so this receiving
-    # row remains durable while producer restart observes its handoff identity.
-    for worker in fixture.relay.workers.values():
-        worker.request_stop()
-    await asyncio.gather(*fixture.relay._worker_tasks)
-    acknowledged = await retain_ack(fixture)
-    reference = acknowledged.admission.execution_attempt_ref
-    item = DeliveryOutcome(fixture.store.scope.api_origin, fixture.store.scope.provider_ref,
-                           acknowledged.start.input.job_ref, reference, TerminalOperation.FAIL,
-                           fail_body(reference, "provider_interrupted", "Authored retained outcome."))
-    selected = await fixture.store.select_terminal(acknowledged, item)
-    fixture.relay.queue.enqueue(item)
-    return selected, item
-
-
-class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_restart_observes_real_relay_row_only_after_native_barrier_without_republishing(self):
+class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
+    async def test_admission_stop_interrupts_live_start_backoff_without_using_the_drain_to_replay(self):
         async with ServicePeers() as fixture:
-            selected, item = await retain_selection(fixture)
-            barrier = AsyncMock()
-            service = fixture.service(retire_native=barrier, on_started=fixture.stop.set)
-            read = service.delivery.status
+            starts = []
+            original_reply, original_arguments = fixture.api_peer.response_factory, fixture.arguments
 
-            async def status(reference):
-                barrier.assert_awaited_once()
-                self.assertEqual(await fixture.store.inventory(), (selected,))
-                return await read(reference)
+            async def reply(request, body):
+                if request.startswith(b"POST /provider/v1/execution-attempts/start "):
+                    starts.append(body)
+                    await original_reply(request, body)
+                    return None
+                return await original_reply(request, body)
 
-            with patch.object(service.delivery, "status", side_effect=status):
-                await asyncio.wait_for(service.run(fixture.stop), 3)
-            await service.settle()
-            self.assertEqual(await fixture.store.inventory(), ())
-            self.assertEqual(fixture.relay.queue.next_pending(item.api_origin, item.provider_ref), item)
-            self.assertEqual(fixture.allocations, [])
-            self.assertEqual(fixture.model_peer.requests, [])
-            self.assertTrue(all(request.startswith(b"GET ") or request.startswith(b"POST /provider/v1/hello ")
-                                for request in fixture.api_peer.requests))
+            def arguments(pending):
+                return original_arguments(pending) | {"start_policy": LiveStartPolicy(
+                    0.01, lambda *_: fixture.stop.set(), lambda *_: self.fail("Stopped START cannot recover"),
+                    maximum_replays=1,
+                )}
 
-    async def test_failed_native_barrier_retains_control_and_queue_without_reading_relay_or_api(self):
-        async with ServicePeers() as fixture:
-            selected, item = await retain_selection(fixture)
-            barrier = AsyncMock(side_effect=TimeoutError("Original native ownership remains held"))
-            service = fixture.service(retire_native=barrier)
-            with patch.object(service.delivery, "status", wraps=service.delivery.status) as status:
+            fixture.api_peer.response_factory = reply
+            service = fixture.service(drain_seconds=3)
+            with patch.object(fixture, "arguments", arguments):
                 with self.assertRaises(ServiceFailed):
-                    await service.run(fixture.stop)
-                status.assert_not_awaited()
-            await service.settle()
-            self.assertEqual(await fixture.store.inventory(), (selected,))
-            self.assertEqual(fixture.relay.queue.next_pending(item.api_origin, item.provider_ref), item)
-            self.assertEqual(fixture.api_peer.requests, [])
-            self.assertEqual(fixture.allocations, [])
+                    await asyncio.wait_for(service.run(fixture.stop), 2)
+            await fixture.settle_service(service)
+            self.assertEqual(len(starts), 1)
+            self.assertTrue(fixture.attempt_stopping.is_set())
+            self.assertTrue(service.shutdown_ready)
+            self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, fixture.ports.instructions.job_ref))
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(fixture.allocations[0].worker.events, [])
 
-    async def test_stop_during_native_proof_keeps_exact_selected_control_and_grants_no_read(self):
+    async def test_old_remote_attempt_does_not_block_unrelated_fresh_science_or_trigger_reconciliation(self):
         async with ServicePeers() as fixture:
-            selected, item = await retain_selection(fixture)
-            entered, release = asyncio.Event(), asyncio.Event()
+            fixture.remote_attempts["old"] = attempt(job_ref="job:old-dark-lifetime")
+            service = fixture.service()
+            fixture.stack.push_async_callback(fixture.settle_service, service)
+            await asyncio.wait_for(service.run(fixture.stop), 4)
+            await fixture.wait_published()
+            self.assertTrue(service.shutdown_ready)
+            self.assertEqual(len(fixture.allocations), 1)
+            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+            self.assertNotIn("/provider/v1/execution-attempts", fixture.request_paths)
+            self.assertIn("old", fixture.remote_attempts)
+            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
-            async def barrier():
-                entered.set()
-                await release.wait()
+    async def test_uncertain_start_remains_excluded_but_quiescent_service_can_stop(self):
+        async with ServicePeers() as fixture:
+            starts = []
+            original_reply = fixture.api_peer.response_factory
 
-            service = fixture.service(retire_native=barrier)
+            async def reply(request, body):
+                if request.startswith(b"POST /provider/v1/execution-attempts/start "):
+                    starts.append(body)
+                    return None
+                return await original_reply(request, body)
+
+            fixture.api_peer.response_factory = reply
+            pending = await fixture.discover()
+            fixture.ports = SessionPorts()
+            arguments = fixture.arguments(pending)
+            arguments["start_policy"] = LiveStartPolicy(0.01, lambda *_: None, lambda *_: None, maximum_replays=0)
+            controller = await assemble_attempt(**arguments)
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            outcome = await controller.run(pending)
+            self.assertIs(type(outcome), StartDeferred)
+            self.assertTrue(outcome.may_have_committed)
+            self.assertTrue(controller.shutdown_ready)
+            self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
+            service = fixture.service(on_started=fixture.stop.set)
+            fixture.stack.push_async_callback(fixture.settle_service, service)
+            with self.assertRaises(ServiceFailed):
+                await asyncio.wait_for(service.run(fixture.stop), 3)
+            self.assertTrue(service.shutdown_ready)
+            self.assertEqual(len(starts), 1)
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(fixture.ports.worker.events, [])
+
+    async def test_full_live_registry_paces_without_start_or_service_failure(self):
+        async with ServicePeers(maximum_live_attempts=1) as fixture:
+            selected = await fixture.discover()
+            other = replace(selected.input, job_ref="job:other-live-owner")
+            held = StartPending(selected.scope, selected.analysis_kind_ref, other, start_body(other.job_ref, "held:one"))
+            fixture.ports = SessionPorts()
+            owner = await assemble_attempt(**fixture.arguments(held))
+            fixture.stack.push_async_callback(fixture.settle_controller, owner)
+            fixture.claims.claim_live(held, lifecycle_owner=owner)
+            service = fixture.service()
             task = asyncio.create_task(service.run(fixture.stop))
             try:
-                await asyncio.wait_for(entered.wait(), 1)
+                async with asyncio.timeout(3):
+                    while len(fixture.allocations) < 2:
+                        await asyncio.sleep(0.01)
                 fixture.stop.set()
                 await asyncio.wait_for(task, 2)
-                await service.settle()
-                self.assertEqual(await fixture.store.inventory(), (selected,))
-                self.assertEqual(fixture.relay.queue.next_pending(item.api_origin, item.provider_ref), item)
-                self.assertEqual(fixture.api_peer.requests, [])
-                self.assertEqual(fixture.allocations, [])
+                self.assertIsNone(service.last_failure)
+                self.assertTrue(service.shutdown_ready)
+                self.assertNotIn("start", fixture.events)
+                self.assertEqual(fixture.model_peer.requests, [])
+                self.assertTrue(fixture.claims.owns_job(held.scope, held.input.job_ref))
             finally:
-                release.set()
                 fixture.stop.set()
                 await asyncio.gather(task, return_exceptions=True)
-                await service.settle()
+                await fixture.settle_service(service)
 
-    async def test_stop_during_real_relay_status_read_preserves_original_control_and_no_enqueue(self):
+    async def test_unacknowledged_selected_result_keeps_service_held_after_physical_cleanup(self):
         async with ServicePeers() as fixture:
-            selected, item = await retain_selection(fixture)
-            entered, release = asyncio.Event(), asyncio.Event()
-            respond = fixture.relay.inbox._respond
+            controllers = []
+            delivery_returned = asyncio.Event()
+            original = fixture.open_attempt
 
-            async def blocked(connection, writer, status, document):
-                if type(document) is dict and document.get("execution_attempt_ref") == item.execution_attempt_ref:
-                    entered.set()
-                    await release.wait()
-                await respond(connection, writer, status, document)
+            async def open_attempt(pending, *, stopping):
+                controller = await original(pending, stopping=stopping)
+                controllers.append(controller)
 
-            fixture.relay.inbox._respond = blocked
-            service = fixture.service()
-            task = asyncio.create_task(service.run(fixture.stop))
+                async def unavailable(outcome):
+                    delivery_returned.set()
+                    raise DeliveryUnavailable("Authored unacknowledged delivery", status=400)
+
+                controller.delivery.submit = unavailable
+                return controller
+
+            service = fixture.service(open_attempt=open_attempt)
             try:
-                await asyncio.wait_for(entered.wait(), 1)
-                fixture.stop.set()
                 with self.assertRaises(ServiceFailed):
-                    await asyncio.wait_for(task, 2)
-                await service.settle()
-                self.assertEqual(await fixture.store.inventory(), (selected,))
-                self.assertEqual(fixture.relay.queue.next_pending(item.api_origin, item.provider_ref), item)
-                self.assertEqual(fixture.api_peer.requests, [])
-                self.assertEqual(fixture.allocations, [])
-                self.assertTrue(service.delivery.retirement_confirmed)
+                    await asyncio.wait_for(service.run(fixture.stop), 4)
+                await asyncio.wait_for(delivery_returned.wait(), 1)
+                (controller,) = controllers
+                self.assertTrue(controller.work_settled)
+                self.assertFalse(controller.shutdown_ready)
+                self.assertFalse(service.shutdown_ready)
+                self.assertIsNone(fixture.result)
+                self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
             finally:
-                release.set()
-                fixture.stop.set()
-                await asyncio.gather(task, return_exceptions=True)
-                await service.settle()
-
-    async def test_stop_during_original_inventory_finishes_read_without_starting_native_proof(self):
-        for retained in (False, True):
-            with self.subTest(retained=retained):
-                async with ServicePeers() as fixture:
-                    expected = (await retain_ack(fixture),) if retained else ()
-                    fixture.store._seconds = 0.1
-                    entered, release = threading.Event(), threading.Event()
-                    read = fixture.store._database.inventory
-
-                    def held_read():
-                        entered.set()
-                        if not release.wait(3):
-                            raise TimeoutError("Fixture did not release its original inventory read")
-                        return read()
-
-                    barrier = AsyncMock()
-                    service = fixture.service(retire_native=barrier, drain_seconds=0.01)
-                    with patch.object(fixture.store._database, "inventory", side_effect=held_read) as original:
-                        task = asyncio.create_task(service.run(fixture.stop))
-                        try:
-                            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
-                            worker = fixture.store._pending.worker
-                            fixture.stop.set()
-                            with self.assertRaises(ServiceFailed):
-                                await asyncio.wait_for(task, 1)
-                            self.assertTrue(service.work_task.done())
-                            self.assertIsNotNone(fixture.store.pending_operation)
-                            self.assertIs(fixture.store._pending.worker, worker)
-                            self.assertFalse(worker.done())
-                            release.set()
-                            await service.settle()
-                            self.assertTrue(worker.done())
-                            self.assertEqual(original.call_count, 1)
-                            barrier.assert_not_awaited()
-                            self.assertEqual(fixture.api_peer.requests, [])
-                            self.assertEqual(fixture.allocations, [])
-                        finally:
-                            release.set()
-                            await asyncio.gather(task, return_exceptions=True)
-                            await service.settle()
-                    self.assertEqual(await fixture.store.inventory(), expected)
-
-    async def test_cancelled_acceptance_write_is_settled_once_without_another_relay_command(self):
-        async with ServicePeers() as fixture:
-            selected, item = await retain_selection(fixture)
-            fixture.store._seconds = 0.1
-            entered, release = threading.Event(), threading.Event()
-            write = fixture.store._database.accept_delivery
-
-            def held_write(*args):
-                entered.set()
-                if not release.wait(3):
-                    raise TimeoutError("Fixture did not release original handoff metadata commit")
-                return write(*args)
-
-            service = fixture.service(drain_seconds=0.01)
-            with patch.object(fixture.store._database, "accept_delivery", side_effect=held_write) as original:
-                task = asyncio.create_task(service.run(fixture.stop))
-                try:
-                    self.assertTrue(await asyncio.to_thread(entered.wait, 1))
-                    fixture.stop.set()
-                    with self.assertRaises(ServiceFailed):
-                        await asyncio.wait_for(task, 2)
-                    self.assertIsNotNone(fixture.store.pending_operation)
-                    release.set()
+                # The permanent refusal has no fabricated ACK or retry authority.
+                # Physical cleanup completes, but the authored process stays held.
+                with self.assertRaises(ServiceFailed):
                     await service.settle()
-                    self.assertEqual(original.call_count, 1)
-                finally:
-                    release.set()
-                    await asyncio.gather(task, return_exceptions=True)
-                    await service.settle()
-            (accepted,) = await fixture.store.inventory()
-            self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
-            self.assertEqual(accepted.selection, selected)
-            fixture.stop = asyncio.Event()
-            replacement = fixture.service(on_started=fixture.stop.set)
-            await asyncio.wait_for(replacement.run(fixture.stop), 3)
-            await replacement.settle()
-            self.assertEqual(await fixture.store.inventory(), ())
-            self.assertEqual(fixture.relay.queue.next_pending(item.api_origin, item.provider_ref), item)
-            self.assertEqual(fixture.allocations, [])
-
-    async def test_aliased_restored_inventory_reserves_nothing_and_makes_no_effect(self):
-        async with ServicePeers(maximum_records=2) as fixture:
-            first = await retain_ack(fixture)
-            second = await retain_ack(fixture, key="recovery:alias")
-            before = await fixture.store.inventory()
-            barrier = AsyncMock()
-            service = fixture.service(retire_native=barrier)
-            with self.assertRaises(ServiceFailed) as refused:
-                await service.run(fixture.stop)
-            self.assertIs(type(refused.exception.cause), OwnershipRefused)
-            await service.settle()
-            barrier.assert_not_awaited()
-            self.assertEqual(await fixture.store.inventory(), before)
-            self.assertEqual(fixture.api_peer.requests, [])
-            for record in (first, second):
-                claim = fixture.claims.claim_record(record)
-                claim.release()
-
-    async def test_wrong_context_refuses_before_inventory_native_or_api_effect(self):
-        async with ServicePeers() as fixture:
-            for reason in ("identity", "topology", "scope"):
-                with self.subTest(reason=reason):
-                    api, store = fixture.api, fixture.store
-                    if reason != "scope":
-                        api = ProviderAPI(replace(fixture.config.api.identity) if reason == "identity" else fixture.config.api.identity,
-                                          fixture.config.api.http.new_transport(),
-                                          expected_topology="web" if reason == "topology" else fixture.config.api.expected_topology)
-                    else:
-                        root = fixture.files.root / "foreign-checkpoints"
-                        root.mkdir(mode=0o700)
-                        store = CheckpointStore(root, scope=replace(fixture.store.scope, generation_id="generation:foreign"),
-                                                limits=fixture.config.lifecycle.store_limits, operation_seconds=1)
-                        await store.open()
-                    barrier = AsyncMock()
-                    service = fixture.service(api=api, store=store, retire_native=barrier)
-                    try:
-                        with patch.object(store, "inventory", wraps=store.inventory) as read:
-                            with self.assertRaises(ServiceFailed):
-                                await service.run(asyncio.Event())
-                            read.assert_not_awaited()
-                        await service.settle()
-                        barrier.assert_not_awaited()
-                        self.assertEqual(fixture.api_peer.requests, [])
-                    finally:
-                        await api.retire()
-                        if store is not fixture.store:
-                            await store.close()
-
-    async def test_unknown_entered_work_reads_api_then_holds_without_science_or_terminal_send(self):
-        async with ServicePeers() as fixture:
-            acknowledged = await retain_ack(fixture)
-            entered = await fixture.store.mark_entered(acknowledged, EvidenceDigest("fixture.prepared.v1", "sha256:" + "a" * 64, 1))
-            barrier = AsyncMock()
-            service = fixture.service(retire_native=barrier)
-            with self.assertRaises(ServiceFailed) as refused:
-                await service.run(fixture.stop)
-            self.assertIs(type(refused.exception.cause), RecoveryFailed)
-            self.assertIs(type(refused.exception.cause.cause), RecoveryRefused)
-            await service.settle()
-            barrier.assert_awaited_once()
-            self.assertEqual(await fixture.store.inventory(), (entered,))
-            self.assertEqual(len(fixture.api_peer.requests), 1)
-            self.assertTrue(fixture.api_peer.requests[0].startswith(b"GET "))
-            self.assertEqual(fixture.allocations, [])
-            self.assertEqual(fixture.hellos, [])
-
-    async def test_explicit_recovery_shared_claim_blocks_startup_until_original_io_settles(self):
-        async with ServicePeers() as fixture:
-            record = await retain_ack(fixture)
-            (claim,) = fixture.claims.claim_records((record,))
-            entered, release = asyncio.Event(), asyncio.Event()
-            reply = fixture.api_peer.response_factory
-
-            async def blocked(request, body):
-                if request.startswith(b"GET /provider/v1/execution-attempts/execution_attempt:"):
-                    entered.set()
-                    await release.wait()
-                return await reply(request, body)
-
-            fixture.api_peer.response_factory = blocked
-            service = fixture.service()
-            recovery = AttemptRecovery(fixture.api, fixture.store, claim, delivery=service.delivery)
-            task = asyncio.create_task(recovery.recover(record))
-            try:
-                await asyncio.wait_for(entered.wait(), 1)
-                with self.assertRaises(ServiceFailed) as refused:
-                    await service.run(asyncio.Event())
-                self.assertIs(type(refused.exception.cause), OwnershipRefused)
-                self.assertEqual(fixture.allocations, [])
-                self.assertEqual(len(fixture.api_peer.requests), 1)
-                task.cancel()
-                with self.assertRaises(asyncio.CancelledError):
-                    await task
-                if claim.operation_owner is not None:
-                    await recovery.settle()
-                claim.release()
-                await service.settle()
-                self.assertEqual(await fixture.store.inventory(), (record,))
-            finally:
-                release.set()
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-                if claim.active:
-                    if claim.operation_owner is not None:
-                        await recovery.settle()
-                    claim.release()
-                await service.settle()
+            self.assertFalse(service.shutdown_ready)
+            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)

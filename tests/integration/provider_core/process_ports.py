@@ -28,9 +28,10 @@ from nmrnet_provider.config import load_provider_config
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
 from provider_core.api import ProviderAPI
-from provider_core.checkpoint_store import CheckpointStore
+from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
 from provider_core.delivery_service import DeliveryBinding, DeliveryService
 from provider_core.delivery_store import QueueLimits
+from provider_core.lifetime import ProviderLifetime
 from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
@@ -82,8 +83,8 @@ class ProcessPeers:
             response_factory=self.reply,
             response_headers=(*response_headers(request_id=b"request:process-proof"), (b"x-private", b"PRIVATE_HEADER")),
         ).__aenter__()
-        # Leave a spare slot: the restart refusal must be caused by the retained
-        # obligation, rather than the separate live-capacity admission gate.
+        # Spare capacity lets held-work tests isolate lifetime ownership from
+        # the independent live-capacity admission limit.
         model_options = {}
         if self.model_peer is not None:
             model_options = {
@@ -94,7 +95,7 @@ class ProcessPeers:
             self.root,
             api_origin=self.peer.origin,
             ca_file=Path(self.peer.scratch.name) / "cert.pem",
-            maximum_records=2,
+            maximum_live_attempts=2,
             **model_options,
         )
         self.config = load_provider_config(self.files.path)
@@ -210,9 +211,8 @@ class ProcessPeers:
             "PROVIDER_CORE_IN_CONTAINER": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
-        # The contained receiving fixture records startup native barriers only;
-        # real runner barrier proof belongs to the separate deployment lane.
-        # Each script still invokes the actual foreground process entrypoint.
+        # Each child invokes the actual foreground process entrypoint. Native
+        # allocation ports are limited to the explicitly selected child script.
         environment["PYTHONPATH"] += os.pathsep + str(Path.cwd())
         script = child_script if child_script is not None else "startup_process.py"
         command = [str(Path(__file__).with_name(script))]
@@ -247,7 +247,7 @@ class ProcessPeers:
             return receipt()
         if self.model_peer is not None:
             # Reuse the signed Job/Attempt wire fixtures; the subprocess owns
-            # its own store and the external model peer is owned by the test.
+            # its own live claims and the external model peer belongs to the test.
             self.api_peer = self.peer
             return await RuntimePeers.api_reply(self, request, body)
         if not path.endswith("/jobs"):
@@ -269,26 +269,24 @@ class ProcessPeers:
 
         await asyncio.wait_for(wait(), 5)
 
-    async def reopen_store(self):
-        store = CheckpointStore(
-            self.files.state,
-            scope=self.config.lifecycle.scope,
-            limits=self.config.lifecycle.store_limits,
-            operation_seconds=self.config.lifecycle.store_seconds,
-        )
+    def assert_lifetime_released(self):
+        """Reacquire the real supervisor lock without creating legacy bookkeeping."""
+        lifetime = ProviderLifetime(self.config.lifecycle.lifetime_root)
         try:
-            await store.open()
-            return await store.inventory()
+            lifetime.open()
         finally:
-            await store.close()
+            lifetime.close()
+        if (self.config.lifecycle.lifetime_root / "checkpoints.sqlite3").exists():
+            raise AssertionError("Live-only process unexpectedly created legacy checkpoints")
 
-    async def seed_pending(self):
+    async def seed_legacy_pending(self):
+        """Author an old retained START solely to exercise cutover refusal."""
         self.files.state.mkdir(mode=0o700)
         store = CheckpointStore(
             self.files.state,
             scope=self.config.lifecycle.scope,
-            limits=self.config.lifecycle.store_limits,
-            operation_seconds=self.config.lifecycle.store_seconds,
+            limits=CheckpointLimits(2, 262144),
+            operation_seconds=2,
         )
         source = facts()
         pending = StartPending(self.config.lifecycle.scope, "peaks_from_mol", source, start_body(source.job_ref, "a" * 32))

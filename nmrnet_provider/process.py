@@ -27,12 +27,12 @@ from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
 from nmrnet_provider.native_factory import NativeAttemptFactory
-from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence, operator_redactor
+from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence, operator_redactor
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.diagnostics import write_stderr as _write_stderr, write_notice as _write_api_notice
-from provider_core.checkpoint_store import CheckpointStore
-from provider_core.controller import StartRecovery
+from provider_core.lifetime import ProviderLifetime
+from provider_core.controller import LiveStartPolicy
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.process_status import ProcessStatus
@@ -244,29 +244,26 @@ def _failure_report(failures, *, secrets, held):
 
 async def _settle_borrowers(service, factory, failures):
     """Join work before factory cleanup, then let service observe released setup."""
-    service_settled = service is None
     if service is not None:
         try:
             await service.settle()
-            service_settled = True
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("service settlement", cause))
     if service is not None and service.work_task is not None and not service.work_task.done():
         return False
-    factory_settled = factory is None
     if factory is not None:
         try:
             await factory.settle()
-            factory_settled = True
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("factory settlement", cause))
-    if service is not None and not service_settled:
+    if service is not None and not service.shutdown_ready:
         try:
             await service.settle()
-            service_settled = True
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("service settlement after factory", cause))
-    return service_settled and factory_settled
+    # A passive Job exclusion may outlive cleanup. An unhanded report may not
+    # disappear merely because settlement returned or all physical I/O stopped.
+    return (service is None or service.shutdown_ready) and (factory is None or factory.shutdown_ready)
 
 
 def _retired_prediction_observation(owner):
@@ -282,7 +279,7 @@ def _retired_prediction_observation(owner):
 
 async def run_provider(config, *, execution_identity, selected_artifacts, stop, diagnostics):
     """Keep unresolved owners alive until the deployment retires their containers."""
-    store = transport = factory = service = None
+    lifetime = transport = factory = service = None
     failures = []
     secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
     redact = operator_redactor(secrets=secrets)
@@ -314,11 +311,13 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         no per-retry file, journal, unbounded history or availability dependency.
         """
         nonlocal notice_failure
-        facts = {name: redact(value) if isinstance(value, str) else value for name, value in facts.items()}
-        content = {**facts, "failure": failure_evidence(failure, secrets=secrets)}
         try:
+            facts = {name: redact(value) if isinstance(value, str) else value for name, value in facts.items()}
+            content = {**facts, "failure": failure_evidence(failure, secrets=secrets)}
             _write_api_notice((json.dumps(content, separators=(",", ":")) + "\n").encode())
-        except (OSError, ValueError) as cause:
+        except Exception as cause:
+            # Rendering and output are diagnostic effects. Neither can veto an
+            # already selected crash report or erase the original sink failure.
             notice_failure = (facts, failure, cause)
 
     def report_api_retry(kind, failure, seconds):
@@ -354,21 +353,19 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     try:
         process_status.refresh("starting")
         status_task = asyncio.create_task(refresh_status(), name="process-readiness")
-        config.lifecycle.store_root.mkdir(mode=0o700, exist_ok=True)
-        store = CheckpointStore(
-            config.lifecycle.store_root,
-            scope=config.lifecycle.scope,
-            limits=config.lifecycle.store_limits,
-            operation_seconds=config.lifecycle.store_seconds,
-        )
-        await store.open()
+        config.lifecycle.lifetime_root.mkdir(mode=0o700, exist_ok=True)
+        lifetime = ProviderLifetime(config.lifecycle.lifetime_root)
+        lifetime.open()
+        if os.path.lexists(config.lifecycle.lifetime_root / "checkpoints.sqlite3"):
+            raise RuntimeError(
+                "Cannot start live NMRNet bookkeeping while legacy producer checkpoints lack a reviewed cutover disposition. "
+                "Keep the old records and queued delivery; resolve their Job exclusions before starting this deployment."
+            )
         transport = config.api.http.new_transport()
         api = ProviderAPI(config.api.identity, transport, expected_topology=config.api.expected_topology)
         factory = NativeAttemptFactory(
             config=config,
-            api=api,
-            store=store,
-            claims=AttemptClaims(),
+            claims=AttemptClaims.live(limits=config.lifecycle.live_limits),
             execution_identity=execution_identity,
             selected_artifacts=selected_artifacts,
             on_operator_notice=report_operator_notice,
@@ -420,13 +417,15 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 {"event": "prediction_retry_started", "maximum_executions": 2,
                  **_retired_prediction_observation(retired)},
             ),
-            start_recovery=StartRecovery(
-                config.service.policy.api_backoff_max_seconds,
-                lambda pending, failure, seconds: report_operator_notice(
+            start_policy=LiveStartPolicy(
+                cadence_seconds=config.lifecycle.poll_seconds,
+                on_retry=lambda pending, failure, seconds: report_operator_notice(
                     failure,
                     {"event": "api_start_retry", "retry_seconds": seconds, "job_ref": redact(pending.input.job_ref)},
                 ),
-                lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_start_recovered"}),
+                on_recovered=lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_start_recovered"}),
+                maximum_replays=config.lifecycle.start_replays,
+                window_seconds=config.lifecycle.start_seconds,
             ),
             on_delivery_retry=lambda attempt, failure, seconds: report_attempt_notice(
                 attempt, failure, {"event": "delivery_handoff_retry", "retry_seconds": seconds}
@@ -434,45 +433,44 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         )
         service = ProviderService(
             config=config,
-            store=store,
             api=api,
             open_attempt=factory,
             claims=factory.claims,
-            retire_native=factory.prove_previous_retired,
             current_announcement=lambda: config.service.announcement,
             policy=config.service.policy,
             on_started=startup_accepted,
             on_api_retry=report_api_retry,
             on_api_recovered=report_api_recovered,
+            on_observed_crash=lambda crash: report_attempt_notice(
+                crash.acknowledged, crash,
+                {"event": "worker_crash_observed", "phase": crash.phase,
+                 "worker_role": crash.native_exit.role, "worker_generation": crash.native_exit.generation,
+                 "worker_operation": crash.native_exit.operation, "returncode": crash.native_exit.returncode},
+            ),
         )
         await service.run(stop)
     except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
         failures.append(("provider operation", cause))
     stop.set()
     released = await _settle_borrowers(service, factory, failures)
-    if released and store is not None and store.pending_operation is not None:
-        # Before service construction only this process can own store.open.
-        # Never claim a controller/factory read merely because its wait expired.
-        if store.pending_owner is None:
-            try:
-                await store.settle(owner=None)
-            except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-                failures.append(("startup storage settlement", cause))
-        released = store.pending_operation is None
     # silent-defaults: allow-contract -- Startup can fail before a service exists; only an existing service can retain an unconfirmed Hello send.
     unconfirmed_hello = None if service is None else service.unconfirmed_hello
     if released:
         retirements = []
         if transport is not None:
             retirements.append(("lifecycle transport retirement", transport.retire))
-        if store is not None:
-            retirements.append(("storage close", store.close))
         for operation, close in retirements:
             try:
                 await close()
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append((operation, cause))
-        released = (transport is None or transport.retirement_confirmed) and (store is None or store.retirement_confirmed)
+        released = transport is None or transport.retirement_confirmed
+        if released and lifetime is not None:
+            try:
+                lifetime.close()
+            except OSError as cause:
+                failures.append(("provider lifetime lock release", cause))
+                released = False
     status_phase = "stopping" if released else "held"
     try:
         process_status.refresh(status_phase)

@@ -12,18 +12,30 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.config_ports import ConfigFiles, execution_source_files
 
 from nmrnet_provider import config as config_module
-from nmrnet_provider.config import _read_provider_config, load_provider_config, read_startup_file
+from nmrnet_provider.config import load_provider_config
 from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.native_factory import NativePolicy
 from nmrnet_provider.service import Announcement, ServicePolicy
 from nmrnet_provider.startup_capture import startup_authorities
-from provider_core.checkpoint_store import CheckpointLimits
+from provider_core.ownership import LiveAttemptLimits
 from provider_core.chat import ChatEndpoint
 from provider_core.hello import hello_body
 from provider_core.uploads import UploadLimits
 
 
 class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
+    def test_live_configuration_reserves_capacity_without_creating_a_checkpoint_store(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files = ConfigFiles(directory)
+            lifecycle = load_provider_config(files.path).lifecycle
+
+            self.assertEqual(lifecycle.lifetime_root, files.state)
+            self.assertEqual(lifecycle.live_limits.maximum_attempts, 2)
+            self.assertEqual(lifecycle.live_limits.maximum_control_bytes, 262144)
+            self.assertEqual(lifecycle.live_limits.maximum_pending_terminal_bytes, 4194304)
+            self.assertEqual((lifecycle.start_replays, lifecycle.start_seconds), (1, 90))
+            self.assertFalse(files.state.exists())
+
     def test_execution_declaration_hashes_actual_sources_and_keeps_caller_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             source_root, names = execution_source_files(directory)
@@ -129,8 +141,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(config.api.identity.credential_ref, "credential:example")
                 self.assertEqual(config.lifecycle.scope.provider_ref, "provider:example")
                 self.assertEqual(config.lifecycle.scope.generation_id, "generation:stable-fixture")
-                self.assertIs(type(config.lifecycle.store_limits), CheckpointLimits)
-                self.assertEqual((config.lifecycle.store_limits.maximum_records, config.lifecycle.store_limits.maximum_bytes), (1, 1048576))
+                self.assertIs(type(config.lifecycle.live_limits), LiveAttemptLimits)
+                self.assertEqual(config.lifecycle.live_limits, LiveAttemptLimits(2, 262144, 4194304))
                 self.assertIsInstance(config.uploads.limits, UploadLimits)
                 self.assertEqual(config.preparation.generation_settings.seed, 17)
                 self.assertEqual(config.source_sha256, hashlib.sha256(files.raw).hexdigest())

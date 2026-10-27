@@ -16,13 +16,13 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from nmrnet_provider.native_session import NativeOperation
+from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
 from nmrnet_provider.worker_protocol import require_seconds
-from provider_core.controller import StartRecovery
+from provider_core.controller import LiveStartPolicy
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
@@ -62,8 +62,6 @@ class NativeAttemptFactory:
         self,
         *,
         config,
-        api,
-        store,
         claims,
         execution_identity,
         selected_artifacts,
@@ -73,26 +71,26 @@ class NativeAttemptFactory:
         on_unconfirmed_phase_progress,
         on_prediction_retry,
         on_operator_notice,
-        start_recovery,
+        start_policy,
         on_delivery_retry,
     ):
         if type(policy) is not NativePolicy:
             raise ValueError("Native factory requires explicit admitted allocation and channel budgets.")
-        # Production requires recovery before any allocation. Runtime assembly
-        # passes this same policy through; core owns its public-entry validation.
+        # Production supplies bounded observation and condition handling before
+        # allocation. Core validates these same policies at its public boundary.
         if type(observation_recovery) is not ObservationRecovery:
             raise ValueError("Native factory requires bounded observation recovery and protected diagnostic observers.")
         if type(condition_recovery) is not ConditionRecovery:
             raise ValueError("Native factory requires bounded condition recovery and protected diagnostic observers.")
-        if type(start_recovery) is not StartRecovery:
-            raise ValueError("Native factory requires bounded exact START recovery and protected diagnostic observers.")
+        if type(start_policy) is not LiveStartPolicy:
+            raise ValueError("Native factory requires the live START policy.")
         if not callable(on_delivery_retry):
             raise ValueError("Native factory requires a protected delivery retry observer.")
         if not callable(on_unconfirmed_phase_progress):
             raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
         if not callable(on_prediction_retry):
             raise ValueError("Native factory requires a protected prediction-retry observer before allocation.")
-        self.config, self.api, self.store, self.claims = config, api, store, claims
+        self.config, self.claims = config, claims
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
         self.condition_recovery = condition_recovery
@@ -101,22 +99,26 @@ class NativeAttemptFactory:
         if not callable(on_operator_notice):
             raise ValueError("Native factory requires a protected operator diagnostic observer.")
         self.on_operator_notice = on_operator_notice
-        self.start_recovery = start_recovery
+        self.start_policy = start_policy
         self.on_delivery_retry = on_delivery_retry
         self.allocations, self.clients = [], {}
         self.last_failure = None
         self._operation = None
 
-    async def __call__(self, pending):
+    @property
+    def shutdown_ready(self):
+        """Confirm setup owns neither a running invocation nor native grants."""
+        return self._operation is None and not self.allocations and not self.clients
+
+    async def __call__(self, pending, *, stopping):
         self._begin_setup()
         try:
             return await assemble_attempt(
                 config=self.config,
                 pending=pending,
-                api=self.api,
-                store=self.store,
-                setup_owner=self,
                 claims=self.claims,
+                stopping=stopping,
+                start_policy=self.start_policy,
                 execution_identity=self.execution_identity,
                 selected_artifacts=self.selected_artifacts,
                 allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
@@ -129,12 +131,10 @@ class NativeAttemptFactory:
                 observation_recovery=self.observation_recovery,
                 condition_recovery=self.condition_recovery,
                 on_unconfirmed_phase_progress=self.on_unconfirmed_phase_progress,
-                start_recovery=self.start_recovery,
                 on_delivery_retry=self.on_delivery_retry,
             )
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-            failures = await self._settle_store()
-            self._raise_setup(cause, failures, job_ref=pending.input.job_ref)
+            self._raise_setup(cause, [], job_ref=pending.input.job_ref)
         finally:
             self._operation = None
 
@@ -177,35 +177,10 @@ class NativeAttemptFactory:
         finally:
             self._operation = None
 
-    async def prove_previous_retired(self):
-        """Settle all three runner barriers before replaying retained outcomes.
-
-        No client or scientific request is created. Partial setup and cleanup
-        remain in the same factory obligations used by ordinary allocations.
-        """
-        self._begin_setup()
-        try:
-            for role in ("prediction", "reader", "smiles"):
-                allocation = self._new_operation(role, job_ref=None)
-                try:
-                    await allocation.connect_for_retirement()
-                except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-                    failures = await self._retire(allocation)
-                    if not failures:
-                        self._release(allocation)
-                    self._raise_setup(cause, failures, job_ref=None)
-                failures = await self._retire(allocation)
-                if failures:
-                    self._raise_setup(failures[0][1], failures, job_ref=None)
-                self._release(allocation)
-        finally:
-            self._operation = None
-
     def _begin_setup(self):
         if (
             self._operation is not None
             or self.allocations
-            or self.store.pending_owner is self
         ):
             raise RuntimeError(
                 "Cannot acquire new native work: await active setup and settle this factory's original obligations first."
@@ -226,7 +201,7 @@ class NativeAttemptFactory:
             raise RuntimeError("Cannot settle native setup while its original invocation is active; await that invocation first.")
         self._operation = asyncio.current_task()
         try:
-            failures = await self._settle_store()
+            failures = []
             for allocation in tuple(self.allocations):
                 cleanup = await self._retire(allocation)
                 failures.extend(cleanup)
@@ -241,14 +216,6 @@ class NativeAttemptFactory:
             self.last_failure = None
         finally:
             self._operation = None
-
-    async def _settle_store(self):
-        if self.store.pending_owner is self:
-            try:
-                await self.store.settle(owner=self)
-            except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-                return [("setup storage read", cause)]
-        return []
 
     def _new_operation(self, role, *, job_ref):
         allocation = NativeOperation(
@@ -265,7 +232,8 @@ class NativeAttemptFactory:
         writer = None
         try:
             reader, writer = await allocation.start()
-            options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds}
+            options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds,
+                       "native": allocation}
             if role == "prediction":
                 options["operation_seconds"] = self.policy.prediction_seconds
                 client = PredictionClient(reader, writer, **options)
@@ -276,6 +244,11 @@ class NativeAttemptFactory:
                 client = SmilesClient(reader, writer, settings=self.config.preparation.generation_settings, **options)
             self.clients[allocation] = client
             return client, allocation
+        except NativeWorkerExited:
+            # The failed allocation task receives this exact grant. Reporting
+            # the proved exit must not wait for inline channel cleanup.
+            self._release(allocation)
+            raise
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures = []
             failures.extend(await self._retire(allocation))
@@ -316,7 +289,7 @@ class NativeAttemptFactory:
         )
         # Resolved failures belong to the caller receiving this exception. Keep
         # factory diagnostics only while their original cleanup remains held.
-        self.last_failure = failure if self.allocations or self.store.pending_owner is self else None
+        self.last_failure = failure if self.allocations else None
         if interruption is not None:
             raise interruption from failure
         raise failure from None

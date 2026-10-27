@@ -53,7 +53,7 @@ fields out of the authored provider definition.</p>
 <p>Installation writes that runtime file under
 <code>secrets/deployments/&lt;name&gt;/bundles/generation-*/config/provider.toml</code>.
 Change the authored inputs and reinstall; do not edit a sealed generation.</p>
-<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v1"</code> and these
+<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v2"</code> and these
 closed tables; unknown fields fail startup:</p>
 <table>
 <thead>
@@ -91,7 +91,7 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>lifecycle</code></td>
-<td><code>consumer_id</code>, <code>generation_id</code>, <code>store_root</code>, <code>maximum_records</code>, <code>maximum_checkpoint_bytes</code>, <code>store_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code></td>
+<td><code>consumer_id</code>, <code>generation_id</code>, <code>lifetime_root</code>, <code>maximum_live_attempts</code>, <code>maximum_control_bytes</code>, <code>maximum_pending_terminal_bytes</code>, <code>start_replays</code>, <code>start_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code></td>
 <td>none</td>
 </tr>
 <tr>
@@ -187,12 +187,13 @@ policy. Its seven containers are the provider, three serial native runners
 their configuration and current readiness. Docker must itself start after a host reboot.
 A separate shared delivery service on the same Docker host owns outstanding
 completion and failure requests. It can finish delivery while a provider is
-stopped or being replaced. On restart, the provider reconciles its small control
-checkpoints with the delivery service and API; it never repeats prediction to
-recover a result. Unresolved execution or conflicting identities require
-operator diagnosis. Sources:
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/service.py">service admission and recovery</a> and
-<a href="https://github.com/numpde/nmrnet-repro/blob/4e7d897/nmrnet_provider/native_factory.py">native retirement barriers</a>.
+stopped or being replaced. The provider supervisor keeps its live Attempt records
+in memory. Restart does not reconstruct an interrupted Attempt, replay its START
+request or repeat its calculation. Reports already saved by shared delivery
+continue independently. A delivery acknowledgement confirms durable local
+storage; API acceptance is a later event. Sources:
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/service.py">service admission and shutdown</a> and
+<a href="https://github.com/numpde/nmr-provider-tools/blob/main/notes/010_live_attempt_bookkeeping_20261027.txt">the shared lifecycle design</a>.
 Keep the public provider definition in
 <code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
 <code>config/deployments/&lt;name&gt;/deployment.toml</code>. Copy the latter from
@@ -200,8 +201,10 @@ Keep the public provider definition in
 Use mode <code>0644</code> for the caller-owned public definition and
 <code>0600</code> for private machine settings; neither may be writable by group or others.
 Keep the path and network settings in that private deployment definition.
-The producer's checkpoint database uses a provider-only Docker volume; final
-request bodies use the delivery service's separate queue volume.</p>
+The provider-only Docker volume holds the lifetime lock; final request bodies
+use the delivery service's separate queue volume. An existing deployment with
+producer checkpoints requires a reviewed disposition of its old Job exclusions
+before cutover. Startup preserves those files and refuses an unreviewed cutover.</p>
 <p>Keep interpreter keys and provider TLS files in
 <code>secrets/deployments/&lt;name&gt;/</code>, named as in the provider definition.
 Keep the host's binding definition as an operator-owned configuration file and
@@ -229,7 +232,7 @@ make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
 make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code></pre>
 <p>Install freezes a new input generation and refuses replacement while that
-provider is running. Up initializes the producer's checkpoint volume, starts the
+provider is running. Up initializes the provider's lifetime-lock volume, starts the
 proxies and serial native runners, then waits for provider readiness, including
 an accepted API Hello. This establishes readiness, not scientific accuracy or
 successful model interpretation. Down stops that provider and its dependencies;
@@ -298,28 +301,32 @@ The service delivers the unchanged body, with fresh request signing and capped
 backoff for permitted retries. A verified matching API receipt removes the queued
 body. Completed results are available through the API; the provider keeps no
 completed-result archive, per-Attempt result file or transcript history.</p>
-<p>The producer keeps only small recovery checkpoints: the original START
-identity, API admission, execution-entry digest, selected request digest and
-handoff or suppression facts. It clears them after the relevant handoff or
-terminal API observation and confirmed native cleanup. A terminal API observation
-closes lifecycle uncertainty; it does not prove that a particular candidate
-result was accepted.</p>
+<p>The provider keeps bounded live Attempt records in supervisor memory: the
+selected Job and START identity, the acknowledged Attempt, and references to the
+actual execution and delivery owners. It removes a record only after those
+owners finish cleanup and any selected report has been durably handed to shared
+delivery. Physical cleanup alone cannot release an undelivered result. Shutdown stops new
+admissions, interrupts a pending START, and lets acknowledged execution finish
+within its configured drain time.
+If forced cleanup interrupts result approval, the supervisor can remain held for operator review;
+it does not manufacture a failure report or discard the returned result.</p>
 <p>The delivery queue has explicit item and byte allowances for each provider.
 Held items still count against that allowance. A full queue pauses fresh
 computation; a result already selected for handoff waits and retries the same
 bytes. Native cleanup proceeds independently of delivery. Unconfirmed cleanup
 prevents another scientific execution, while an approved result can still reach
 the API.</p>
-<p>After a restart, the service resumes committed queue entries. The provider
-uses its scoped relay inventory and API observations to reconcile control
-metadata, and excludes relay-owned Jobs from new computation. If a producer dies
-before durable handoff, a result held only in memory can be lost. An absent queue
-row never authorizes another prediction. Preserve unresolved identities and
-diagnose them through the API and Docker logs.</p>
-<p>Storage and recovery owners:
-<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/delivery_store.py">pending queue</a>,
-<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/checkpoint_store.py">producer checkpoints</a>,
-<a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/recovery.py">recovery without scientific replay</a>.
+<p>After a restart, shared delivery resumes its committed queue entries. The
+provider excludes relay-owned Jobs from fresh discovery but does not restore
+its former in-memory records, replay their START requests, inspect each old
+Attempt, or repeat their science. An unrelated old Attempt does not block a new
+Job. If the supervisor dies before durable handoff, a result held only in memory
+can be lost. An absent queue row never authorizes another prediction. Diagnose
+unresolved Attempts through the API and Docker logs.</p>
+<p>Storage and lifecycle owners:
+<a href="https://github.com/numpde/nmr-provider-tools/blob/d070b0280bb3ab310418f1422c681b24a8374afd/packages/provider-core/src/provider_core/delivery_store.py">durable delivery queue</a>,
+<a href="https://github.com/numpde/nmr-provider-tools/blob/d070b0280bb3ab310418f1422c681b24a8374afd/packages/provider-core/src/provider_core/ownership.py">live Attempt ownership</a> and
+<a href="https://github.com/numpde/nmr-provider-tools/blob/d070b0280bb3ab310418f1422c681b24a8374afd/packages/provider-core/src/provider_core/lifetime.py">same-root lifetime exclusion</a>.
 The design and existing evidence are in
 <a href="notes/021_compose_runner_architecture_20261023.html#shared-delivery">note 021</a>;
 deferred refinements and further testing are tracked in
@@ -421,8 +428,8 @@ prediction. The received result cannot supply its own expected image identity.</
   regenerated from this run's predictions.</li>
 <li><code>OUTPUT</code>: a fresh absolute private directory outside the checkout, separate
   from all credential/trust inputs. It retains configuration and protected receipts.
-  Producer checkpoints and outstanding terminal bodies remain in the recipe's named
-  Docker volumes. Preserve both the directory and those volumes; inspect them before
+  The provider's lifetime lock and delivery service's outstanding terminal bodies
+  use separate named Docker volumes. Preserve both the directory and those volumes; inspect them before
   any new mutation after failure.</li>
 </ul>
 <p>The scripted target additionally requires <code>LOCAL_NETWORK</code> and <code>LOCAL_INTERFACE</code>
@@ -685,37 +692,36 @@ The existing lifecycle monitor can stop work during backoff. Protected
 condition and Attempt; only the latter reports <code>condition_receipt_received=true</code>.
 No model call or science is retried. Authentication, conflicting state, malformed
 receipts, cancellation and unsettled cleanup remain operational failures.
-Configure only one progress writer for an Attempt: local store/claim locks do not
+Configure only one progress writer for an Attempt: local lifetime/claim locks do not
 fence an independently deployed provider. Source:
 <a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/execution.py"><code>ConditionRecovery</code> and <code>AttemptExecutor</code></a>,
 <a href="https://github.com/numpde/nmr-provider-tools/blob/a30ec2ff8f5cf60a464408309781b7996baae3ad/packages/provider-core/src/provider_core/api.py"><code>can_retry_condition</code></a>, and
 the same pinned progress PUT recovery contract above.</p>
-<p>Native prediction can recover once within the same Attempt. After an admitted
-prediction fails or its response is lost, the provider confirms exact old-worker
-retirement, scratch release and local channel closure before acquiring a
-replacement. The replacement prepares the same ordered geometry bytes with a new
-worker-local token and must report the original runtime. Existing result checks
-still verify the complete batch and selected artifacts.</p>
-<p>The protected <code>prediction_retry_started</code> notice retains the first failure and
-actual Job/Attempt references, including when recovery succeeds. It announces
-replacement, not an OOM diagnosis or a completed prediction. Failed notice output
-uses the existing private shutdown fallback. Recovery does not rerun interpretation,
-coordinate reading/generation or API lifecycle operations. There are at most two
-native executions; input/protocol rejection, caller cancellation, foreign timeouts
-and result assembly do not permit replacement. Exhaustion, failed allocation or
-unconfirmed cleanup remain operational failures with both causes retained for
-operator diagnosis. Resource limits and model selection remain fixed. The policy
-is implemented by <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>, using the
-existing <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_session.py"><code>NativeOperation</code></a> retirement owners.</p>
-<p>The opt-in offline target
-<code>make test/integration/provider/prediction-recovery</code> forces a real kernel OOM in
-a synthetic child under the fixed 512 MiB runner profile, then checks unchanged
-requests, one replacement, the original reap receipt and settled scratch/channel
-ownership in the same runner generation. It uses the recorded provider image and loads
-no released models. This establishes synthetic kernel-OOM and serial-runner recovery, not model
-memory capacity, GPU behavior or numerical equivalence. Precise source/image and
-retained evidence hashes are in <a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>.</p>
+<p>When the original worker exits during preparation or prediction, a positive
+observation made before local stop and within the Attempt's execution permission
+produces a <code>worker_crashed</code> failure for that exact acknowledged Attempt.
+The provider does not repeat its calculation. The public failure gives the phase
+and verified exit status or signal; protected diagnostics retain the underlying
+cause. A signal alone does not establish an out-of-memory diagnosis. Local stop
+requests, channel loss and missing records do not establish a crash. An already
+selected completion or failure keeps its own delivery responsibility.</p>
+<p>For eligible prediction operation failures without a proved worker crash,
+the existing policy permits one replacement within the same live Attempt.
+Exact old-worker retirement, scratch release and local channel closure precede
+replacement. The new worker receives the same ordered geometry bytes, prepares
+its own local token and must report the original runtime. Input interpretation,
+coordinate reading/generation and result assembly are not repeated. Input/protocol
+rejection, caller cancellation and unconfirmed cleanup do not grant replacement.
+The protected <code>prediction_retry_started</code> notice preserves the initiating
+failure and exact Job/Attempt references. Diagnostic output uses bounded Docker
+logs; failed output remains a protected in-memory observation.</p>
+<p>The policy is implemented by
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_session.py"><code>NativeOperation</code></a>.
+The installed consumer tests exercise real child exits during reader preparation
+and prediction startup, exact failure handoff before delayed cleanup, and the
+absence of a scientific rerun.</p>
 <p>The Job's own <code>preparation.seconds</code> limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure
 <code>input_selection_time_limit</code>. Protected evidence retains the configured limit,
@@ -751,7 +757,7 @@ and safe next steps; protected evidence retains actual call counts and prior
 interpreter diagnostics. After the relay durably accepts that FAIL and original
 resources retire, the service can accept another Job within available capacity.
 The limit is separate from an invalid input diagnosis. Unsettled producer cleanup,
-checkpoint storage or lifecycle API failures block fresh work. A shared publisher
+a full live registry or unresolved lifecycle I/O can block fresh work. A shared publisher
 outage can leave outcomes queued while other Jobs proceed within the queue limits.</p>
 <p>The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified

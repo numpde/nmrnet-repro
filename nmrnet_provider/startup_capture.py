@@ -57,7 +57,7 @@ def prediction_lifetime_seconds(config):
 
     Acquisition follows START and completed input selection/chooser retirement.
     Counts cover the remaining AttemptExecutor preparation-monitor observation,
-    running progress, durable entry, active observations and prediction exchanges.
+    running progress, active observations and prediction exchanges.
     Terminal publication follows child exit; this binding emits no awaited condition.
     """
     lifecycle, native = config.lifecycle, config.service.native
@@ -65,12 +65,11 @@ def prediction_lifetime_seconds(config):
     gap = lifecycle.observation_gap_seconds
     # Include the original and a late admitted running-progress exchange.
     phase_progress = 2 * (exchange + config.api.http.retirement_seconds + gap)
-    # Preparation-monitor overhangs, durable-entry observation and eligibility
+    # Preparation-monitor overhangs, execution-entry observation and eligibility
     # reads around prediction each have the existing active-freshness gap cap.
     observations = 5 * gap
-    durable_entry = lifecycle.store_seconds
     science = 2 * native.prediction_seconds
-    return sum((native.allocation_seconds, phase_progress, observations, durable_entry, science))
+    return sum((native.allocation_seconds, phase_progress, observations, science))
 
 
 def startup_authorities(config):

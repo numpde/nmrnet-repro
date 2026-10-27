@@ -1,4 +1,4 @@
-schema_id = "nmrnet.provider.runtime_config.v1"
+schema_id = "nmrnet.provider.runtime_config.v2"
 
 # Copy to config/deployments/<name>/provider.toml.
 # API identity, trust and delivery socket grants come from the selected shared binding.
@@ -39,10 +39,12 @@ seconds = 240
 [lifecycle]
 consumer_id = "lane:nmrnet-local"
 generation_id = "generation:local"
-store_root = "/srv/nmrnet/attempts"
-maximum_records = 2
-maximum_checkpoint_bytes = 262144
-store_seconds = 10
+lifetime_root = "/srv/nmrnet/attempts"
+maximum_live_attempts = 2
+maximum_control_bytes = 262144
+maximum_pending_terminal_bytes = 4194304
+start_replays = 1
+start_seconds = 90
 allowed_job_states = ["open"]
 poll_seconds = 2
 task_settle_seconds = 10

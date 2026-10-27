@@ -12,22 +12,25 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
+import logging
 import math
 import random
 from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy, _require_context, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
-from provider_core.attempt_record import AcknowledgedAttempt
+from provider_core.controller import ControllerFailed
 from provider_core.delivery_client import DeliveryClient, DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
-from provider_core.producer_checkpoint import AcknowledgedCheckpoint
+from provider_core.execution import AttemptExecutor
 from provider_core.hello import AnalysisOffering
-from provider_core.ownership import AttemptClaims
-from provider_core.recovery import AttemptRecovery
+from provider_core.ownership import AttemptClaims, LiveCapacityFull
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +104,7 @@ def _retrieve_task_failure(task):
 class ProviderService:
     """One serial Attempt lane and independently paced current announcements.
 
-    The caller owns the opened store and lifecycle API. open_attempt owns partial
+    The caller owns the provider lifetime lock and admission API. open_attempt owns partial
     allocation and setup I/O until it returns the existing controller, or confirms
     their cleanup before raising. Its original invocation stays in work_task.
     Successful return transfers the controller here before shutdown is checked.
@@ -115,8 +118,8 @@ class ProviderService:
     Empty offerings pause fresh allocation. Work already handed to the factory
     remains owned until it finishes or stop is requested. Reviewed admission and
     discovery read failures retry from a fresh complete view. Hello recovery
-    builds the latest complete announcement after each wait. Active Attempt
-    failures and holds still stop; other mutations/science never use these loops.
+    builds the latest complete announcement after each wait. Unexpected Attempt
+    failures still stop; other mutations/science never use these loops.
     Retry/recovery callbacks receive the operation kind and protected failures.
     """
 
@@ -124,20 +127,19 @@ class ProviderService:
         self,
         *,
         config,
-        store,
         api,
         open_attempt,
         claims,
-        retire_native,
         current_announcement,
         policy,
         on_started,
         on_api_retry,
         on_api_recovered,
+        on_observed_crash,
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
-                callable, (open_attempt, retire_native, current_announcement, on_started, on_api_retry, on_api_recovered)
+                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered, on_observed_crash)
             )
         ):
             raise ValueError(
@@ -145,13 +147,13 @@ class ProviderService:
             )
         if type(claims) is not AttemptClaims:
             raise ValueError("NMRNet service requires the shared Attempt claims.")
-        self.config, self.store, self.api = config, store, api
-        self._claims, self._retire_native = claims, retire_native
+        self.config, self.api, self._claims = config, api, claims
+        self._attempt_stopping = None
         self.delivery = DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,
                                        retirement_seconds=config.delivery.retirement_seconds)
-        self._recovery_claims, self._recovery = (), None
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
+        self._on_observed_crash = on_observed_crash
         self.policy = policy
         self.hello_api = ProviderAPI(
             config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology
@@ -159,13 +161,33 @@ class ProviderService:
         self.controller = None
         self.work_task = None
         self._hello_task = None
-        self._settlement_task = None
+        self._settlement_tasks = {}
         self._expected_cancellations = set()
         self._failures = []
         self.last_failure = None
         self.unconfirmed_hello = None
         self._state = _State.NEW
         self._stop = None
+
+    def _owned_controllers(self):
+        owners = dict.fromkeys((*self._claims.live_owners(), *self._settlement_tasks))
+        if self.controller is not None:
+            owners[self.controller] = None
+        return owners
+
+    @property
+    def shutdown_ready(self):
+        """Keep pending reports alive even after their workers and I/O stop."""
+        return (
+            self._state not in (_State.RUNNING, _State.SETTLING)
+            and all(task is None or task.done() for task in (
+                self.work_task, self._hello_task, *self._settlement_tasks.values(),
+            ))
+            and all(controller.shutdown_ready for controller in self._owned_controllers())
+            and self.api.retirement_confirmed
+            and self.hello_api.retirement_confirmed
+            and self.delivery.retirement_confirmed
+        )
 
     async def run(self, stop):
         """Run once; stop prohibits new allocation before bounded drain/settlement."""
@@ -218,7 +240,6 @@ class ProviderService:
             await asyncio.gather(stopped, return_exceptions=True)
 
     async def _startup(self):
-        await self._recover_retained()
         if self._stop.is_set():
             return False
         try:
@@ -233,50 +254,8 @@ class ProviderService:
         self._on_started()
         return not self._stop.is_set()
 
-    async def _recover_retained(self):
-        # Recovery precedes fresh admission and must use its same authority.
-        _require_context(self.config, self.api, self.policy.admission, self)
-        if self.store.scope != self.config.lifecycle.scope:
-            raise ValueError("Recovery checkpoint storage must use the configured provider scope.")
-        records = await self.store.inventory(owner=self)
-        if self._stop.is_set():
-            return
-        self._recovery_claims = self._claims.claim_records(records)
-        await self._retire_native()
-        for record, claim in zip(records, self._recovery_claims, strict=True):
-            if self._stop.is_set():
-                break
-            self._recovery = AttemptRecovery(self.api, self.store, claim, delivery=self.delivery)
-            try:
-                outcome = await self._recovery.recover(record)
-                if type(outcome) is AcknowledgedAttempt:
-                    # Exact START replay produced a real admission, not permission
-                    # to reconstruct scientific execution after process restart.
-                    self._recovery = AttemptRecovery(self.api, self.store, claim, delivery=self.delivery)
-                    await self._recovery.recover(AcknowledgedCheckpoint(outcome.start, outcome.admission))
-            except asyncio.CancelledError as cause:
-                if self._recovery.last_failure is not None:
-                    raise cause from self._recovery.last_failure
-                raise
-            self._recovery = None
-        self._release_recovery_claims()
-
-    def _release_recovery_claims(self):
-        if any(claim.operation_owner is not None for claim in self._recovery_claims):
-            raise ServiceRefused("Retained startup recovery still owns I/O; settle its exact operation before releasing claims.")
-        for claim in self._recovery_claims:
-            claim.release()
-        self._recovery_claims = ()
-
-    async def _settle_recovery(self):
-        if self._recovery is not None:
-            if self._recovery.claim.operation_owner is not None:
-                await self._recovery.settle()
-            self._recovery = None
-        self._release_recovery_claims()
-
     async def _admission(self):
-        return await require_admission_ready(self.config, self.api, self.store, delivery=self.delivery,
+        return await require_admission_ready(self.config, self.api, delivery=self.delivery,
                                              policy=self.policy.admission, owner=self)
 
     async def _select_after_admission(self):
@@ -288,7 +267,7 @@ class ProviderService:
         if self._stop.is_set():
             return None
         return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self,
-                                         excluded_jobs=frozenset(item["job_ref"] for item in relay["items"]))
+                                         excluded_jobs=frozenset(item["job_ref"] for item in relay["items"]), claims=self._claims)
 
     async def _read_until_available(self, operation):
         """Repeat only the supplied admission/read cycle, in its original task.
@@ -400,12 +379,34 @@ class ProviderService:
                 # selection; resumption must start with fresh observations.
                 await self._pause(self.policy.idle_seconds)
                 continue
-            self.controller = await self._open_attempt(pending)
+            self._attempt_stopping = asyncio.Event()
+            if self._stop.is_set():
+                self._attempt_stopping.set()
+                return
+            self.controller = await self._open_attempt(pending, stopping=self._attempt_stopping)
             # Adoption precedes this stop check, including a late factory return.
             # Shutdown observes work_task before settling that exact controller.
             if self._stop.is_set():
                 return
-            await self.controller.run(pending)
+            controller = self.controller
+            try:
+                await controller.run(pending)
+            except ControllerFailed as failure:
+                if type(failure.cause) is not LiveCapacityFull:
+                    raise
+                # Capacity refusal precedes START. Retire this unused session;
+                # independent cleanup failures still prevent another selection.
+                await controller.settle()
+                LOGGER.info("Live Attempt bookkeeping is full; no START was sent. Waiting for capacity.")
+                self.controller = None
+                await self._pause(self.policy.idle_seconds)
+                continue
+            finally:
+                operation = controller.operation
+                if isinstance(operation, AttemptExecutor) and operation.observed_crash is not None:
+                    self._on_observed_crash(operation.observed_crash)
+            # Held work remains reachable through the shared live registry.
+            self.controller = None
 
     async def _pause(self, seconds):
         try:
@@ -469,11 +470,9 @@ class ProviderService:
         self._record_task_failure(self._hello_task, "current Hello publication")
         if self.work_task is None or self.work_task.done():
             for operation, function in (
-                ("startup terminal recovery settlement", self._settle_recovery),
                 ("Attempt settlement", lambda: self._settle_controller(retry=retry_settlement)),
                 ("execution API retirement", self._retire_api),
                 ("delivery control retirement", self.delivery.retire),
-                ("preflight storage settlement", self._settle_store),
             ):
                 failure = await self._cleanup(operation, function)
                 if failure is not None:
@@ -491,9 +490,19 @@ class ProviderService:
 
     async def _finish_work(self, drain):
         try:
+            if self._attempt_stopping is not None and (
+                self.controller is None or not isinstance(self.controller.operation, AttemptExecutor)
+            ):
+                # Stop a selected START (including its permitted replay) as soon
+                # as admissions close. Only acknowledged execution may drain.
+                self._attempt_stopping.set()
             if drain:
                 await self._wait_task(self.work_task, self.policy.drain_seconds)
         finally:
+            # Admission stops immediately, while its existing Attempt may finish
+            # during the configured drain. Revoke effects before forced cleanup.
+            if self._attempt_stopping is not None:
+                self._attempt_stopping.set()
             self._cancel_once(self.work_task)
         if not await self._wait_task(self.work_task, self.policy.settle_seconds):
             raise ServiceRefused(
@@ -507,16 +516,27 @@ class ProviderService:
             )
 
     async def _settle_controller(self, *, retry):
-        if self.controller is None:
-            return
-        previous = self._settlement_task
-        if previous is None or (retry and previous.done() and (previous.cancelled() or previous.exception() is not None)):
-            self._settlement_task = self._start_task(self.controller.settle())
-        if not await self._wait_task(self._settlement_task, self.policy.settle_seconds):
-            raise ServiceRefused(
-                "The original controller settlement is still pending. Retain its task and allocation before retrying observation."
-            )
-        self._settlement_task.result()
+        # These are actual settlement tasks, not copies of controller phases.
+        failures = []
+        for controller in self._owned_controllers():
+            previous = self._settlement_tasks.get(controller)
+            if previous is None or (retry and previous.done() and (previous.cancelled() or previous.exception() is not None)):
+                previous = self._start_task(controller.settle())
+                self._settlement_tasks[controller] = previous
+            try:
+                if not await self._wait_task(previous, self.policy.settle_seconds):
+                    raise ServiceRefused(
+                        "Original Attempt settlement is still pending; retain its controller and task before releasing dependencies."
+                    )
+                previous.result()
+            except (Exception, asyncio.CancelledError) as cause:
+                failures.append(cause)
+            else:
+                del self._settlement_tasks[controller]
+                if self.controller is controller:
+                    self.controller = None
+        if failures:
+            raise BaseExceptionGroup("NMRNet could not settle every live Attempt", failures)
 
     async def _retire_api(self):
         if self.api.pending_owner is not None and self.api.pending_owner is not self:
@@ -524,14 +544,6 @@ class ProviderService:
                 "Execution API still belongs to another operation; settle its original owner before releasing dependencies."
             )
         await self.api.retire(owner=self)
-
-    async def _settle_store(self):
-        if self.store.pending_operation is not None:
-            if self.store.pending_owner is not self:
-                raise ServiceRefused(
-                    "Storage still belongs to another setup or Attempt operation; its original owner must settle it."
-                )
-            await self.store.settle(owner=self)
 
     async def _cleanup(self, operation, function):
         try:

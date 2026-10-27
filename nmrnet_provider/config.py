@@ -27,7 +27,7 @@ from provider_core.api_config import (
     api_settings, https_settings, require_api_fields,
 )
 from provider_core.attempt_record import RecoveryScope
-from provider_core.checkpoint_store import CheckpointLimits
+from provider_core.ownership import LiveAttemptLimits
 from provider_core.delivery_client import DeliveryEndpoint
 from provider_core.delivery_worker import require_delivery_retry_settings
 from provider_core.transport import _positive_seconds
@@ -99,9 +99,10 @@ class PreparationSettings:
 @dataclass(frozen=True, slots=True, repr=False)
 class LifecycleSettings:
     scope: RecoveryScope
-    store_root: Path
-    store_limits: CheckpointLimits
-    store_seconds: float
+    lifetime_root: Path
+    live_limits: LiveAttemptLimits
+    start_replays: int
+    start_seconds: float
     allowed_job_states: frozenset[str]
     poll_seconds: float
     task_settle_seconds: float
@@ -109,8 +110,10 @@ class LifecycleSettings:
 
     def __post_init__(self):
         require_observation_gap(self.observation_gap_seconds)
-        _path(self.store_root, "Producer checkpoint store")
-        _positive_seconds(self.store_seconds)
+        _path(self.lifetime_root, "Provider lifetime directory")
+        _positive_seconds(self.start_seconds)
+        if type(self.start_replays) is not int or not 0 <= self.start_replays <= 1:
+            raise ConfigurationRejected("lifecycle start_replays must be zero or one.")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -186,8 +189,8 @@ def _configuration_document(path, read_file):
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
     _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service"}, "configuration")
-    if document["schema_id"] != "nmrnet.provider.runtime_config.v1":
-        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v1.")
+    if document["schema_id"] != "nmrnet.provider.runtime_config.v2":
+        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v2.")
     return raw, document
 
 
@@ -323,10 +326,12 @@ def _lifecycle(table, api_origin, provider_ref):
         {
             "consumer_id",
             "generation_id",
-            "store_root",
-            "maximum_records",
-            "maximum_checkpoint_bytes",
-            "store_seconds",
+            "lifetime_root",
+            "maximum_live_attempts",
+            "maximum_control_bytes",
+            "maximum_pending_terminal_bytes",
+            "start_replays",
+            "start_seconds",
             "allowed_job_states",
             "poll_seconds",
             "task_settle_seconds",
@@ -343,9 +348,11 @@ def _lifecycle(table, api_origin, provider_ref):
     )
     return LifecycleSettings(
         RecoveryScope(api_origin, provider_ref, table["consumer_id"], table["generation_id"]),
-        _path(table["store_root"], "Attempt store"),
-        CheckpointLimits(table["maximum_records"], table["maximum_checkpoint_bytes"]),
-        table["store_seconds"],
+        _path(table["lifetime_root"], "Provider lifetime directory"),
+        LiveAttemptLimits(table["maximum_live_attempts"], table["maximum_control_bytes"],
+                          table["maximum_pending_terminal_bytes"]),
+        table["start_replays"],
+        table["start_seconds"],
         states,
         table["poll_seconds"],
         table["task_settle_seconds"],

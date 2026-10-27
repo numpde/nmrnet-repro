@@ -44,7 +44,7 @@ class ComposeRefusalTests(ComposeFixture, unittest.TestCase):
         for path in (self.bundle, self.bundle.parent.parent / "runtime", self.root / "prepared", self.root / "checkout",
                      Path("/run"), Path("/run/state"), Path("/run/status.json")):
             with self.subTest(path=path), self.assertRaises(ConfigurationRejected):
-                self.config = replace(self.config, lifecycle=replace(self.config.lifecycle, store_root=path))
+                self.config = replace(self.config, lifecycle=replace(self.config.lifecycle, lifetime_root=path))
                 self.plan()
 
     def test_nonroot_identity_and_bundle_ownership_are_required(self):

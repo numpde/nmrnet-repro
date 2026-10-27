@@ -24,7 +24,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source, store_headers
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
-from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
+from tests.fakes.attempts import ATTEMPT_REF, observation, progress_response
 from tests.fakes.condition_recovery import ConditionOutageTransport
 from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
 from tests.fakes.controller import empty_store
@@ -53,7 +53,7 @@ from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation
 from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
 from provider_core.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
-from provider_core.controller import StartRecovery
+from provider_core.controller import LiveStartPolicy
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import (
@@ -66,7 +66,7 @@ from provider_core.execution import (
     ObservationRecovery,
 )
 from provider_core.ownership import AttemptClaims, OwnershipRefused
-from provider_core.delivery_client import DeliveryRejected, DeliveryUnavailable
+from provider_core.delivery_client import DeliveryRejected
 from provider_core.delivery_store import DeliveryOutcome, DeliveryStorageFailed
 from provider_core.delivery_worker import DeliveryWorkerFailed
 from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, TerminalSelectedCheckpoint
@@ -226,9 +226,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             transport = Transport()
             factory = NativeAttemptFactory(
                 config=SimpleNamespace(),
-                api=api(transport, store.scope.api_origin),
-                store=store,
-                claims=AttemptClaims(),
+                claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
@@ -238,7 +236,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 on_operator_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 on_delivery_retry=Mock(),
-                start_recovery=StartRecovery(1, Mock(), Mock()),
+                start_policy=LiveStartPolicy(1, Mock(), Mock()),
             )
             allocation = Mock(
                 start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()

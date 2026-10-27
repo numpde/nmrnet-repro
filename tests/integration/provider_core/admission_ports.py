@@ -13,8 +13,8 @@ def feed_response(**changes):
 
 
 class AdmissionPeers(RuntimePeers):
-    def __init__(self, ports, *, maximum_records=2):
-        super().__init__(ports, "smiles", maximum_records=maximum_records)
+    def __init__(self, ports, *, maximum_live_attempts=2):
+        super().__init__(ports, "smiles", maximum_live_attempts=maximum_live_attempts)
         self.inventory_replies = [inventory_response(attempts=[], next_cursor=None)]
         self.feed_replies = None
         self.request_paths = []

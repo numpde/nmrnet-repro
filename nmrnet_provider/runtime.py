@@ -19,7 +19,7 @@ from nmrnet_provider.session import NMRNetSession
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.chat import ChatEndpoint
-from provider_core.controller import AttemptController, ControllerRefused
+from provider_core.controller import AttemptController
 from provider_core.delivery_client import DeliveryClient
 from provider_core.uploads import JobUploads
 
@@ -28,10 +28,9 @@ async def assemble_attempt(
     *,
     config,
     pending,
-    api,
-    store,
-    setup_owner,
     claims,
+    stopping,
+    start_policy,
     execution_identity,
     selected_artifacts,
     allocate_prediction,
@@ -42,39 +41,29 @@ async def assemble_attempt(
     observation_recovery,
     condition_recovery,
     on_unconfirmed_phase_progress,
-    start_recovery,
     on_delivery_retry,
 ):
     """Return the existing controller, which must run this same selected pending.
 
-    The caller obtains pending.input from authenticated ProviderAPI.jobs and owns
-    the opened store and lifecycle API. Prediction is acquired only after START
+    The caller obtains pending.input from authenticated ProviderAPI.jobs.
+    This controller receives its own API and delivery exchanges; a held Attempt
+    cannot retire the exchanges of a later unrelated Job. Prediction follows START
     acknowledgement and successful input preparation. Reader/generator factories
     keep partial allocations until they return their client/retirement pair.
 
-    Inventory is an early refusal check, not a claim: core checks again at run.
-    setup_owner identifies the caller's inventory read; explicit None keeps an
-    externally serialized setup read. Cancellation/timeout can leave that original
-    read pending; its owner must settle it before retry or close. No allocation or API request
-    occurs here; all construction after the inventory await is passive/synchronous.
+    Construction allocates no worker and sends no request. The shared controller
+    reserves live capacity and Job/key ownership before sending START.
     """
     if type(config) is not ProviderConfig or type(pending) is not StartPending:
         raise ValueError("Cannot assemble NMRNet Attempt: admitted configuration and selected pending start are required.")
     if not callable(on_interpreter_failure):
         raise ValueError("Cannot assemble NMRNet Attempt: interpreter failures require an operator diagnostic recipient.")
-    if api.identity is not config.api.identity:
-        raise ValueError("Cannot assemble NMRNet Attempt: lifecycle API must use the configured signing identity.")
-    if api.expected_topology != config.api.expected_topology:
-        raise ValueError("Cannot assemble NMRNet Attempt: lifecycle API must use the configured API topology.")
-    if store.scope != config.lifecycle.scope or pending.scope != store.scope:
-        raise ValueError(
-            "Cannot assemble NMRNet Attempt: configuration, retained store and pending start must share a recovery scope."
-        )
+    if pending.scope != config.lifecycle.scope:
+        raise ValueError("Cannot assemble NMRNet Attempt: selection differs from the configured provider scope.")
     if pending.analysis_kind_ref != ANALYSIS_KIND_REF:
         raise ValueError("Cannot assemble NMRNet Attempt: the selected Job must request peaks_from_mol.")
-    if await store.inventory(owner=setup_owner):
-        raise ControllerRefused("Cannot assemble new work: retained Attempt obligations require explicit recovery first.")
-
+    api = ProviderAPI(config.api.identity, config.api.http.new_transport(),
+                      expected_topology=config.api.expected_topology)
     source_api_transport = config.api.http.new_transport()
     source_store_transport = config.uploads.http.new_transport()
     source_api = ProviderAPI(config.api.identity, source_api_transport, expected_topology=config.api.expected_topology)
@@ -118,11 +107,14 @@ async def assemble_attempt(
         on_prediction_retry=on_prediction_retry,
     )
     settings = config.lifecycle
-    return AttemptController(
+    return AttemptController.live(
         api,
-        store,
         claims,
         session,
+        scope=settings.scope,
+        stopping=stopping,
+        start_policy=start_policy,
+        allow_active_start_replay=True,
         delivery=DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,
                                 retirement_seconds=config.delivery.retirement_seconds),
         on_delivery_retry=on_delivery_retry,
@@ -134,5 +126,4 @@ async def assemble_attempt(
         observation_recovery=observation_recovery,
         condition_recovery=condition_recovery,
         on_unconfirmed_phase_progress=on_unconfirmed_phase_progress,
-        start_recovery=start_recovery,
     )
