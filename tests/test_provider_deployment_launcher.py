@@ -66,7 +66,10 @@ count=0
 count=$((count + 1)); printf '%s\n' "$count" > "$root/count"
 printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
- ps) [[ ${TEST_LIVE-false} != true ]] || printf '%064d\n' 7 ;;
+ ps)
+    if [[ " $* " == *' --all '* ]]; then printf '%s' "${TEST_CONTAINERS-}";
+    elif [[ ${TEST_LIVE-false} == true ]]; then printf '%064d\n' 7; fi
+    ;;
  run)
     if [[ ${TEST_RUN_STATUS-0} != 0 ]]; then printf 'actual helper cause\n' >&2; exit "$TEST_RUN_STATUS"; fi
     if [[ " $* " == *' provider_core.deployment_binding paths '* ]]; then
@@ -81,7 +84,12 @@ case $1 in
       esac
     done
     ;;
- image|inspect) printf 'sha256:%064d\n' 9 ;;
+ inspect)
+    [[ ${TEST_INSPECT_STATUS-0} == 0 ]] || exit "$TEST_INSPECT_STATUS"
+    if [[ " $* " == *'.Mounts'* ]]; then printf '%s' "${TEST_MOUNTS-}";
+    else printf 'sha256:%064d\n' 9; fi
+    ;;
+ image) printf 'sha256:%064d\n' 9 ;;
  compose)
     if [[ ${TEST_PAUSE-false} == true ]]; then
       : > "$root/ready"
@@ -223,8 +231,52 @@ esac
         self.assertNotEqual(selected, self.bundle)
         self.assertEqual(selected.stat().st_mode & 0o777, 0o500)
         self.assertEqual((selected / 'compose.json').stat().st_mode & 0o777, 0o400)
-        self.assertTrue(self.bundle.exists())
+        self.assertFalse(self.bundle.exists())
         self.assertFalse(any(call[0] in ('create', 'start') for call in self.calls()))
+
+    def test_retirement_preserves_current_stopped_borrowers_and_original_inputs(self):
+        bundles = self.provider / 'bundles'
+        obsolete = bundles / 'generation-obsolete'
+        obsolete.mkdir(mode=0o700)
+        (obsolete / 'config').mkdir()
+        (obsolete / 'config/provider.toml').write_text('derived inputs\n')
+        (obsolete / 'config').chmod(0o500)
+        obsolete.chmod(0o500)
+        borrowed = bundles / 'generation-stopped'
+        borrowed.mkdir()
+        (borrowed / 'config.toml').write_text('stopped borrower\n')
+        (bundles / 'generation-symlink').symlink_to(self.provider / 'unselected-directory')
+        result = self.run_command('retire-generations', changes={
+            'TEST_CONTAINERS': CID, 'TEST_MOUNTS': str(borrowed / 'config.toml') + '\n',
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(obsolete.exists())
+        self.assertTrue(borrowed.exists())
+        self.assertTrue(self.bundle.exists())
+        self.assertTrue((self.provider / 'unselected-directory/canary').exists())
+        self.assertTrue((self.provider / 'signing.private.json').exists())
+        self.assertIn(['ps', '--all', '--quiet'], self.calls())
+        self.assertIn('Retired 1 unused', result.stdout)
+
+    def test_mount_above_generations_keeps_all_reachable_bundles(self):
+        unselected = self.provider / 'bundles/generation-borrowed'
+        unselected.mkdir()
+        result = self.run_command('retire-generations', changes={
+            'TEST_CONTAINERS': CID, 'TEST_MOUNTS': str(self.provider) + '\n',
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(unselected.exists())
+        self.assertIn('Retired 0 unused', result.stdout)
+
+    def test_inspection_failure_removes_no_generation(self):
+        unselected = self.provider / 'bundles/generation-unresolved'
+        unselected.mkdir()
+        result = self.run_command('retire-generations', changes={
+            'TEST_CONTAINERS': CID, 'TEST_INSPECT_STATUS': '7',
+        })
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertTrue(unselected.exists())
+        self.assertTrue(self.bundle.exists())
 
     def test_native_lifetime_locks_are_created_private_and_keep_their_inode(self):
         result = self.run_command('install')

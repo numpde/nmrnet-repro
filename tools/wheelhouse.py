@@ -255,6 +255,15 @@ def populate_pool(lock, pool, *, inference):
     requirements(lock)
     if not pool.is_dir():
         raise ValueError("Cannot populate wheels: shared pool must already be a directory.")
+    try:
+        selected = select_wheels(lock, pool)
+    except subprocess.CalledProcessError:
+        # An incomplete pool is expected during explicit acquisition. Pip still
+        # owns compatibility and hash admission on the download path below.
+        pass
+    else:
+        sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
+        return selected
     # Same-filesystem staging permits no-replace link publication. Cleanup is
     # success-only: a failure keeps its downloaded evidence and original cause.
     stage = Path(tempfile.mkdtemp(prefix=".nmrnet-wheel-download-", dir=pool))

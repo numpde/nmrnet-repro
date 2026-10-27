@@ -54,6 +54,20 @@ class WheelPoolTests(unittest.TestCase):
         self.alpha.write_bytes(b"later pool modification")
         self.assertEqual((destination / self.alpha.name).read_bytes(), original)
 
+    def test_complete_pool_skips_acquisition_and_preserves_all_cached_files(self):
+        before = {path.name: path.read_bytes() for path in self.pool.iterdir()}
+        run = subprocess.run
+
+        def offline_only(command, **kwargs):
+            self.assertIn("--no-index", command, "A complete pool must not query a package index")
+            return run(command, **kwargs)
+
+        with patch.object(wheelhouse.subprocess, "run", side_effect=offline_only):
+            for _ in range(2):
+                identity = wheelhouse.populate_pool(self.lock, self.pool, inference=True)
+                self.assertEqual(set(identity["files"]), {self.alpha.name})
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.pool.iterdir()})
+
     def test_only_incompatible_cached_wheel_fails_offline(self):
         self.alpha.unlink()
         with self.assertRaises(subprocess.CalledProcessError):
@@ -135,10 +149,11 @@ class WheelPoolTests(unittest.TestCase):
             return run(command, **kwargs)
 
         before = {path.name: path.read_bytes() for path in self.pool.iterdir()}
-        with patch.object(wheelhouse.subprocess, "run", side_effect=download):
+        with patch.object(wheelhouse.subprocess, "run", side_effect=download) as calls:
             wheelhouse.populate_pool(lock, self.pool, inference=False)
             inode = (self.pool / incoming.name).stat().st_ino
             wheelhouse.populate_pool(lock, self.pool, inference=False)
+            self.assertEqual(sum("download" in call.args[0] for call in calls.call_args_list), 1)
             self.assertEqual((self.pool / incoming.name).stat().st_ino, inode)
             self.assertEqual((self.pool / incoming.name).read_bytes(), incoming.read_bytes())
             (self.pool / incoming.name).write_bytes(b"conflicting pooled bytes")

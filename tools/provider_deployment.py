@@ -51,7 +51,8 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     """Freeze admitted inputs into a fresh generation for Compose normalization.
 
     No API/model request, store opening or worker allocation occurs. Failed
-    generations retain their actual configuration, and previous generations stay intact.
+    generations retain their actual configuration. After selection, the launcher
+    retires older generations only when no container borrows them.
     The caller receives the resulting Compose configuration directly.
     """
     definition, settings, secrets, bundle, source_root, models = map(

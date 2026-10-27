@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
-[[ $# == 2 && $role == provider && $action =~ ^(install|up|down|status|logs|client-inputs)$ ]] || exit 2
+[[ $# == 2 && $role == provider && $action =~ ^(install|up|down|status|logs|client-inputs|retire-generations)$ ]] || exit 2
 caller_uid=$(id -u) caller_gid=$(id -g)
 [[ $caller_uid != 0 && $caller_gid != 0 ]] || { printf '%s\n' 'Run Compose deployment as its nonroot owner.' >&2; exit 2; }
 refuse() { printf 'Cannot %s %s deployment: %s\n' "$action" "$role" "$1" >&2; return 2; }
@@ -86,6 +86,43 @@ select_bundle() {
     bundle=$root/$target
     path "$bundle"
     [[ -d $bundle && -f $bundle/compose.json && ! -L $bundle/compose.json ]] || return 2
+}
+retire_generations() {
+    local records sources= candidate source borrowed removed=0 kept=0
+    local -a containers=() mounts=()
+    # The deployment lock serializes supported installs/up/down. Inspect every
+    # container, including stopped borrowers and mounts above or within a bundle.
+    records=$(run 30 ps --all --quiet)
+    if [[ -n $records ]]; then
+        mapfile -t containers <<< "$records"
+        sources=$(run 30 inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${containers[@]}")
+        while IFS= read -r source; do
+            [[ -n $source ]] || continue
+            mounts+=("$(realpath -m -- "$source")")
+        done <<< "$sources"
+    fi
+    for candidate in "$root/bundles"/generation-*; do
+        [[ -d $candidate && ! -L $candidate ]] || continue
+        [[ $candidate != "$bundle" ]] || { kept=$((kept + 1)); continue; }
+        borrowed=false
+        for source in "${mounts[@]}"; do
+            source=${source%/}
+            if [[ $source == "$candidate" || $source == "$candidate/"* || $candidate == "$source/"* ]]; then
+                borrowed=true
+                break
+            fi
+        done
+        if [[ $borrowed == true ]]; then
+            kept=$((kept + 1))
+            continue
+        fi
+        # Sealed generations are owner-read-only. Restore directory write access
+        # only inside the obsolete bundle; original inputs and runtime stay put.
+        find -P "$candidate" -depth -type d -exec chmod u+rwx -- {} +
+        rm -rf --one-file-system -- "$candidate"
+        removed=$((removed + 1))
+    done
+    printf 'Retired %s unused configuration generations; retained %s selected or borrowed generations.\n' "$removed" "$kept"
 }
 helper() {
     local image=$1 python=$2; shift 2
@@ -236,11 +273,16 @@ if [[ $action == install ]]; then
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
+    retire_generations
     printf 'Ensure shared delivery is running through nmr-provider-tools using this binding definition.\n'
     printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
     exit 0
 fi
 select_bundle
+if [[ $action == retire-generations ]]; then
+    retire_generations
+    exit 0
+fi
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
 case $action in
     up)

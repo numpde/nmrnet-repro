@@ -267,6 +267,7 @@ help:
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
 		'make provider/deployment/down DEPLOYMENT=<name> Stop/remove this provider stack; retain data volumes.' \
+		'make provider/deployment/retire-generations DEPLOYMENT=<name> Remove unused frozen inputs; keep selected and container-borrowed generations.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
 		'make test/integration/provider/deployment/smiles Generate two CCl conformers and predict H/C through the Compose native path (opt-in).' \
 		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \
@@ -385,6 +386,7 @@ provider/prepare:
 
 .PHONY: provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 .PHONY: provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
+.PHONY: provider/deployment/retire-generations
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
 	bash tools/compose_qualification.sh
@@ -393,7 +395,7 @@ test/integration/provider/deployment:
 test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:
 	bash tools/compose_qualification.sh $(notdir $@)
 
-provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
+provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down provider/deployment/retire-generations:
 	bash tools/provider_deployment.sh $(notdir $@)
 
 test/unit/provider/deployment:

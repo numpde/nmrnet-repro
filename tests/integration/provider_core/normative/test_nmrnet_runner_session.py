@@ -2,14 +2,44 @@
 
 import asyncio
 import errno
+import os
 import socket
+import subprocess
+import sys
+import tempfile
 import threading
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from nmrnet_provider.native_session import NativeOperation
 from provider_core.runner_session import RunnerSession, RunnerStartupStopped, RunnerStartupUnavailable
 from tests.fakes.runner import RunningSupervisor
+
+
+class NativeLeaseTests(unittest.TestCase):
+    def test_fifo_lease_rejects_without_waiting_for_a_writer_or_allocating_a_child(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            os.mkfifo(root / ".owner-session.lock", mode=0o600)
+            code = """
+import sys
+sys.path.append('/consumer')
+from pathlib import Path
+from nmrnet_provider.native_session import NativeOperation
+operation = NativeOperation(role='reader', endpoint=Path(sys.argv[1]) / 'runner.sock',
+                            operation_seconds=1, on_notice=lambda notice: None)
+try:
+    operation._connect()
+except PermissionError as failure:
+    assert 'regular file' in str(failure), str(failure)
+else:
+    raise AssertionError('A FIFO must not admit a native session')
+assert operation.session is None
+"""
+            result = subprocess.run([sys.executable, "-c", code, str(root)],
+                                    capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):

@@ -132,6 +132,7 @@ class AcquisitionInputTests(unittest.TestCase):
                 "-C",
                 str(self.root),
                 "packages/wheelhouse",
+                "SHARED_RUNTIME_IMAGE=sha256:" + "a" * 64,
             ],
             env=environment,
             stdin=slave,
