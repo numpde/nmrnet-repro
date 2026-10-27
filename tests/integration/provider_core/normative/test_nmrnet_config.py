@@ -121,7 +121,10 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(body["display_name"], "NMRNet local fixture")
             self.assertEqual(
-                body["analysis_offerings"], [{"analysis_kind_ref": "peaks_from_mol", "description": "Coordinate shifts"}]
+                body["analysis_offerings"], [{
+                    "analysis_kind_ref": "peaks_from_mol",
+                    "description": (Path(config_module.__file__).with_name("about") / "hello.md").read_text(encoding="utf-8"),
+                }]
             )
             self.assertFalse(files.state.exists())
 

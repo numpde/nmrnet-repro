@@ -113,7 +113,6 @@ retry_max_seconds = 0.1
 [service]
 display_name = "NMRNet local fixture"
 description = "NMRNet coordinate shifts"
-offering_description = "Coordinate shifts"
 page_size = 1
 maximum_pages = 2
 idle_seconds = 0.2

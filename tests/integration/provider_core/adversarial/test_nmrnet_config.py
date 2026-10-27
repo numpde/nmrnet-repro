@@ -15,6 +15,16 @@ from nmrnet_provider.startup_capture import startup_authorities
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_missing_packaged_offering_refuses_startup_and_preserves_the_file_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files = ConfigFiles(directory)
+            failure = FileNotFoundError("packaged offering is missing")
+            with patch.object(Path, "read_text", side_effect=failure):
+                with self.assertRaisesRegex(ConfigurationRejected, "packaged offering") as raised:
+                    load_provider_config(files.path)
+            self.assertIs(raised.exception.cause, failure)
+            self.assertFalse(files.state.exists())
+
     def test_live_limits_are_explicit_positive_integers_before_startup_effects(self):
         for field, current in (("maximum_live_attempts", "2"), ("maximum_control_bytes", "262144"),
                                ("maximum_pending_terminal_bytes", "4194304")):
@@ -99,6 +109,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
         replacements = (
             (b"[service]", b"[unknown_service]"),
             (b"[service]", b'[service]\nanalysis_kind_ref = "PRIVATE-UNSUPPORTED"'),
+            (b"[service]", b'[service]\noffering_description = "Obsolete inline override"'),
             (b'display_name = "NMRNet local fixture"\n', b""),
             (b'display_name = "NMRNet local fixture"', b'display_name = ""'),
             (b'display_name = "NMRNet local fixture"', b'display_name = "' + b"PRIVATE" * 22 + b'"'),

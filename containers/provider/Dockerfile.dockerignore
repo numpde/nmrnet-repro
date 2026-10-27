@@ -7,6 +7,8 @@
 !requirements/provider-core-install.lock
 !nmrnet_provider/
 !nmrnet_provider/*.py
+!nmrnet_provider/about/
+!nmrnet_provider/about/*.md
 nmrnet_provider/worker_main.py
 nmrnet_provider/native_child.py
 nmrnet_provider/geometry_worker.py

@@ -4,7 +4,7 @@
 # Source/context labels identify committed inputs; immutable IDs identify output.
 
 provider_image_inputs=(containers/provider/Dockerfile containers/provider/Dockerfile.dockerignore
-    requirements/provider-core-install.lock
+    requirements/provider-core-install.lock nmrnet_provider/about/hello.md
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py
     tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
 # Capture controller bindings; shared runtime code enters only as a locked wheel.

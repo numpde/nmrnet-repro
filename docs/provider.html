@@ -32,15 +32,12 @@ coordinates using released models. Supply coordinates or generate conformers fro
 SMILES. <a href="https://numpde.github.io/nmrnet-repro/">Scientific guide</a></p>
 </blockquote>
 <p>Set the description in the deployment's startup configuration.
-The maintained <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/provider.toml.example">operator example</a> also supplies
-the offering text shown to scientific API/GUI readers: supported inputs, per-atom
-ppm output, hydrogen handling, separate geometries and the scientific guide.
-Copy and adapt that TOML; the runtime transports the operator's admitted text.
-<code>nmrnet_provider.service.ProviderService</code> publishes the
-admitted description through Provider Hello; operators retain ownership of their
-configured text. This follows
-<a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/config/provider.toml.example#L9-L12">SECS's explicit provider-description example</a>
-and <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_main.py#L49-L55">NMRPeak's announcement description</a>.</p>
+The <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/provider.toml.example">operator example</a>
+provides the summary and operational settings. The scientific offering is maintained
+once in <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/about/hello.md"><code>nmrnet_provider/about/hello.md</code></a>
+and installed with the provider. Both deployments publish this Markdown text
+through Provider Hello. To change the offering, edit that file, rebuild the images
+and redeploy; deployment TOML contains no offering override.</p>
 <p>The internal <code>nmrnet_provider.config.load_provider_config</code> loads one explicit
 UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
 configured credential, interpreter keys and TLS roots before any HTTP request,
@@ -102,7 +99,7 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>service</code></td>
-<td><code>display_name</code>, <code>description</code>, <code>offering_description</code>, <code>page_size</code>, <code>maximum_pages</code>, <code>idle_seconds</code>, <code>api_backoff_max_seconds</code>, <code>hello_seconds</code>, <code>drain_seconds</code>, <code>settle_seconds</code>, <code>allocation_seconds</code>, <code>prediction_seconds</code>, <code>source_seconds</code></td>
+<td><code>display_name</code>, <code>description</code>, <code>page_size</code>, <code>maximum_pages</code>, <code>idle_seconds</code>, <code>api_backoff_max_seconds</code>, <code>hello_seconds</code>, <code>drain_seconds</code>, <code>settle_seconds</code>, <code>allocation_seconds</code>, <code>prediction_seconds</code>, <code>source_seconds</code></td>
 <td>none</td>
 </tr>
 </tbody>

@@ -57,7 +57,7 @@ class StageApiConfigTests(unittest.TestCase):
             public = tomllib.loads((root / "deployment/provider.toml").read_text())
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
             self.assertNotIn("store_root", private)
-            self.assertEqual(public["lifecycle"]["store_root"], "/srv/nmrnet/attempts")
+            self.assertEqual(public["lifecycle"]["lifetime_root"], "/srv/nmrnet/attempts")
             binding = tomllib.loads((root / "deployment/bindings.toml").read_text())["bindings"][0]
             self.assertEqual(binding["route"], {
                 "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["api.example=127.0.0.1"],
@@ -75,14 +75,14 @@ class StageApiConfigTests(unittest.TestCase):
                 self.assertEqual(retained.read_bytes(), (root / "source" / name).read_bytes())
                 self.assertEqual(retained.stat().st_mode & 0o777, 0o600)
 
-    def test_qualification_offering_uses_the_operator_example_without_replacing_its_config_owner(self):
+    def test_qualification_uses_the_operator_summary_and_leaves_the_offering_to_the_binding(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             staged_real_config(root)
             document = tomllib.loads((root / "source/provider.toml").read_text())
             example = tomllib.loads(Path("/fixture/provider.toml.example").read_text())
-            for field in ("description", "offering_description"):
-                self.assertEqual(document["service"][field], example["service"][field])
+            self.assertEqual(document["service"]["description"], example["service"]["description"])
+            self.assertNotIn("offering_description", document["service"])
 
     def test_file_inspection_does_not_require_or_read_a_key(self):
         with tempfile.TemporaryDirectory() as temporary:

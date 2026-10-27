@@ -69,9 +69,10 @@ class DocumentationTests(unittest.TestCase):
             .stdout.decode()
             .split("\0")
         )
-        # README is the entry point; two .txt files are data. The user explicitly
-        # requested note022 as a plain-text running record (quoted in that note).
-        exceptions = {"README.md", "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
+        # Pages use HTML; the API offering is a packaged Markdown input.
+        # The remaining exceptions are the README, data and a plain-text design record.
+        exceptions = {"README.md", "nmrnet_provider/about/hello.md",
+                      "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
                       "docs/notes/022_shared_delivery_deferred_20261024.txt"}
         leftovers = [
             name

@@ -383,7 +383,6 @@ def _service(table):
         {
             "display_name",
             "description",
-            "offering_description",
             "page_size",
             "maximum_pages",
             "idle_seconds",
@@ -397,10 +396,16 @@ def _service(table):
         },
         "service",
     )
+    # The installed binding owns its scientific offering; deployments supply
+    # only the provider's summary and operational settings.
+    try:
+        offering_description = (Path(__file__).with_name("about") / "hello.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as cause:
+        raise ConfigurationRejected("cannot read the packaged offering description as UTF-8.", cause=cause) from None
     announcement = Announcement(
         table["display_name"],
         table["description"],
-        (AnalysisOffering(ANALYSIS_KIND_REF, table["offering_description"]),),
+        (AnalysisOffering(ANALYSIS_KIND_REF, offering_description),),
     )
     hello_body(
         display_name=announcement.display_name,

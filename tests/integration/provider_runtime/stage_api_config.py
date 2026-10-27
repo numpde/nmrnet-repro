@@ -150,9 +150,7 @@ def stage(root, origin, topology, *, inputs, interpreter_config, prediction_imag
         ca_file=api_ca,
         model_ca_file=model_ca,
         store_ca_file=api_ca,
-        # Keep the completed Job's durable record plus one free admission slot.
-        # A full store correctly refuses new work, including the next idle poll.
-        maximum_records=2,
+        maximum_live_attempts=2,
     )
     files.credential.write_bytes(original)
     raw = files.raw.replace(
@@ -161,11 +159,10 @@ def stage(root, origin, topology, *, inputs, interpreter_config, prediction_imag
     raw = raw.replace(b'profile = "dev-local"', ("profile = " + json.dumps(credential.profile)).encode())
     raw = raw.replace(b'topology = "dev-local"', ("topology = " + json.dumps(topology)).encode())
     presentation = tomllib.loads(Path("/fixture/provider.toml.example").read_text())["service"]
-    for field, previous in (("description", "NMRNet coordinate shifts"), ("offering_description", "Coordinate shifts")):
-        raw = raw.replace(
-            (field + " = " + json.dumps(previous)).encode(),
-            (field + " = " + json.dumps(presentation[field])).encode(),
-        )
+    raw = raw.replace(
+        b'description = "NMRNet coordinate shifts"',
+        ("description = " + json.dumps(presentation["description"])).encode(),
+    )
     raw = raw.replace(str(files.state).encode(), str(root / "state").encode())
     if interpreter_config is not None:
         files.key.write_bytes(captured_inputs[referenced["key_file"]])
