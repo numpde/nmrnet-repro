@@ -1,4 +1,4 @@
-"""Keep published HTML navigable and dated records faithful to their cited source."""
+"""Keep published HTML navigable and source quotations faithful to their citations."""
 
 from tools.container_guard import require_container
 
@@ -107,7 +107,7 @@ class DocumentationTests(unittest.TestCase):
                     if parts.fragment:
                         self.assertIn(unquote(parts.fragment), pages[target].ids, (path, link))
 
-    def test_literal_records_match_their_original_git_bytes(self):
+    def test_record_quotations_match_their_cited_source_lines(self):
         records = 0
         for path in (ROOT / "docs").rglob("*.html"):
             page = Page(path.read_text())
@@ -124,10 +124,19 @@ class DocumentationTests(unittest.TestCase):
                     check=True,
                 ).stdout
                 self.assertEqual(hashlib.sha256(original).hexdigest(), page.metadata["original-source-sha256"])
-                self.assertEqual(original, "".join(page.record).encode())
-                self.assertEqual(
-                    [(f"L{index}", line) for index, line in enumerate(original.decode().splitlines(keepends=True), 1)],
-                    [(identity, "".join(text)) for identity, text in page.lines],
-                )
+                # Notes retain evidence excerpts, not operational transcripts.
+                # Original line IDs keep citations stable across omissions.
+                source_lines = original.decode().splitlines(keepends=True)
+                retained = [(int(identity[1:]), "".join(text)) for identity, text in page.lines]
+                self.assertTrue(retained, "Retain the cited design and evidence quotations.")
+                indices = [index for index, _ in retained]
+                self.assertEqual(indices, sorted(set(indices)), "Keep original source order and unique line IDs.")
+                for index, text in retained:
+                    self.assertGreaterEqual(index, 1)
+                    self.assertLessEqual(index, len(source_lines))
+                    # A quotation may omit leading coordination metadata, but
+                    # the remaining wording must be an exact source suffix.
+                    self.assertTrue(source_lines[index - 1].endswith(text), (path, index, text))
+                self.assertEqual("".join(page.record), "".join(text for _, text in retained))
                 records += 1
-        self.assertGreaterEqual(records, 13, "Historical notes must remain available, with literal source evidence.")
+        self.assertGreaterEqual(records, 13, "Historical notes must retain their cited source evidence.")

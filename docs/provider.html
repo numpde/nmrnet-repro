@@ -234,6 +234,10 @@ proxies and serial native runners, then waits for provider readiness, including
 an accepted API Hello. This establishes readiness, not scientific accuracy or
 successful model interpretation. Down stops that provider and its dependencies;
 it leaves shared delivery and its queue available.</p>
+<p>Install retires unused older input generations. The selected generation and
+any generation mounted by a container, including a stopped container, remain.
+To retire unused generations without reconfiguring or stopping the provider:</p>
+<pre><code class="language-sh">make provider/deployment/retire-generations DEPLOYMENT=&lt;name&gt;</code></pre>
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/status PROJECT=&lt;project-name&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/logs PROJECT=&lt;project-name&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;</code></pre>
@@ -336,8 +340,8 @@ payload bodies or a dump file. Discard requires that exact binding, Attempt and
 digest and removes only a held row; pending rows remain unchanged. It proves
 neither API acceptance nor resolution of the remote Attempt. Producer sockets
 have no deletion route. Source:
-<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_discard.py">offline operator command</a> and
-<a href="https://github.com/numpde/nmrnet-repro/blob/3126062/packages/provider-core/src/provider_core/delivery_store.py">queue disposition owner</a>.</p>
+<a href="https://github.com/numpde/nmr-provider-tools/blob/d9e7b18bbf5b7d0d310f2515e3f23500acfc4d35/packages/provider-core/src/provider_core/delivery_discard.py">offline operator command</a> and
+<a href="https://github.com/numpde/nmr-provider-tools/blob/d9e7b18bbf5b7d0d310f2515e3f23500acfc4d35/packages/provider-core/src/provider_core/delivery_store.py">queue disposition owner</a>.</p>
 <h3>One scientific Job</h3>
 <p>The prediction targets create one <strong>persistent Job</strong> on the selected API. Pasted
 targets use fixed supplied chloromethane and compare against an existing pinned

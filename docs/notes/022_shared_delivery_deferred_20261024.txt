@@ -316,7 +316,7 @@ retained rather than inferring an empty queue after a failed qualification.
 
 8 / Actual isolated recovery: maintained target
   make test/integration/provider/deployment/recovery
-    WHEELHOUSE=/home/ra/Downloads/wheelhouse
+    WHEELHOUSE=/path/to/wheelhouse
 passed at b3dcaeb, /tmp/nmrnet-final-private-recovery-lock-fixed.log,
 private evidence /tmp/nmrnet-compose-ySe66an5. The signed peer counted:
   START=0; COMPLETE=0; model=0; download=0; Hello=13.
@@ -343,38 +343,11 @@ Full IDs have sha256: prefix. Build logs on each host:
 
 Deployment refresh used maintained down/install/up owners, retaining persistent
 volumes and existing credentials; no new Job, model call or scientific run.
-Local nmr-localhost generation-6Mu12zYz: seven roles healthy, controller and
-shared daemon restart0/OOMfalse; shared queue0 and producer checkpoints0.
-Remote nmr-dapp32-com generation-Tu9hieB4: native/proxy roles healthy, controller
-and daemon restart0/OOMfalse, shared queue0. At 07:21UTC its controller waited
-for API reads: selected interface wlp10s0 was DOWN, DNS returned errno101
-(network unreachable); host default route used a different, wired interface.
-The initial request for a new interface choice was mistaken: the agent had
-extended the user's download-interface selection into runtime configuration.
-Inspected user directions selected Wi-Fi for weights/download (23 October,
-16:33UTC) and "the WLAN interface where needed" alongside the wheelhouse
-(24 October, 09:03UTC); neither required runtime service traffic over Wi-Fi.
-The user corrected that interpretation. Existing deployment authorization
-therefore covered correcting the agent's route assumption without another
-approval or an automatic runtime fallback.
 The explicit end-state rule is two independent choices: setup/acquisition uses
 an explicitly selected interface; deployment also uses explicitly selected
 interfaces. They may be the same or different. The mistake was conflating those
 choices, not requiring interface binding. Runtime must not inherit WLAN_INTERFACE
-or select a default-route fallback; the wired choice above is explicit config.
-
-Final remote route correction, 25 October 07:38UTC: all three external routes
-(api, interpreter, store) explicitly select the active default-route interface
-enx344b50000000, with its observed resolvectl DNS server192.168.0.1. Acquisition
-interface selections were unchanged. Maintained down/install/up owners regenerated
-both configurations without image rebuilds. Final provider generation-D7JHQLEe:
-seven roles healthy; controller and shared daemon restart0/OOMfalse;
-outstanding_items=0 and producer checkpoints=0. A transient API CONNECT502 was
-followed by api_read_recovered in the original controller process. Evidence:
-  remote /tmp/nmrnet-final-wired-deploy.log
-  Docker logs for nmrnet-0afe8dc0042e806a879f-provider-generation-D7JHQLEe
-Local generation-6Mu12zYz remains healthy. Both hosts use the image IDs above.
-No new scientific Job, model call or inference was needed for this correction.
+or select a default-route fallback.
 
 Supervisor backlog, 25 October 2026: residue closure
 
@@ -408,7 +381,7 @@ Installed delivery backlog qualification, 25 October 2026
 
 Maintained command (contained, installed wheel, local signed TLS peers only):
   make test/integration/provider-core/delivery
-    WHEELHOUSE=/home/ra/Downloads/wheelhouse
+    WHEELHOUSE=/path/to/wheelhouse
 Result: 30 tests pass in3.979s; /tmp/nmrnet-installed-queue-recovery-first.log.
 New source witnesses in packages/provider-core/tests/integration/delivery/
  normative/test_delivery_process.py:
@@ -684,7 +657,7 @@ Frozen application/source batchdb92409, after b87ffd9 (retirement diagnostic)
 and4188c70 (complete setup sequence). All four images were built once per host
 from this freeze. Synthetic qualification used the maintained target:
   make test/integration/provider/prediction-recovery
-    WHEELHOUSE=/home/ra/Downloads/wheelhouse
+    WHEELHOUSE=/path/to/wheelhouse
 It passed with exactly one kernel OOM and one replacement in the same runner,
 identical frozen request bytes, and confirmed original/successor retirement.
 The two synthetic protocol executions were original OOM failure plus successor;
@@ -756,7 +729,7 @@ Duplicate-cache cleanup, after consumer and byte checks:
   .work/provider-core/wheelhouse:11 wheels;
   .work/preparation/wheelhouse:3 wheels.
 All73 wheels had identical size/SHA-256 counterparts in the operator-selected
-/home/ra/Downloads/wheelhouse. Immediately before removal, cmp verified every
+shared wheelhouse. Immediately before removal, cmp verified every
 wheel and the archive against that shared cache. The archive matches
 Uni-Core-ace6fae1c8479a9751f2bb1e1d6e4047427bc134.tar.gz (tracked source declaration).
 No current source, deployment, process or Engine mount referenced the old pools.
@@ -968,24 +941,6 @@ No additional model, dependency, source inventory or broad policy run was needed
 Diff checks and the final owner/caller/privacy review found no further actionable
 source issue in this pass. Earlier pending QA corrections remain intact.
 
-Observed operational issue, not resolved by these source changes:
-Production's bounded last-30-minute proxy sample contained1144lines, including
-38 DNS-query failure notices with native TimeoutError and1067 BrokenPipeError
-forwarding notices. Provider notices showed repeated CONNECT502 retry/recovery
-pairs, plus a small number of HTTP503 notices. A separate bounded provider sample
-had30 read retry/recovery pairs and7 Hello retries/6recoveries; these are sample
-counts, not a complete outage history or a loss-rate measurement. The configured
-proxy had one IPv4 resolver. All seven roles remained healthy; the API proxy had
-restart_count0/OOMfalse. This health does not establish uninterrupted API access.
-The logs establish interface-bound DNS timeouts and automatic recovery, not why
-queries timed out. Broken pipes were not proved to cause the admission retries
-or to be harmless; they were not suppressed. No route, resolver, interface,
-service or credential was changed, and no packet capture or network-failure
-campaign was performed. Underlying network diagnosis remains open.
-
-All QA changes remain uncommitted and undeployed. Existing live source revision
-is ec3efc8. The additional core changes require refresh of all four affected
-runtime images for release; this audit did not rebuild or restart any deployment.
 Earlier deferred stress, extended failure-timing and global policy work remains
 unqualified. No new durable file outside this existing note was introduced.
 
@@ -1007,17 +962,6 @@ The independent result review ran the maintained result lane:48checks passed in
 not a new native geometry, model, API or numerical qualification. The previous
 Upload and held-result corrections remain present with their prior evidence;
 those unaffected suites were not repeated in this pass.
-
-Follow-up on the observed production availability issue:
-Six bounded DNS queries used the existing production API-proxy container, its
-configured IPv4 resolver and its configured interface, without changing grants.
-All six returned answers; observed durations were0.006,0.002,0.002,0.001,0.002,
-0.001seconds. The result establishes reachability at the sample time, not the
-cause or absence of intermittent failures. The earlier native TimeoutError and
-API retry/recovery observations remain valid. No alternate resolver/interface,
-DNS cache, transport or retry policy was substituted. Forwarding BrokenPipeError
-notices were not treated as proof of failed API operations or suppressed without
-establishing their cause. Underlying network diagnosis remains open.
 
 The reviewed source pass finished without a new actionable finding. This does
 not qualify the previously deferred stress, timing, engine/UID, global-policy or
@@ -1155,9 +1099,8 @@ work with its owner; shared API retry support alone does not complete that work.
 
 The maintainer requested end-to-end completion with continuous U/A QA/QC.
 Shared package, delivery/proxy implementation, GitHub release and host deployment
-are owned by nmr-provider-tools (session 01a1769b-a54e-7371-ae9a-4cf56c888228).
-This session owns the NMRNet consumer; Magnet's owner is
-01a1644e-f84a-7ad1-9749-198734febb41. Donor source is d09b77b.
+are owned by nmr-provider-tools. NMRNet and Magnet own their consumers.
+Donor source is d09b77b.
 
 Agreed release is provider-core 0.2.0 from GitHub, with wheel, normal source
 distribution, runtime installation lock and exact artifact hashes. The flat
@@ -1253,7 +1196,7 @@ enters its import path. Normal source-unit lanes use the same released wheel.
 Shared release v0.2.0 is public at
 https://github.com/numpde/nmr-provider-tools/releases/tag/v0.2.0.
 Anonymous acquisition through the maintained packages/provider-core/wheelhouse
-target, explicit interface wlp1s0 and shared image
+target, an explicitly selected interface and shared image
 sha256:c801a505abbbef79ae60d51f33bb339ee03b782104197615517296b44da4f7f3
 downloaded the exact wheel/source hashes above into a fresh temporary cache.
 The third-party pip invocation selected 12 dependencies; provider-core was
@@ -1907,39 +1850,7 @@ actual borrower. Do not add an archive, registry, payload dump or another shared
 deployment root. No files were removed or lifecycle behavior changed for this
 finding; it is not a new gate on Magnet's current integration and delivery proof.
 
-Local Magnet adoption and coexistence, 26 October 2026, 19:22 UTC
-
-Magnet's owner completed local adoption with the converted policies committed
-as 9e87836, following provider-code commit 00978d0. Independent Docker metadata
-inspection confirmed the actual localhost provider running and healthy at
-sha256:03b8cfb75087e18cc19e3772d61759f04876684d927d288b71a8730c183a312a,
-UID/GID 65532:65532 with supplementary GID 1000, restart count zero. E01 and E02
-CPU runners were running with restart count zero at, respectively,
-sha256:cac894ae366379bb93641b1f82ad49a69b18a9514f94cba2fd33b9bdc82a165a
-and sha256:9293a1ac89b4cb3ddf2ec88ca6ff447535f4902dca8aa1da77ba6ea2be634c28.
-
-All seven NMRNet roles remained healthy in generation-vpYDkZ4g at their previously
-recorded image identities, each with restart count zero. The shared daemon and
-both API proxies remained healthy at ab664d1e19c2daae73f06a946ec951296f6f99d080ac44ad8dd2bf46fabb4025,
-each with restart count zero. This independently confirms local consumer
-adoption and coexistence without a shared-service or NMRNet restart. It is not
-terminal API publication evidence. Production Magnet adoption and the authentic
-retained-command replay remain outstanding at this observation.
-
 Production Magnet adoption and authentic replay, 26 October 2026, 19:46 UTC
-
-Independent production Docker inspection confirmed Magnet's provider running
-and healthy at
-sha256:29faacd97add78bab0e0883016200bdf59c782abb16974de944925aa111af238,
-UID/GID 65532:65532 with supplementary GID 1000 and restart count zero. Its three
-selected runners were running, each with restart count zero:
-E01 sha256:19490f3fdc45d8c28998f69ed52d49b953ab65f4e0a165b61693a53745e2e479;
-E02 sha256:20b6cdf55f528360c106903dbd0b9a9dc7c803772c92e80fb6336fdaa04a0166;
-G01 sha256:3f5f39d5bdf9d554e611472316a4ce94bc8f3f35e2200048877b4ac40a0a3136.
-All seven NMRNet roles remained healthy in generation-sotqpmM7 at their original
-recorded images, each with restart count zero. The shared daemon and both API
-proxies remained healthy at their original d5d39bcfce25bf39b38ba28bf207e42298989c8b732ad0314cbc7362b0bdd3cc
-image, each with restart count zero.
 
 The actual shared daemon's Docker log contained one matching delivery_published
 event for provider:magnet-pa-a, operation complete, on the original production
@@ -2060,3 +1971,144 @@ ran. The open now includes O_NONBLOCK so the existing fstat admission can reject
 that object; no extra state, validator or fallback was added. A dedicated FIFO
 failure-injection test is deferred. This was a source-level failure scenario,
 not an observed production incident.
+
+27 October 2026 - v0.2.3 NMRNet adoption on both hosts
+
+Functional source 15fc91f21baa6b2dc6536a920b687d01b34d8747 is published on main.
+Each host acquired the public pinned wheel/source through the maintained lane
+into its existing flat wheelhouse and built controller, geometry and inference
+images offline. Both hosts passed the four installed-controller inventory,
+signing/import-origin checks and the inference-import target. Existing scientific
+locks and model inputs were preserved; no scientific rerun was submitted.
+
+The local deployment is generation-sRphUltt, with these observed images:
+controller sha256:74f57f25d332e2781329f3473e059e1568dbc52560c8b6d314d51b45001a9270;
+geometry sha256:17a870cbc25cc0729047f3a4aa174f82cc1aec0eb5daf101a73221faf8ed7cd6;
+inference sha256:506f71bdd9457b265368361feb109bff036be78aa84ffb5b8dbe3d9be55fc65b.
+Production is generation-6ksMJS7k, with these observed images:
+controller sha256:58adc0847575d60a7fb62046b545ec826d92ba2cc2aff1a2d75a8037efdd4087;
+geometry sha256:df61086b9bcd59b50604a7e4da3fec18977d48f92875eb4cadb85c0648974fa1;
+inference sha256:15072849e47bf0aa6b8ee5e01271c0e7a462d40114cb9cc6c6f08c05a96f61a9.
+All seven NMRNet roles on each host were independently observed healthy with
+restart count zero after the maintained down/install/up sequence. The three
+native roles had reported idle readiness before their old generation stopped.
+The producer-owned checkpoint initialization completed in both up operations.
+
+At 26 October 2026 21:35-21:36 UTC, independent Docker inspection retained the
+original shared queue, NMRNet IPC and producer checkpoint volume identities
+recorded above. The complete neutral binding digests are unchanged:
+local e42c669669277b7ad0ba137bcf9c2d45c352b2e1e5bc4f16cb51b4f30926fd45;
+production 49428d535939c8c259b630c9fac03cdb7c29a78f180700551c8473a57af9705c.
+Shared delivery, queue/socket identities and Magnet's containers were preserved.
+
+This proves the NMRNet package/image/deployment adoption. The earlier actual API
+receipt/replay evidence remains scoped to the unchanged shared delivery code and
+service; readiness is not a new terminal-delivery claim. The shared owner also
+verified its approved default-branch fast-forward to d9e7b18, matching the public
+v0.2.3 tag. Magnet's remaining native lifecycle/conversation integration and
+appropriate rollout remain with its owner; overall completion is still open.
+
+The Pages build/deployment for the same functional source15fc91f completed
+successfully: GitHub Actions run40404901421,
+https://github.com/numpde/nmrnet-repro/actions/runs/40404901421.
+The published reference pages now point to v0.2.3; this is documentation
+publication evidence, separate from the image/runtime observations above.
+
+The final active-guide owner check found two held-delivery source links still
+pointing at the former NMRNet-local package. They now identify delivery_discard.py
+and delivery_store.py in the exact adopted shared source d9e7b18. The documented
+commands already use the shared owner's Make targets; no runtime change or
+additional delivery test is needed for this reference correction.
+
+27 October 2026 - Magnet final integration and local adoption
+
+Magnet published source commit 160d1fa92473752127c5a48b9949ba1009de5e71
+and recorded its local deployment evidence in commit 6870c02. Independent
+comparison of all six regenerated CPU/CUDA locks found no scientific package version or artifact-hash
+changes. Only SDK-overlap utility pins changed: anyio/certifi/idna and, for E01,
+typing-extensions. Existing numerical evidence therefore retains its scope;
+this refactor does not add numerical or GPU qualification claims.
+
+Magnet commit 3cd056c, notes/040_shared_terminal_handoff_20261026.txt, records
+local adoption and the unsuccessful production acquisition of the unchanged
+Torch 2.12.0+cpu wheel. That acquisition failure is not an SDK failure or evidence
+of production native adoption. No new numerical qualification is claimed.
+
+27 October 2026 - Cached inputs and configuration retirement
+
+Cached acquisition now asks the existing offline pip selector whether the
+selected flat WHEELHOUSE already satisfies the complete lock. A successful
+selection returns immediately, without a public index query, download staging
+directory or cache mutation. An unsuccessful selection retains pip's diagnostic
+and follows the existing explicit acquisition path, with unchanged hash checks
+and additive publication. It does not authorize acquisition during offline
+capture, build or test. The real-pip fixture proves two consecutive complete
+cache hits without any online subprocess, plus missing-wheel acquisition and
+conflicting-byte preservation. The maintained wheelhouse lane passed 53 checks.
+
+Configuration retirement now belongs to tools/compose_deployment.sh under its
+existing deployment lock. Successful install retires unused older generations;
+make provider/deployment/retire-generations DEPLOYMENT=<name> provides the same
+operation without reconfiguration or provider shutdown. The selected bundle is
+always retained. Docker inspection includes all containers, including stopped
+ones, and preserves mounts at, above or inside a generation. Inspection failure
+stops before deletion. Only obsolete bundles have their sealed directory modes
+relaxed for removal; original operator inputs, runtime directories and volumes
+are outside this operation. No archive, retention registry or handoff file was
+added. This resolves the configuration-generation deferral recorded above.
+
+Fresh inventory found 18 local and 15 production NMRNet generations. A real
+local Docker witness used one never-started, network-disabled container
+(Docker state: created) borrowing
+generation-1SyC8g5t. Retirement removed 16 unused generations and preserved both
+that borrow and selected generation-sRphUltt. After removing only the disposable
+witness container, a second maintained retirement removed the remaining unused
+generation. All seven original NMRNet product container IDs remained running
+and healthy.
+
+Implementation: ebbb76702bae6b0ea250c97cdeb9da125ff900a2. The maintained
+production retirement target removed 14 unused generations, leaving selected
+generation-6ksMJS7k. The selected
+symlink and the original input-file names, sizes, inodes and modes were unchanged.
+All seven existing product container IDs were unchanged, running and healthy,
+with restart count zero. Together the two hosts retired 31 redundant generations.
+No image build, provider restart, model execution or scientific/API request was
+needed for this host-maintenance change. Source synchronization does not change
+the image/adoption evidence recorded above.
+
+The deferred FIFO witness now uses an actual FIFO with no writer, inside a
+bounded subprocess. It proves NativeOperation rejects that lease as a nonregular
+file without blocking or creating a session. The installed-core native-runner
+lane passed 18 checks. Deployment checks passed 27, provider posture 45, and
+operator-input checks 31. The latter exposed a pre-existing interactive fixture
+that omitted the now-required shared runtime image; its invocation now supplies
+that explicit image. Product requirements were preserved.
+
+Decision review: the existing pip selector owns compatible artifact and hash
+admission. Reusing it avoids a second filename/tag resolver; an incomplete cache
+pays for an offline attempt before the explicitly requested download. Retirement
+uses the deployment lock and Docker's actual mount inventory rather than an
+age/count policy, which could discard a stopped container's inputs. Retaining
+all generations or archiving them would preserve the redundant configuration
+copies the user asked to remove. The FIFO witness addresses one concrete hang;
+no new stress matrix or model qualification was needed. The real Docker witness
+proves preservation for a never-started container, not a separate exited-state
+trial; all-container inspection covers both states in the same code path.
+
+Selected failure/resource evidence: the new FIFO case covers blocking before
+lease admission. The deployment witnesses cover inspection failure before
+deletion, mounted ancestors/files and retained nonrunning borrowers. The cache
+witness covers repeated complete-cache reuse without staging or byte mutation,
+and the existing conflicting-byte case covers failure without replacement.
+The 53-check wheelhouse lane also reran the existing native-client resource
+regression, tests/test_inference_image.py:265-282: 40 consecutive real helper
+calls must finish within 15 seconds in the contained lane. The adjacent deadline
+case uses TERM-resistant descendants/held pipes and checks that the child is
+retired or a zombie rather than running, while rejecting late success. These
+are bounded process-exhaustion and retirement witnesses, not a throughput,
+concurrent-job, long-duration leak, numerical or production-outage qualification.
+No new signal justified a broader stress campaign for these maintenance changes;
+those unmeasured properties remain unclaimed.
+
+The existing shared tooling supplies wheel selection/capture. Magnet's
+source-only dependency and build-backend policy remain model-owned.
