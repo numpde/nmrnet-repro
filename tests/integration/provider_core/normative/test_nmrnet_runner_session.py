@@ -210,6 +210,20 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         evidence = self.notices.call_args.args[0]
         self.assertTrue(evidence is reset or reset in evidence.exceptions)
 
+    async def test_channel_retirement_records_interruption_before_closing_science(self):
+        operation = self.operation()
+        await operation.start()
+        interrupted_at_close = []
+
+        def close():
+            interrupted_at_close.append(operation._stop_requested)
+            operation.writer.close()
+
+        failures = await operation.retire_channel(Mock(close=close))
+        self.assertEqual(failures, [])
+        self.assertEqual(interrupted_at_close, [True])
+        await operation.settle()
+
     async def test_retirement_during_transport_adoption_closes_the_returned_writer(self):
         operation = self.operation()
         entered, release = asyncio.Event(), asyncio.Event()

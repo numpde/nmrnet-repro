@@ -261,6 +261,8 @@ class NativeOperation:
 
     async def retire_channel(self, worker):
         failures = []
+        # Closing science can make the child exit before the control stop arrives.
+        self._stop_requested = True
         try:
             worker.close()
         except Exception as cause:
