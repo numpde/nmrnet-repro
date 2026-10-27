@@ -1,7 +1,7 @@
 """Bind one admitted Job's prepared geometries to science and confirmed retirement.
 
 The protocol owner is provider_core.analysis.AnalysisSession. Core owns current
-server observations, execution entry, durable terminal choice and publication.
+server observations, execution entry, terminal choice and delivery handoff.
 This binding owns the scientific handle, result admission and worker cleanup.
 The required preparation owner supplies admitted sources and owns their cleanup.
 """
@@ -142,8 +142,8 @@ def _prepared_identity(plan, prepared, interpreter_diagnostics):
     if interpreter_diagnostics is not None:
         document["interpreter_diagnostics"] = json.loads(interpreter_diagnostics)
     try:
-        # Keep observations in core's existing durable entry, under its single
-        # evidence limit. A local-only carrier would lose them after a crash.
+        # Carry these observations in the prepared evidence owned by the live
+        # Attempt; core applies its existing evidence limit.
         return ProtectedEvidence(
             "nmrnet.prepared_input.v1",
             json.dumps(document, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii"),
@@ -274,8 +274,8 @@ class NMRNetSession:
             _evidence(reservation)
         except Exception as cause:
             raise PreparationEvidenceFailed({"scientific_evidence_reservation": reservation}) from cause
-        # Core checkpoints the identity digest before calling execute(). Keep the admitted
-        # bytes here until then, so even worker admission follows the durable write.
+        # Core binds this identity to the live Attempt before execute(). Keep
+        # the admitted bytes here so the worker receives that same preparation.
         if type(prepared) is GeneratedJobInput:
             requests = tuple(item.request_bytes for item in prepared.generated.conformers)
         else:

@@ -27,7 +27,8 @@ from nmrnet_provider.config import ConfigurationRejected, _interpreter, read_sta
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.interpreter import InputInterpreter, ModelReportedInputProblem
 from nmrnet_provider.process import _diagnostics_directory, _failure_report, _publish
-from nmrnet_provider.process_reports import failure_evidence, operator_redactor
+from nmrnet_provider.process_reports import failure_evidence
+from provider_core.diagnostics import operator_redactor
 from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
 from provider_core.job_input import INPUT_SCHEMA, FeedInputFacts, VerifiedJobInput

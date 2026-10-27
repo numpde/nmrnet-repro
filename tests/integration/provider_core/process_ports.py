@@ -18,17 +18,13 @@ from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import job, page
-from tests.fakes.job_input import facts
 from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import InputPorts
 from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.config import load_provider_config
-from provider_core.attempt_record import StartPending
-from provider_core.attempt_request import start_body
 from provider_core.api import ProviderAPI
-from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
 from provider_core.delivery_service import DeliveryBinding, DeliveryService
 from provider_core.delivery_store import QueueLimits
 from provider_core.lifetime import ProviderLifetime
@@ -278,21 +274,3 @@ class ProcessPeers:
             lifetime.close()
         if (self.config.lifecycle.lifetime_root / "checkpoints.sqlite3").exists():
             raise AssertionError("Live-only process unexpectedly created legacy checkpoints")
-
-    async def seed_legacy_pending(self):
-        """Author an old retained START solely to exercise cutover refusal."""
-        self.files.state.mkdir(mode=0o700)
-        store = CheckpointStore(
-            self.files.state,
-            scope=self.config.lifecycle.scope,
-            limits=CheckpointLimits(2, 262144),
-            operation_seconds=2,
-        )
-        source = facts()
-        pending = StartPending(self.config.lifecycle.scope, "peaks_from_mol", source, start_body(source.job_ref, "a" * 32))
-        try:
-            await store.open()
-            await store.retain_start(pending)
-        finally:
-            await store.close()
-        return pending

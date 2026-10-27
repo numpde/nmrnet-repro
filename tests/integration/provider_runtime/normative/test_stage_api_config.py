@@ -56,7 +56,7 @@ class StageApiConfigTests(unittest.TestCase):
             )
             public = tomllib.loads((root / "deployment/provider.toml").read_text())
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
-            self.assertNotIn("store_root", private)
+            self.assertNotIn("lifetime_root", private)
             self.assertEqual(public["lifecycle"]["lifetime_root"], "/srv/nmrnet/attempts")
             binding = tomllib.loads((root / "deployment/bindings.toml").read_text())["bindings"][0]
             self.assertEqual(binding["route"], {

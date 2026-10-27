@@ -37,16 +37,6 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                         load_provider_config(files.path)
                     self.assertFalse(files.state.exists())
 
-    def test_displaced_history_and_reservation_fields_are_not_accepted_as_compatibility_policy(self):
-        for declaration in (b"confirmed_history_records = 64\n", b"filesystem_reserve_bytes = 0\n",
-                            b"store_root = \"/legacy\"\n", b"store_seconds = 10\n"):
-            with self.subTest(declaration=declaration), tempfile.TemporaryDirectory() as directory:
-                files = ConfigFiles(directory)
-                files.write(files.raw.replace(b"[lifecycle]\n", b"[lifecycle]\n" + declaration))
-                with self.assertRaises(ConfigurationRejected):
-                    load_provider_config(files.path)
-                self.assertFalse(files.state.exists())
-
     def test_direct_execution_sources_refuse_invalid_grants_or_identities_without_publication(self):
         for fault in ("missing", "linked", "empty_names", "duplicate_names", "escaping_name", "absolute_name", "oversized", "image", "revision"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
@@ -109,7 +99,6 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
         replacements = (
             (b"[service]", b"[unknown_service]"),
             (b"[service]", b'[service]\nanalysis_kind_ref = "PRIVATE-UNSUPPORTED"'),
-            (b"[service]", b'[service]\noffering_description = "Obsolete inline override"'),
             (b'display_name = "NMRNet local fixture"\n', b""),
             (b'display_name = "NMRNet local fixture"', b'display_name = ""'),
             (b'display_name = "NMRNet local fixture"', b'display_name = "' + b"PRIVATE" * 22 + b'"'),

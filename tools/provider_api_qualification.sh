@@ -141,9 +141,8 @@ api_witness_ambiguity() {
         provider_host_ipv4 "$resolver" && [[ $resolver != 0.* && $resolver != 127.* ]] \
             || { provider_host_refuse 'External resolvers require literal nonloopback IPv4 addresses.'; return 2; }
     done
-    provider_host_initialize || return $?
     api_witness_mode=real-ambiguity
-    trap api_witness_finish EXIT
+    provider_host_initialize api_witness_finish || return $?
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     local print_command=false controller_image shared_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT

@@ -10,12 +10,10 @@ import io
 import itertools
 import json
 import os
-import sqlite3
 import sys
-import tempfile
 import unittest
 import httpcore
-from contextlib import closing, redirect_stderr
+from contextlib import redirect_stderr
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,12 +21,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source, store_headers
 from tests.fakes.api import Transport, reply
-from tests.fakes.attempt_store import admission, record
-from tests.fakes.attempts import ATTEMPT_REF, observation, progress_response
+from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempts import ATTEMPT_REF, observation, progress_response, start_response
 from tests.fakes.condition_recovery import ConditionOutageTransport
-from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
-from tests.fakes.controller import empty_store
-from tests.fakes.execution import Session, acknowledged_store, unexpected_condition
+from tests.fakes.conditions import ConditionTransport
+from tests.fakes.live_analysis import LiveSession
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.job_input import response
 from tests.fakes.api import api
@@ -47,47 +45,102 @@ from nmrnet_provider.session import PredictionRecoveryFailed, PreparationEvidenc
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import PredictionExecutionFailed
+from provider_core.analysis import AnalysisSuccess
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import MAX_EVIDENCE_BYTES, TerminalOperation, acknowledge_start
+from provider_core.attempt_record import MAX_EVIDENCE_BYTES, ProtectedEvidence, TerminalOperation, acknowledge_start
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation
-from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
 from provider_core.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
-from provider_core.controller import LiveStartPolicy
+from provider_core.controller import AttemptController, ControllerFailed, LiveStartPolicy
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import (
-    AttemptExecutor,
-    ConditionRecovery,
-    ConditionRecoveryExpired,
-    ExecutionFailed,
-    ExecutionRefused,
-    ExecutionStopped,
-    ObservationRecovery,
-)
+from provider_core.execution import ConditionRecovery, ConditionRecoveryExpired, ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationRecovery
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.delivery_client import DeliveryRejected
 from provider_core.delivery_store import DeliveryOutcome, DeliveryStorageFailed
 from provider_core.delivery_worker import DeliveryWorkerFailed
-from provider_core.producer_checkpoint import AcknowledgedCheckpoint, EnteredCheckpoint, TerminalSelectedCheckpoint
-from provider_core.recovery import ObservedAttempt, RecoveryFailed, RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, HttpFileResponse, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file
 
 
+class _LiveStartTransport:
+    async def exchange(self, request, *, maximum_bytes, owner=None):
+        if request.method == "POST" and request.url.path.endswith("/execution-attempts/start"):
+            self.calls.append((request, maximum_bytes))
+            return reply(start_response())
+        return await super().exchange(request, maximum_bytes=maximum_bytes, owner=owner)
+
+
+class _ConditionTransport(_LiveStartTransport, ConditionTransport):
+    pass
+
+
+class _ConditionOutageTransport(_LiveStartTransport, ConditionOutageTransport):
+    pass
+
+
+class _DiagnosticSession(LiveSession):
+    def __init__(self):
+        super().__init__()
+        self.outcome = AnalysisSuccess("result.v1", b"result bytes", ProtectedEvidence("evidence.v1", b"private evidence"))
+        self.retirement_failure = None
+
+    async def execute(self, prepared, *, report_condition):
+        await super().execute(prepared, report_condition=report_condition)
+        return self.outcome
+
+    async def retire(self):
+        await super().retire()
+        if self.retirement_failure is not None:
+            raise self.retirement_failure
+
+
+class _ReportingSession(_DiagnosticSession):
+    async def report(self, report_condition):
+        await report_condition("waiting_capacity")
+        await report_condition(None)
+
+    async def prepare(self, acknowledged, instructions, *, report_condition):
+        await self.report(report_condition)
+        return await super().prepare(acknowledged, instructions, report_condition=report_condition)
+
+    async def execute(self, prepared, *, report_condition):
+        await self.report(report_condition)
+        return await super().execute(prepared, report_condition=report_condition)
+
+
+class _SwallowingSession(_ReportingSession):
+    async def report(self, report_condition):
+        try:
+            await super().report(report_condition)
+        except (Exception, asyncio.CancelledError) as cause:
+            self.caught = cause
+
+
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
-    def test_sqlite_native_identity_reaches_operator_stderr_without_sql_or_private_names(self):
-        with closing(sqlite3.connect(":memory:")) as database:
-            try:
-                database.execute('SELECT * FROM "PRIVATE_SQL_TABLE"')
-            except sqlite3.Error as cause:
-                report = self.receive(CheckpointFailed("Cannot retain producer control", cause=cause))
-        rendered = json.dumps(report)
-        self.assertIn('"sqlite_errorcode": 1', rendered)
-        self.assertIn('"sqlite_errorname": "SQLITE_ERROR"', rendered)
-        self.assertNotIn("PRIVATE_SQL_TABLE", rendered)
-        self.assertNotIn("SELECT", rendered)
+    def live_controller(self, transport, session, *, poll_seconds=1, condition_recovery=None):
+        claims = AttemptClaims.live()
+        controller = AttemptController.live(
+            api(transport, scope().api_origin), claims, session,
+            scope=scope(), stopping=asyncio.Event(), start_policy=LiveStartPolicy(1, Mock(), Mock()),
+            allow_active_start_replay=True, delivery=RecordingDelivery(), on_delivery_retry=Mock(),
+            delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04,
+            allowed_job_states=frozenset({"open"}), poll_seconds=poll_seconds, task_settle_seconds=0.1,
+            condition_recovery=condition_recovery,
+        )
+        return controller, claims
+
+    def receive(self, failure, *, secrets=()):
+        output = io.StringIO()
+        with (
+            redirect_stderr(output),
+            patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
+        ):
+            _failure_report((("operation", failure),), secrets=secrets, held=False)
+        return json.loads(output.getvalue())
+
+
 
     async def test_connect_rejection_reaches_operator_as_proxy_status_without_private_reason_or_api_status(self):
         report = self.receive(ExchangeFailed(
@@ -122,14 +175,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         for private in (key, "FALLBACK_CREDENTIAL_", "PRIVATE_FIELD", "PRIVATE_RESPONSE_DUMP", "PRIVATE_INPUT", "C 0 0 0"):
             self.assertNotIn(private, rendered)
 
-    def test_checkpoint_failure_preserves_private_io_cause_without_inventing_history_facts(self):
-        failure = CheckpointFailed("Producer checkpoint operation failed", cause=OSError(errno.EIO, "owned key=credential-canary"))
-        rendered = json.dumps(self.receive(failure, secrets=("credential-canary",)))
-        self.assertIn("Producer checkpoint operation failed", rendered)
-        self.assertIn('"errno": 5', rendered)
-        self.assertNotIn("credential-canary", rendered)
-        self.assertNotIn("history_", rendered)
-        self.assertNotIn("record_visible", rendered)
 
     def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_in_stderr(self):
         first = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; known-key")
@@ -143,54 +188,33 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("known-key", rendered)
 
     async def test_condition_expiry_retains_first_latest_and_uncertainty_in_stderr(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, acknowledged, claim = await acknowledged_store(directory)
-            transport = ConditionOutageTransport(first_failed_put=5)
-            transport.faults = itertools.chain(
-                (reply(b"PRIVATE first body", status=503, headers=((b"x-request-id", b"request:condition-first"),)),),
-                itertools.repeat(
-                    reply(b"PRIVATE latest body", status=503, headers=((b"x-request-id", b"request:condition-latest"),))
-                ),
-            )
-            session = SwallowingSession(store)
-            executor = AttemptExecutor(
-                api(transport, store.scope.api_origin),
-                store,
-                claim,
-                session,
-                delivery=RecordingDelivery(),
-                on_delivery_retry=Mock(),
-                delivery_retry_initial_seconds=0.01,
-                delivery_retry_max_seconds=0.04,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=0.005,
-                task_settle_seconds=0.1,
-                condition_recovery=ConditionRecovery(0.05, 0.01, Mock(), Mock()),
-            )
-            try:
-                with self.assertRaises(ExecutionFailed) as caught:
-                    await asyncio.wait_for(executor.run(acknowledged), 2)
-                self.assertIs(type(caught.exception.cause), ConditionRecoveryExpired)
-                self.assertIs(caught.exception.outcome, session.outcome)
-                report = self.receive(caught.exception)
-                rendered = json.dumps(report)
-                for fact in (
-                    "ConditionRecoveryExpired",
-                    "request:condition-first",
-                    "request:condition-latest",
-                    '"condition_code": "waiting_capacity"',
-                    '"phase": "running"',
-                    '"condition_receipt_received": false',
-                    '"attempt_mutation_may_have_committed": true',
-                ):
-                    self.assertIn(fact, rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                with self.assertRaises(ExecutionFailed):
-                    await executor.settle()
-                await executor.retain_suppressed_disposition()
-                claim.release()
-            finally:
-                await store.close()
+        transport = _ConditionOutageTransport(first_failed_put=5)
+        transport.faults = itertools.chain(
+            (reply(b"PRIVATE first body", status=503, headers=((b"x-request-id", b"request:condition-first"),)),),
+            itertools.repeat(reply(b"PRIVATE latest body", status=503,
+                headers=((b"x-request-id", b"request:condition-latest"),))),
+        )
+        session = _SwallowingSession()
+        controller, claims = self.live_controller(transport, session, poll_seconds=0.005,
+            condition_recovery=ConditionRecovery(0.05, 0.01, Mock(), Mock()))
+        with self.assertRaises(ControllerFailed) as caught:
+            await asyncio.wait_for(controller.run(record()), 2)
+        failure = caught.exception.cause
+        self.assertIs(type(failure), ExecutionFailed)
+        self.assertIs(type(failure.cause), ConditionRecoveryExpired)
+        self.assertIs(failure.outcome, session.outcome)
+        rendered = json.dumps(self.receive(failure))
+        for fact in (
+            "ConditionRecoveryExpired", "request:condition-first", "request:condition-latest",
+            '"condition_code": "waiting_capacity"', '"phase": "running"',
+            '"condition_receipt_received": false', '"attempt_mutation_may_have_committed": true',
+        ):
+            self.assertIn(fact, rendered)
+        self.assertNotIn("PRIVATE", rendered)
+        with self.assertRaises(ControllerFailed):
+            await controller.settle()
+        self.assertFalse(controller.shutdown_ready)
+        self.assertTrue(claims.owns_job(scope(), record().input.job_ref))
 
     def test_start_failure_keeps_uncertain_send_without_inventing_attempt(self):
         pending = record()
@@ -201,7 +225,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         )
         outage.attempt_mutation_may_have_committed = True
         start_failure = StartFailed(
-            "Attempt start lacks a durable owned acknowledgement",
+            "Attempt start lacks a verified owned acknowledgement",
             cause=outage,
             acknowledgement=None,
             api_failure=outage,
@@ -210,7 +234,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         report = self.receive(start_failure, secrets=(pending.input.job_ref,))
         rendered = json.dumps(report)
         for fact in (
-            "Attempt start lacks a durable owned acknowledgement",
+            "Attempt start lacks a verified owned acknowledgement",
             "request:start-outage",
             '"status": 503',
             '"attempt_mutation_may_have_committed": true',
@@ -221,144 +245,76 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(pending.input.job_ref, rendered)
 
     async def test_native_allocation_failure_identifies_selected_job_at_factory_boundary(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = await empty_store(directory, maximum_records=1)
-            transport = Transport()
-            factory = NativeAttemptFactory(
-                config=SimpleNamespace(),
-                claims=AttemptClaims.live(),
-                execution_identity={},
-                selected_artifacts={},
-                policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
-                observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
-                condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-                on_prediction_retry=Mock(),
-                on_operator_notice=Mock(),
-                on_unconfirmed_phase_progress=Mock(),
-                on_delivery_retry=Mock(),
-                start_policy=LiveStartPolicy(1, Mock(), Mock()),
-            )
-            allocation = Mock(
-                start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()
-            )
-            allocation.retirement = allocation
-            try:
-                with (
-                    patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
-                    self.assertRaises(NativeSetupFailed) as caught,
-                ):
-                    await factory.allocate_prediction(job_ref="job:example")
-                report = self.receive(caught.exception)
-                rendered = json.dumps(report)
-                self.assertIn('"job_ref": "job:example"', rendered)
-                self.assertIn('"errno": 13', rendered)
-                self.assertNotIn("execution_attempt_ref", rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                self.assertEqual(await store.inventory(), ())
-                self.assertEqual(transport.calls, [])
-                self.assertEqual(factory.allocations, [])
-                self.assertIsNone(factory.last_failure)
-                allocation.retire.assert_awaited_once()
-                with (
-                    patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
-                    self.assertRaises(NativeSetupFailed) as source,
-                ):
-                    await factory.allocate_reader()
-                report = self.receive(source.exception)
-                self.assertNotIn("job_ref", json.dumps(report))
-                self.assertNotIn("execution_attempt_ref", json.dumps(report))
-                self.assertEqual(caught.exception.job_ref, "job:example")
-            finally:
-                await store.close()
-
-    def test_read_only_recovery_diagnostics_distinguish_observation_from_receipt_and_durability(self):
-        acknowledged = AcknowledgedCheckpoint(record(), admission())
-        selected = TerminalSelectedCheckpoint(acknowledged, TerminalOperation.FAIL, "sha256:" + "b" * 64, 42)
-        observed = ObservedAttempt(selected, AttemptObservation(ATTEMPT_REF, "job:example", "succeeded", "closed"))
-        send = ApiFailure(
-            "publish outcome", "No verified response was obtained",
-            response=HttpResponse(409, ((b"x-request-id", b"request:publication"),
-                                        (b"authorization", b"PRIVATE_HEADER")), b"PRIVATE_BODY"),
+        factory = NativeAttemptFactory(
+            config=SimpleNamespace(),
+            claims=AttemptClaims.live(),
+            execution_identity={},
+            selected_artifacts={},
+            policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
+            observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+            condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
+            on_prediction_retry=Mock(),
+            on_operator_notice=Mock(),
+            on_unconfirmed_phase_progress=Mock(),
+            on_delivery_retry=Mock(),
+            start_policy=LiveStartPolicy(1, Mock(), Mock()),
         )
-        publication = DeliveryWorkerFailed(cause=send, api_failure=send, cleanup_failures=(), api_receipt_received=False)
-        rendered = json.dumps(self.receive(publication))
-        self.assertIn('"api_receipt_received": false', rendered)
-        self.assertIn("request:publication", rendered)
-        self.assertNotIn("PRIVATE", rendered)
-        for result in (None, observed):
-            failure = RecoveryFailed(OSError(errno.EIO, "PRIVATE_PATH"), observed_record=result)
-            report = self.receive(failure)
-            owner = report["relationships"][0]["failure"]
-            self.assertIs(owner["attempt_observation_received"], result is observed)
-            rendered = json.dumps(report)
-            self.assertIn('"errno": 5', rendered)
-            if result is observed:
-                self.assertIn('"observed_attempt_state": "succeeded"', rendered)
-                self.assertIn('"observed_job_state": "closed"', rendered)
-            self.assertNotIn("PRIVATE", rendered)
-            self.assertNotIn("api_receipt_received", rendered)
-            self.assertNotIn("readback_retained", rendered)
-
-    # silent-defaults: allow-contract -- Fixtures without configured credentials still exercise the same receiving renderer; credential cases supply explicit keys.
-    def receive(self, failure, *, secrets=()):
-        output = io.StringIO()
+        allocation = Mock(
+            start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()
+        )
+        allocation.retirement = allocation
         with (
-            redirect_stderr(output),
-            patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
+            patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
+            self.assertRaises(NativeSetupFailed) as caught,
         ):
-            _failure_report((("operation", failure),), secrets=secrets, held=False)
-        return json.loads(output.getvalue())
+            await factory.allocate_prediction(job_ref="job:example")
+        report = self.receive(caught.exception)
+        rendered = json.dumps(report)
+        self.assertIn('"job_ref": "job:example"', rendered)
+        self.assertIn('"errno": 13', rendered)
+        self.assertNotIn("execution_attempt_ref", rendered)
+        self.assertNotIn("PRIVATE", rendered)
+        self.assertEqual(factory.allocations, [])
+        self.assertIsNone(factory.last_failure)
+        allocation.retire.assert_awaited_once()
+        with (
+            patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
+            self.assertRaises(NativeSetupFailed) as source,
+        ):
+            await factory.allocate_reader()
+        report = self.receive(source.exception)
+        self.assertNotIn("job_ref", json.dumps(report))
+        self.assertNotIn("execution_attempt_ref", json.dumps(report))
+        self.assertEqual(caught.exception.job_ref, "job:example")
 
     async def test_returned_outcome_in_memory_does_not_claim_durable_retention_or_publication(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store, acknowledged, claim = await acknowledged_store(directory)
-            session = Session(store)
-            session.outcome = replace(session.outcome, content=b"PRIVATE_RESULT_BYTES")
-            transport = Transport(
-                reply(observation()),
-                reply(response()),
-                reply(progress_response()),
-                reply(observation()),
-                reply(progress_response(phase="running")),
-                reply(observation()),
-                reply(observation(job_state="closed")),
-            )
-            executor = AttemptExecutor(
-                api(transport, store.scope.api_origin),
-                store,
-                claim,
-                session,
-                delivery=RecordingDelivery(),
-                on_delivery_retry=Mock(),
-                delivery_retry_initial_seconds=0.01,
-                delivery_retry_max_seconds=0.04,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-            )
-            try:
-                with self.assertRaises(ExecutionFailed) as caught:
-                    await executor.run(acknowledged)
-                self.assertIs(caught.exception.outcome, session.outcome)
-                (retained,) = await store.inventory()
-                self.assertIs(type(retained), EnteredCheckpoint)
-                self.assertEqual(len(transport.calls), 7)
-                report = self.receive(caught.exception)
-                rendered = json.dumps(report)
-                self.assertIn('"outcome_in_memory": true', rendered)
-                self.assertIn('"unconfirmed_record_in_memory": false', rendered)
-                self.assertNotIn("outcome_retained", rendered)
-                self.assertNotIn("unconfirmed_record_retained", rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                with self.assertRaises(ExecutionFailed):
-                    await executor.settle()
-                await executor.retain_suppressed_disposition()
-                claim.release()
-            finally:
-                await store.close()
+        session = _DiagnosticSession()
+        session.outcome = replace(session.outcome, content=b"PRIVATE_RESULT_BYTES")
+        transport = Transport(
+            reply(start_response()), reply(observation()), reply(response()), reply(progress_response()),
+            reply(observation()), reply(progress_response(phase="running")), reply(observation()),
+            reply(observation(job_state="closed")),
+        )
+        controller, claims = self.live_controller(transport, session)
+        with self.assertRaises(ControllerFailed) as caught:
+            await controller.run(record())
+        failure = caught.exception.cause
+        self.assertIs(type(failure), ExecutionFailed)
+        self.assertIs(failure.outcome, session.outcome)
+        self.assertEqual(len(transport.calls), 8)
+        rendered = json.dumps(self.receive(failure))
+        self.assertIn('"outcome_in_memory": true', rendered)
+        self.assertIn('"unconfirmed_record_in_memory": false', rendered)
+        self.assertNotIn("outcome_retained", rendered)
+        self.assertNotIn("unconfirmed_record_retained", rendered)
+        self.assertNotIn("PRIVATE", rendered)
+        with self.assertRaises(ControllerFailed):
+            await controller.settle()
+        self.assertFalse(controller.shutdown_ready)
+        self.assertTrue(claims.owns_job(scope(), record().input.job_ref))
 
     async def test_failed_condition_and_later_binding_error_keep_both_receiving_causes(self):
-        class LaterFailureSession(ReportingSession):
+        class LaterFailureSession(_ReportingSession):
             async def prepare(self, _acknowledged, _instructions, *, report_condition):
                 try:
                     await report_condition("waiting_capacity")
@@ -366,55 +322,35 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     self.report_failure = cause
                 raise ResultRejected("Cannot assemble authored result PRIVATE_BINDING_SECRET")
 
-        with tempfile.TemporaryDirectory() as directory:
-            store, acknowledged, claim = await acknowledged_store(directory)
-            transport = ConditionTransport()
-            transport.release.set()
-            transport.failure = ExchangeFailed(
-                "Cannot receive authored progress acknowledgement", primary=OSError(errno.ETIMEDOUT, "PRIVATE_TRANSPORT")
-            )
-            session = LaterFailureSession(store)
-            session.retirement_failure = OSError(errno.EIO, "PRIVATE_CLEANUP")
-            executor = AttemptExecutor(
-                api(transport, store.scope.api_origin),
-                store,
-                claim,
-                session,
-                delivery=RecordingDelivery(),
-                on_delivery_retry=Mock(),
-                delivery_retry_initial_seconds=0.01,
-                delivery_retry_max_seconds=0.04,
-                allowed_job_states=frozenset({"open"}),
-                poll_seconds=1,
-                task_settle_seconds=0.1,
-            )
-            try:
-                with self.assertRaises(ExecutionFailed) as caught:
-                    await executor.run(acknowledged)
-                self.assertIs(caught.exception.cause, session.report_failure)
-                report = self.receive(caught.exception, secrets=("PRIVATE_BINDING_SECRET",))
-                rendered = json.dumps(report)
-                for fact in (
-                    "ApiFailure",
-                    "ResultRejected",
-                    "Cannot assemble authored result",
-                    "ExchangeFailed",
-                    '"errno": 110',
-                    '"errno": 5',
-                    '"relationship": "context"',
-                    "independent cleanup",
-                ):
-                    self.assertIn(fact, rendered)
-                self.assertIn('"outcome_in_memory": false', rendered)
-                self.assertIn('"unconfirmed_record_in_memory": false', rendered)
-                self.assertNotIn("outcome_retained", rendered)
-                self.assertNotIn("unconfirmed_record_retained", rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                session.retirement_failure = None
-                await executor.settle()
-                claim.release()
-            finally:
-                await store.close()
+        transport = _ConditionTransport()
+        transport.release.set()
+        transport.failure = ExchangeFailed("Cannot receive authored progress acknowledgement",
+            primary=OSError(errno.ETIMEDOUT, "PRIVATE_TRANSPORT"))
+        session = LaterFailureSession()
+        session.retirement_failure = OSError(errno.EIO, "PRIVATE_CLEANUP")
+        controller, claims = self.live_controller(transport, session)
+        with self.assertRaises(ControllerFailed) as caught:
+            await controller.run(record())
+        failure = caught.exception.cause
+        self.assertIs(type(failure), ExecutionFailed)
+        self.assertIs(failure.cause, session.report_failure)
+        rendered = json.dumps(self.receive(failure, secrets=("PRIVATE_BINDING_SECRET",)))
+        for fact in (
+            "ApiFailure", "ResultRejected", "Cannot assemble authored result", "ExchangeFailed",
+            '"errno": 110', '"errno": 5', '"relationship": "context"', "independent cleanup",
+        ):
+            self.assertIn(fact, rendered)
+        self.assertIn('"outcome_in_memory": false', rendered)
+        self.assertIn('"unconfirmed_record_in_memory": false', rendered)
+        self.assertNotIn("outcome_retained", rendered)
+        self.assertNotIn("unconfirmed_record_retained", rendered)
+        self.assertNotIn("PRIVATE", rendered)
+        session.retirement_failure = None
+        with self.assertRaises(ControllerFailed):
+            await controller.settle()
+        # Physical cleanup does not invent a terminal report or release this Job.
+        self.assertTrue(controller.shutdown_ready)
+        self.assertTrue(claims.owns_job(scope(), record().input.job_ref))
 
     async def test_session_cleanup_cancellation_keeps_its_nested_owned_reason_for_the_operator(self):
         ports = SessionPorts()
@@ -702,11 +638,9 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
     def test_exact_owned_refusal_reasons_remain_distinct_through_receiving_renderer(self):
         for failure in (
             OwnershipRefused("Attempt claim still owns an operation; settle it before another effect"),
-            ExecutionRefused("Exact acknowledgement is not current in storage; reread it before preparing work"),
-            StartRefused("Exact pending start is absent or has already advanced; reread storage before recovery"),
-            CheckpointRefused("Producer checkpoint belongs to another recovery scope"),
+            ExecutionRefused("Exact acknowledgement is not owned by this live Attempt"),
+            StartRefused("This live owner already sent its selected START"),
             DeliveryRejected("The durable acknowledgement does not match this selected body"),
-            RecoveryRefused("Selected recovery record is no longer current; reread storage before another action"),
             UploadInputRejected("inspect attached Uploads before selecting a source"),
         ):
             with self.subTest(owner=type(failure).__name__):
@@ -934,7 +868,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             active.admission.job_ref, ATTEMPT_REF, TerminalOperation.FAIL,
             fail_body(ATTEMPT_REF, "input_rejected", "PRIVATE_MESSAGE"))
         for acknowledgement in (None, active):
-            failure = StartFailed("Start acknowledgement durability is unconfirmed",
+            failure = StartFailed("Cannot finish live Attempt startup",
                 cause=OSError(errno.EIO, "PRIVATE"), acknowledgement=acknowledgement,
                 api_failure=None, settlement_failures=())
             report = self.receive(failure)
@@ -944,7 +878,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(owner["observed_attempt_state"], "in_progress")
             self.assertNotIn("PRIVATE", json.dumps(report))
         for acceptance in (None, item.acceptance()):
-            failure = ExecutionFailed(cause=CheckpointFailed("Cannot retain accepted control", cause=OSError(errno.EIO, "PRIVATE")),
+            failure = ExecutionFailed(cause=DeliveryRejected("Cannot confirm the selected terminal handoff"),
                 outcome=None, unconfirmed_record=None, api_failure=None, cleanup_failures=(), attempt=active)
             failure.delivery_acceptance = acceptance
             report = self.receive(failure)

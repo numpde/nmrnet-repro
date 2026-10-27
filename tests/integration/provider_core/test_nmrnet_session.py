@@ -1,4 +1,4 @@
-"""NMRNet sessions preserve scientific inputs through compact control and handoff.
+"""NMRNet sessions preserve scientific inputs through live ownership and handoff.
 
 Science, retirement and relay handoff are recording ports. The final case also
 sends its exact handed-off body through real signed TLS, as a separate receiving
@@ -10,11 +10,9 @@ import base64
 import copy
 import hashlib
 import json
-import tempfile
 import unittest
 from dataclasses import replace
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import admission, record, scope
@@ -35,9 +33,8 @@ from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
     acknowledge_start,
 )
-from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, EnteredCheckpoint, EvidenceDigest
-from provider_core.controller import AttemptController
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
+from provider_core.controller import AttemptController, LiveStartPolicy
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
 from provider_core.result_verbosity import ResultVerbosity
@@ -511,7 +508,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(self.session.last_retirement_failure.cause, first)
         self.assertEqual(self.worker.events, ["closed"])
 
-    async def test_signed_api_receives_exact_handed_off_scientific_result_after_durable_entry(self):
+    async def test_signed_api_receives_exact_handed_off_scientific_result_with_live_ownership(self):
         diagnostic = "PRIVATE_PREPARATION_LIFECYCLE"
         preparation = AsyncMock()
         preparation.interpreter_diagnostics = None
@@ -548,84 +545,77 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             pending = replace(self.pending, scope=recovery_scope)
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
             client = api(transport, peer.origin)
-            with tempfile.TemporaryDirectory() as directory:
-                store = CheckpointStore(
-                    Path(directory), scope=recovery_scope,
-                    limits=CheckpointLimits(1, 300000), operation_seconds=1,
+            claims = AttemptClaims.live()
+            try:
+                delivery = RecordingDelivery()
+                delivery.endpoint = replace(delivery.endpoint, api_origin=peer.origin)
+                controller = AttemptController.live(
+                    client,
+                    claims,
+                    self.session,
+                    scope=recovery_scope,
+                    stopping=asyncio.Event(),
+                    start_policy=LiveStartPolicy(1, Mock(), Mock()),
+                    allow_active_start_replay=True,
+                    delivery=delivery,
+                    on_delivery_retry=lambda *_: self.fail("Unexpected handoff retry in the receiving fixture"),
+                    delivery_retry_initial_seconds=0.01,
+                    delivery_retry_max_seconds=0.04,
+                    allowed_job_states=frozenset({"open"}),
+                    poll_seconds=1,
+                    task_settle_seconds=0.1,
                 )
-                await store.open()
-                try:
-                    delivery = RecordingDelivery()
-                    delivery.endpoint = replace(delivery.endpoint, api_origin=peer.origin)
-                    controller = AttemptController(
-                        client,
-                        store,
-                        AttemptClaims(),
-                        self.session,
-                        delivery=delivery,
-                        on_delivery_retry=lambda *_: self.fail("Unexpected handoff retry in the receiving fixture"),
-                        delivery_retry_initial_seconds=0.01,
-                        delivery_retry_max_seconds=0.04,
-                        allowed_job_states=frozenset({"open"}),
-                        poll_seconds=1,
-                        task_settle_seconds=0.1,
-                    )
-                    prepare_worker = self.worker.prepare
-                    prepare_session, execute_session = self.session.prepare, self.session.execute
-                    observed = {}
+                prepare_worker = self.worker.prepare
+                prepare_session, execute_session = self.session.prepare, self.session.execute
+                observed = {}
 
-                    async def capture_prepared(*args, **kwargs):
-                        handle = await prepare_session(*args, **kwargs)
-                        observed["identity"] = handle.identity
-                        return handle
+                async def capture_prepared(*args, **kwargs):
+                    handle = await prepare_session(*args, **kwargs)
+                    observed["identity"] = handle.identity
+                    return handle
 
-                    async def capture_outcome(*args, **kwargs):
-                        outcome = await execute_session(*args, **kwargs)
-                        observed["outcome"] = outcome
-                        return outcome
+                async def capture_outcome(*args, **kwargs):
+                    outcome = await execute_session(*args, **kwargs)
+                    observed["outcome"] = outcome
+                    return outcome
 
-                    async def require_retained_identity(raw_requests):
-                        (entered,) = await store.inventory()
-                        self.assertIs(type(entered), EnteredCheckpoint)
-                        self.assertEqual(entered.prepared, EvidenceDigest.from_evidence(observed["identity"]))
-                        candidate = json.loads(observed["identity"].content)
-                        self.assertEqual(candidate["preparation_diagnostics"][0]["diagnostic"], diagnostic)
-                        self.assertEqual(
-                            [hashlib.sha256(raw).hexdigest() for raw in raw_requests],
-                            [item["request_sha256"] for item in candidate["geometries"]],
-                        )
-                        return await prepare_worker(raw_requests)
-
-                    with (
-                        patch.object(self.session, "prepare", side_effect=capture_prepared),
-                        patch.object(self.session, "execute", side_effect=capture_outcome),
-                        patch.object(self.worker, "prepare", side_effect=require_retained_identity),
-                    ):
-                        accepted = await controller.run(pending)
-                    self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
-                    self.assertEqual(await store.inventory(), ())
-                    self.assertEqual(len(delivery.items), 1)
-                    item = delivery.items[0]
-                    self.assertEqual(item.body_sha256, accepted.selection.body_sha256)
+                async def require_retained_identity(raw_requests):
+                    self.assertEqual(claims.live_owners(), (controller,))
                     candidate = json.loads(observed["identity"].content)
-                    result = json.loads(base64.b64decode(json.loads(item.body)["canonical_result_base64"], validate=True))
-                    self.assertEqual(candidate["geometries"][0]["request_sha256"], result["geometries"][0]["request_sha256"])
-                    self.assertNotIn(diagnostic, json.dumps(result))
+                    self.assertEqual(candidate["preparation_diagnostics"][0]["diagnostic"], diagnostic)
                     self.assertEqual(
-                        json.loads(observed["outcome"].evidence.content)["preparation_diagnostics"][0]["diagnostic"], diagnostic
+                        [hashlib.sha256(raw).hexdigest() for raw in raw_requests],
+                        [item["request_sha256"] for item in candidate["geometries"]],
                     )
-                    database = (Path(directory) / "checkpoints.sqlite3").read_bytes()
-                    for private in (diagnostic.encode(), observed["identity"].content,
-                                    observed["outcome"].content, observed["outcome"].evidence.content):
-                        self.assertNotIn(private, database)
-                    self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
-                    self.assertEqual(len(peer.requests), 8)
-                    # This is a separate signed wire assertion after recording
-                    # handoff, not a claim that the fixture ran a delivery daemon.
-                    receipt = await client.complete_attempt(item.body, execution_attempt_ref=item.execution_attempt_ref)
-                    self.assertEqual(receipt.execution_attempt_ref, item.execution_attempt_ref)
-                    self.assertEqual(peer.request_bodies[-1], item.body)
-                    self.assertEqual(len(peer.requests), 9)
-                finally:
-                    await store.close()
+                    return await prepare_worker(raw_requests)
+
+                with (
+                    patch.object(self.session, "prepare", side_effect=capture_prepared),
+                    patch.object(self.session, "execute", side_effect=capture_outcome),
+                    patch.object(self.worker, "prepare", side_effect=require_retained_identity),
+                ):
+                    accepted = await controller.run(pending)
+                self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
+                self.assertEqual(claims.live_owners(), ())
+                self.assertTrue(controller.shutdown_ready)
+                self.assertEqual(len(delivery.items), 1)
+                item = delivery.items[0]
+                self.assertEqual(item.body_sha256, accepted.selection.body_sha256)
+                candidate = json.loads(observed["identity"].content)
+                result = json.loads(base64.b64decode(json.loads(item.body)["canonical_result_base64"], validate=True))
+                self.assertEqual(candidate["geometries"][0]["request_sha256"], result["geometries"][0]["request_sha256"])
+                self.assertNotIn(diagnostic, json.dumps(result))
+                self.assertEqual(
+                    json.loads(observed["outcome"].evidence.content)["preparation_diagnostics"][0]["diagnostic"], diagnostic
+                )
+                self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
+                self.assertEqual(len(peer.requests), 8)
+                # This is a separate signed wire assertion after recording
+                # handoff, not a claim that the fixture ran a delivery daemon.
+                receipt = await client.complete_attempt(item.body, execution_attempt_ref=item.execution_attempt_ref)
+                self.assertEqual(receipt.execution_attempt_ref, item.execution_attempt_ref)
+                self.assertEqual(peer.request_bodies[-1], item.body)
+                self.assertEqual(len(peer.requests), 9)
+            finally:
+                await self.session.retire()
             await transport.retire()

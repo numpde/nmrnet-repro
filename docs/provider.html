@@ -208,9 +208,8 @@ Use mode <code>0644</code> for the caller-owned public definition and
 <code>0600</code> for private machine settings; neither may be writable by group or others.
 Keep the path and network settings in that private deployment definition.
 The provider-only Docker volume holds the lifetime lock; final request bodies
-use the delivery service's separate queue volume. An existing deployment with
-producer checkpoints requires a reviewed disposition of its old Job exclusions
-before cutover. Startup preserves those files and refuses an unreviewed cutover.</p>
+use the delivery service's separate queue volume. Attempt bookkeeping is
+in memory and is not restored after the provider process stops.</p>
 <p>Keep interpreter keys and provider TLS files in
 <code>secrets/deployments/&lt;name&gt;/</code>, named as in the provider definition.
 Keep the host's binding definition as an operator-owned configuration file and
@@ -574,14 +573,13 @@ these component tests establish neither deployment nor external model access.</p
 <h2 id="attempt-and-service-ownership">Attempt and service ownership</h2>
 <p><code>nmrnet_provider.runtime.assemble_attempt</code> connects these settings to the
 existing input interpreter, source acquisition, NMRNet session and core controller.
-The caller selects a Job from signed <code>ProviderAPI.jobs</code>, opens the scoped store
-and supplies the prediction allocation and reader/generator factories. Assembly
-refuses outstanding retained obligations before constructing source/model owners;
-recovery stays explicit. The returned controller must run the same pending start.
-Successful return transfers the supplied allocation to that controller, including
-cleanup if it is never run. Refusal leaves allocation cleanup with the caller.
-The caller retains lifecycle API/store ownership and must settle any interrupted
-inventory read before reuse. All HTTP roles have separate transport owners.</p>
+The caller selects a never-attempted Job from signed <code>ProviderAPI.jobs</code>
+and supplies the live claims, stop event and scientific allocation factories.
+The controller reserves bounded live capacity before START. An acknowledged START
+precedes the Job input read, interpretation and scientific allocation. The returned
+controller runs that same pending start and owns its session's cleanup. Each
+Attempt has separate lifecycle and source HTTP exchanges. The provider holds its
+lifetime lock until the actual owners are ready for shutdown.</p>
 <p>The controller selects the final request before handoff. Native retirement
 and delivery are independent: a cleanup failure holds worker reuse, while the
 approved request can still be delivered. Every session receives an explicit
@@ -764,16 +762,18 @@ operation is repeated to recover from selection expiry.</p>
 <p>After a reviewed START availability failure, HTTP 500 or unverified pre-head protocol response,
 the same starter can resend the exact retained Job/key/body with fresh signing.
 It first settles the original exchange and checks the API-owned replay permission.
-Retries continue with capped jittered waits until resolution or cancellation.
+The live policy allows at most <code>lifecycle.start_replays</code> replays within
+<code>lifecycle.start_seconds</code> of the first START: one replay within 90 seconds
+in the supplied configurations. Capped jittered waits respect that limit and stop.
 Each exchange and its cleanup remain bounded; no prediction child is allocated
 while START or input interpretation is still pending.
-Authentication/topology faults, malformed success, cancellation, cleanup failure
-and an acknowledgement that could not be saved stop automatic START recovery.
-The original request and protected send evidence remain retained. A terminal
+Authentication/topology faults, malformed success, cancellation and cleanup failure
+stop automatic START replay. An unresolved START remains owned in memory and
+does not authorize science. A terminal
 replay admission retires the session without starting science.</p>
-<p>Protected <code>api_start_retry</code> notices identify only the known Job. Once a verified
-acknowledgement is durable, <code>api_start_recovered</code> also identifies its actual
-Attempt. Both use the existing bounded failed-output fallback. The focused signed
+<p>Protected <code>api_start_retry</code> notices identify only the known Job. Once an
+acknowledgement is verified, <code>api_start_recovered</code> also identifies its actual
+Attempt. Notices use the bounded stderr channel collected by Docker. The focused signed
 local TLS service witness loses its first accepted START reply, returns the same
 admission on exact replay, and performs one interpretation and prediction. Its
 scientific/model peers are authored fixtures; this is local lifecycle evidence.

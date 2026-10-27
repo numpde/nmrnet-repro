@@ -24,7 +24,7 @@ from provider_core.uploads import UploadLimits
 
 
 class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
-    def test_live_configuration_reserves_capacity_without_creating_a_checkpoint_store(self):
+    def test_live_configuration_reserves_capacity_before_runtime_resources(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
             lifecycle = load_provider_config(files.path).lifecycle

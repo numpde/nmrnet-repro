@@ -130,8 +130,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     provider["depends_on"] = {role: {"condition": "service_started"} for role in ("prediction", "reader", "smiles", "api", "interpreter", "store")}
     provider["command"] = ["--config", str(bundle / "config/provider.toml"), "--execution", "/input/execution.json",
                            "--models", "/input/prediction-models.json", "--diagnostics", "/run"]
-    # Keep this scope's physical volume identity: a new volume would bypass the
-    # same-root lock that also excludes an old checkpoint owner.
+    # Keep this scope's physical volume identity so supervisors contend for
+    # the same lifetime lock across container replacement.
     control_volume = checkpoint_volume_name(config.lifecycle.scope, namespace=delivery_project)
     provider["volumes"] = [_bind(bundle, bundle), _bind(bundle / "execution.json", "/input/execution.json"),
                            _bind(bundle / "prediction-models.json", "/input/prediction-models.json"),

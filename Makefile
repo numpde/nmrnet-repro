@@ -2,10 +2,6 @@ override SHELL := bash
 override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
-ifneq ($(origin WLAN_INTERFACE),undefined)
-$(error WLAN_INTERFACE was replaced by NETWORK_INTERFACE; use NETWORK_INTERFACE=<interface>)
-endif
-
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: packages/base-images/python/download
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
@@ -316,7 +312,7 @@ help:
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
-		'make test/integration/provider-core/recovery Test signed compact-checkpoint readback without scientific replay.' \
+		'make test/integration/provider-core/recovery Test live Attempt recovery without restart replay.' \
 		'make test/integration/provider-core/interpreter-ambiguity Test the fixed interpreter-probe mechanics offline.' \
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \

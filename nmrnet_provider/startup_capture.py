@@ -1,6 +1,6 @@
 """Admit startup paths, destination authorities and the prediction lifetime.
 
-Deployment and finite recovery reuse these narrow rules. They do not construct
+Deployment and finite qualification reuse these narrow rules. They do not construct
 runtime owners or allocate native work; each caller owns its captured files.
 """
 
@@ -8,7 +8,6 @@ from tools.container_guard import require_container
 
 require_container()
 
-import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -79,7 +78,3 @@ def startup_authorities(config):
         "interpreter": sorted({_authority(endpoint.spec.url) for endpoint in config.interpreter.endpoints}),
         "store": [_authority(config.uploads.store_origin)],
     }
-
-
-def _private_file(path, flags):
-    return os.open(path, flags | os.O_NOFOLLOW, 0o600)

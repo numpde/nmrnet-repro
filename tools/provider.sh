@@ -92,34 +92,6 @@ provider_host_remove() {
     return 2
 }
 
-provider_host_finish() {
-    local status=$1 role cleanup=0
-    trap - EXIT
-    # Retire the finite controller before its API route. Never tear down its
-    # grants while it might still submit or use them, including after rm fails.
-    if [[ $inference_retirement_confirmed == true ]]; then provider_host_remove controller || cleanup=2; fi
-    if [[ ! -v provider_host_ids[controller] && $inference_retirement_confirmed == true ]]; then
-        for role in api capture metadata; do
-            [[ $inference_retirement_confirmed == true ]] || break
-            provider_host_remove "$role" || cleanup=2
-        done
-    fi
-    if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
-    provider_host_diagnostic+=${pending_diagnostic-}
-    if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || status=2; fi
-    if [[ $inference_retirement_confirmed != true ]]; then
-        printf 'A local recovery client remains unretired. Keep this process and its private evidence at %q.\n' "$provider_host_root" >&2 || :
-        while :; do sleep 1 || :; done
-    fi
-    if (( ${#provider_host_ids[@]} )); then
-        printf 'Recovery left container ownership unresolved. Preserve original IDs, dependencies and receipts at %q before arranging another recovery.\n' "$provider_host_root" >&2 || :
-        status=2
-    fi
-    docker_client_cleanup || status=2
-    exec {provider_host_lock}<&-
-    exit "$status"
-}
-
 provider_host_ipv4() {
     local value=$1 part
     local -a parts
@@ -131,6 +103,8 @@ provider_host_ipv4() {
 }
 
 provider_host_initialize() {
+    # Each finite caller supplies its cleanup owner before any setup effects.
+    local on_exit=$1
     # Each finite caller owns a fresh private root and local Engine client.
     # Production native ownership belongs to the named Compose deployment.
     umask 077
@@ -150,7 +124,7 @@ provider_host_initialize() {
     provider_host_stop_requested=false
     declare -gA provider_host_ids=()
     trap 'provider_host_stop_requested=true' HUP INT TERM
-    trap 'provider_host_finish "$?"' EXIT
+    trap "$on_exit" EXIT
     mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/output" "$provider_host_root/routes" || return $?
     docker_client_prepare run || { provider_host_diagnostic+=$docker_client_diagnostic; return 2; }
 }

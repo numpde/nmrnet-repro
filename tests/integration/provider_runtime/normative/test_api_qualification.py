@@ -34,6 +34,7 @@ provider_host_disjoint() { [[ $1 != "$2" && $1 != "$2/"* ]]; }
 provider_host_ipv4() { [[ $1 == 127.0.0.1 || $1 == 192.0.2.53 || $1 == 198.51.100.53 ]]; }
 provider_host_refuse() { provider_host_diagnostic=$1; return 2; }
 provider_host_initialize() {
+    trap "$1" EXIT
     mkdir -p "$provider_host_root/components" "$provider_host_root/routes"
     source "$repository_root/tools/docker_client.sh"
     inference_retirement_confirmed=true
@@ -394,7 +395,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 "signing.private.json",
                 "prediction-models",
                 "/native/",
-                "store_root",
+                "lifetime_root",
             ):
                 self.assertNotIn(forbidden, selection + proxy + probe)
             argv = (records / "proxy.argv").read_text().split("\0")[:-1]

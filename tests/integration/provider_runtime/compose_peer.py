@@ -330,7 +330,7 @@ async def serve(root, seconds, case, delivery_project):
         for name, owner in (("api-ca.pem", api), ("model-ca.pem", model), ("store-ca.pem", store)):
             (source / name).write_bytes((Path(owner.scratch.name) / "cert.pem").read_bytes())
         files = ConfigFiles(source, api_origin=api.origin, model_origin=model.origin, store_origin=store.origin,
-                            maximum_records=maximum_records, ca_file=source / "api-ca.pem",
+                            maximum_live_attempts=2, ca_file=source / "api-ca.pem",
                             model_ca_file=source / "model-ca.pem", store_ca_file=source / "store-ca.pem")
         peer.config = load_provider_config(files.path)
         raw = files.raw.replace(str(files.state).encode(), b"/srv/nmrnet/attempts")

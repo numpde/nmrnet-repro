@@ -58,8 +58,7 @@ fi
 mkdir -p -m 700 -- "$repository_root/.work/qualification"
 scratch=$(mktemp -d "$repository_root/.work/qualification/prediction-crash-XXXXXXXX")
 provider_host_root=$scratch/owner
-provider_host_initialize
-trap after_proof EXIT
+provider_host_initialize after_proof
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 print_command=false

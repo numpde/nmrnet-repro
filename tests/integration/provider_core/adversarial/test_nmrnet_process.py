@@ -217,21 +217,6 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(fixture.files.state.exists())
                     self.assertEqual(fixture.peer.requests, [])
 
-    async def test_legacy_start_blocks_live_startup_until_reviewed_cutover(self):
-        async with ProcessPeers() as fixture:
-            await fixture.seed_legacy_pending()
-            checkpoint = fixture.config.lifecycle.lifetime_root / "checkpoints.sqlite3"
-            retained = checkpoint.read_bytes()
-            process = await fixture.start()
-            stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1, stderr.decode())
-            self.assertIn(b'"exception_type":"RuntimeError"', stderr)
-            self.assertIn(b'"requires_host_retirement":false', stderr)
-            self.assertEqual(fixture.peer.requests, [])
-            self.assertEqual(checkpoint.read_bytes(), retained)
-            self.assertFalse((fixture.diagnostics / "admitted").exists())
-            self.assertFalse((fixture.diagnostics / "science-entered").exists())
-            self.assertNotIn(b"PRIVATE", stdout + stderr)
 
     async def test_invalid_config_has_no_journal_or_requests_and_no_private_echo(self):
         async with ProcessPeers() as fixture:

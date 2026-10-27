@@ -27,10 +27,10 @@ from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
 from nmrnet_provider.native_factory import NativeAttemptFactory
-from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence, operator_redactor
+from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
-from provider_core.diagnostics import write_stderr as _write_stderr, write_notice as _write_api_notice
+from provider_core.diagnostics import operator_redactor, write_stderr as _write_stderr, write_notice as _write_api_notice
 from provider_core.lifetime import ProviderLifetime
 from provider_core.controller import LiveStartPolicy
 from provider_core.execution import ConditionRecovery, ObservationRecovery
@@ -356,11 +356,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         config.lifecycle.lifetime_root.mkdir(mode=0o700, exist_ok=True)
         lifetime = ProviderLifetime(config.lifecycle.lifetime_root)
         lifetime.open()
-        if os.path.lexists(config.lifecycle.lifetime_root / "checkpoints.sqlite3"):
-            raise RuntimeError(
-                "Cannot start live NMRNet bookkeeping while legacy producer checkpoints lack a reviewed cutover disposition. "
-                "Keep the old records and queued delivery; resolve their Job exclusions before starting this deployment."
-            )
         transport = config.api.http.new_transport()
         api = ProviderAPI(config.api.identity, transport, expected_topology=config.api.expected_topology)
         factory = NativeAttemptFactory(

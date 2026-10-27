@@ -24,7 +24,7 @@ from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.api_config import (
     ApiConfigurationRejected, ApiSettings, HttpsSettings,
-    api_settings, https_settings, require_api_fields,
+    api_settings, https_settings,
 )
 from provider_core.attempt_record import RecoveryScope
 from provider_core.ownership import LiveAttemptLimits
@@ -227,13 +227,6 @@ def read_startup_file(path, *, maximum_bytes, label, secret=False):
 def _https(table, label, read_file):
     try:
         return https_settings(table, label, read_file)
-    except ApiConfigurationRejected as failure:
-        raise ConfigurationRejected(str(failure), cause=failure.cause) from None
-
-
-def _api_fields(table):
-    try:
-        require_api_fields(table)
     except ApiConfigurationRejected as failure:
         raise ConfigurationRejected(str(failure), cause=failure.cause) from None
 
