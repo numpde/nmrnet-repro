@@ -106,6 +106,14 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 </tbody>
 </table>
+<p>The supplied definitions reserve two live Attempt slots, 256 KiB for control
+records and 4 MiB for pending terminal reports. Each slot reserves 128 KiB of
+control capacity and a 2 MiB encoded-report allowance before START. These are
+bookkeeping and report allowances, not limits on total process memory. A full
+registry pauses new START requests and keeps unresolved obligations. The live
+START policy allows the initial request and at most one permitted replay within
+90 seconds of the first send; the API contract and stop request still govern
+whether a replay is allowed.</p>
 <p>Paths are absolute container paths. Startup inputs must be regular files without
 a final-component symlink. Secrets must belong to the container user and have
 mode <code>0400</code> or <code>0600</code>; configuration and CA files must belong to root or that user,
@@ -722,6 +730,18 @@ logs; failed output remains a protected in-memory observation.</p>
 The installed consumer tests exercise real child exits during reader preparation
 and prediction startup, exact failure handoff before delayed cleanup, and the
 absence of a scientific rerun.</p>
+<p>The opt-in offline target
+<code>make test/integration/provider/prediction-crash</code> runs a synthetic child
+under a fixed 512 MiB limit. It checks one original SIGKILL observation, one
+SDK-selected failure, no replacement execution, completed native cleanup and
+exactly one additional kernel OOM kill in the runner's cgroup. The public failure
+uses the verified signal and phase; the cgroup counter supplies the separate
+OOM evidence. API and relay receipts are authored local fixtures, so this probe
+establishes neither deployed API delivery nor durable queue storage. It uses the
+recorded provider image and loads no released models. The
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/integration/provider_worker/prediction_crash_probe.py">probe</a>
+and <a href="https://github.com/numpde/nmrnet-repro/blob/main/tools/prediction_crash_qualification.sh">launcher</a>
+define its checks and retained qualification evidence.</p>
 <p>The Job's own <code>preparation.seconds</code> limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure
 <code>input_selection_time_limit</code>. Protected evidence retains the configured limit,

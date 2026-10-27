@@ -37,9 +37,9 @@ test/unit/smiles-worker:
 .PHONY: test/integration/provider-core/lifecycle
 .PHONY: test/integration/provider-core
 
-.PHONY: test/integration/provider/prediction-recovery
-test/integration/provider/prediction-recovery:
-	bash tools/prediction_recovery_qualification.sh
+.PHONY: test/integration/provider/prediction-crash
+test/integration/provider/prediction-crash:
+	bash tools/prediction_crash_qualification.sh
 
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
@@ -299,7 +299,7 @@ help:
 		'make test/integration/native-geometry-worker Check real MOL/SDF parsing across the private worker channel in the recorded RDKit image.' \
 		'make test/integration/provider-core/runner Test native task cancellation and lost-control recovery offline.' \
 		'make test/unit/provider/worker Test prediction worker framing and exchange failures.' \
-		'make test/integration/provider/prediction-recovery Prove one prediction replacement after a real synthetic kernel OOM (opt-in).' \
+		'make test/integration/provider/prediction-crash Opt in to one kernel OOM, one worker_crashed FAIL and no prediction retry.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/integration/provider-core/smiles Test Job-bound SMILES choices with installed core.' \
 		'make test/integration/provider-core/pasted Test exact pasted Job coordinates, units and source mapping.' \
