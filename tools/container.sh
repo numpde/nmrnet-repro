@@ -212,6 +212,10 @@ esac
 
 case "$1" in
     provider/image/build)
+        if ! "$print_command"; then
+            source "$repository_root/tools/image_lifecycle.sh"
+            image_lifecycle_lock shared
+        fi
         build_kind=${1%%/*}
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
             printf -v pending_diagnostic '%s\n' 'Provider image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
@@ -240,6 +244,10 @@ case "$1" in
         exit
         ;;
     geometry/image/build)
+        if ! "$print_command"; then
+            source "$repository_root/tools/image_lifecycle.sh"
+            image_lifecycle_lock shared
+        fi
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
             printf -v pending_diagnostic '%s\n' 'RDKit image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
             exit 2
@@ -294,7 +302,7 @@ case "$1" in
         exit 2
         ;;
     test/unit/provider/deployment|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
-    test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/delivery|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs|probe|download|check|inspect|extract)
+    test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/unit/packages/images|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/delivery|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -489,14 +497,24 @@ case "$1" in
                     --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
                     "$image" python3 -B -m tools.rdkit_runtime_tests temporary)
                 ;;
-            test/unit/packages|test/unit/packages/wheelhouse)
+            test/unit/packages|test/unit/packages/wheelhouse|test/unit/packages/images)
                 require_source_directory tools
                 require_source_directory tests
+                package_test_image=$image
+                if [[ "$1" == test/unit/packages/images ]]; then
+                    checker_image
+                    package_test_image=$checker_image_id
+                    command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
+                        --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly")
+                fi
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
-                    "$image" python3 -B -m unittest -v)
-                if [[ "$1" == test/unit/packages/wheelhouse ]]; then
+                    "$package_test_image" python3 -B -m unittest -v)
+                if [[ "$1" == test/unit/packages/images ]]; then
+                    command+=(tests.test_image_retirement tests.test_provider_deployment_launcher
+                        repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health)
+                elif [[ "$1" == test/unit/packages/wheelhouse ]]; then
                     command+=(tests.test_wheelhouse tests.test_inference_image
                         tests.unit.normative.test_wheelhouse_path tests.unit.adversarial.test_wheelhouse_path
                         tests.unit.normative.test_wheel_pool)

@@ -159,6 +159,10 @@ trap 'caller_cancellation=143; exit 143' TERM
 if [[ $1 == build ]]; then
     source "$repository_root/tools/wheelhouse_path.sh"
     select_wheelhouse
+    if ! "$print_command"; then
+        source "$repository_root/tools/image_lifecycle.sh"
+        image_lifecycle_lock shared
+    fi
 fi
 if "$print_command"; then
     docker_client_prepare print

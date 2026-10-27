@@ -30,7 +30,7 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / 'tools'
         tools.mkdir()
-        for name in ('compose_deployment.sh', 'provider_deployment.sh'):
+        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'image_lifecycle.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
         (tools / 'docker_client.sh').write_text('''docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
@@ -74,7 +74,7 @@ case $1 in
     if [[ ${TEST_RUN_STATUS-0} != 0 ]]; then printf 'actual helper cause\n' >&2; exit "$TEST_RUN_STATUS"; fi
     if [[ " $* " == *' provider_core.deployment_binding paths '* ]]; then
         printf '%s\0' "$root/secrets/deployments/fixture/signing.private.json"
-    elif [[ " $* " == *' checkpoint-owner '* ]]; then
+    elif [[ " $* " == *' lifetime-owner '* ]]; then
         printf 'sha256:%064d nmr-api-delivery-control-%064d %s %s\n' 9 1 "$(id -u)" "$(id -g)"
     fi
     arguments=("$@")

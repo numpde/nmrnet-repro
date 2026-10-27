@@ -12,6 +12,7 @@ require_container()
 # Port source: https://github.com/numpde/dapp32/blob/778c16f8d8b77181d2ac4cd11a62a2034ded2518/tests/checks/test_repository_hygiene.py
 # Original groups: Python bytecode, first-party symlinks, help completeness,
 # scoped targets, aggregate campaigns, sole entrypoint, phony/default/duplicates.
+import os
 import re
 import subprocess
 import tempfile
@@ -50,6 +51,23 @@ SECRET_PATTERNS = [
 
 
 class RepositoryHygieneTest(unittest.TestCase):
+    def test_image_retirement_runs_after_success_without_changing_deployment_health(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Makefile").write_text(read_text(repo_path("Makefile")))
+            (root / "tools").mkdir()
+            (root / "tools/provider_deployment.sh").write_text('exit "${TEST_UP_STATUS}"\n')
+            (root / "tools/image_retirement.sh").write_text('touch "$(dirname "$0")/cleanup-called"\nexit 7\n')
+            for up_status in (7, 0):
+                with self.subTest(up_status=up_status):
+                    result = subprocess.run(["make", "--no-print-directory", "-C", str(root), "provider/deployment/up"],
+                                            env={**os.environ, "TEST_UP_STATUS": str(up_status)},
+                                            capture_output=True, text=True, timeout=5)
+                    self.assertEqual(result.returncode == 0, up_status == 0, result.stderr)
+                    self.assertEqual((root / "tools/cleanup-called").exists(), up_status == 0)
+                    if up_status == 0:
+                        self.assertIn("Deployment is healthy; image retirement is incomplete", result.stderr)
+
     def test_secret_text_patterns_are_absent(self):
         findings = []
         for path in iter_repo_text_files():

@@ -25,6 +25,10 @@ digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum)
 project=nmrnet-${digest:0:20}
 project_directory=$repository_root
 path "$root"
+if [[ $action == install || $action == up ]]; then
+    source "$repository_root/tools/image_lifecycle.sh"
+    image_lifecycle_lock shared
+fi
 if [[ $action == install ]]; then
     mkdir -p -m 700 -- "$(dirname -- "$root")"
     private_directory "$root"

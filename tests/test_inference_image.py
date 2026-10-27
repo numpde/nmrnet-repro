@@ -138,6 +138,7 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools/git_inputs.sh").write_bytes(Path("tools/git_inputs.sh").read_bytes())
         (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
+        (self.root / "tools/image_lifecycle.sh").write_bytes(Path("tools/image_lifecycle.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.lock", "unicore-source.json"):
             (self.root / "requirements" / name).write_text("fixture\n")

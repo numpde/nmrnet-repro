@@ -89,6 +89,13 @@ test/integration/rdkit-runtime:
 .PHONY: test/repository/operator-inputs test/repository/documentation
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
+.PHONY: packages/images/retire test/unit/packages/images
+
+packages/images/retire:
+	bash tools/image_retirement.sh
+
+test/unit/packages/images:
+	bash tools/container.sh $@
 
 packages/provider-core/wheelhouse:
 	bash tools/wheelhouse.sh download provider-core
@@ -272,6 +279,7 @@ help:
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
 		'make provider/deployment/down DEPLOYMENT=<name> Stop/remove this provider stack; retain data volumes.' \
 		'make provider/deployment/retire-generations DEPLOYMENT=<name> Remove unused frozen inputs; keep selected and container-borrowed generations.' \
+		'make packages/images/retire           Remove obsolete NMRNet images; preserve prepared, selected and container-referenced images.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
 		'make test/integration/provider/deployment/smiles Generate two CCl conformers and predict H/C through the Compose native path (opt-in).' \
 		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \
@@ -399,8 +407,14 @@ test/integration/provider/deployment:
 test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:
 	bash tools/compose_qualification.sh $(notdir $@)
 
-provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down provider/deployment/retire-generations:
+provider/deployment/install provider/deployment/status provider/deployment/logs provider/deployment/down provider/deployment/retire-generations:
 	bash tools/provider_deployment.sh $(notdir $@)
+
+provider/deployment/up:
+	bash tools/provider_deployment.sh up
+	@if bash tools/image_retirement.sh; then :; else \
+		status=$$?; printf 'Deployment is healthy; image retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$$status" >&2; \
+	fi
 
 test/unit/provider/deployment:
 	bash tools/container.sh $@
