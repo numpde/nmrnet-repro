@@ -240,8 +240,15 @@ make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code></pre>
 provider is running. Up initializes the provider's lifetime-lock volume, starts the
 proxies and serial native runners, then waits for provider readiness, including
 an accepted API Hello. This establishes readiness, not scientific accuracy or
-successful model interpretation. Down stops that provider and its dependencies;
-it leaves shared delivery and its queue available.</p>
+successful model interpretation. Down requests provider shutdown and removes its
+dependencies only after confirming that the provider exited successfully.</p>
+<p>This down command requests provider stop <a href="https://docs.docker.com/reference/cli/docker/container/stop/#stop-container-with-timeout--t---timeout">without an Engine kill deadline</a>.
+The command waits up to 120 seconds for its stop request. If that wait expires,
+is interrupted, or cannot confirm a successful exit, down returns nonzero and
+leaves the provider's dependencies, selected configuration and container logs
+available. Inspect status and logs, resolve the blocked delivery or cleanup,
+then retry down. Expiry of the command's wait does not establish that the provider
+stopped. Shared delivery and its queue remain available throughout.</p>
 <p>Install retires unused older input generations. The selected generation and
 any generation mounted by a container, including a stopped container, remain.
 To retire unused generations without reconfiguring or stopping the provider:</p>
@@ -518,6 +525,9 @@ SIGINT/TERM stops new work and requests bounded settlement.
 If an original borrower remains active, the process reports
 <code>requires_host_retirement = true</code>, keeps its original owners alive and waits for
 the host to retire it; a normal stop signal does not cancel the same work again.
+Ordinary deployment down preserves that held process rather than imposing a
+forced-stop deadline. Emergency termination can lose a report that shared
+delivery has not acknowledged; it does not establish successful drain.
 An unadmitted diagnostics directory receives no files; safe reasons or OS errno
 still reach Docker's stderr logging. Neither diagnostics nor the
 readiness observations establish successful science. Run the focused subprocess proof

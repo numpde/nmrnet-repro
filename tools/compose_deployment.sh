@@ -41,7 +41,7 @@ flock --nonblock "$deployment_lock" || { refuse 'another command is active; noth
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
-helper_name= lifetime_query= binding_inputs_directory=
+helper_name= lifetime_query= stop_query= binding_inputs_directory=
 finish() {
     local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
@@ -55,6 +55,13 @@ finish() {
     fi
     if [[ $inference_retirement_confirmed == true && -n ${lifetime_query-} ]]; then
         rm -f -- "$lifetime_query" || cleanup=$?
+    fi
+    if [[ -n $stop_query ]]; then
+        if [[ $inference_retirement_confirmed == true ]]; then
+            rm -f -- "$stop_query" || cleanup=$?
+        else
+            printf 'Provider stop metadata remains owned by an unretired client: %q.\n' "$stop_query" >&2
+        fi
     fi
     if [[ $inference_retirement_confirmed == true && -z $helper_name && -n $binding_inputs_directory ]]; then
         rm -f -- "$binding_inputs_directory/definition.toml" "$binding_inputs_directory/paths" || cleanup=$?
@@ -76,6 +83,59 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; exit 2; }
 run() { local seconds=$1; shift; inference_native "$role Compose $action" "$seconds" stdio "${engine[@]}" "$@"; }
+capture_stop_metadata() {
+    # Preserve the native owner's facts in this shell; only bounded Engine
+    # metadata goes to the private file. A timed-out writer keeps that file.
+    inference_native 'provider stop inspection' 15 stdio bash -eu -c '
+        output=$1; shift
+        ulimit -f 4
+        exec "$@" > "$output"
+    ' bash "$stop_query" "${engine[@]}" "$@"
+    [[ $inference_retirement_confirmed == true ]] \
+        || { refuse 'provider inspection has not settled; no dependencies were stopped.'; return 2; }
+    [[ $(stat -c '%s' -- "$stop_query") -lt 4096 ]] \
+        || { refuse 'provider inspection reached its metadata limit; no dependencies were stopped.'; return 2; }
+}
+provider_state() {
+    capture_stop_metadata inspect --type container --format '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}}' "$provider_id"
+    IFS=' ' read -r provider_status provider_exit provider_oom extra < "$stop_query" \
+        || { refuse 'provider state is incomplete; no dependencies were stopped.'; return 2; }
+    [[ $provider_status =~ ^(created|running|paused|restarting|removing|exited|dead)$ \
+        && $provider_exit =~ ^[0-9]+$ && $provider_oom =~ ^(true|false)$ && -z $extra ]] \
+        && cmp -s -- "$stop_query" <(printf '%s %s %s\n' "$provider_status" "$provider_exit" "$provider_oom") \
+        || { refuse 'provider state is malformed; no dependencies were stopped.'; return 2; }
+}
+drain_provider() {
+    local provider_id provider_status provider_exit provider_oom extra stop_status
+    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+    capture_stop_metadata "${compose[@]}" ps --all --quiet provider
+    if [[ ! -s $stop_query ]]; then
+        capture_stop_metadata "${compose[@]}" ps --all --quiet
+        [[ ! -s $stop_query ]] \
+            || { refuse 'the provider container is absent but dependencies remain; inspect this deployment before teardown.'; return 2; }
+        return 0
+    fi
+    IFS= read -r provider_id < "$stop_query" \
+        || { refuse 'provider selection is incomplete; no dependencies were stopped.'; return 2; }
+    [[ $provider_id =~ ^[0-9a-f]{64}$ ]] \
+        && cmp -s -- "$stop_query" <(printf '%s\n' "$provider_id") \
+        || { refuse 'provider selection must identify exactly one container; no dependencies were stopped.'; return 2; }
+    provider_state
+    if [[ $provider_status == running ]]; then
+        # The daemon must not turn a caller's finite wait into report loss.
+        # Stop only this provider; its proxies and native owners stay available.
+        if run 120 stop --signal SIGTERM --timeout -1 "$provider_id"; then :; else
+            stop_status=$?
+            printf 'Provider stop is not confirmed; no dependencies were stopped. Restore delivery if needed, inspect status/logs, then retry down.\n' >&2
+            return "$stop_status"
+        fi
+        [[ $inference_retirement_confirmed == true ]] \
+            || { refuse 'provider stop client has not settled; no dependencies were stopped.'; return 2; }
+        provider_state
+    fi
+    [[ $provider_status == exited && $provider_exit == 0 && $provider_oom == false ]] \
+        || { refuse "provider exit is not confirmed successful (state $provider_status, exit $provider_exit, OOM $provider_oom); no dependencies were stopped."; return 2; }
+}
 image_record() {
     local record=$repository_root/.work/$1/image-id
     [[ -f $record && ! -L $record && $(stat -c '%s' -- "$record") == 72 ]] || { refuse 'build or load the required immutable image first.'; return 2; }
@@ -293,7 +353,10 @@ case $action in
         initialize_lifetime
         run 180 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120
         ;;
-    down) run 120 "${compose[@]}" down --timeout 60 ;;
+    down)
+        drain_provider
+        run 120 "${compose[@]}" down --timeout 60
+        ;;
     status) run 30 "${compose[@]}" ps --all ;;
     logs) run 30 "${compose[@]}" logs --no-color --tail 80 ;;
     client-inputs)

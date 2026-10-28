@@ -273,7 +273,7 @@ help:
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
-		'make provider/deployment/down DEPLOYMENT=<name> Stop/remove this provider stack; retain data volumes.' \
+		'make provider/deployment/down DEPLOYMENT=<name> Await provider exit before removing dependencies; retain blocked work and data volumes.' \
 		'make provider/deployment/retire-generations DEPLOYMENT=<name> Remove unused frozen inputs; keep selected and container-borrowed generations.' \
 		'make packages/images/retire           Remove obsolete NMRNet images; preserve prepared, selected and container-referenced images.' \
 		'make test/unit/packages/images        Test image retirement ownership and preservation offline.' \

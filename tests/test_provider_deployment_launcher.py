@@ -8,6 +8,7 @@ require_container()
 
 import hashlib
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -86,7 +87,10 @@ case $1 in
     ;;
  inspect)
     [[ ${TEST_INSPECT_STATUS-0} == 0 ]] || exit "$TEST_INSPECT_STATUS"
-    if [[ " $* " == *'.Mounts'* ]]; then printf '%s' "${TEST_MOUNTS-}";
+    if [[ " $* " == *'.State.Status'* ]]; then
+        if [[ -f $root/provider-stopped ]]; then printf '%s\n' "${TEST_PROVIDER_STOPPED_STATE-exited 0 false}";
+        else printf '%s\n' "${TEST_PROVIDER_STATE-running 0 false}"; fi
+    elif [[ " $* " == *'.Mounts'* ]]; then printf '%s' "${TEST_MOUNTS-}";
     else printf 'sha256:%064d\n' 9; fi
     ;;
  image) printf 'sha256:%064d\n' 9 ;;
@@ -95,8 +99,23 @@ case $1 in
       : > "$root/ready"
       until [[ -f $root/release ]]; do sleep 0.01; done
     fi
-    if [[ " $* " == *' ps --all --quiet prediction '* ]]; then printf '%064d\n' 8; fi
+    if [[ " $* " == *' ps --all --quiet provider '* ]]; then
+        if [[ ! -f $root/provider-removed ]]; then
+            provider=${TEST_PROVIDER_ID-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
+            [[ -z $provider ]] || printf '%s\n' "$provider"
+        fi
+    elif [[ " $* " == *' ps --all --quiet prediction '* ]]; then printf '%064d\n' 8;
+    elif [[ " $* " == *' ps --all --quiet '* ]]; then printf '%s' "${TEST_PROJECT_CONTAINERS-}"; fi
     if [[ ${TEST_COMPOSE_STATUS-0} != 0 ]]; then printf 'actual Compose cause\n' >&2; exit "$TEST_COMPOSE_STATUS"; fi
+    if [[ " $* " == *' down '* ]]; then : > "$root/provider-removed"; fi
+    ;;
+ stop)
+    if [[ ${TEST_STOP_PAUSE-false} == true ]]; then
+        : > "$root/stop-entered"
+        until [[ -f $root/stop-release ]]; do sleep 0.01; done
+    fi
+    [[ ${TEST_STOP_STATUS-0} == 0 ]] || exit "$TEST_STOP_STATUS"
+    : > "$root/provider-stopped"
     ;;
  rm) [[ ${TEST_RM_STATUS-0} == 0 ]] || exit "$TEST_RM_STATUS" ;;
  *) exit 91 ;;
@@ -173,6 +192,95 @@ esac
                     self.assertTrue((bundle / 'compose.json').exists())
         self.assertFalse(any('--volumes' in call or '-v' in call for call in self.calls()))
         self.assertTrue((self.root / 'cleanup').exists())
+
+    def test_down_confirms_exact_provider_exit_before_stopping_dependencies(self):
+        result = self.run_command('down')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        stops = [index for index, call in enumerate(calls) if call[0] == 'stop']
+        self.assertEqual(len(stops), 1)
+        self.assertEqual(calls[stops[0]], ['stop', '--signal', 'SIGTERM', '--timeout', '-1', CID])
+        teardown = next(index for index, call in enumerate(calls) if 'down' in call)
+        self.assertLess(stops[0], teardown)
+        self.assertTrue(any('.State.Status' in ' '.join(call) for call in calls[stops[0] + 1:teardown]))
+        self.assertTrue((self.bundle / 'compose.json').exists())
+        self.assertFalse(any('--volumes' in call or '--force' in call for call in calls))
+
+    def test_unconfirmed_stop_never_stops_dependencies_or_removes_containers(self):
+        for status in (124, 130, 143):
+            with self.subTest(status=status):
+                before = len(self.calls())
+                result = self.run_command('down', changes={'TEST_STOP_STATUS': str(status)})
+                self.assertEqual(result.returncode, status, result.stderr)
+                calls = self.calls()[before:]
+                self.assertEqual(len([call for call in calls if call[0] == 'stop']), 1)
+                self.assertFalse(any('down' in call or call[0] == 'rm' for call in calls))
+                self.assertTrue(self.bundle.exists())
+                self.assertIn('no dependencies were stopped', result.stderr)
+
+    def test_stop_requires_known_successful_provider_exit(self):
+        for state in ('exited 1 false', 'exited 137 true', 'running 0 false', 'PRIVATE malformed'):
+            with self.subTest(state=state):
+                before = len(self.calls())
+                result = self.run_command('down', changes={'TEST_PROVIDER_STOPPED_STATE': state})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any('down' in call or call[0] == 'rm' for call in self.calls()[before:]))
+                self.assertNotIn('PRIVATE', result.stderr)
+
+    def test_existing_abnormal_paused_or_restarting_provider_is_not_torn_down(self):
+        for state in ('exited 1 false', 'exited 137 true', 'paused 0 false', 'restarting 1 false', 'created 0 false'):
+            with self.subTest(state=state):
+                before = len(self.calls())
+                result = self.run_command('down', changes={'TEST_PROVIDER_STATE': state})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any('down' in call or call[0] in ('stop', 'rm') for call in self.calls()[before:]))
+                self.assertTrue(self.bundle.exists())
+
+    def test_stopped_provider_and_repeated_down_need_no_stop_signal(self):
+        for _ in range(2):
+            result = self.run_command('down', changes={'TEST_PROVIDER_STATE': 'exited 0 false'})
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(call[0] == 'stop' for call in self.calls()))
+
+    def test_absent_provider_does_not_authorize_teardown_of_remaining_containers(self):
+        result = self.run_command('down', changes={'TEST_PROVIDER_ID': '', 'TEST_PROJECT_CONTAINERS': 'c' * 64 + '\n'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any('down' in call or call[0] in ('stop', 'rm') for call in self.calls()))
+
+    def test_ambiguous_provider_selection_cannot_stop_another_container(self):
+        for selection in (CID + '\n' + 'c' * 64, 'PRIVATE invalid'):
+            with self.subTest(selection=selection):
+                before = len(self.calls())
+                result = self.run_command('down', changes={'TEST_PROVIDER_ID': selection})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any('down' in call or call[0] in ('stop', 'rm') for call in self.calls()[before:]))
+                self.assertNotIn('PRIVATE', result.stderr)
+
+    def test_unretired_query_prevents_following_engine_calls(self):
+        result = self.run_command('down', changes={'TEST_RETIRED': 'false'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertFalse((self.root / 'cleanup').exists())
+
+    def test_interrupting_stop_preserves_dependencies(self):
+        environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture', TEST_STOP_PAUSE='true')
+        process = subprocess.Popen(['bash', str(self.root / 'tools/provider_deployment.sh'), 'down'], env=environment,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            deadline = time.monotonic() + 2
+            while not (self.root / 'stop-entered').exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue((self.root / 'stop-entered').exists())
+            process.send_signal(signal.SIGTERM)
+            (self.root / 'stop-release').touch()
+            _stdout, stderr = process.communicate(timeout=2)
+            self.assertEqual(process.returncode, 143, stderr)
+            self.assertFalse(any('down' in call or call[0] == 'rm' for call in self.calls()))
+        finally:
+            (self.root / 'stop-release').touch()
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate(timeout=2)
 
     def test_failed_compose_preserves_original_status_and_selected_configuration_without_retry(self):
         result = self.run_command('up', changes={'TEST_COMPOSE_STATUS': '7'})
