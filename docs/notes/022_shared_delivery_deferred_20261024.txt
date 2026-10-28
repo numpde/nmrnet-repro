@@ -2112,3 +2112,34 @@ those unmeasured properties remain unclaimed.
 
 The existing shared tooling supplies wheel selection/capture. Magnet's
 source-only dependency and build-backend policy remain model-owned.
+
+NMRNet provider follow-up
+
+Shared lifecycle decisions are recorded in the sibling repository:
+../../../nmr-provider-tools/notes/014_joint_provider_refactor_decisions_20261028.txt
+This note records NMRNet-specific follow-up; it does not replace those decisions.
+
+1. Make ordinary updates practical without abandoning a selected result.
+   The current up command requires an empty project; down waits for a clean
+   provider exit before removing dependencies. Develop a shared lifecycle
+   approach that permits safe routine updates and handles partial deployments
+   without relying on forced removal.
+
+2. Resolve blocked shutdowns without losing reporting duties. A selected result
+   can keep shutdown waiting indefinitely while delivery is unavailable. Keep
+   the original report and its owner until durable handoff, and develop an
+   operator-visible recovery path with the shared delivery owners.
+
+3. Qualify scientific and resource behavior separately from lifecycle tests.
+   GPU, out-of-memory and numerical campaigns have not been established by the
+   current lifecycle checks. Confirm the intended deployment and scientific
+   claims before presenting those checks as evidence.
+
+4. Preserve the distinction between public result capacity and protected
+   evidence capacity. The result planner reports a conservative public size
+   limit before prediction; oversized protected preparation evidence remains a
+   separate retained failure and needs its own reviewed reporting policy.
+
+5. Native recovery after supervisor replacement requires continuity of the
+   original scratch authority or independent proof of its cleanup. An empty new
+   scratch directory alone does not establish that the old child was cleaned up.
