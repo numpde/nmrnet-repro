@@ -58,6 +58,7 @@ maximum_pages = 10
 idle_seconds = 2
 api_backoff_max_seconds = 30
 hello_seconds = 60
+# Log when shutdown is still waiting for an admitted Attempt after this time.
 drain_seconds = 120
 settle_seconds = 10
 allocation_seconds = 30

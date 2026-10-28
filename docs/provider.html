@@ -329,10 +329,10 @@ selected Job and START identity, the acknowledged Attempt, and references to the
 actual execution and delivery owners. It removes a record only after those
 owners finish cleanup and any selected report has been durably handed to shared
 delivery. Physical cleanup alone cannot release an undelivered result. Shutdown stops new
-admissions, interrupts a pending START, and lets acknowledged execution finish
-within its configured drain time.
-If forced cleanup interrupts result approval, the supervisor can remain held for operator review;
-it does not manufacture a failure report or discard the returned result.</p>
+admissions and interrupts a pending START. Acknowledged execution and its result
+handoff continue through shutdown. <code>drain_seconds</code> sets when the provider
+logs that it is still waiting; it does not cancel the Attempt. Existing execution
+and API time limits still apply.</p>
 <p>The delivery queue has explicit item and byte allowances for each provider.
 Held items still count against that allowance. A full queue pauses fresh
 computation; a result already selected for handoff waits and retries the same
@@ -599,7 +599,7 @@ readers before the shared scientific execution and delivery path.</p>
 retained-work/capacity and live-inventory checks precede Hello, fresh discovery
 and allocation. Verified relay-owned Attempts do not block unrelated Jobs, and
 those Jobs are excluded from new computation. It refreshes the current announcement through independent I/O,
-drains or cancels original work on stop, and retains unsettled tasks/controllers.
+drains admitted work on stop, and retains unsettled tasks/controllers.
 Startup acceptance does not establish scientific readiness.</p>
 <p>Startup admission and idle discovery automatically retry reviewed GET failures
 after the original API I/O retires. Each retry repeats complete admission and

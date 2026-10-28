@@ -216,6 +216,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
 
                 ports.host.retire = retire
                 fixture.stop.set()
+                fixture.execution_release.set()
                 await asyncio.wait_for(retirement_entered.wait(), 1)
                 with self.assertRaises(ServiceFailed):
                     await asyncio.wait_for(task, 1)
@@ -230,7 +231,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(calls, ["retire", "retire"])
                 self.assertTrue(ports.host.confirmed)
                 self.assertEqual(len(fixture.allocations), 1)
-                self.assertIsNone(fixture.result)
             finally:
                 fixture.stop.set()
                 fixture.execution_release.set()
@@ -280,27 +280,75 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 await fixture.settle_service(service)
 
 
-    async def test_stop_cancels_active_execution_then_settles_original_controller(self):
+    async def test_stop_preserves_original_acknowledged_execution_past_the_drain_window(self):
         async with ServicePeers() as fixture:
             fixture.execution_release = asyncio.Event()
-            service = fixture.service()
-            task = asyncio.create_task(service.run(fixture.stop))
-            try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 1)
-                fixture.stop.set()
-                with self.assertRaises(ServiceFailed):
-                    await asyncio.wait_for(task, 2)
-                await fixture.settle_service(service)
-                self.assertEqual(len(fixture.allocations), 1)
-                self.assertTrue(fixture.allocations[0].host.confirmed)
-                self.assertIsNone(fixture.result)
-                self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, fixture.ports.instructions.job_ref))
-            finally:
-                fixture.stop.set()
-                fixture.execution_release.set()
-                if not task.done():
-                    await task
-                await fixture.settle_service(service)
+            service = fixture.service(drain_seconds=0.02)
+            window_elapsed = asyncio.Event()
+            wait_task = service._wait_task
+
+            async def observed_wait(task, seconds):
+                finished = await wait_task(task, seconds)
+                if task is service.work_task and seconds == service.policy.drain_seconds:
+                    window_elapsed.set()
+                return finished
+
+            with patch.object(service, '_wait_task', observed_wait):
+                task = asyncio.create_task(service.run(fixture.stop))
+                try:
+                    await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                    driver = service.work_task
+                    fixture.stop.set()
+                    await asyncio.wait_for(window_elapsed.wait(), 1)
+                    self.assertFalse(driver.done())
+                    self.assertEqual(driver.cancelling(), 0)
+                    self.assertFalse(fixture.attempt_stopping.is_set())
+                    fixture.execution_release.set()
+                    await asyncio.wait_for(asyncio.shield(task), 3)
+                    await fixture.wait_published()
+                    self.assertIs(service.work_task, driver)
+                    self.assertIsNone(service.last_failure)
+                    self.assertTrue(service.shutdown_ready)
+                    self.assertEqual(len(fixture.allocations), 1)
+                    self.assertEqual(fixture.allocations[0].worker.events.count('execute'), 1)
+                    self.assertTrue(fixture.allocations[0].host.confirmed)
+                finally:
+                    fixture.stop.set()
+                    fixture.execution_release.set()
+                    await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 4)
+                    if service.shutdown_ready:
+                        await fixture.settle_service(service)
+
+    async def test_failed_shutdown_notice_does_not_cancel_result_handoff(self):
+        async with ServicePeers() as fixture:
+            fixture.execution_release = asyncio.Event()
+            service = fixture.service(drain_seconds=0.02)
+            notice = asyncio.Event()
+            failure = OSError("notice sink failed")
+
+            def fail_notice(*args, **kwargs):
+                notice.set()
+                raise failure
+
+            with patch("nmrnet_provider.service.LOGGER.warning", side_effect=fail_notice):
+                task = asyncio.create_task(service.run(fixture.stop))
+                try:
+                    await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                    fixture.stop.set()
+                    await asyncio.wait_for(notice.wait(), 2)
+                    self.assertEqual(service.work_task.cancelling(), 0)
+                    fixture.execution_release.set()
+                    with self.assertRaises(ServiceFailed):
+                        await asyncio.wait_for(asyncio.shield(task), 3)
+                    await fixture.wait_published()
+                    self.assertTrue(service.shutdown_ready)
+                    self.assertTrue(any(cause is failure for _, cause in service._failures))
+                finally:
+                    fixture.stop.set()
+                    fixture.execution_release.set()
+                    await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 4)
+                    if service.shutdown_ready:
+                        await fixture.settle_service(service)
 
     async def test_hello_and_scientific_retirement_failures_both_survive_without_replacement(self):
         async with ServicePeers() as fixture:
@@ -312,6 +360,8 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             try:
                 await asyncio.wait_for(fixture.execution_entered.wait(), 1)
                 fixture.hello_failure_after = 1
+                await asyncio.wait_for(asyncio.wait({service._hello_task}), 2)
+                fixture.execution_release.set()
                 with self.assertRaises(ServiceFailed) as caught:
                     await asyncio.wait_for(task, 2)
                 self.assertIsInstance(caught.exception.cause, ApiFailure)
@@ -326,7 +376,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 await fixture.settle_service(service)
                 self.assertTrue(fixture.allocations[0].host.confirmed)
                 self.assertEqual(len(fixture.allocations), 1)
-                self.assertIsNone(fixture.result)
             finally:
                 fixture.stop.set()
                 fixture.execution_release.set()

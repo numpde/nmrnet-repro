@@ -14,6 +14,9 @@ from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
 from provider_core.controller import LiveStartPolicy, StartDeferred
 from provider_core.delivery_client import DeliveryUnavailable
+from provider_core.delivery_store import DeliveryFull
+from provider_core.execution import ExecutionRefused
+from provider_core.producer_checkpoint import SuppressedCheckpoint
 
 
 class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
@@ -154,3 +157,104 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     await service.settle()
             self.assertFalse(service.shutdown_ready)
             self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+
+
+    async def test_selected_report_retries_original_bytes_after_stop_and_drain_expiry(self):
+        async with ServicePeers() as fixture:
+            controllers, bodies = [], []
+            pressured, recovered, window_elapsed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+            open_original = fixture.open_attempt
+
+            async def open_attempt(pending, *, stopping):
+                controller = await open_original(pending, stopping=stopping)
+                controllers.append(controller)
+                submit = controller.delivery.submit
+
+                async def bounded_delivery(outcome):
+                    bodies.append(outcome.body)
+                    if not recovered.is_set():
+                        pressured.set()
+                        raise DeliveryFull('Authored full queue; retain the selected report')
+                    return await submit(outcome)
+
+                controller.delivery.submit = bounded_delivery
+                return controller
+
+            service = fixture.service(open_attempt=open_attempt, drain_seconds=0.02)
+            wait_task = service._wait_task
+
+            async def observed_wait(task, seconds):
+                finished = await wait_task(task, seconds)
+                if task is service.work_task and seconds == service.policy.drain_seconds:
+                    window_elapsed.set()
+                return finished
+
+            with patch.object(service, '_wait_task', observed_wait):
+                task = asyncio.create_task(service.run(fixture.stop))
+                try:
+                    await asyncio.wait_for(pressured.wait(), 3)
+                    driver = service.work_task
+                    (controller,) = controllers
+                    fixture.stop.set()
+                    await asyncio.wait_for(window_elapsed.wait(), 1)
+                    self.assertFalse(driver.done())
+                    self.assertEqual(driver.cancelling(), 0)
+                    self.assertFalse(controller.shutdown_ready)
+                    with self.assertRaises(ExecutionRefused):
+                        await controller.operation.retain_suppressed_disposition()
+                    recovered.set()
+                    await asyncio.wait_for(asyncio.shield(task), 3)
+                    await fixture.wait_published()
+                    self.assertIs(service.work_task, driver)
+                    self.assertTrue(service.shutdown_ready)
+                    self.assertIsNone(service.last_failure)
+                    self.assertEqual(fixture.claims.live_owners(), ())
+                    self.assertGreaterEqual(len(bodies), 2)
+                    self.assertTrue(all(body == bodies[0] for body in bodies))
+                    self.assertEqual(len(controllers), 1)
+                    self.assertEqual(fixture.allocations[0].worker.events.count('execute'), 1)
+                finally:
+                    recovered.set()
+                    fixture.stop.set()
+                    await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 4)
+                    if service.shutdown_ready:
+                        await fixture.settle_service(service)
+
+    async def test_returned_unselected_outcome_requires_supported_explicit_suppression(self):
+        async with ServicePeers() as fixture:
+            controllers, submissions = [], []
+            open_original = fixture.open_attempt
+
+            async def open_attempt(pending, *, stopping):
+                controller = await open_original(pending, stopping=stopping)
+                controllers.append(controller)
+                execute, submit = controller.session.execute, controller.delivery.submit
+
+                async def stop_after_return(*args, **kwargs):
+                    result = await execute(*args, **kwargs)
+                    stopping.set()
+                    return result
+
+                async def observe_submission(outcome):
+                    submissions.append(outcome.body)
+                    return await submit(outcome)
+
+                controller.session.execute = stop_after_return
+                controller.delivery.submit = observe_submission
+                return controller
+
+            service = fixture.service(open_attempt=open_attempt)
+            with self.assertRaises(ServiceFailed):
+                await asyncio.wait_for(service.run(fixture.stop), 3)
+            (controller,) = controllers
+            self.assertEqual(submissions, [])
+            self.assertIsNone(fixture.result)
+            self.assertFalse(service.shutdown_ready)
+            self.assertTrue(controller.work_settled)
+            disposition = await controller.operation.retain_suppressed_disposition()
+            self.assertIsInstance(disposition, SuppressedCheckpoint)
+            await controller.settle()
+            await fixture.settle_service(service)
+            self.assertTrue(service.shutdown_ready)
+            self.assertEqual(submissions, [])
+            self.assertEqual(fixture.allocations[0].worker.events.count('execute'), 1)

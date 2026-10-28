@@ -190,7 +190,7 @@ class ProviderService:
         )
 
     async def run(self, stop):
-        """Run once; stop prohibits new allocation before bounded drain/settlement."""
+        """Run once; stop prohibits new allocation while admitted work drains."""
         if self._state is not _State.NEW:
             raise ServiceRefused(
                 "This service accepts one run. Settle its original tasks and retained obligations before arranging a replacement."
@@ -497,10 +497,15 @@ class ProviderService:
                 # as admissions close. Only acknowledged execution may drain.
                 self._attempt_stopping.set()
             if drain:
-                await self._wait_task(self.work_task, self.policy.drain_seconds)
+                finished = await self._wait_task(self.work_task, self.policy.drain_seconds)
+                if not finished and self.controller is not None and isinstance(self.controller.operation, AttemptExecutor):
+                    try:
+                        LOGGER.warning("Provider shutdown is waiting for the admitted Attempt and its result handoff.")
+                    except Exception as cause:
+                        self._remember("shutdown notice", cause)
+                    await asyncio.wait({self.work_task})
         finally:
-            # Admission stops immediately, while its existing Attempt may finish
-            # during the configured drain. Revoke effects before forced cleanup.
+            # Revoke remaining effects after work finishes or observation is interrupted.
             if self._attempt_stopping is not None:
                 self._attempt_stopping.set()
             self._cancel_once(self.work_task)
