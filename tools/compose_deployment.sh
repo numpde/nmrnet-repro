@@ -350,6 +350,10 @@ fi
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
 case $action in
     up)
+        stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+        capture_stop_metadata ps --all --quiet --filter "label=com.docker.compose.project=$project"
+        [[ ! -s $stop_query ]] \
+            || { refuse 'this deployment still has containers; inspect its status and use down before starting it again.'; exit 2; }
         initialize_lifetime
         run 180 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120
         ;;

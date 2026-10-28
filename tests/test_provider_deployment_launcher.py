@@ -68,6 +68,7 @@ count=$((count + 1)); printf '%s\n' "$count" > "$root/count"
 printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
  ps)
+    [[ ${TEST_PS_STATUS-0} == 0 ]] || exit "$TEST_PS_STATUS"
     if [[ " $* " == *' --all '* ]]; then printf '%s' "${TEST_CONTAINERS-}";
     elif [[ ${TEST_LIVE-false} == true ]]; then printf '%064d\n' 7; fi
     ;;
@@ -289,6 +290,22 @@ esac
         self.assertIn('actual Compose cause', result.stderr)
         self.assertIn('No automatic retry', result.stderr)
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_up_refuses_existing_project_before_initialization_or_compose(self):
+        result = self.run_command('up', changes={'TEST_CONTAINERS': CID + '\n'})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('down', result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.calls()[0][0:3], ['ps', '--all', '--quiet'])
+        self.assertRegex(self.calls()[0][4], r'^label=com\.docker\.compose\.project=nmrnet-[0-9a-f]{20}$')
+
+    def test_up_refuses_failed_or_unretired_project_inspection(self):
+        for changes in ({'TEST_PS_STATUS': '7'}, {'TEST_RETIRED': 'false'}):
+            with self.subTest(changes=changes):
+                before = len(self.calls())
+                result = self.run_command('up', changes=changes)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(len(self.calls()[before:]), 1)
 
     def test_completed_command_exits_without_reading_new_checkout_tail(self):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture', TEST_PAUSE='true')

@@ -237,7 +237,10 @@ make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
 make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code></pre>
 <p>Install freezes a new input generation and refuses replacement while that
-provider is running. Up initializes the provider's lifetime-lock volume, starts the
+provider is running. Up requires an empty project; if containers remain, inspect
+their status and use down before starting again. An incomplete or abnormal
+deployment may require inspection before down can safely remove its dependencies.
+Up initializes the provider's lifetime-lock volume, starts the
 proxies and serial native runners, then waits for provider readiness, including
 an accepted API Hello. This establishes readiness, not scientific accuracy or
 successful model interpretation. Down requests provider shutdown and removes its
