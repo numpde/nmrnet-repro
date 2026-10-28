@@ -354,7 +354,7 @@ def prepare_core_assets(inputs, pool, *, download):
 
 
 def core_dependencies(lock, destination):
-    """Let PyPI supply third-party dependencies only; the private wheel has its own origin."""
+    """Write third-party pins and report whether the lock needs any index packages."""
     packages = requirements(lock)
     if sum(name == "provider-core" for name, _version in packages) != 1:
         raise ValueError("Cannot acquire shared dependencies: the installation lock must identify provider-core once.")
@@ -362,6 +362,7 @@ def core_dependencies(lock, destination):
         for (name, version), hashes in sorted(packages.items()):
             if name != "provider-core":
                 stream.write(" \\\n    ".join([f"{name}=={version}", *(f"--hash=sha256:{value}" for value in sorted(hashes))]) + "\n")
+    return len(packages) > 1
 
 
 def main():
@@ -412,8 +413,8 @@ def main():
                     if args.assets is None:
                         parser.error("the provider-core installation lock requires --assets for its GitHub release pins")
                     third_party = root / f"third-party-{index}.lock"
-                    core_dependencies(lock, third_party)
-                    populate_pool(third_party, args.pool, inference=False)
+                    if core_dependencies(lock, third_party):
+                        populate_pool(third_party, args.pool, inference=False)
                     select_wheels(lock, args.pool)
                 else:
                     populate_pool(lock, args.pool, inference=args.profile == "inference")

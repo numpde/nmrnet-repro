@@ -13,6 +13,23 @@ from tools import wheelhouse
 
 
 class WheelhouseTests(unittest.TestCase):
+    def test_native_core_lock_needs_no_third_party_download(self):
+        self.lock.write_text("provider-core==0.5.0 \\\n" + "    --hash=sha256:" + "a" * 64 + "\n")
+        assets = self.root / "core-assets.in"
+        assets.write_text("fixture release inputs")
+        with (
+            patch.object(wheelhouse.sys, "argv", ["wheelhouse", "download", "--profile", "provider-core",
+                                                  "--lock", str(self.lock), "--assets", str(assets),
+                                                  "--pool", str(self.pool)]),
+            patch.object(wheelhouse, "prepare_core_assets") as prepare,
+            patch.object(wheelhouse, "populate_pool") as populate,
+            patch.object(wheelhouse, "select_wheels") as select,
+        ):
+            wheelhouse.main()
+        prepare.assert_called_once_with(assets, self.pool, download=True)
+        populate.assert_not_called()
+        select.assert_called_once()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
