@@ -28,6 +28,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 class ProviderRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.release = json.loads(Path("/input/provider-core-release.json").read_bytes())
+        self.core_wheel = next(name for name in self.release["files"] if name.endswith("-py3-none-any.whl"))
+
     def test_complete_distribution_inventory_and_native_signing(self):
         # The build owner validates full lock syntax/hashes. Here package/version
         # rows independently qualify the complete installed distribution set.
@@ -36,7 +40,7 @@ class ProviderRuntimeTests(unittest.TestCase):
             for line in Path("/opt/provider/provider-core-install.lock").read_text().splitlines()
             if (match := re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s;]+) \\", line))
         )
-        self.assertIn(("provider-core", "0.2.3"), expected)
+        self.assertIn(("provider-core", self.core_wheel.removeprefix("provider_core-").removesuffix("-py3-none-any.whl")), expected)
         observed = sorted(
             (re.sub(r"[-_.]+", "-", item.metadata["Name"]).lower(), item.version) for item in importlib.metadata.distributions()
         )
@@ -108,8 +112,12 @@ class ProviderRuntimeTests(unittest.TestCase):
     def test_consumed_dependency_inventory_is_retained_in_the_image(self):
         evidence = json.loads(Path("/opt/provider/dependency-inputs.json").read_bytes())
         self.assertEqual(set(evidence), {"runtime"})
-        self.assertEqual(evidence["runtime"]["files"]["provider_core-0.2.3-py3-none-any.whl"],
-                         "2b5fe22d9bab969b83445e9ac3d839ad9c980c226ad53893e70776f3bc75e376")
+        self.assertEqual(evidence["runtime"]["files"], {
+            **self.release["dependency_inputs"]["runtime"]["files"],
+            self.core_wheel: self.release["files"][self.core_wheel],
+        })
+        self.assertEqual(evidence["runtime"]["lock_sha256"],
+                         self.release["files"][self.core_wheel.removesuffix("-py3-none-any.whl") + "-install.lock"])
         self.assertEqual(
             evidence["runtime"]["lock_sha256"], hashlib.sha256(Path("/opt/provider/provider-core-install.lock").read_bytes()).hexdigest()
         )

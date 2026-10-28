@@ -442,6 +442,7 @@ case "$1" in
                 require_provider_image
                 command+=(--init --entrypoint /opt/provider/environment/bin/python
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime,dst=/provider-tests,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/input/provider-core-release.json,readonly"
                     --workdir /tmp "$provider_image_id" -I -B -m unittest discover -s /provider-tests -p test_runtime.py -v)
                 ;;
             test/integration/rdkit-worker|test/integration/mol-reader|test/integration/sdf-reader|test/integration/smiles-generator|test/integration/native-smiles-worker|test/integration/native-geometry-worker)
