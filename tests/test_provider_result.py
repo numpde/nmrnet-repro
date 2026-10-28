@@ -12,7 +12,7 @@ from pathlib import Path
 
 from nmrnet_provider.input_geometry import UploadSource, prepare_json
 from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
-from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
+from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan, ResultRejected
 from nmrnet_provider.xyz import prepare_xyz
 
 
@@ -166,7 +166,7 @@ class ResultTests(unittest.TestCase):
         raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["H", "C"] * 64, "coordinates": [[0, 0, 0]] * 128}).encode()
         geometry = prepare_json(raw)
         self.assertLess(self.batch_plan((geometry,), "direct_coordinate_json").maximum_result_bytes, MAX_RESULT_BYTES)
-        with self.assertRaisesRegex(ResultRejected, "before inference"):
+        with self.assertRaisesRegex(ResultRejected, "prediction did not run"):
             self.batch_plan((geometry,) * 128, "direct_coordinate_json")
 
     def test_batch_requires_a_nonempty_immutable_geometry_collection(self):
@@ -225,7 +225,7 @@ class ResultTests(unittest.TestCase):
         self.assertEqual({"geometry-1", "geometry-2"}, {warning["geometry_id"] for warning in json.loads(content)["warnings"]})
         self.assertNotIn(b"PRIVATE_BATCH_WARNING", content)
         self.execution["fixture_metadata"] += text
-        with self.assertRaisesRegex(ResultRejected, "before inference"):
+        with self.assertRaisesRegex(ResultRejected, "prediction did not run"):
             self.batch_plan(geometries, "direct_coordinate_json")
 
     def test_prepared_identity_retains_ordered_source_and_request_without_coordinates(self):
@@ -400,7 +400,7 @@ class ResultTests(unittest.TestCase):
 
     def test_capacity_is_rejected_during_planning(self):
         self.execution["oversized_source_identity"] = "x" * MAX_RESULT_BYTES
-        with self.assertRaisesRegex(ResultRejected, "before inference"):
+        with self.assertRaises(ResultCapacityExceeded):
             self.make_plan()
 
     def test_caller_cannot_widen_the_reserved_result_size_after_planning(self):
@@ -492,5 +492,5 @@ class ResultTests(unittest.TestCase):
         )
         self.assertLessEqual(len(plan.finish((self.result,))), plan.maximum_result_bytes)
         self.execution["fixture_metadata"] += text
-        with self.assertRaisesRegex(ResultRejected, "before inference"):
+        with self.assertRaises(ResultCapacityExceeded):
             self.make_plan()

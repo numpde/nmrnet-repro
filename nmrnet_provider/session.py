@@ -22,7 +22,7 @@ from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWork
 from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
-from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
+from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.worker_client import PredictionExecutionFailed, WorkerExchangeTimedOut
@@ -260,13 +260,16 @@ class NMRNetSession:
             self._facts["runtime_expectations"] = await self._acquire_prediction(_Phase.PREPARING)
         except NativeWorkerExited as cause:
             raise self._worker_crash(cause, cause=cause) from None
-        plan = ResultPlan(
-            prepared,
-            job_ref=instructions.job_ref,
-            execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
-            input_fingerprint=instructions.identity.input_fingerprint,
-            **self._facts,
-        )
+        try:
+            plan = ResultPlan(
+                prepared,
+                job_ref=instructions.job_ref,
+                execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
+                input_fingerprint=instructions.identity.input_fingerprint,
+                **self._facts,
+            )
+        except ResultCapacityExceeded as cause:
+            return self._failed_preparation(cause, instructions)
         diagnostics = self._input_preparation.interpreter_diagnostics
         handle = PreparedAnalysis(_prepared_identity(plan, prepared, diagnostics))
         reservation = _scientific_evidence_document(plan.scientific_evidence_reservation(), json.loads(handle.identity.content))
@@ -306,6 +309,8 @@ class NMRNetSession:
                     "independently_verified": False,
                     "interpretation": json.loads(cause.observation),
                 }
+            elif isinstance(cause, ResultCapacityExceeded):
+                code = "result_size_limit"
             elif isinstance(cause, InputRejected):
                 code = "invalid_input"
                 document.update(preparation_failure=str(cause), diagnostic=cause.diagnostic)

@@ -25,7 +25,7 @@ from tests.integration.nmrnet.session_ports import CoordinateJsonPreparation
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
-from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
+from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
 from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
@@ -268,6 +268,29 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], self.worker.events)
         await self.session.retire()
         self.assertTrue(self.host.confirmed)
+
+    async def test_result_capacity_returns_actionable_failure_before_prediction(self):
+        raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["H"] * 128, "coordinates": [[0, 0, 0]] * 128}).encode()
+        geometry = prepare_json(raw)
+        preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
+        preparation.prepare.return_value = PreparedJobInput((geometry,) * 128, "direct_coordinate_json")
+        session = self.make_session(preparation)
+        outcome = await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        self.assertIs(type(outcome), AnalysisFailure)
+        self.assertEqual(outcome.code, "result_size_limit")
+        self.assertIn("did not run", outcome.message)
+        self.assertIn("may exceed", outcome.message)
+        self.assertEqual(self.worker.events, [])
+        await session.retire()
+        self.assertTrue(self.host.confirmed)
+
+    async def test_other_result_rejection_remains_internal(self):
+        with patch("nmrnet_provider.session.ResultPlan", side_effect=ResultRejected("structural failure")):
+            with self.assertRaisesRegex(ResultRejected, "structural failure"):
+                await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        self.assertEqual(self.worker.events, [])
+        await self.session.retire()
 
     async def test_interpreter_diagnostics_share_the_existing_total_identity_capacity(self):
         preparation = AsyncMock()

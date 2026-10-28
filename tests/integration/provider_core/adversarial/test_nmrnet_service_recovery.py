@@ -1,14 +1,17 @@
 """Live exclusions and delivery duties survive waits; restart grants no action."""
 
 import asyncio
+import json
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
+from nmrnet_provider.input_geometry import prepare_json
+from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.service import ServiceFailed
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
@@ -20,6 +23,40 @@ from provider_core.producer_checkpoint import SuppressedCheckpoint
 
 
 class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
+    async def test_result_size_failure_reaches_api_without_prediction(self):
+        async with ServicePeers() as fixture:
+            raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["H"] * 128, "coordinates": [[0, 0, 0]] * 128}).encode()
+            geometry = prepare_json(raw)
+            original_open = fixture.open_attempt
+            original_reply = fixture.api_peer.response_factory
+            failures = []
+
+            async def open_attempt(pending, *, stopping):
+                controller = await original_open(pending, stopping=stopping)
+                controller.session._input_preparation.prepare = AsyncMock(
+                    return_value=PreparedJobInput((geometry,) * 128, "direct_coordinate_json")
+                )
+                return controller
+
+            async def reply(request, body):
+                response = await original_reply(request, body)
+                if request.split(b"\r\n", 1)[0].split()[1].endswith(b"/fail"):
+                    failures.append(json.loads(body))
+                    fixture.stop.set()
+                return response
+
+            fixture.api_peer.response_factory = reply
+            service = fixture.service(open_attempt=open_attempt)
+            fixture.stack.push_async_callback(fixture.settle_service, service)
+            await asyncio.wait_for(service.run(fixture.stop), 5)
+            await fixture.wait_published()
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0]["failure_code"], "result_size_limit")
+            self.assertIn("did not run", failures[0]["failure_message"])
+            self.assertIn("may exceed", failures[0]["failure_message"])
+            self.assertEqual(fixture.allocations[0].worker.events, ["close", "closed"])
+            self.assertTrue(service.shutdown_ready)
+
     async def test_admission_stop_interrupts_live_start_backoff_without_using_the_drain_to_replay(self):
         async with ServicePeers() as fixture:
             starts = []

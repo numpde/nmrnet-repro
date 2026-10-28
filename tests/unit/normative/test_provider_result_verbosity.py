@@ -11,7 +11,7 @@ from dataclasses import replace
 
 from tests.unit.result_fakes import precision_documents, supplied_documents
 
-from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
+from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan, ResultRejected
 from provider_core.result_verbosity import ResultVerbosity
 
 
@@ -103,5 +103,5 @@ class ResultVerbosityTests(unittest.TestCase):
         self.assertGreater(len(medium.prepared_identity), MAX_RESULT_BYTES)
         self.assertLess(medium.maximum_result_bytes, MAX_RESULT_BYTES)
         self.assertLessEqual(len(medium.finish(outcomes)), medium.maximum_result_bytes)
-        with self.assertRaisesRegex(ResultRejected, "before inference"):
+        with self.assertRaises(ResultCapacityExceeded):
             ResultPlan(replace(prepared, output=replace(prepared.output, verbosity=ResultVerbosity.MAX)), **facts)

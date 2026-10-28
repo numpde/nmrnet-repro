@@ -10,7 +10,7 @@ Predicts per-atom shifts (ppm) using released NMRNet++ models.
 
 For supplied coordinates, state units: angstrom, nm or bohr. Supplied geometries are not optimized; missing hydrogens are not added and can affect other shifts. SMILES preparation adds hydrogens and generates 3D coordinates.
 
-**Results:** shifts linked to atoms in each geometry; conformers are not averaged. Limits: 128 geometries per request; 128 atoms per geometry, including hydrogens. Solvent and temperature are not model inputs.
+**Results:** shifts linked to atoms in each geometry; conformers are not averaged. Limits: 128 geometries per request; 128 atoms per geometry, including hydrogens. Result-size limits can require smaller batches. Solvent and temperature are not model inputs.
 
 **Detail:** `verbosity: low` returns shifts and atom correspondence; `medium` (default) adds coordinates; `max` adds the software source manifest.
 

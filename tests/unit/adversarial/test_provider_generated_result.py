@@ -11,7 +11,7 @@ from dataclasses import replace
 from tests.unit.result_fakes import generated_job_input, scientific_facts, scientific_outcomes
 from tests.unit.smiles_fakes import collection
 
-from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
+from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan, ResultRejected
 
 
 class GeneratedResultRejectionTests(unittest.TestCase):
@@ -28,7 +28,7 @@ class GeneratedResultRejectionTests(unittest.TestCase):
         batch = collection()
         metadata = json.loads(batch.provenance)
         metadata["model_projection"] = "x" * MAX_RESULT_BYTES
-        with self.assertRaisesRegex(ResultRejected, "before inference"):
+        with self.assertRaises(ResultCapacityExceeded):
             ResultPlan(generated_job_input(replace(batch, provenance=json.dumps(metadata).encode())), **scientific_facts())
 
     def test_reordered_or_missing_outcomes_cannot_publish_a_prefix(self):

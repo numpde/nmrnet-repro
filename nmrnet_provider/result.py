@@ -75,6 +75,10 @@ class ResultRejected(ValueError):
     """A safe result-admission reason; the caller retains the private worker outcome."""
 
 
+class ResultCapacityExceeded(ResultRejected):
+    """The planned result may exceed the API's content limit."""
+
+
 def _encode(value):
     try:
         return json.dumps(value, ensure_ascii=True, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("ascii")
@@ -163,8 +167,9 @@ class ResultPlan:
             envelope["warnings"].extend(_warning_reservation(geometry))
         self._maximum_result_bytes = len(_encode(_public_envelope(envelope)))
         if self._maximum_result_bytes > MAX_RESULT_BYTES:
-            raise ResultRejected(
-                "Cannot admit scientific result before inference: the selected published result exceeds the API byte limit."
+            raise ResultCapacityExceeded(
+                "Shift prediction did not run because the requested result may exceed the API size limit. "
+                "Use fewer geometries or a lower verbosity."
             )
 
     @property
