@@ -11,7 +11,7 @@ from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
 from nmrnet_provider.runtime import assemble_attempt
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, checkpoint_start
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, checkpoint_acknowledgement
 
 
 class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
@@ -46,7 +46,7 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             outcome = await controller.run(pending)
             self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
-            self.assertEqual(checkpoint_start(outcome), pending)
+            self.assertEqual(checkpoint_acknowledgement(outcome).start, pending)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             self.assertTrue(ports.host.confirmed)
             self.assertEqual(ports.worker.events.count("execute"), 1)

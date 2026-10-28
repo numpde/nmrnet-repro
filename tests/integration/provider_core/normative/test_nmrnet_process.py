@@ -704,7 +704,6 @@ class ProcessDiagnosticTests(unittest.TestCase):
         primary = ExecutionFailed(
             cause=api,
             outcome=None,
-            unconfirmed_record=None,
             api_failure=api,
             cleanup_failures=(),
             attempt=acknowledge_start(record(), admission()),

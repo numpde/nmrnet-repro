@@ -304,9 +304,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(transport.calls), 8)
         rendered = json.dumps(self.receive(failure))
         self.assertIn('"outcome_in_memory": true', rendered)
-        self.assertIn('"unconfirmed_record_in_memory": false', rendered)
         self.assertNotIn("outcome_retained", rendered)
-        self.assertNotIn("unconfirmed_record_retained", rendered)
         self.assertNotIn("PRIVATE", rendered)
         with self.assertRaises(ControllerFailed):
             await controller.settle()
@@ -341,9 +339,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertIn(fact, rendered)
         self.assertIn('"outcome_in_memory": false', rendered)
-        self.assertIn('"unconfirmed_record_in_memory": false', rendered)
         self.assertNotIn("outcome_retained", rendered)
-        self.assertNotIn("unconfirmed_record_retained", rendered)
         self.assertNotIn("PRIVATE", rendered)
         session.retirement_failure = None
         with self.assertRaises(ControllerFailed):
@@ -879,7 +875,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("PRIVATE", json.dumps(report))
         for acceptance in (None, item.acceptance()):
             failure = ExecutionFailed(cause=DeliveryRejected("Cannot confirm the selected terminal handoff"),
-                outcome=None, unconfirmed_record=None, api_failure=None, cleanup_failures=(), attempt=active)
+                outcome=None, api_failure=None, cleanup_failures=(), attempt=active)
             failure.delivery_acceptance = acceptance
             report = self.receive(failure)
             owner = report["relationships"][0]["failure"]
