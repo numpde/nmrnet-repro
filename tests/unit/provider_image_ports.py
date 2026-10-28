@@ -29,6 +29,7 @@ class ImageSource:
             "containers/provider/Dockerfile",
             "containers/provider/Dockerfile.dockerignore",
             "requirements/provider-core-install.lock",
+            "nmrnet_provider/about/hello.md",
             "nmrnet_inference/predict.py",
             "nmrnet_inference/model.py",
             "nmrnet_inference/release.py",

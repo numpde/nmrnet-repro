@@ -25,5 +25,6 @@ def run_wheel_capture(arguments):
     context = str(Path(mounts["/workspace/tools/wheelhouse.py"]).parent.parent)
     selected = arguments[arguments.index("python3") :]
     selected = [mounts.get(value, value) for value in selected]
-    selected[0] = sys.executable
+    # The provider test environment omits pip; the checker Python owns wheel selection.
+    selected[0] = sys._base_executable
     return subprocess.run(selected, cwd=context, env=os.environ | {"PYTHONPATH": context}, check=False).returncode

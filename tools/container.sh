@@ -647,6 +647,10 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly")
                 fi
                 unit_tests=(discover -s tests)
+                if [[ "$1" == test || "$1" == test/unit/provider ]]; then
+                    require_source_directory requirements
+                    command+=(--mount "type=bind,src=$repository_root/requirements,dst=/workspace/requirements,readonly")
+                fi
                 if [[ "$1" == test/unit/prediction-input ]]; then
                     unit_tests=(-v tests.test_prediction_input tests.test_provider_input)
                 fi
