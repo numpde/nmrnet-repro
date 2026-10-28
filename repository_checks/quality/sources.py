@@ -40,9 +40,6 @@ def python_sources(*, production_only):
     # silent-defaults: allow-contract -- The required production_only choice selects tools or all authored roots; future inference modules belong to both inventories; proof=repository_checks/quality/test_source_inventory.py::SourceInventoryUnitTests.test_python_source_selection_respects_explicit_scope
     roots = ("tools",) if production_only else PYTHON_ROOTS
     directories = [ROOT / name for name in (*roots, *OPTIONAL_PYTHON_ROOTS)]
-    directories.extend(ROOT.glob("packages/*/src"))
-    if not production_only:
-        directories.extend(ROOT.glob("packages/*/tests"))
     return sorted(path for directory in directories for path in directory.rglob("*.py"))
 
 

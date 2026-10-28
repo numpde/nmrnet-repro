@@ -269,9 +269,6 @@ class UploadResponse:
     def getheaders(self):
         return self.headers
 
-    def getheader(self, name):
-        return next((value for key, value in self.headers if key.lower() == name.lower()), None)
-
 
 def synthetic_signer(_arguments):
     sys.stdout.write("Signature: synthetic-api-signature\n")

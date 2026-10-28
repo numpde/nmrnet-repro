@@ -68,7 +68,7 @@ class CheckerDependencyFixture(unittest.TestCase):
 
 class CheckerDeclarationTests(CheckerDependencyFixture):
     def test_valid_exact_inputs_and_receipt_are_accepted(self):
-        self.assertEqual(checker.check(self.path, self.directory), checker.inventory(self.path, self.directory))
+        self.assertEqual(checker.check(self.path, self.directory, self.document["base"]), checker.inventory(self.path, self.directory))
 
     def test_unknown_missing_and_wrong_container_fields_are_rejected(self):
         for field in self.document:
@@ -133,16 +133,16 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         original = path.read_bytes()
         path.write_bytes(b"changed")
         with self.assertRaises(ValueError) as caught:
-            checker.check(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"])
         self.assertIn("artifact bytes differ from declaration", str(caught.exception))
         self.assertIn(repr(filename), str(caught.exception))
         path.unlink()
         with self.assertRaisesRegex(ValueError, "inventory"):
-            checker.check(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"])
         path.write_bytes(original)
         (self.directory / "extra.deb").write_bytes(b"extra")
         with self.assertRaisesRegex(ValueError, "inventory"):
-            checker.check(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"])
 
     def test_symlinked_artifact_cannot_reuse_a_valid_receipt(self):
         path = self.directory / self.document["packages"][0]["file"]
@@ -150,13 +150,13 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         path.rename(original)
         path.symlink_to(original)
         with self.assertRaises(OSError):
-            checker.check(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"])
 
     def test_changed_declaration_invalidates_an_existing_receipt(self):
         self.document["base"] = self.document["base"].replace("a" * 64, "b" * 64)
         self.write()
         with self.assertRaisesRegex(ValueError, "completion receipt"):
-            checker.check(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"])
 
     def test_declaration_replacement_cannot_rebind_admitted_artifact_bytes(self):
         admitted_bytes = self.path.read_bytes()
@@ -178,7 +178,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         self.assertNotEqual(receipt["declaration_sha256"], original_identity(self.path)["sha256"])
         (self.directory / ".complete").write_text(json.dumps(receipt))
         with self.assertRaisesRegex(ValueError, "completion receipt"):
-            checker.check(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"])
 
 
 class CheckerAcquisitionTests(CheckerDependencyFixture):
@@ -200,7 +200,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
 
     def test_acquisition_publishes_only_exact_verified_artifacts(self):
         output = self.acquire()
-        self.assertEqual(checker.check(self.path, output), checker.check(self.path, self.directory))
+        self.assertEqual(checker.check(self.path, output, self.document["base"]), checker.check(self.path, self.directory, self.document["base"]))
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
 
     def test_invalid_declaration_and_proxy_fail_before_staging_or_network(self):
@@ -396,9 +396,9 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         expected = [str(self.directory / package["file"]) for package in self.document["packages"] if package["name"] != "ruff"]
         self.assertEqual(calls[0], ["dpkg", "--install", *expected])
 
-    def test_base_mismatch_blocks_acquisition_and_installation(self):
+    def test_base_mismatch_blocks_acquisition_verification_and_installation(self):
         with patch.object(checker, "open_url") as network, patch.object(checker.subprocess, "run") as command:
-            for action in (checker.download, checker.install):
+            for action in (checker.download, checker.check, checker.install):
                 with self.subTest(action=action.__name__), self.assertRaisesRegex(ValueError, "another base"):
                     action(self.path, self.directory, "wrong base")
         network.assert_not_called()

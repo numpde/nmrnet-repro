@@ -1,5 +1,5 @@
 # Port source: https://github.com/numpde/vote-mcp/blob/6f595850d199e0d97098c1a7e67ddff774171a25/repo-checks/silent-defaults/test_env_file_empty_defaults.py
-# Complete original detector assertion groups; project input paths adapted locally.
+# Detector assertions adapted to NMRNet authored inputs; no private-file exemptions.
 from __future__ import annotations
 
 from tools.container_guard import require_container
@@ -15,8 +15,6 @@ from unittest.mock import patch
 from . import _repo_surfaces
 from ._repo_surfaces import (
     INTERPOLATION_DEFAULT_RE,
-    REPO_ROOT,
-    SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS,
     repo_path,
     surface_files,
     surface_lines,
@@ -27,10 +25,7 @@ ENV_ASSIGNMENT_RE = re.compile(r"^(?:export\s+)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)
 
 
 def _env_files() -> list[Path]:
-    return surface_files(
-        ENV_FILE_GLOBS,
-        exclude_repo_paths=SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS,
-    )
+    return surface_files(ENV_FILE_GLOBS)
 
 
 class EnvFileEmptyDefaultsTest(unittest.TestCase):
@@ -47,30 +42,14 @@ class EnvFileEmptyDefaultsTest(unittest.TestCase):
     def test_env_interpolation_matcher_flags_default_expansion(self) -> None:
         self.assertRegex("API_ORIGIN=${API_ORIGIN:-https://example.test}", INTERPOLATION_DEFAULT_RE)
 
-    def test_env_file_scan_excludes_operator_only_secret_files(self) -> None:
-        # Original source proves a deployment-secret exclusion while admitting
-        # its documented example. Exercise that same contract in a fixture:
-        # NMRNet has no reviewed private dotenv exclusions to grant.
+    def test_env_file_scan_includes_configurations_and_examples(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("private.env", "private.env.example"):
+            for name in ("provider.env", "provider.env.example"):
                 (root / name).write_text("PROFILE=fixture\n")
-            excluded = frozenset({Path("private.env")})
-            with (
-                patch.object(_repo_surfaces, "REPO_ROOT", root),
-                patch(__name__ + ".SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS", excluded),
-            ):
+            with patch.object(_repo_surfaces, "REPO_ROOT", root):
                 scanned = {repo_path(path) for path in _env_files()}
-            self.assertTrue(excluded.isdisjoint(scanned))
-            self.assertIn(Path("private.env.example"), scanned)
-            self.assertNotIn(Path("private.env"), scanned)
-
-    def test_env_file_exclusions_must_be_repo_relative(self) -> None:
-        with self.assertRaisesRegex(ValueError, "repo-relative"):
-            surface_files(
-                ENV_FILE_GLOBS,
-                exclude_repo_paths=frozenset({REPO_ROOT / "config/deploy/demo.env"}),
-            )
+            self.assertEqual({Path("provider.env"), Path("provider.env.example")}, scanned)
 
     def test_surface_files_always_excludes_silent_defaults_tests(self) -> None:
         scanned = {repo_path(path) for path in surface_files(("repository_checks/**/*.py",))}

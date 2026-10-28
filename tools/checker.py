@@ -156,8 +156,11 @@ def inventory(path, directory):
     return inventory_for_declaration(document, declaration_sha256, directory)
 
 
-def check(path, directory):
-    expected = inventory(path, directory)
+def check(path, directory, base):
+    document, declaration_sha256 = admitted_declaration(path)
+    if document["base"] != base:
+        raise ValueError("Cannot verify checker dependencies: declaration names another base image")
+    expected = inventory_for_declaration(document, declaration_sha256, directory)
     if read_document(Path(directory) / ".complete") != expected:
         raise ValueError("Cannot verify checker dependencies: completion receipt differs from admitted inputs")
     return expected
@@ -278,13 +281,8 @@ def main():
     elif args.action == "install":
         install(args.declaration, args.directory, args.base)
     else:
-        document, declaration_sha256 = admitted_declaration(args.declaration)
-        if document["base"] != args.base:
-            raise ValueError("Cannot verify checker dependencies: declaration names another base image")
-        expected = inventory_for_declaration(document, declaration_sha256, args.directory)
-        if read_document(args.directory / ".complete") != expected:
-            raise ValueError("Cannot verify checker dependencies: completion receipt differs")
-        sys.stdout.write(declaration_sha256 + "\n")
+        expected = check(args.declaration, args.directory, args.base)
+        sys.stdout.write(expected["declaration_sha256"] + "\n")
 
 
 if __name__ == "__main__":

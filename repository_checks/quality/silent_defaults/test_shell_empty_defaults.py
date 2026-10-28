@@ -1,5 +1,5 @@
 # Port source: https://github.com/numpde/vote-mcp/blob/6f595850d199e0d97098c1a7e67ddff774171a25/repo-checks/silent-defaults/test_shell_empty_defaults.py
-# Complete original detector assertion groups; project input paths adapted locally.
+# Detector assertions adapted to NMRNet authored inputs; no private-file exemptions.
 from __future__ import annotations
 
 from tools.container_guard import require_container
@@ -14,7 +14,6 @@ from unittest.mock import patch
 from . import _repo_surfaces
 from ._repo_surfaces import (
     INTERPOLATION_DEFAULT_RE,
-    SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS,
     repo_path,
     surface_files,
     surface_lines,
@@ -38,7 +37,6 @@ SHELL_SURFACE_GLOBS = (
     "tools/**/*.sh",
     "nmrnet_inference/**/*.py",
     "nmrnet_provider/**/*.py",
-    "packages/*/src/**/*.py",
 )
 
 
@@ -46,7 +44,6 @@ def _shell_surface_files() -> list[Path]:
     return surface_files(
         SHELL_SURFACE_GLOBS,
         extra_exclude_parts=frozenset({"tests"}),
-        exclude_repo_paths=SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS,
     )
 
 
@@ -64,24 +61,16 @@ class ShellEmptyDefaultsTest(unittest.TestCase):
     def test_shell_matcher_ignores_strict_required_expansion(self) -> None:
         self.assertNotRegex("${PROFILE:?missing_PROFILE}", INTERPOLATION_DEFAULT_RE)
 
-    def test_shell_surface_scan_excludes_operator_only_secret_files(self) -> None:
-        # No local secret exemption: retain the original secret/example
-        # classification proof using temporary deployment input fixtures.
+    def test_shell_surface_scan_includes_configurations_and_examples(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = root / "config"
             config.mkdir()
-            for name in ("private.env", "private.env.example"):
+            for name in ("provider.env", "provider.env.example"):
                 (config / name).write_text("PROFILE=fixture\n")
-            excluded = frozenset({Path("config/private.env")})
-            with (
-                patch.object(_repo_surfaces, "REPO_ROOT", root),
-                patch(__name__ + ".SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS", excluded),
-            ):
+            with patch.object(_repo_surfaces, "REPO_ROOT", root):
                 scanned = {repo_path(path) for path in _shell_surface_files()}
-            self.assertTrue(excluded.isdisjoint(scanned))
-            self.assertIn(Path("config/private.env.example"), scanned)
-            self.assertNotIn(Path("config/private.env"), scanned)
+            self.assertEqual({Path("config/provider.env"), Path("config/provider.env.example")}, scanned)
 
     def test_shell_operator_surfaces_do_not_use_empty_default_expansion(self) -> None:
         findings: list[str] = []

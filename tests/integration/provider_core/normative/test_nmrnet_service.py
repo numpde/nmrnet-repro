@@ -7,7 +7,6 @@ from dataclasses import replace
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers, signature_window_problem
-from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.unix_proxy import UnixProxy
 from tests.integration.nmrnet.admission_ports import feed_response
@@ -305,7 +304,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_discovery_page_outage_restarts_complete_admission_and_first_page(self):
         async with ServicePeers() as fixture:
-            fixture.inventory_replies.append(inventory_response(attempts=[], next_cursor=None))
             fixture.feed_replies = [feed_response(next_cursor="YQ")]
             first_page = "/provider/v1/jobs?analysis_kind_ref=peaks_from_mol&has_provider_execution_attempt=false&limit=2"
             second_page = first_page + "&cursor=YQ"
@@ -325,7 +323,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             initial_reads = observed[:observed.index("/provider/v1/execution-attempts/start")]
             discovery = [target for target in initial_reads if urlsplit(target).path == "/provider/v1/jobs"]
             self.assertEqual(discovery, [first_page, second_page, first_page])
-            self.assertNotIn("inventory", fixture.events)
+            self.assertNotIn("/provider/v1/execution-attempts", fixture.request_paths)
             self.assertEqual(fixture.events.count("start"), 1)
             self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
 

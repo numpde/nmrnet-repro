@@ -14,8 +14,8 @@ readonly caller_gid="$(id -g)"
 readonly image_admission_timeout=30
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply} [inference|preparation].' >&2
+if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(stage|apply)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {stage|apply} [inference|preparation].' >&2
     exit 2
 fi
 # Existing inference targets pass one action. Preparation targets explicitly
@@ -30,11 +30,6 @@ esac
 run() {
     if "$print_command"; then printf '%q ' "$@"; printf '\n'; else "$@"; fi
 }
-if [[ "$1" == pull ]]; then
-    printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to NETWORK_INTERFACE.' >&2
-    printf 'Provision these pinned images through an independently interface-bound process:\n%s\n%s\n' "$python_image" "$uv_image" >&2
-    exit 2
-fi
 if [[ "$1" == stage ]]; then
     source "$repository_root/tools/acquisition_interface.sh"
     select_acquisition_interface

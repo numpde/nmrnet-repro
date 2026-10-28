@@ -26,7 +26,7 @@ from tools.artifacts import regular_file
 
 
 SUPPORT_MODULES = (
-    "acquisition", "api", "api_tls", "attempt_inventory", "attempt_store", "attempts",
+    "acquisition", "api", "api_tls", "attempt_store", "attempts",
     "checkpoint_execution", "condition_recovery", "conditions", "controller", "conversation",
     "credential", "delivery", "execution", "hello", "job_feed", "job_input", "runner",
     "tls_peer", "transport", "unix_proxy", "uploads", "live_analysis",

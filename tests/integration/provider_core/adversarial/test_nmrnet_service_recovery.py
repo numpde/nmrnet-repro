@@ -5,7 +5,6 @@ import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
-from tests.fakes.attempt_inventory import attempt
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
@@ -49,9 +48,8 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fixture.model_peer.requests, [])
             self.assertEqual(fixture.allocations[0].worker.events, [])
 
-    async def test_old_remote_attempt_does_not_block_unrelated_fresh_science_or_trigger_reconciliation(self):
+    async def test_fresh_science_does_not_query_prior_attempt_history(self):
         async with ServicePeers() as fixture:
-            fixture.remote_attempts["old"] = attempt(job_ref="job:old-dark-lifetime")
             service = fixture.service()
             fixture.stack.push_async_callback(fixture.settle_service, service)
             await asyncio.wait_for(service.run(fixture.stop), 4)
@@ -60,7 +58,6 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(fixture.allocations), 1)
             self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
             self.assertNotIn("/provider/v1/execution-attempts", fixture.request_paths)
-            self.assertIn("old", fixture.remote_attempts)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
     async def test_uncertain_start_remains_excluded_but_quiescent_service_can_stop(self):

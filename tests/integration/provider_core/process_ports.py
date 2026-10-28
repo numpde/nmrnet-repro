@@ -15,7 +15,6 @@ from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers
 from tests.fakes.api_tls import api_tls_peer
-from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import job, page
 from tests.integration.nmrnet.config_ports import ConfigFiles
@@ -237,8 +236,6 @@ class ProcessPeers:
         self.events.append(path.rsplit("/", 1)[-1])
         if self.bad_reply:
             return b"PRIVATE_BODY Bearer PRIVATE_MODEL_KEY"
-        if path.endswith("/execution-attempts"):
-            return inventory_response(attempts=[], next_cursor=None)
         if path.endswith("/hello"):
             return receipt()
         if self.model_peer is not None:
@@ -247,7 +244,7 @@ class ProcessPeers:
             self.api_peer = self.peer
             return await RuntimePeers.api_reply(self, request, body)
         if not path.endswith("/jobs"):
-            raise AssertionError("Foreground fixture permits only inventory, Hello and discovery")
+            raise AssertionError("Foreground fixture permits only Hello and discovery")
         self.discovered.set()
         result = page()
         # silent-defaults: allow-contract -- The fixture offers one eligible Job only when the test requests work; idle startup and refusal cases discover none.

@@ -113,8 +113,6 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 "repository_checks/check.py",
                 "nmrnet_inference/nested/future.py",
                 "nmrnet_provider/nested/future.py",
-                "packages/example/src/example/owner.py",
-                "packages/example/tests/test_owner.py",
                 "unowned/ignored.py",
             ):
                 path = root / name
@@ -125,7 +123,6 @@ class SourceInventoryUnitTests(unittest.TestCase):
                     [
                         root / "nmrnet_inference/nested/future.py",
                         root / "nmrnet_provider/nested/future.py",
-                        root / "packages/example/src/example/owner.py",
                         root / "tools/nested/a.py",
                         root / "tools/z.py",
                     ],
@@ -135,8 +132,6 @@ class SourceInventoryUnitTests(unittest.TestCase):
                     [
                         root / "nmrnet_inference/nested/future.py",
                         root / "nmrnet_provider/nested/future.py",
-                        root / "packages/example/src/example/owner.py",
-                        root / "packages/example/tests/test_owner.py",
                         root / "repository_checks/check.py",
                         root / "tests/unit.py",
                         root / "tools/nested/a.py",

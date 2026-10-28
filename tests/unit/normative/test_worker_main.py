@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from nmrnet_provider import native_child, worker_main
 from nmrnet_provider.worker_protocol import receive

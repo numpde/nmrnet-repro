@@ -13,7 +13,6 @@ from dataclasses import asdict, replace
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
-from tests.fakes.attempt_inventory import attempt as inventory_attempt, response as inventory_response
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import page
@@ -35,8 +34,6 @@ from provider_core.job_input import verify_job_input
 class ServicePeers(AdmissionPeers):
     def __init__(self, *, maximum_live_attempts=2):
         super().__init__(InputPorts(), maximum_live_attempts=maximum_live_attempts)
-        self.inventory_replies = [inventory_response(attempts=[], next_cursor=None)] * 2
-        self.remote_attempts = {}
         self.started_jobs = set()
         self.events = []
         self.api_notices = []
@@ -172,12 +169,7 @@ class ServicePeers(AdmissionPeers):
             if self.hello_failure_after is not None and len(self.hellos) > self.hello_failure_after:
                 return b"PRIVATE invalid Hello receipt"
             return receipt()
-        if path == "/provider/v1/execution-attempts":
-            self.events.append("inventory")
-            if not self.inventory_replies:
-                self.request_paths.append(path)
-                return inventory_response(attempts=list(self.remote_attempts.values()), next_cursor=None)
-        elif path == "/provider/v1/jobs":
+        if path == "/provider/v1/jobs":
             self.events.append("discover")
             self.discovery_entered.set()
             if self.discovery_release is not None:
@@ -190,17 +182,7 @@ class ServicePeers(AdmissionPeers):
         result = await super().api_reply(request, body)
         if path.endswith("/start"):
             accepted = json.loads(result)
-            value = json.loads(body)
             self.started_jobs.add(accepted["job_ref"])
-            self.remote_attempts[accepted["execution_attempt_ref"]] = inventory_attempt(
-                analysis_kind_ref=accepted["analysis_kind_ref"],
-                execution_attempt_ref=accepted["execution_attempt_ref"],
-                job_ref=accepted["job_ref"],
-                provider_attempt_key=value["provider_attempt_key"],
-                started_at=accepted["started_at"],
-            )
-        if path.endswith(("/complete", "/fail")):
-            self.remote_attempts.pop(json.loads(body)["execution_attempt_ref"], None)
         if path.endswith("/complete"):
             self.completed.set()
             if self.stop_after_complete:
@@ -213,7 +195,7 @@ class ServicePeers(AdmissionPeers):
 class SuccessiveServicePeers(ServicePeers):
     """Three fixed Jobs; accept Job 2's outcome but lose its first acknowledgement.
 
-    Real service/controller/store/recovery and signed local TLS are exercised.
+    Real service, live ownership, delivery and signed local TLS are exercised.
     The generator and predictor remain recording ports, not native science.
     """
 
@@ -288,7 +270,7 @@ class SuccessiveServicePeers(ServicePeers):
         if path == "/provider/v1/hello":
             return await super().api_reply(request, body)
         if path == "/provider/v1/execution-attempts":
-            return inventory_response(attempts=list(self.remote_attempts.values()), next_cursor=None)
+            raise AssertionError("Live admission must not read prior Attempt history")
         if path == "/provider/v1/jobs":
             available = self.jobs[len(self.start_bodies) : len(self.start_bodies) + 1]
             return json.dumps(
@@ -315,12 +297,6 @@ class SuccessiveServicePeers(ServicePeers):
             if len(self.claims.live_owners()) != 1:
                 raise AssertionError("A successive Job started before prior live ownership was released")
             self.start_bodies.append(body)
-            self.remote_attempts[self.attempt_refs[index]] = inventory_attempt(
-                analysis_kind_ref=ANALYSIS_KIND_REF,
-                execution_attempt_ref=self.attempt_refs[index],
-                job_ref=self.jobs[index].job_ref,
-                provider_attempt_key=json.loads(body)["provider_attempt_key"],
-            )
             return start_response(
                 execution_attempt_ref=self.attempt_refs[index],
                 job_ref=self.jobs[index].job_ref,
@@ -345,7 +321,6 @@ class SuccessiveServicePeers(ServicePeers):
             if pending.operation is not TerminalOperation.FAIL:
                 raise AssertionError("Failure request differs from the retained terminal choice")
             result = self.failure_receipt(index, value, pending)
-            self.remote_attempts.pop(self.attempt_refs[index], None)
             return result
         if pending.operation is not TerminalOperation.COMPLETE:
             raise AssertionError("Completion request differs from the retained terminal choice")
@@ -368,7 +343,6 @@ class SuccessiveServicePeers(ServicePeers):
             raise AssertionError("Recovery changed the accepted terminal bytes")
         self.complete_bodies.append(body)
         self.accepted_outcomes[index] = body
-        self.remote_attempts.pop(self.attempt_refs[index], None)
         if index == 1 and not replayed and self.lose_second_completion:
             return None
         if index == 1 and self.recovery_release is not None:

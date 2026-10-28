@@ -2,7 +2,7 @@ override SHELL := bash
 override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
-.PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
+.PHONY: help test test/unit test/repository test/probe weights/download weights/check
 .PHONY: packages/base-images/python/download
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
 .PHONY: test/unit/provider test/unit/provider/pdb test/unit/provider/mol2
@@ -173,7 +173,7 @@ test/integration/provider-core/lifecycle:
 test/integration/provider-core:
 	bash tools/container.sh $@
 .PHONY: weights/inspect weights/extract
-.PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
+.PHONY: packages/lock/stage packages/lock/apply
 .PHONY: packages/preparation/lock/stage packages/preparation/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
 .PHONY: test/unit/packages/wheelhouse
@@ -276,6 +276,7 @@ help:
 		'make provider/deployment/down DEPLOYMENT=<name> Stop/remove this provider stack; retain data volumes.' \
 		'make provider/deployment/retire-generations DEPLOYMENT=<name> Remove unused frozen inputs; keep selected and container-borrowed generations.' \
 		'make packages/images/retire           Remove obsolete NMRNet images; preserve prepared, selected and container-referenced images.' \
+		'make test/unit/packages/images        Test image retirement ownership and preservation offline.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
 		'make test/integration/provider/deployment/smiles Generate two CCl conformers and predict H/C through the Compose native path (opt-in).' \
 		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \
@@ -343,9 +344,7 @@ help:
 		'make checks/dependencies/download NETWORK_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
 		'make checks/dependencies/check         Verify retained checker dependencies offline.' \
 		'make checks/image/build                Build and record the offline repository checker image.' \
-		'make packages/base-images/pull         Print required image provisioning guidance; refuses daemon pulls.' \
 		'make packages/base-images/python/download Download the pinned Debian Python worker base into local Docker using Docker default routing.' \
-		'make packages/lock/base-images/pull    Print resolver image provisioning guidance; refuses daemon pulls.' \
 		'make packages/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
 		'make packages/lock/apply STAGE=lock.ID  Apply the reviewed stage offline.' \
 		'make packages/preparation/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE  Resolve preparation dependencies for review.' \
@@ -368,9 +367,6 @@ help:
 		'make prediction/model-parity            Load real released models and compare reference predictions offline.' \
 		'make prediction/model-parity/state      Compare actual loaded H/C tensors with verified checkpoint state offline.' \
 		'make prediction/qualify                 Compare tensors, released-model predictions and worker results offline.'
-
-packages/base-images/pull:
-	bash tools/container.sh pull
 
 packages/base-images/python/download:
 	bash tools/container.sh download-base-image
@@ -505,9 +501,6 @@ weights/inspect:
 
 weights/extract:
 	bash tools/container.sh extract
-
-packages/lock/base-images/pull:
-	bash tools/packages.sh pull
 
 packages/lock/stage:
 	bash tools/packages.sh stage

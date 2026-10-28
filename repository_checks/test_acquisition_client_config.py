@@ -259,7 +259,7 @@ class AcquisitionClientTests(unittest.TestCase):
                     self.assertIn("Docker may retain", result.stderr)
                     self.assertIn("packages/base-images/python/download", result.stderr)
                 else:
-                    self.assertEqual("", result.stderr)
+                    self.assertIn("make packages/wheelhouse", result.stderr)
         for call in self.fixture.calls():
             self.assertEqual(["image", "pull", self.worker_image], call["arguments"])
             self.assertEqual([], call["client_config"]["entries"])
