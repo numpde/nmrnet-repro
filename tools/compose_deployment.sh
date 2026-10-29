@@ -261,9 +261,10 @@ initialize_lifetime() {
     helper_name=
 }
 if [[ $action == install ]]; then
-    # Reconfiguration is explicit; stop the existing deployment before install.
-    existing=$(run 15 ps --quiet --filter "label=com.docker.compose.project=$project")
-    [[ -z $existing ]] || { refuse 'stop this deployment before replacing its configuration.'; exit 2; }
+    # Retire even stopped containers while current still names their recipe.
+    # A new binding can otherwise change the API proxy service name.
+    existing=$(run 15 ps --all --quiet --filter "label=com.docker.compose.project=$project")
+    [[ -z $existing ]] || { refuse 'retire this deployment with down before replacing its configuration; inspect status if down refuses.'; exit 2; }
     image_record provider; controller_image=$selected_image
     bundle=$(mktemp -d "$root/bundles/generation-XXXXXXXX")
     select_binding_inputs

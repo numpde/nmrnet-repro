@@ -69,7 +69,8 @@ printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
  ps)
     [[ ${TEST_PS_STATUS-0} == 0 ]] || exit "$TEST_PS_STATUS"
-    if [[ " $* " == *' --all '* ]]; then printf '%s' "${TEST_CONTAINERS-}";
+    if [[ " $* " == *' --all '* ]]; then
+        if [[ ${TEST_LIVE-false} == true ]]; then printf '%064d\n' 7; else printf '%s' "${TEST_CONTAINERS-}"; fi
     elif [[ ${TEST_LIVE-false} == true ]]; then printf '%064d\n' 7; fi
     ;;
  run)
@@ -330,9 +331,17 @@ esac
     def test_install_refuses_live_project_without_shutdown_or_replacement(self):
         result = self.run_command('install', changes={'TEST_LIVE': 'true'})
         self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(self.calls()[0][0:2], ['ps', '--quiet'])
+        self.assertEqual(self.calls()[0][0:3], ['ps', '--all', '--quiet'])
         self.assertEqual(len(self.calls()), 1)
-        self.assertIn('stop this deployment', result.stderr)
+        self.assertIn('retire this deployment with down', result.stderr)
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_install_keeps_the_incumbent_recipe_when_only_stopped_containers_remain(self):
+        result = self.run_command('install', changes={'TEST_CONTAINERS': CID + '\n'})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('retire this deployment with down', result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.calls()[0][0:3], ['ps', '--all', '--quiet'])
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
 
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
