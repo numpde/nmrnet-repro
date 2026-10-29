@@ -142,15 +142,20 @@ class ImmutableBuildInputTests(unittest.TestCase):
             self.assertNotEqual(evidence["context"], str(fixture.root))
             self.assertFalse(Path(evidence["context"]).exists())
 
-    def test_ignored_python_package_output_rejects_before_engine(self):
+    def test_ignored_python_package_output_is_excluded_from_build_context(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             canary = fixture.root / "tools/__pycache__/private.pyc"
             canary.parent.mkdir()
             canary.write_bytes(b"ignored interpreter output")
-            result = fixture.run("inference_image.sh", "build", additions={"NMRNET_FAKE_IGNORED_OUTPUT": "1"})
-            self.assertNotEqual(result.returncode, 0, msg="Ignored interpreter output was admitted to the build operation.")
-            self.assertFalse(fixture.calls())
+            upstream_canary = fixture.root / "NMRNetplusplus/uninmr/__pycache__/private.pyc"
+            upstream_canary.parent.mkdir(parents=True, exist_ok=True)
+            upstream_canary.write_bytes(b"ignored upstream interpreter output")
+            result = fixture.run("inference_image.sh", "build")
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            manifest = fixture.build_evidence()["manifest"]
+            self.assertNotIn("tools/__pycache__/private.pyc", manifest)
+            self.assertNotIn("NMRNetplusplus/uninmr/__pycache__/private.pyc", manifest)
 
     def test_failed_build_preserves_image_record_and_retires_captured_inputs(self):
         with tempfile.TemporaryDirectory() as directory:

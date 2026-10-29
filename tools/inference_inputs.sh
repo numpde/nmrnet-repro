@@ -8,7 +8,7 @@
 source "$repository_root/tools/git_inputs.sh"
 
 inference_capture_inputs() {
-    local parent_head gitlink source_head source_root changes untracked file digest name
+    local parent_head gitlink source_head source_root changes file digest name
     local -a authored=()
     parent_head=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}')
     [[ "$parent_head" =~ ^[0-9a-f]{40}$ ]] \
@@ -40,13 +40,12 @@ inference_capture_inputs() {
     [[ "$source_head" =~ ^[0-9a-f]{40}$ && "$gitlink" == "160000 commit $source_head"$'\tNMRNetplusplus' ]] \
         || { git_input_failure 'inference build inputs' 'upstream HEAD differs from the committed parent gitlink.'; return 2; }
     revision=$source_head
+    # Ignored files are outside the committed blob inventory copied below.
     changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${authored[@]}")
-    untracked=$(repository_git -C "$repository_root" ls-files --others -- tools)
-    [[ -z "$changes" && -z "$untracked" ]] \
-        || { git_input_failure 'inference build inputs' 'authored inputs changed or tools contains untracked/ignored files.'; return 2; }
+    [[ -z "$changes" ]] \
+        || { git_input_failure 'inference build inputs' 'authored inputs changed.'; return 2; }
     changes=$(repository_git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- LICENSE uninmr)
-    untracked=$(repository_git -C "$repository_root/NMRNetplusplus" ls-files --others -- LICENSE uninmr)
-    [[ -z "$changes" && -z "$untracked" ]] \
+    [[ -z "$changes" ]] \
         || { git_input_failure 'inference build inputs' 'the complete pinned source closure changed.'; return 2; }
 
     mkdir -- "$capture_directory/context" "$capture_directory/wheelhouse" "$capture_directory/runtime-wheels"

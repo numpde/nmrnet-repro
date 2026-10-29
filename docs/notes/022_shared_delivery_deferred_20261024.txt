@@ -1993,13 +1993,7 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
    elapsed time or absence from discovery does not release its claim. Do not
    infer or manufacture a terminal Attempt outcome or discard unresolved ownership.
 
-7. Inference image input capture rejects ignored files anywhere under tools,
-   including ordinary Python bytecode, even though its build context is copied
-   from committed inputs. Review the need for that restriction and its effect
-   on the normal development-to-build workflow; do not weaken checks on files
-   that actually determine executed tools or the captured image inputs.
-
-8. Provider-core 0.5.0 does not classify a TLS handshake EOF as a temporary
+7. Provider-core 0.5.0 does not classify a TLS handshake EOF as a temporary
    network failure. A settled Job read can consequently stop a provider, and
    terminal delivery can pause its binding rather than retrying the retained
    request. The shared owner is reviewing operation-specific recovery; retain

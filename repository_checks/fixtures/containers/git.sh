@@ -92,8 +92,10 @@ case "$*" in
         [[ $1 == ls-files && ${2:-} == --others && ${3:-} == -- && ( $# == 4 || $# == 5 ) ]] || exit 97
         if [[ "$database" == */parent ]]; then [[ $# == 4 && $4 == tools ]] || exit 97
         else [[ $# == 5 && ( ( $4 == LICENSE && $5 == uninmr ) || ( $4 == uninmr && $5 == LICENSE ) ) ]] || exit 97; fi
-        if [[ "$repository" != */NMRNetplusplus && "${NMRNET_FAKE_IGNORED_OUTPUT:-0}" == 1 ]]; then
+        if [[ "$repository" != */NMRNetplusplus && -f "$repository/tools/__pycache__/private.pyc" ]]; then
             printf '%s\n' 'tools/__pycache__/private.pyc'
+        elif [[ "$repository" == */NMRNetplusplus && -f "$repository/uninmr/__pycache__/private.pyc" ]]; then
+            printf '%s\n' 'uninmr/__pycache__/private.pyc'
         fi ;;
     *) printf 'unexpected fake git invocation: %s\n' "$*" >&2; exit 97 ;;
 esac

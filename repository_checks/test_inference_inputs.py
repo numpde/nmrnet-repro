@@ -153,14 +153,13 @@ class CapturedInputTests(unittest.TestCase):
             self.assertEqual(b"concurrent worktree mutation\n", source.read_bytes())
             self.assert_retired_capture(fixture)
 
-    def test_dirty_authored_inputs_and_ignored_tool_cache_never_reach_engine(self):
-        for flag in ("NMRNET_FAKE_DIRTY_ROOT", "NMRNET_FAKE_IGNORED_OUTPUT"):
-            with self.subTest(flag=flag), tempfile.TemporaryDirectory() as directory:
-                fixture = LauncherFixture(Path(directory))
-                result = fixture.run("inference_image.sh", "build", additions={flag: "1"})
-                self.assertEqual(2, result.returncode, msg=result.stderr)
-                self.assertEqual([], fixture.calls())
-                self.assert_retired_capture(fixture)
+    def test_dirty_authored_inputs_never_reach_engine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            result = fixture.run("inference_image.sh", "build", additions={"NMRNET_FAKE_DIRTY_ROOT": "1"})
+            self.assertEqual(2, result.returncode, msg=result.stderr)
+            self.assertEqual([], fixture.calls())
+            self.assert_retired_capture(fixture)
 
     def test_live_bytes_modes_and_linked_ancestors_must_match_committed_inputs(self):
         for mutation in ("bytes", "mode", "ancestor"):
