@@ -2008,3 +2008,10 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
    evidence. On the next acquisition-tooling change, preserve bounded proxy
    failure evidence alongside the original worker error without logging request
    contents or claiming an unobserved cause.
+
+10. Image retirement: tools/image_retirement.sh inventories container IDs before
+    inspecting their images. If a container disappears between those operations,
+    inspection can fail and stop retirement before any image is removed. Review
+    this race at the next image-lifecycle change while preserving the rule that
+    incomplete inventory never authorizes removal. Provider readiness is separate
+    from this cleanup outcome.
