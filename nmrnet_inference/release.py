@@ -196,9 +196,9 @@ class ReleasedPredictionSession:
                         json.dumps(
                             {
                                 "failed_geometry": index,
-                                "completed_outcomes": outcomes,
+                                "completed_geometries": len(outcomes),
+                                "completed_request_sha256": [item["request_sha256"] for item in outcomes],
                                 "artifacts": self._models.observed_artifacts(),
-                                "private_warnings": self._models.observed_warnings(),
                             },
                             sort_keys=True,
                         )

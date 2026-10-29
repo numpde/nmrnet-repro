@@ -11,6 +11,7 @@ import json
 import multiprocessing
 import socket
 import struct
+import traceback
 import unittest
 from contextlib import suppress
 from unittest.mock import AsyncMock, Mock, patch
@@ -178,7 +179,7 @@ def execute_frame(token):
 
 
 class WorkerFramingTests(unittest.TestCase):
-    def test_later_geometry_failure_sends_only_private_completed_outcomes_and_cause(self):
+    def test_later_geometry_failure_sends_cause_and_completed_input_identity_without_values(self):
         requests = (encoded_request(atoms=["H"], coordinates=[[0, 0, 0]]), encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]))
         token = "a" * 32
         connection = RecordingConnection(
@@ -203,7 +204,7 @@ class WorkerFramingTests(unittest.TestCase):
             patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
             patch("nmrnet_inference.release.importlib.metadata.version", return_value="fixture"),
             patch.object(prediction_model, "compose_net_input", return_value=object()),
-            patch.object(prediction_model, "predict_composed_element", side_effect=[((0, 1.2),), cause]),
+            patch.object(prediction_model, "predict_composed_element", side_effect=[((0, 987654.321),), cause]),
         ):
             serve_connection(connection, session, allocation="test-allocation", io_seconds=1)
         replies = [document(raw[4:]) for raw in connection.sent]
@@ -211,9 +212,10 @@ class WorkerFramingTests(unittest.TestCase):
         self.assertNotIn("result", replies[-1])
         diagnostic = replies[-1]["diagnostic"]
         self.assertIn("PRIVATE_LATER_GEOMETRY_CAUSE", diagnostic)
-        self.assertIn("completed_outcomes", diagnostic)
+        self.assertIn("completed_geometries", diagnostic)
         self.assertIn('"failed_geometry": 2', diagnostic)
-        self.assertIn('"shift_ppm": 1.2', diagnostic)
+        self.assertNotIn('"shift_ppm"', diagnostic)
+        self.assertNotIn("987654.321", diagnostic)
 
     def test_fragmented_frames_preserve_maximum_input(self):
         raw = b" " * MAX_INPUT_BYTES
@@ -233,13 +235,19 @@ class WorkerFramingTests(unittest.TestCase):
         token = "a" * 32
         cause = OSError("result was partially sent")
         connection = RecordingConnection(prepare_frame() + execute_frame(token), failure=cause)
-        with patch("nmrnet_inference.worker.secrets.token_hex", return_value=token), self.assertRaises(OSError) as failed:
-            serve_connection(connection, RecordingPrediction(), allocation="test-allocation", io_seconds=1)
+        prediction = RecordingPrediction()
+        with (
+            patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
+            patch.object(prediction, "execute", return_value=({"shift_ppm": 987654.321},)),
+            self.assertRaises(OSError) as failed,
+        ):
+            serve_connection(connection, prediction, allocation="test-allocation", io_seconds=1)
         self.assertIs(failed.exception, cause)
         self.assertEqual(len(connection.sent), 2)
-        self.assertIn("completed_outcomes", cause.__notes__[-1])
+        self.assertIn('"result_delivery": "unconfirmed"', cause.__notes__[-1])
+        self.assertNotIn("987654.321", "".join(traceback.format_exception(cause)))
 
-    def test_oversized_success_reply_keeps_completed_outcomes_without_a_second_frame(self):
+    def test_oversized_success_reply_reports_unconfirmed_delivery_without_payload(self):
         token = "a" * 32
         connection = RecordingConnection(prepare_frame() + execute_frame(token))
         prediction = RecordingPrediction()
@@ -253,7 +261,9 @@ class WorkerFramingTests(unittest.TestCase):
         self.assertEqual(1, len(connection.sent))
         self.assertNotIn("PRIVATE_SCIENTIFIC_RESULT", str(failure.exception))
         self.assertNotIn("PRIVATE_SCIENTIFIC_RESULT", repr(failure.exception))
-        self.assertIn("PRIVATE_SCIENTIFIC_RESULT", failure.exception.__notes__[-1])
+        self.assertNotIn("PRIVATE_SCIENTIFIC_RESULT", failure.exception.__notes__[-1])
+        self.assertNotIn("PRIVATE_SCIENTIFIC_RESULT", "".join(traceback.format_exception(failure.exception)))
+        self.assertIn('"result_delivery": "unconfirmed"', failure.exception.__notes__[-1])
 
     def test_replacement_invalidates_previous_wire_token(self):
         connection = RecordingConnection(prepare_frame() + prepare_frame(b"replacement") + execute_frame("a" * 32))

@@ -91,9 +91,9 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
         except Exception as cause:
             if operation == "execute":
                 # No retry can establish whether a partially sent reply arrived.
-                # Raw stderr carries the completed science into bounded Docker logs.
+                # Report completion without copying scientific results into logs.
                 try:
-                    cause.add_note(json.dumps({"completed_outcomes": result}, sort_keys=True))
+                    cause.add_note(json.dumps({"completed_geometries": len(result), "result_delivery": "unconfirmed"}))
                 except Exception as recording_failure:
                     raise cause from recording_failure
             raise

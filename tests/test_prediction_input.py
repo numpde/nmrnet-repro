@@ -533,7 +533,7 @@ class SelectedReleaseTests(unittest.TestCase):
         self.assertEqual([1, 0, 0], [len(item["private_warnings"]) for item in outcomes])
         self.assertEqual([], outcomes[2]["prediction"]["predictions"])
 
-    def test_later_batch_failure_keeps_completed_outcomes_and_original_cause_private(self):
+    def test_later_batch_failure_keeps_original_cause_and_completed_input_identity(self):
         session = ReleasedPredictionSession(self.loader)
         raw = (encoded_request(atoms=["H"], coordinates=[[0, 0, 0]]), encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]))
         cause = RuntimeError("PRIVATE_SECOND_GEOMETRY_FAILURE")
@@ -551,7 +551,9 @@ class SelectedReleaseTests(unittest.TestCase):
         self.assertIs(cause, failure.exception)
         evidence = json.loads(cause.__notes__[-1])
         self.assertEqual(2, evidence["failed_geometry"])
-        self.assertEqual(hashlib.sha256(raw[0]).hexdigest(), evidence["completed_outcomes"][0]["request_sha256"])
+        self.assertEqual(1, evidence["completed_geometries"])
+        self.assertEqual([hashlib.sha256(raw[0]).hexdigest()], evidence["completed_request_sha256"])
+        self.assertNotIn("shift_ppm", cause.__notes__[-1])
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(handle)
 
