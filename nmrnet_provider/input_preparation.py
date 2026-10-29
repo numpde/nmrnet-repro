@@ -33,6 +33,7 @@ from nmrnet_provider.submission import select_job_pasted, select_job_smiles
 from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.conversation import independent_interruption_failure
 from provider_core.job_input import VerifiedJobInput
+from provider_core.task_boundary import contain_task_exit
 
 
 class InputWorkerCallLimit(RuntimeError):
@@ -183,7 +184,7 @@ class InputPreparation:
         try:
             async with self._conversation():
                 async with selection_deadline:
-                    self._chooser_task = asyncio.create_task(self._run_chooser(instructions))
+                    self._chooser_task = asyncio.create_task(contain_task_exit(self._run_chooser, instructions))
                     self._chooser_task.add_done_callback(self._observe_chooser)
                     cancellations = asyncio.current_task().cancelling()
                     try:
@@ -276,7 +277,7 @@ class InputPreparation:
 
     async def _retire_chooser(self):
         if self._chooser_retirement_task is None:
-            self._chooser_retirement_task = asyncio.create_task(self._close_conversation())
+            self._chooser_retirement_task = asyncio.create_task(contain_task_exit(self._close_conversation))
         await asyncio.shield(self._chooser_retirement_task)
 
     async def _close_conversation(self):
@@ -364,7 +365,7 @@ class InputPreparation:
         return self._source
 
     async def _source_call(self, operation, *args):
-        self._source_task = asyncio.create_task(operation(*args))
+        self._source_task = asyncio.create_task(contain_task_exit(operation, *args))
         self._source_task.add_done_callback(self._record_source_failure)
         try:
             result = await asyncio.shield(self._source_task)
@@ -497,7 +498,7 @@ class InputPreparation:
         """Own one allocation through its operation and confirmed retirement."""
         self._require_choosing()
         self._worker_calls += 1
-        self._worker_task = asyncio.create_task(allocator(**configuration))
+        self._worker_task = asyncio.create_task(contain_task_exit(allocator, **configuration))
         self._worker_task.add_done_callback(self._record_allocation_failure)
         try:
             client, _ = await asyncio.shield(self._worker_task)
@@ -511,7 +512,7 @@ class InputPreparation:
             # Even cancellation must observe the retained allocation. Cleanup
             # uncertainty remains operational and keeps the original cause.
             try:
-                await self._retire_worker()
+                await self._retire_worker(observed_failure=operation_failure)
             except PreparationRetirementFailed as cleanup_failure:
                 self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cleanup_failure:
@@ -523,18 +524,49 @@ class InputPreparation:
             await self._retire_worker()
 
     def _record_allocation_failure(self, task):
-        if not task.cancelled():
+        try:
             self.allocation_failure = task.exception()
+        except asyncio.CancelledError as cause:
+            if self.allocation_failure is None:
+                self.allocation_failure = cause
 
-    async def _retire_worker(self):
+    async def _retire_worker(self, *, observed_failure=None):
         if self._worker_task is None:
             return
+        cancellations = asyncio.current_task().cancelling()
         try:
             async with asyncio.timeout(self._seconds):
                 client, host = await asyncio.shield(self._worker_task)
         except NativeWorkerExited as failure:
             await failure.native_operation.retire()
             self._worker_task = None
+            return
+        except asyncio.CancelledError:
+            if (not self._worker_task.done() or not self._worker_task.cancelled()
+                    or asyncio.current_task().cancelling() > cancellations):
+                raise
+            if self.allocation_failure is None:
+                self._record_allocation_failure(self._worker_task)
+            self._worker_task = None
+            child = self.allocation_failure
+            if child is not None and child.__cause__ is not None:
+                if isinstance(observed_failure, asyncio.CancelledError):
+                    previous = observed_failure.__cause__
+                    if previous is None:
+                        observed_failure.__cause__ = child
+                    elif previous is not child:
+                        observed_failure.__cause__ = BaseExceptionGroup("Allocation interruption observations", (previous, child))
+                else:
+                    raise child
+            return
+        except (Exception, BaseExceptionGroup) as failure:
+            if not self._worker_task.done() or self._worker_task.cancelled():
+                raise
+            # A failed allocator transferred no client. Its factory retains any
+            # partial allocation; this task remains evidence, not a second owner.
+            self._worker_task = None
+            if failure is not observed_failure:
+                raise
             return
         failures = await host.retire_channel(client)
         if failures:

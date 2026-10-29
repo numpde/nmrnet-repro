@@ -30,6 +30,96 @@ from provider_core.uploads import UploadFailed
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_allocation_remains_the_primary_failure_and_preparation_retires(self):
+        ports = SessionPorts()
+        failure = RuntimeError("native allocation failed")
+        ports.allocate_generator.side_effect = failure
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        owner = ports.owner(choose)
+        with self.assertRaises(RuntimeError) as caught:
+            await owner.prepare(ports.instructions)
+        self.assertIs(caught.exception, failure)
+        await owner.retire()
+        for transport in ports.transports:
+            transport.retire.assert_awaited_once()
+
+    async def test_cancelled_waiter_retains_a_later_independent_allocation_failure(self):
+        ports = SessionPorts()
+        entered, release = asyncio.Event(), asyncio.Event()
+        failure = OSError(5, "PRIVATE_LATE_ALLOCATION")
+
+        async def allocate(**_options):
+            entered.set()
+            await release.wait()
+            raise failure
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        owner = ports.owner(choose, allocate_generator=allocate)
+        task = asyncio.create_task(owner.prepare(ports.instructions))
+        await asyncio.wait_for(entered.wait(), 1)
+        task.cancel()
+        release.set()
+        with self.assertRaises(asyncio.CancelledError) as caught:
+            await task
+        self.assertIs(owner.allocation_failure, failure)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("PRIVATE_LATE_ALLOCATION", rendered)
+        self.assertIsNone(owner._worker_task)
+        await owner.retire()
+
+    async def test_finished_cancelled_allocation_does_not_hold_preparation_open(self):
+        ports = SessionPorts()
+        ports.allocate_generator.side_effect = asyncio.CancelledError("allocation stopped")
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        owner = ports.owner(choose)
+        with self.assertRaises(asyncio.CancelledError):
+            await owner.prepare(ports.instructions)
+        await owner.retire()
+        for transport in ports.transports:
+            transport.retire.assert_awaited_once()
+
+    async def test_cancelled_allocator_retains_its_independent_cause(self):
+        ports = SessionPorts()
+
+        async def allocate(**_options):
+            raise asyncio.CancelledError("allocation stopped") from OSError(5, "PRIVATE_ALLOCATION_CAUSE")
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        owner = ports.owner(choose, allocate_generator=allocate)
+        with self.assertRaises(asyncio.CancelledError) as caught:
+            await owner.prepare(ports.instructions)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("PRIVATE_ALLOCATION_CAUSE", rendered)
+        await owner.retire()
+
+    async def test_fatal_source_exit_is_retained_and_source_transports_retire(self):
+        ports = SessionPorts()
+        fatal = SystemExit(7)
+        ports.uploads.inspect.side_effect = fatal
+
+        async def choose(_instructions, capability):
+            await capability.inspect()
+
+        owner = ports.owner(choose)
+        with self.assertRaises(BaseExceptionGroup) as caught:
+            await owner.prepare(ports.instructions)
+        self.assertIs(caught.exception.exceptions[0], fatal)
+        await owner.retire()
+        for transport in ports.transports:
+            transport.retire.assert_awaited_once()
+
     async def test_grouped_interpreter_cleanup_does_not_skip_source_transport_retirement(self):
         ports = SessionPorts()
         owner = ports.owner(AsyncMock())
@@ -133,6 +223,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def check_late_model_fault(self, observation):
         ports = SessionPorts()
+        observed_heads = []
         async with TlsPeer("body-stall", response_headers=((b"x-request-id", b"request:late-model"),)) as peer:
             endpoint = chat_endpoint(peer, exchange_seconds=2)
             original_retire = endpoint.retire
@@ -142,6 +233,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 # Model the actual transport retirement contract: it can finish
                 # closing while adding late operation evidence to this object.
                 exchange = endpoint._transport.last_failure
+                observed_heads.append(exchange.response_head)
                 if observation == "io":
                     exchange.primary = OSError(5, "PRIVATE_LATE_IO")
                 else:
@@ -149,11 +241,12 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
             endpoint.retire = observe_late_fault
             chooser = InputInterpreter((endpoint,), max_turns=2)
-            owner = ports.owner(chooser.run, chooser=chooser, seconds=0.1)
+            owner = ports.owner(chooser.run, chooser=chooser, seconds=0.5)
             session = ports.make_session(owner)
             try:
                 with self.assertRaises(BaseExceptionGroup) as caught:
                     await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+                self.assertTrue(any(head is not None for head in observed_heads), "Model response headers were not observed")
                 rendered = json.dumps(failure_evidence(caught.exception, secrets=("PRIVATE_MODEL_KEY",)))
                 self.assertIn("request:late-model", rendered)
                 self.assertIn('"errno": 5' if observation == "io" else '"status": 503', rendered)
