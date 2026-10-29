@@ -2001,3 +2001,10 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
    failure and worker cleanup do not depend on logging. Review a bounded way to
    signal omitted or unavailable diagnostics without claiming durable storage
    or introducing a local payload dump.
+
+9. Acquisition diagnostics: tools/docker.sh collects proxy logs for readiness
+   failures but not when an acquisition worker exits unsuccessfully. A release
+   download returned a tunnel 502 without the proxy's underlying connection
+   evidence. On the next acquisition-tooling change, preserve bounded proxy
+   failure evidence alongside the original worker error without logging request
+   contents or claiming an unobserved cause.
