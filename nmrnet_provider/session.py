@@ -14,6 +14,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -25,10 +26,11 @@ from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
-from nmrnet_provider.worker_client import PredictionExecutionFailed
+from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
+from provider_core.task_boundary import contain_task_exit
 
 
 class ResultAssemblyFailed(RuntimeError):
@@ -188,9 +190,18 @@ class NMRNetSession:
         selected_artifacts,
         input_preparation,
         on_prediction_failure=None,
+        max_retries=0,
+        prediction_seconds=None,
     ):
         if not callable(allocate_prediction):
             raise ValueError("Scientific session requires a prediction allocation owner.")
+        if type(max_retries) is not int or max_retries not in (0, 1):
+            raise ValueError("Scientific session permits zero or one prediction retry.")
+        if max_retries and (type(prediction_seconds) not in (int, float) or not 0 < prediction_seconds
+                            or not math.isfinite(2 * prediction_seconds)):
+            raise ValueError("Prediction retry requires a finite positive prediction deadline.")
+        self._max_retries = max_retries
+        self._prediction_seconds = prediction_seconds
         self._allocate_prediction = allocate_prediction
         self._worker = self._retirement = None
         self._prediction_retirement_task = None
@@ -328,11 +339,14 @@ class NMRNetSession:
                 raise ValueError("Scientific failure arrived after retirement began; it cannot be accepted.") from cause
             try:
                 diagnostic = json.dumps(cause.diagnostic, ensure_ascii=True).encode("ascii")
-                evidence = _evidence({"prediction_failure": {
+                prediction_failure = {
                     "diagnostic_encoding": "JSON string encoded as ASCII",
                     "diagnostic_bytes": len(diagnostic),
                     "diagnostic_sha256": hashlib.sha256(diagnostic).hexdigest(),
-                }})
+                }
+                if type(cause) is ModelCallFailed and cause.retry_not_started is not None:
+                    prediction_failure["retry_not_started"] = cause.retry_not_started
+                evidence = _evidence({"prediction_failure": prediction_failure})
             except Exception as evidence_failure:
                 raise evidence_failure from cause
             if self._on_prediction_failure is not None:
@@ -360,14 +374,90 @@ class NMRNetSession:
             raise ValueError("Scientific retirement has begun; prediction dispatch is blocked.")
 
     async def _predict(self, requests):
-        """Execute the admitted prediction once and retain any observed crash."""
+        """Execute the frozen batch, retaining original owners across a permitted retry."""
         try:
-            self._require_prediction_active()
-            worker_handle = await self._worker.prepare(requests)
-            self._require_prediction_active()
-            return await self._worker.execute(worker_handle)
+            if not self._max_retries:
+                return await self._predict_once(requests)
+            deadline = asyncio.get_running_loop().time() + 2 * self._prediction_seconds
+            try:
+                async with asyncio.timeout_at(deadline):
+                    return await self._predict_once(requests)
+            except ModelCallFailed as first:
+                if type(first) is not ModelCallFailed:
+                    raise
+                return await self._retry_prediction(requests, first, deadline)
         except NativeWorkerExited as cause:
             raise self._worker_crash(cause, cause=cause) from None
+
+    async def _retry_prediction(self, requests, first, deadline):
+        self._require_prediction_active()
+        failures = await self._retire_prediction(self._worker, self._retirement)
+        if failures:
+            try:
+                self._raise_retirement_failure(failures)
+            except asyncio.CancelledError as cleanup:
+                previous = cleanup.__cause__
+                raise cleanup from BaseExceptionGroup("Prediction and retirement interruption", (first, previous))
+            except Exception as cleanup:
+                raise BaseExceptionGroup("Prediction and its retirement both failed", (first, cleanup)) from None
+        self._require_prediction_active()
+        if asyncio.get_running_loop().time() >= deadline:
+            first.retry_not_started = "The execution budget expired during worker retirement."
+            raise first
+        self._worker = self._retirement = self._prediction_retirement_task = None
+        acquisition_budget = asyncio.timeout_at(deadline)
+        try:
+            async with acquisition_budget:
+                runtime = await self._acquire_prediction(_Phase.EXECUTING)
+        except NativeWorkerExited:
+            raise
+        except asyncio.CancelledError as interruption:
+            previous = interruption.__cause__
+            if previous is None:
+                raise interruption from first
+            raise interruption from BaseExceptionGroup("Prediction and replacement interruption", (first, previous))
+        except TimeoutError as acquisition:
+            cancelled = acquisition.__cause__
+            if acquisition_budget.expired() and isinstance(cancelled, asyncio.CancelledError) and cancelled.__cause__ is None:
+                first.retry_not_started = "The execution budget expired during replacement setup."
+                raise first from acquisition
+            raise ExceptionGroup("Prediction failed and replacement could not be acquired", (first, acquisition)) from None
+        except Exception as acquisition:
+            raise BaseExceptionGroup("Prediction failed and replacement could not be acquired", (first, acquisition)) from None
+        if runtime != self._facts["runtime_expectations"]:
+            raise ValueError("Cannot retry prediction: replacement runtime differs from the admitted runtime.") from first
+        self._require_prediction_active()
+        if asyncio.get_running_loop().time() >= deadline:
+            first.retry_not_started = "The execution budget expired during replacement setup."
+            raise first
+        preparation_budget = asyncio.timeout_at(deadline)
+        try:
+            async with preparation_budget:
+                worker_handle = await self._worker.prepare(requests)
+        except TimeoutError as preparation:
+            cancelled = preparation.__cause__
+            if preparation_budget.expired() and isinstance(cancelled, asyncio.CancelledError) and cancelled.__cause__ is None:
+                first.retry_not_started = "The execution budget expired during replacement preparation."
+                raise first from preparation
+            raise ExceptionGroup("Prediction failed and replacement preparation failed", (first, preparation)) from None
+        self._require_prediction_active()
+        if asyncio.get_running_loop().time() >= deadline:
+            first.retry_not_started = "The execution budget expired during replacement preparation."
+            raise first
+        if self._on_prediction_failure is not None:
+            self._on_prediction_failure(first, self._acknowledged)
+        self._require_prediction_active()
+        if asyncio.get_running_loop().time() >= deadline:
+            first.retry_not_started = "The execution budget expired before retry dispatch."
+            raise first
+        async with asyncio.timeout_at(deadline):
+            return await self._worker.execute(worker_handle)
+
+    async def _predict_once(self, requests):
+        self._require_prediction_active()
+        worker_handle = await self._worker.prepare(requests)
+        self._require_prediction_active()
+        return await self._worker.execute(worker_handle)
 
     def _worker_crash(self, failure, *, cause):
         if self._phase is _Phase.PREPARING:
@@ -407,7 +497,6 @@ class NMRNetSession:
     async def retire(self):
         if self._phase is _Phase.RETIRED:
             return
-        retry_retirement = self._phase is _Phase.RETIRING
         self._phase = _Phase.RETIRING
         self._prepared = None
         failures = []
@@ -424,7 +513,7 @@ class NMRNetSession:
                 self._prediction_setup = None
         worker, retirement = self._worker, self._retirement
         if retirement is not None:
-            failures.extend(await self._retire_prediction(worker, retirement, retry=retry_retirement))
+            failures.extend(await self._retire_prediction(worker, retirement, retry=True))
         if (self._prediction_pending or self._prediction_setup is not None
                 or self._worker is not worker or self._retirement is not retirement):
             failures.append(
@@ -445,7 +534,7 @@ class NMRNetSession:
             task.cancelled() or task.exception() is not None or bool(task.result())
         )
         if task is None or (retry and failed):
-            task = asyncio.create_task(retirement.retire_channel(worker))
+            task = asyncio.create_task(contain_task_exit(retirement.retire_channel, worker))
             self._prediction_retirement_task = task
         return await asyncio.shield(task)
 

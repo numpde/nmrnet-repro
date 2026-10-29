@@ -25,7 +25,7 @@ from builtins import BaseExceptionGroup
 from dataclasses import replace
 from pathlib import Path
 
-from nmrnet_provider.config import ConfigurationRejected, ScientificRetryNotImplemented, load_provider_config, read_startup_file
+from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService
@@ -555,7 +555,7 @@ def main(arguments=None):
             config, api=options.api_proxy_socket, interpreter=options.interpreter_proxy_socket, store=options.store_proxy_socket
         )
         execution, artifacts = _runtime_facts(options.execution, options.models, config)
-    except (OSError, ConfigurationRejected, ScientificRetryNotImplemented) as cause:
+    except (OSError, ConfigurationRejected) as cause:
         _failure_report((("startup admission", cause),), secrets=(), held=False)
         raise SystemExit(2) from None
     try:

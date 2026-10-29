@@ -128,15 +128,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Scientific worker failed", rendered)
                 self.assertNotIn("PRIVATE_KEY", rendered)
 
-    def test_retry_refusal_is_safe_without_exposing_unrelated_not_implemented_errors(self):
-        from nmrnet_provider.config import ScientificRetryNotImplemented
-
-        refusal = ScientificRetryNotImplemented(
-            "Cannot start NMRNet: scientific_retry.max_retries must be 0 until scientific retries are implemented."
-        )
-        self.assertIn("scientific_retry.max_retries", json.dumps(self.receive(refusal)))
-        self.assertNotIn("PRIVATE_UNRELATED", json.dumps(self.receive(NotImplementedError("PRIVATE_UNRELATED"))))
-
     def live_controller(self, transport, session, *, poll_seconds=1, condition_recovery=None):
         claims = AttemptClaims.live()
         controller = AttemptController.live(

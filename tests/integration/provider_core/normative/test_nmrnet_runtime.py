@@ -15,6 +15,7 @@ from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
+from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWorker
 
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.worker_client import ModelCallFailed
@@ -26,6 +27,39 @@ from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_configured_model_retry_delivers_one_result_for_same_attempt(self):
+        ports = SessionPorts()
+        failure = ModelCallFailed("PRIVATE_FIRST_MODEL_FAILURE")
+        ports.worker.execute = AsyncMock(side_effect=failure)
+        replacement = ScientificWorker(ports.worker.artifacts, ports.worker.runtime)
+        replacement_host = HostOwner()
+
+        async def allocate():
+            if not ports.host.confirmed:
+                return ports.worker, ports.host, ports.worker.runtime
+            return replacement, replacement_host, replacement.runtime
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            fixture.config = replace(fixture.config, scientific_max_retries=1)
+            fixture.allocate_prediction.side_effect = allocate
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            outcome = await controller.run(pending)
+            self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
+            await fixture.wait_published()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertEqual(sum(b"/start HTTP/" in request for request in requests), 1)
+            self.assertEqual(sum(b"/fail HTTP/" in request for request in requests), 0)
+            self.assertEqual(sum(b"/complete HTTP/" in request for request in requests), 1)
+            self.assertEqual(ports.worker.requests, replacement.requests)
+            self.assertTrue(ports.host.confirmed)
+            self.assertTrue(replacement_host.confirmed)
+            self.assertEqual(replacement.events.count("execute"), 1)
+            notices = [item for item in fixture.operator_notices if item[0] == "prediction_failed"]
+            self.assertEqual(len(notices), 1)
+            self.assertIs(notices[0][1], failure)
+
     async def test_prediction_failure_is_delivered_once_with_private_diagnostic_separate(self):
         ports = SessionPorts()
         failure = ModelCallFailed("PRIVATE_PREDICTION_DIAGNOSTIC" + "💧" * 300000)

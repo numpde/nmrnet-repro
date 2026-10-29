@@ -18,7 +18,7 @@ class DeploymentBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             arguments, _ = deployment_inputs(Path(directory))
             definition = arguments["definition"]
-            definition.write_text(definition.read_text().replace("max_retries = 0", "max_retries = 1"))
+            definition.write_text(definition.read_text().replace("max_retries = 0", "max_retries = 2"))
             argv = ["freeze"]
             for key, value in arguments.items():
                 if key == "source_names":

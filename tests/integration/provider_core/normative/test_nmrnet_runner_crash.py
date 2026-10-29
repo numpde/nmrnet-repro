@@ -51,8 +51,63 @@ with socket.socket(fileno=args.session_fd) as channel:
     raise SystemExit(17)
 '''
 
+MODEL_FAILURE_CHILD = r'''
+import argparse, json, socket
+parser = argparse.ArgumentParser()
+parser.add_argument('--session-fd', type=int)
+parser.add_argument('--lease-fd', type=int)
+parser.add_argument('--operation')
+args = parser.parse_args()
+with socket.socket(fileno=args.session_fd) as channel:
+    def receive(size):
+        result = b''
+        while len(result) < size:
+            part = channel.recv(size - len(result))
+            if not part: raise SystemExit(29)
+            result += part
+        return result
+    def send(document):
+        raw = json.dumps(document, separators=(',', ':')).encode()
+        channel.sendall(len(raw).to_bytes(4, 'big') + raw)
+    send({'kind': 'startup', 'allocation': args.operation, 'runtime': {'python': 'fixture'}})
+    request = json.loads(receive(int.from_bytes(receive(4), 'big')))
+    assert request['operation'] == 'prepare'
+    send({'kind': 'prepared', 'allocation': args.operation, 'token': 'a' * 32, 'declaration_sha256': 'd' * 64})
+    request = json.loads(receive(int.from_bytes(receive(4), 'big')))
+    assert request['operation'] == 'execute'
+    send({'kind': 'model_call_failed', 'allocation': args.operation, 'diagnostic': 'authored model-call failure'})
+'''
+
 
 class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
+    async def test_two_native_model_failures_retire_both_children_and_report_once(self):
+        ports, claims = SessionPorts(), AttemptClaims.live()
+        runner = RunningSupervisor(role="prediction", worker_argv=[sys.executable, "-c", MODEL_FAILURE_CHILD])
+        self.addCleanup(runner.close)
+        factory = self.factory(ports, claims, Mock())
+        factory.execution_identity["prediction_declaration_sha256"] = "d" * 64
+        operations = []
+
+        def operation(**arguments):
+            owned = NativeOperation(**(arguments | {"endpoint": runner.path}))
+            operations.append(owned)
+            return owned
+
+        session = NMRNetSession(
+            allocate_prediction=partial(factory.allocate_prediction, job_ref=ports.instructions.job_ref),
+            execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation, max_retries=1, prediction_seconds=2,
+        )
+        with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
+            prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=Mock())
+            result = await session.execute(prepared, report_condition=Mock())
+            await session.retire()
+        self.assertEqual(result.code, "prediction_execution_failed")
+        self.assertEqual(len(operations), 2)
+        self.assertNotEqual(operations[0].allocation, operations[1].allocation)
+        self.assertTrue(all(item._retirement.done() for item in operations))
+        self.assertTrue(factory.shutdown_ready)
+
     def factory(self, ports, claims, retry):
         return NativeAttemptFactory(
             admission_stopping=asyncio.Event(),

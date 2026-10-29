@@ -40,9 +40,9 @@ from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
-    async def test_positive_scientific_retry_refuses_startup_without_api_effects(self):
+    async def test_excess_scientific_retry_refuses_startup_without_api_effects(self):
         async with ProcessPeers() as fixture:
-            fixture.files.write(fixture.files.raw.replace(b"max_retries = 0", b"max_retries = 1"))
+            fixture.files.write(fixture.files.raw.replace(b"max_retries = 0", b"max_retries = 2"))
             process = await fixture.start()
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 2)

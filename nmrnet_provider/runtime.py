@@ -118,6 +118,8 @@ async def assemble_attempt(
         selected_artifacts=selected_artifacts,
         input_preparation=preparation,
         on_prediction_failure=on_prediction_failure,
+        max_retries=config.scientific_max_retries,
+        prediction_seconds=config.service.native.prediction_seconds,
     )
     settings = config.lifecycle
     return AttemptController.live(

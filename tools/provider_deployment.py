@@ -22,7 +22,7 @@ from pathlib import Path
 import tomllib
 import tomli_w
 
-from nmrnet_provider.config import ConfigurationRejected, ScientificRetryNotImplemented, _read_provider_config, read_startup_file
+from nmrnet_provider.config import ConfigurationRejected, _read_provider_config, read_startup_file
 from nmrnet_provider.deployment import _disjoint, compose_bytes, render_compose
 from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.process import _declared_models
@@ -307,7 +307,7 @@ def main(arguments=None):
             initialize_lifetime(**values)
             sys.stdout.write("Provider lifetime volume ready.\n")
             return 0
-    except (ConfigurationRejected, OSError, ScientificRetryNotImplemented) as failure:
+    except (ConfigurationRejected, OSError) as failure:
         # Protected Docker-stderr projection for this finite receiving boundary:
         # preserve owned causal evidence without arbitrary exception stringify.
         sys.stderr.write(json.dumps(failure_evidence(failure, secrets=())) + "\n")

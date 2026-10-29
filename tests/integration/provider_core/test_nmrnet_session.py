@@ -546,6 +546,16 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         retire_channel.assert_awaited_once_with(self.worker)
         self.assertTrue(self.host.confirmed)
 
+    async def test_process_control_failure_in_retirement_stays_owned_by_task(self):
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        fatal = SystemExit(7)
+        with patch.object(self.host, "retire_channel", new=AsyncMock(side_effect=fatal)):
+            with self.assertRaises(BaseExceptionGroup) as caught:
+                await self.session.retire()
+        self.assertIs(caught.exception.exceptions[0], fatal)
+        await self.session.retire()
+        self.assertTrue(self.host.confirmed)
+
     async def test_cleanup_preserves_primary_and_all_later_failures(self):
         await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         first = OSError("private close failure")

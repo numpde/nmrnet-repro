@@ -37,6 +37,10 @@ class PredictionExecutionFailed(WorkerReportedFailure):
 class ModelCallFailed(PredictionExecutionFailed):
     """The worker reported an exception from the admitted model call."""
 
+    def __init__(self, diagnostic):
+        super().__init__(diagnostic)
+        self.retry_not_started = None
+
 
 class WorkerExchangeTimedOut(TimeoutError):
     """This channel's own exchange deadline elapsed, not a foreign timeout."""

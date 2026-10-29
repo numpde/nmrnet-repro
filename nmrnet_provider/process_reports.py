@@ -15,7 +15,7 @@ import json
 import re
 
 from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES
-from nmrnet_provider.config import ConfigurationRejected, ScientificRetryNotImplemented
+from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem
@@ -96,7 +96,6 @@ def _safe_owner_details(error):
         ProviderProcessFailed,
         DiagnosticOutputRefused,
         ConfigurationRejected,
-        ScientificRetryNotImplemented,
         ServiceFailed,
         ServiceRefused,
         NativeSetupFailed,
@@ -122,6 +121,8 @@ def _safe_owner_details(error):
     details = {"message": str(error)}
     if type(error) is WorkerExchangeTimedOut:
         details["send_started"] = error.send_started
+    if type(error) is ModelCallFailed and error.retry_not_started is not None:
+        details["retry_not_started"] = error.retry_not_started
     if type(error) is ProviderProcessFailed:
         details["requires_host_retirement"] = error.requires_host_retirement
     if type(error) is NativeSetupFailed and type(error.job_ref) is str:

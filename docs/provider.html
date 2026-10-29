@@ -109,9 +109,15 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 </tbody>
 </table>
-<p><code>scientific_retry.max_retries</code> must be <code>0</code>. Positive
-values are not yet implemented and prevent startup. Prediction runs at most once per
-Attempt; this setting does not change API or delivery retries.</p>
+<p><code>scientific_retry.max_retries</code> is <code>0</code> or <code>1</code>.
+The supplied configuration uses <code>0</code>. With <code>1</code>, a model call
+that raises before returning may be retried once with a fresh worker and the same
+prepared batch, after the original worker has been retired. Earlier calculations
+in the batch may have completed and will be repeated; the failed call may also
+have performed work before raising. A lost reply, a worker crash,
+or a failure after the model call returned does not trigger a retry. The retry
+shares the original execution time budget. This setting does not change API or
+delivery retries.</p>
 <p>The supplied definitions reserve two live Attempt slots, 256 KiB for control
 records and 4 MiB for pending terminal reports. Each slot reserves 128 KiB of
 control capacity and a 2 MiB encoded-report allowance before START. These are
@@ -734,7 +740,7 @@ lock waits and backoff. An admitted exchange still owns its I/O until settled.
 The existing lifecycle monitor can stop work during backoff. Protected
 <code>api_condition_retry</code> and <code>api_condition_recovered</code> notices identify the phase,
 condition and Attempt; only the latter reports <code>condition_receipt_received=true</code>.
-No model call or science is retried. Authentication, conflicting state, malformed
+This recovery does not retry a model call or scientific calculation. Authentication, conflicting state, malformed
 receipts, cancellation and unsettled cleanup remain operational failures.
 Configure only one progress writer for an Attempt: local lifetime/claim locks do not
 fence an independently deployed provider. Source:
