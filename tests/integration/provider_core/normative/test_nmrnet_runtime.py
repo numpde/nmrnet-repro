@@ -17,7 +17,7 @@ from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
-from nmrnet_provider.worker_client import PredictionExecutionFailed
+from nmrnet_provider.worker_client import ModelCallFailed
 from provider_core.attempt_record import AcknowledgedAttempt
 from provider_core.controller import StartDeferred
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
@@ -28,7 +28,7 @@ from provider_core.uploads import UploadInputRejected
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_prediction_failure_is_delivered_once_with_private_diagnostic_separate(self):
         ports = SessionPorts()
-        failure = PredictionExecutionFailed("PRIVATE_PREDICTION_DIAGNOSTIC" + "💧" * 300000)
+        failure = ModelCallFailed("PRIVATE_PREDICTION_DIAGNOSTIC" + "💧" * 300000)
         ports.worker.execute = AsyncMock(side_effect=failure)
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()

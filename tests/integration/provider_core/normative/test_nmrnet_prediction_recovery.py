@@ -10,7 +10,7 @@ from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.session import NMRNetSession
-from nmrnet_provider.worker_client import PredictionExecutionFailed
+from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed
 from provider_core.analysis import AnalysisFailure
 
 
@@ -71,7 +71,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         await session.retire()
 
     async def test_failure_is_preserved_without_reallocating_or_reexecuting(self):
-        for failure in (PredictionExecutionFailed("Prediction failed"),
+        for failure in (PredictionExecutionFailed("Prediction failed"), ModelCallFailed("Model call failed"),
                         asyncio.IncompleteReadError(b"", 1), TimeoutError("Prediction timed out")):
             with self.subTest(failure=type(failure).__name__):
                 ports = SessionPorts()

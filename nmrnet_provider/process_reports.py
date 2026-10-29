@@ -30,6 +30,7 @@ from nmrnet_provider.session import (
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import (
+    ModelCallFailed,
     PredictionExecutionFailed,
     WorkerExchangeTimedOut,
     WorkerReportedFailure,
@@ -109,6 +110,7 @@ def _safe_owner_details(error):
         ModelReportedInputProblem,
         WorkerReportedFailure,
         PredictionExecutionFailed,
+        ModelCallFailed,
         WorkerExchangeTimedOut,
         WorkerResultRejected,
         WorkerProtocolError,
@@ -228,7 +230,7 @@ def _preparation_summary(document, text, diagnostic_window):
 
 def _describe_scientific_owner(current, text, diagnostic_window):
     evidence = _safe_owner_details(current)
-    if type(current) in (WorkerReportedFailure, PredictionExecutionFailed):
+    if type(current) in (WorkerReportedFailure, PredictionExecutionFailed, ModelCallFailed):
         evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
     if type(current) is InputRejected and current.diagnostic is not None:
         evidence["input_rejection_diagnostic"] = diagnostic_window(current.diagnostic)

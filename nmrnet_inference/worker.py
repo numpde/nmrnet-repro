@@ -18,6 +18,7 @@ import secrets
 import traceback
 
 from nmrnet_inference.predict import MAX_GEOMETRIES, require_request_batch
+from nmrnet_inference.model import ModelCallFailed
 from nmrnet_provider.worker_protocol import (
     WorkerProtocolError,
     receive,
@@ -81,9 +82,10 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             # diagnostic fails frame admission rather than silently truncating it;
             # Docker also collects the worker's raw stderr on abnormal exit.
             diagnostic = "".join(traceback.format_exception(cause))
-            # Only a consumed valid token admits prediction recovery. Request,
-            # token and preparation refusals keep the non-retryable failure kind.
-            kind = "execution_failed" if execution_entered else "failure"
+            # The distinct model-call fact requires a consumed execution token;
+            # it does not by itself authorize another calculation.
+            kind = ("model_call_failed" if execution_entered and type(cause) is ModelCallFailed
+                    else "execution_failed" if execution_entered else "failure")
             send(connection, {"kind": kind, "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
             return
         try:

@@ -14,6 +14,7 @@ import tempfile
 import traceback
 import unittest
 import warnings
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -41,6 +42,28 @@ class PredictionDictionary:
 
 
 class PredictionInputTests(unittest.TestCase):
+    def test_only_model_call_exception_is_marked_as_computation_failure(self):
+        torch = mock.Mock()
+        torch.no_grad.return_value = nullcontext()
+        composed = prediction_model.ComposedNetInput({}, (0,))
+        cause = RuntimeError("private model cause")
+        model = mock.Mock(side_effect=cause)
+        with mock.patch.dict(sys.modules, {"torch": torch, "numpy": mock.Mock()}):
+            with self.assertRaises(prediction_model.ModelCallFailed) as caught:
+                prediction_model.predict_composed_element(composed, model, mock.Mock())
+            self.assertIs(caught.exception.__cause__, cause)
+            model.eval.side_effect = ValueError("evaluation setup failed")
+            with self.assertRaisesRegex(ValueError, "evaluation setup failed"):
+                prediction_model.predict_composed_element(composed, model, mock.Mock())
+            model.eval.side_effect = None
+            malformed = prediction_model.ComposedNetInput({1: "invalid keyword"}, (0,))
+            with self.assertRaises(TypeError):
+                prediction_model.predict_composed_element(malformed, model, mock.Mock())
+            model.side_effect = None
+            model.return_value = None
+            with self.assertRaisesRegex(ValueError, "non-empty tuple"):
+                prediction_model.predict_composed_element(composed, model, mock.Mock())
+
     def parse(self, raw):
         return predict.parse_request(raw)
 

@@ -40,6 +40,10 @@ class ComposedNetInput(NamedTuple):
     selected_atom_indices: tuple[int, ...]
 
 
+class ModelCallFailed(RuntimeError):
+    """The model call raised before returning to its caller."""
+
+
 def require_dictionary_atoms(atoms, dictionary):
     """Reject atoms the pinned upstream tokenizer would map to UNK.
 
@@ -254,6 +258,8 @@ def predict_composed_element(composed, model, scaler):
     import torch  # noqa: PLC0415 -- An absent nucleus returns without loading its scientific dependencies.
 
     model.eval()
+    # Bind keywords before the try: malformed input is not a model-call failure.
+    arguments = dict(**composed.model_inputs, features_only=True, classification_head_name="nmr_head")
     with torch.no_grad():
         # The pinned task registers nmr_head as a node head; UniMat selects its rows
         # with select_atom.
@@ -261,11 +267,10 @@ def predict_composed_element(composed, model, scaler):
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L462-L469
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L276-L280
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35
-        result = model(
-            **composed.model_inputs,
-            features_only=True,
-            classification_head_name="nmr_head",
-        )
+        try:
+            result = model(**arguments)
+        except Exception as cause:
+            raise ModelCallFailed("NMRNet model call raised before returning to its caller.") from cause
     if not isinstance(result, tuple) or not result:
         raise ValueError("Cannot predict NMRNet++ shifts: model output must be a non-empty tuple.")
     predictions = result[0]

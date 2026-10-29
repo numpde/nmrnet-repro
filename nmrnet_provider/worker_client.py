@@ -34,6 +34,10 @@ class PredictionExecutionFailed(WorkerReportedFailure):
     """The worker admitted a valid execution token, then prediction failed."""
 
 
+class ModelCallFailed(PredictionExecutionFailed):
+    """The worker reported an exception from the admitted model call."""
+
+
 class WorkerExchangeTimedOut(TimeoutError):
     """This channel's own exchange deadline elapsed, not a foreign timeout."""
 
@@ -196,11 +200,12 @@ class PredictionClient(WorkerClient):
         self._prepared = None
         self._executed = True
         reply = await self._exchange({"operation": "execute", "token": token})
-        if reply.get("kind") == "execution_failed":
+        if reply.get("kind") in ("execution_failed", "model_call_failed"):
             self.close()
             if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
                 raise WorkerProtocolError("Scientific execution failure reply has no valid diagnostic")
-            raise PredictionExecutionFailed(reply["diagnostic"])
+            failure = ModelCallFailed if reply["kind"] == "model_call_failed" else PredictionExecutionFailed
+            raise failure(reply["diagnostic"])
         if (
             set(reply) != {"kind", "allocation", "result"}
             or reply["kind"] != "result"

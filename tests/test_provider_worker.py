@@ -23,6 +23,7 @@ from nmrnet_inference.predict import MAX_INPUT_BYTES
 from nmrnet_inference.release import ReleasedPredictionSession
 from nmrnet_inference.worker import serve_connection
 from nmrnet_provider.worker_client import (
+    ModelCallFailed,
     PredictionClient,
     PredictionExecutionFailed,
     WorkerExchangeTimedOut,
@@ -179,6 +180,18 @@ def execute_frame(token):
 
 
 class WorkerFramingTests(unittest.TestCase):
+    def test_model_failure_has_a_distinct_private_frame(self):
+        token = "a" * 32
+        connection = RecordingConnection(prepare_frame() + execute_frame(token))
+        prediction = RecordingPrediction()
+        cause = prediction_model.ModelCallFailed("model failure")
+        with (patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
+              patch.object(prediction, "execute", side_effect=cause)):
+            serve_connection(connection, prediction, allocation="test-allocation", io_seconds=1)
+        reply = document(connection.sent[-1][4:])
+        self.assertEqual(reply["kind"], "model_call_failed")
+        self.assertIn("model failure", reply["diagnostic"])
+
     def test_later_geometry_failure_sends_cause_and_completed_input_identity_without_values(self):
         requests = (encoded_request(atoms=["H"], coordinates=[[0, 0, 0]]), encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]))
         token = "a" * 32
@@ -305,6 +318,17 @@ class BufferedWriter:
 
 
 class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_model_failure_frame_is_distinct_from_general_execution_failure(self):
+        replies = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32}) + frame(
+            {"kind": "model_call_failed", "allocation": "test-allocation", "diagnostic": "private cause"}
+        )
+        client, writer = self.client(replies)
+        handle = await client.prepare((b"request",))
+        with self.assertRaises(ModelCallFailed) as caught:
+            await client.execute(handle)
+        self.assertEqual(caught.exception.diagnostic, "private cause")
+        self.assertTrue(writer.closed)
+
     async def test_wrong_result_count_or_shape_preserves_private_reply(self):
         for result in ([], [{"private": "PRIVATE_RESULT"}] * 2, {"private": "PRIVATE_RESULT"}):
             with self.subTest(shape=type(result).__name__):

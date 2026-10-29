@@ -44,7 +44,7 @@ from nmrnet_provider.result import ResultRejected
 from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
-from nmrnet_provider.worker_client import PredictionExecutionFailed
+from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed
 from provider_core.analysis import AnalysisSuccess
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import MAX_EVIDENCE_BYTES, ProtectedEvidence, TerminalOperation, acknowledge_start
@@ -120,10 +120,13 @@ class _SwallowingSession(_ReportingSession):
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
     def test_prediction_diagnostic_is_bounded_and_redacts_known_secret(self):
-        failure = PredictionExecutionFailed("allocation failed; api_key=PRIVATE_KEY")
-        rendered = json.dumps(failure_evidence(failure, secrets=("PRIVATE_KEY",)))
-        self.assertIn("allocation failed", rendered)
-        self.assertNotIn("PRIVATE_KEY", rendered)
+        for failure_type in (PredictionExecutionFailed, ModelCallFailed):
+            with self.subTest(failure_type=failure_type):
+                failure = failure_type("allocation failed; api_key=PRIVATE_KEY")
+                rendered = json.dumps(failure_evidence(failure, secrets=("PRIVATE_KEY",)))
+                self.assertIn("allocation failed", rendered)
+                self.assertIn("Scientific worker failed", rendered)
+                self.assertNotIn("PRIVATE_KEY", rendered)
 
     def test_retry_refusal_is_safe_without_exposing_unrelated_not_implemented_errors(self):
         from nmrnet_provider.config import ScientificRetryNotImplemented
