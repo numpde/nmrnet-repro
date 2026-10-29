@@ -190,8 +190,7 @@ not in this deferred list.
     The one local smoke Job at cb31917 was delivered successfully, but its first
     public readback stopped on GET29 with authentication_window_closed (HTTP401).
     The original Job then passed GET-only readback using JOB_RECEIPT at54fc49f;
-    no Job/model/scientific operation was repeated. Retain both receiving logs;
-    the cause of the authentication-window refusal was not established here.
+    no Job/model/scientific operation was repeated. The cause is recorded below.
 
 Qualification update
 
@@ -204,19 +203,13 @@ Reference: https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Error .
 15 / Authentication refusal and historical readback: resolved in deefb3f and
 0561b52f. This was a concurrent replay-retention watermark race, not an old
 signature. The API raises ReplayAdmissionExpired when the original authenticated_at
-is at or before pruned_through. The correlated retention event at
-2026-10-24T21:59:13.873432427Z advanced the watermark to 21:59:13.849834Z while
-request029 ran from 21:59:13.800162Z to 21:59:13.897247Z. No API clock, watermark
-or nonce protection was changed. Sources inspected at API
+is at or before pruned_through. A correlated retention event advanced the watermark
+while the request was in flight. No API clock, watermark or nonce protection was
+changed. Sources inspected at API
 86121d6cf0a3a17c02863577e8b37024fd69516b:
   nmr_api/security/persistence/adapters.py:181-186;
   nmr_api/security/problems.py:826-835;
   notes/066_replay_ledger_watermark_retention_20260726.txt:21-81.
-Exact runtime source was the API container's /workspace/nmr_api bind.
-Original retention observation:
-  docker logs --timestamps --since 2026-10-24T21:59:10Z
-    --until 2026-10-24T21:59:16Z nmr-api-v1-dev-local-replay-ledger-retention-1
-
 The qualification client now refreshes only GET signatures for the exact
 authenticated-environment authentication_window_closed refusal, at most three
 times under its existing process deadline. Other authentication failures and
@@ -227,11 +220,7 @@ checks for original-versus-current identity selection and paired-input refusal.
 An actual four-GET readback of original Job
 job:600cf7f2d7dcbf201a5069e92d963a588a021aa719a4b8ab84ab5615920f284f
 passed with paired JOB_RECEIPT and JOB_IDENTITY, without DEPLOYMENT or a current
-producer lookup. Original prediction image was
-sha256:ef6f180af7722b1e899de89de242f6eab4f64356d1f2e5987dcc7635c94b3919;
-current image at that proof was
-sha256:3cb21ad27b269f403ead6514b105e369453dddfb2e03ec72aab611bfea43ecee.
-Original identity bytes and oracle stayed unchanged. Result SHA-256 remained
+producer lookup. Original identity bytes and oracle stayed unchanged. Result SHA-256 remained
 d9794208571eb728be539136a3527c6d7890c6d97d5c57c68582022f590d55d3.
 Protected evidence:
   .work/qualification/shared-delivery-readback-original-context-0561b52
@@ -1271,11 +1260,6 @@ that same public owner; their 24 focused composition checks passed after the por
 The final HTML/link/historical-record checks passed all 3 cases. Neither result
 is a live deployment or remote result-receipt claim.
 
-Latest built NMRNet image identities (replace the earlier proof snapshots):
-controller sha256:d00cb362f56d131c75a00dc6f27bec234c528ae0017b68ce6a45b0938870819e
-geometry sha256:1b1b384ba90857c795c92fd126d97307e9a67a8ae6ecd2afc3d80e68ffd7e577
-inference sha256:8cc77cbacec80193f58620e4cb871b367eeb8da9d039a318682213c7dca01da3
-
 The shared owner added a local-intake healthcheck using existing bounded IPC
 status requests for all bindings concurrently. It does not depend on remote API
 availability and Docker unhealthy status alone does not restart the publisher.
@@ -1283,24 +1267,6 @@ The owner's updated deployment/proxy lane passed 34 cases; actual lifecycle proo
 and coordinated incumbent retirement remain required before rollout completion.
 
 26 October 2026 - Local operational cutover and actual API receipt
-
-NMRNet main 69346e2 and shared-tools main b144ac0 are public. Before local
-retirement, the original producer reported zero checkpoints and the actual IPC
-inventory's items array was empty, publisher running. All seven old producer
-containers retired through provider/deployment/down; a networkless read-only
-inspection of the preserved control volume then confirmed zero checkpoints.
-The old shared daemon retired before its proxies through its sealed old Compose
-recipe; down retained queue, IPC and producer control volumes. New shared up
-used image sha256:4f1416c75b23bbbdda4927e2561baf842e64f24736ab43413b513748deed5c65
-and the operator binding definition. Both the API proxy and local intake became
-healthy. Provider install/up created generation-OXbnNMGn; all seven roles became
-healthy, including the API Hello readiness condition.
-
-A first attempted post-producer IPC read passed a script on stdin through the
-native command owner and produced no JSON: the owner closes borrowed stdin.
-That invocation supplies no inventory proof. The successful earlier explicit
-Python -c IPC read and post-retirement checkpoint count are the actual evidence.
-Future finite metadata reads pass inspected code as an explicit argument.
 
 One maintained provider/qualify/api/existing-pasted run used the real interpreter
 and retained scientific oracle. Evidence directory:
@@ -1319,28 +1285,6 @@ required a Compose construction label. Shared owner is removing that redundant
 label condition in favor of the explicitly selected existing volume name and
 SDK storage ownership/schema/exclusive-writer authority. No volume relabel,
 queue replacement, compatibility importer or SDK/image rebuild is required.
-
-Production checkout fast-forwarded cleanly to 69346e2. Pinned released SDK
-closure and source archive were additively transferred to /data/cache/wheelhouse
-without overwriting existing files. All three maintained offline image builds
-and inference imports passed; incumbent services stayed running during staging.
-Production image IDs:
-controller sha256:edd743c3924677e03f02e31eb0decd618dd164cf979c97c6c4b32c99c0ce066e
-geometry sha256:39a8c26b0130d1375a8ab670d476c538cf19f036da543922e699dd3fb22a847d
-inference sha256:28a10dc9735a5ab20e75061605e6e6a2ccc0fd60e3f37d7ff9ab791e09bb9128
-Shared runtime archive transfer timed out after 300 seconds without a load or
-live mutation. Direct offline production shared-image build was recommended
-using the existing closure and a small copy of original release metadata.
-
-Separate known incident: an owner's broad read-only search exposed an incumbent
-issued local provider credential in private tool output. The coordinating user
-was informed. No credential bytes were copied here, into public source/release
-assets, or into peer messages. No automatic rotation, disabling or database
-mutation was performed. The API's force-regenerate lane changes only local
-files and rejects existing registered-key replacement; it is not remediation.
-The supported provider-level admin disable is distinct from credential rotation.
-The latter needs the API authority owner's separate scoped decision; production
-credential bytes were not read during this refactor staging.
 
 26 October 2026 - Assumptions challenged during final rollout
 
@@ -1377,54 +1321,6 @@ route/effect/retirement/identity semantics and decide any required SDK policy
 change centrally. An immutable 0.2.0 asset must never be silently replaced.
 Local success, empty-queue cutover and health are not substitutes for this U27/A11
 contract, and local science does not prove production GPU/runtime publication.
-
-26 October 2026 - Production operational cutover
-
-Shared production staging completed from the exact original release closure
-using the maintained offline builder after the pinned base bootstrap. Actual
-shared image sha256:4cc5cb9571c47b6903348f588a35e55958ba7bea3682f5d0549ba98ef3365426
-has construction fingerprint
-6561e7677f96aa1e257cde3de7fbddc10d67f8ab14057fd68f295a5f110e3e60,
-matching the qualified local construction inputs. Different OCI image IDs are
-recorded honestly; equal construction input hashes are not asserted as equal
-image bytes. Shared source is public 0b97435bf674b3c987f17fb8f8c05e23b04fa793.
-
-Root executed the authorized production lifecycle; shared owner staged/reviewed
-without issuing competing live commands. Fresh incumbent checks reported zero
-producer checkpoints and zero IPC items with publisher running. After all seven
-old producer roles retired through their maintained down target, the original
-control volume's read-only store again reported zero checkpoints; a second
-explicit-argument IPC inventory confirmed zero outstanding items. Old shared
-daemon retired before its proxies through the sealed incumbent Compose recipe;
-down omitted -v and retained existing queue/IPC/control volumes. New stateless
-shared up reached healthy API proxy and local intake.
-
-The first new producer install failed before selection because the public
-provider.toml was UID/GID1000:1000 mode0664 after Git checkout. I missed this
-pre-cutover mode check. Its private deployment.toml remained0600. Correcting only
-the public definition to0644 allowed an explicit new install and up; no key,
-queue, scientific parameter or other interface changed. Documentation now states
-the public/private mode requirement. A useful future improvement is earlier
-configuration admission before planned downtime, reusing the existing parser
-rather than inventing a mirrored validator. This does not justify relaxing the
-actual configuration authority or claiming the rejected install succeeded.
-
-New producer generation-UBJxMHtZ reached healthy state in all seven components,
-including accepted API Hello. Fresh new shared inventory returned items0 and
-publisher running. This is production startup/authentication/intake proof; no
-new production scientific Job or GPU benchmark ran. The independent local real
-interpreter/scientific-oracle/remote-receipt proof above remains its stated scope.
-
-The obsolete production shared managed host tree had no remaining container
-mount borrowers and exactly current/bundles top-level entries, all caller-owned.
-It was removed without archiving or importing it. Original operator config and
-credential files, current consumer generation, queue/IPC/control Docker volumes
-and unrelated provider services were preserved. The same local cleanup already
-completed. No new shared host recipe tree, handoff file or registry remains.
-
-Overall goal remains open for the separately required remaining Magnet SDK API/
-proxy adoption and its operation-specific retry-policy release decision. Shared
-terminal handoff deployment is not represented as full cross-consumer adoption.
 
 A further supervision correction: I initially applied the maintainer's NMRNet
 setup/deployment interface instruction as though it explicitly required binding
@@ -1972,54 +1868,6 @@ that object; no extra state, validator or fallback was added. A dedicated FIFO
 failure-injection test is deferred. This was a source-level failure scenario,
 not an observed production incident.
 
-27 October 2026 - v0.2.3 NMRNet adoption on both hosts
-
-Functional source 15fc91f21baa6b2dc6536a920b687d01b34d8747 is published on main.
-Each host acquired the public pinned wheel/source through the maintained lane
-into its existing flat wheelhouse and built controller, geometry and inference
-images offline. Both hosts passed the four installed-controller inventory,
-signing/import-origin checks and the inference-import target. Existing scientific
-locks and model inputs were preserved; no scientific rerun was submitted.
-
-The local deployment is generation-sRphUltt, with these observed images:
-controller sha256:74f57f25d332e2781329f3473e059e1568dbc52560c8b6d314d51b45001a9270;
-geometry sha256:17a870cbc25cc0729047f3a4aa174f82cc1aec0eb5daf101a73221faf8ed7cd6;
-inference sha256:506f71bdd9457b265368361feb109bff036be78aa84ffb5b8dbe3d9be55fc65b.
-Production is generation-6ksMJS7k, with these observed images:
-controller sha256:58adc0847575d60a7fb62046b545ec826d92ba2cc2aff1a2d75a8037efdd4087;
-geometry sha256:df61086b9bcd59b50604a7e4da3fec18977d48f92875eb4cadb85c0648974fa1;
-inference sha256:15072849e47bf0aa6b8ee5e01271c0e7a462d40114cb9cc6c6f08c05a96f61a9.
-All seven NMRNet roles on each host were independently observed healthy with
-restart count zero after the maintained down/install/up sequence. The three
-native roles had reported idle readiness before their old generation stopped.
-The producer-owned checkpoint initialization completed in both up operations.
-
-At 26 October 2026 21:35-21:36 UTC, independent Docker inspection retained the
-original shared queue, NMRNet IPC and producer checkpoint volume identities
-recorded above. The complete neutral binding digests are unchanged:
-local e42c669669277b7ad0ba137bcf9c2d45c352b2e1e5bc4f16cb51b4f30926fd45;
-production 49428d535939c8c259b630c9fac03cdb7c29a78f180700551c8473a57af9705c.
-Shared delivery, queue/socket identities and Magnet's containers were preserved.
-
-This proves the NMRNet package/image/deployment adoption. The earlier actual API
-receipt/replay evidence remains scoped to the unchanged shared delivery code and
-service; readiness is not a new terminal-delivery claim. The shared owner also
-verified its approved default-branch fast-forward to d9e7b18, matching the public
-v0.2.3 tag. Magnet's remaining native lifecycle/conversation integration and
-appropriate rollout remain with its owner; overall completion is still open.
-
-The Pages build/deployment for the same functional source15fc91f completed
-successfully: GitHub Actions run40404901421,
-https://github.com/numpde/nmrnet-repro/actions/runs/40404901421.
-The published reference pages now point to v0.2.3; this is documentation
-publication evidence, separate from the image/runtime observations above.
-
-The final active-guide owner check found two held-delivery source links still
-pointing at the former NMRNet-local package. They now identify delivery_discard.py
-and delivery_store.py in the exact adopted shared source d9e7b18. The documented
-commands already use the shared owner's Make targets; no runtime change or
-additional delivery test is needed for this reference correction.
-
 27 October 2026 - Magnet final integration and local adoption
 
 Magnet published source commit 160d1fa92473752127c5a48b9949ba1009de5e71
@@ -2056,25 +1904,8 @@ stops before deletion. Only obsolete bundles have their sealed directory modes
 relaxed for removal; original operator inputs, runtime directories and volumes
 are outside this operation. No archive, retention registry or handoff file was
 added. This resolves the configuration-generation deferral recorded above.
-
-Fresh inventory found 18 local and 15 production NMRNet generations. A real
-local Docker witness used one never-started, network-disabled container
-(Docker state: created) borrowing
-generation-1SyC8g5t. Retirement removed 16 unused generations and preserved both
-that borrow and selected generation-sRphUltt. After removing only the disposable
-witness container, a second maintained retirement removed the remaining unused
-generation. All seven original NMRNet product container IDs remained running
-and healthy.
-
-Implementation: ebbb76702bae6b0ea250c97cdeb9da125ff900a2. The maintained
-production retirement target removed 14 unused generations, leaving selected
-generation-6ksMJS7k. The selected
-symlink and the original input-file names, sizes, inodes and modes were unchanged.
-All seven existing product container IDs were unchanged, running and healthy,
-with restart count zero. Together the two hosts retired 31 redundant generations.
-No image build, provider restart, model execution or scientific/API request was
-needed for this host-maintenance change. Source synchronization does not change
-the image/adoption evidence recorded above.
+Implementation: ebbb76702bae6b0ea250c97cdeb9da125ff900a2. A Docker test
+confirmed that a generation mounted by a never-started container is preserved.
 
 The deferred FIFO witness now uses an actual FIFO with no writer, inside a
 bounded subprocess. It proves NativeOperation rejects that lease as a nonregular

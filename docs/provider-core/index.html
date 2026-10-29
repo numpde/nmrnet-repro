@@ -7,9 +7,8 @@ the reusable provider package, result delivery service, network proxies and host
 delivery deployment. NMRNet installs its released <code>provider-core</code> wheel;
 it owns molecular input preparation, NMRNet++ execution and scientific results.</p>
 <h2 id="requirements">Release and installation</h2>
-<p>The <a href="https://github.com/numpde/nmr-provider-tools/releases/tag/v0.2.3">0.2.3 release</a>
-supplies the wheel, source archive, full installation lock and provenance record.
-NMRNet pins the
+<p>The shared owner publishes the wheel, source archive, installation lock and
+provenance record. NMRNet pins the
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-assets.in">GitHub artifact URLs and hashes</a>
 and consumes the
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-install.lock">released installation lock</a>
@@ -21,9 +20,11 @@ acknowledges durable intake. After acknowledgment, the service owns publication,
 retry and recovery of those exact bytes. It deletes a queued payload only after a
 verified matching API receipt or an explicit operator discard. Intake acknowledgment
 is not API completion.</p>
-<p>A crash before durable intake can leave the remote Attempt unresolved. Restarting
-a provider does not repeat scientific work to manufacture a replacement result.
-The provider and delivery service reconcile their existing records with the API.
+<p>If the provider stops before observing the intake acknowledgment, the remote
+Attempt may remain unresolved. The delivery service may still have stored the
+report if its acknowledgment was lost. After the delivery service restarts, it
+continues managing stored reports; some may require operator attention. A provider
+restart does not reconstruct the interrupted Attempt or repeat its scientific work.
 See <a href="../provider.html#result-delivery-and-storage">result delivery and storage</a>.</p>
 <h2 id="configuration">Shared configuration</h2>
 <p>One operator-owned binding definition supplies API identity, credentials, route
