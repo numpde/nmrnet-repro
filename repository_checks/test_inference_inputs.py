@@ -214,7 +214,10 @@ class CapturedInputTests(unittest.TestCase):
                     os.mkfifo(entry)
                 else:
                     entry.mkdir()
-                result = fixture.run("inference_image.sh", "build", additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"})
+                # This path runs two real pip selections inside the bounded fixture.
+                result = fixture.run(
+                    "inference_image.sh", "build", additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"}, timeout=30,
+                )
                 self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertEqual(set(fixture.build_evidence()["wheelhouse_manifest"]), {selected.name, "unicore-source.tar.gz"})
                 self.assertTrue(entry.exists() or entry.is_symlink())
