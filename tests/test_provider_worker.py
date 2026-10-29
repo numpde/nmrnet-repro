@@ -574,6 +574,39 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("OSError", rendered)
         self.assertNotIn("PRIVATE_CLOSE_FAILURE", rendered)
 
+    async def test_cancellation_stays_primary_when_channel_close_fails(self):
+        reader, writer = asyncio.StreamReader(), BufferedWriter()
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1, declaration_sha256="d" * 64)
+        cleanup = OSError("PRIVATE_CLOSE_FAILURE")
+        with patch.object(writer, "close", side_effect=cleanup):
+            task = asyncio.create_task(client.prepare((b"request",)))
+            while not writer.sent:
+                await asyncio.sleep(0)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await task
+        self.assertIsInstance(caught.exception.__cause__, BaseExceptionGroup)
+        self.assertIs(caught.exception.__cause__.exceptions[0], cleanup)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn("CancelledError", rendered)
+        self.assertIn("OSError", rendered)
+        self.assertNotIn("PRIVATE_CLOSE_FAILURE", rendered)
+
+    async def test_cancellation_during_exit_observation_survives_close_failure(self):
+        reader, writer = asyncio.StreamReader(), BufferedWriter()
+        reader.feed_eof()
+        interruption = asyncio.CancelledError()
+        cleanup = OSError("PRIVATE_CLOSE_FAILURE")
+        native = Mock(observe_failure=AsyncMock(side_effect=interruption))
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1,
+                                  declaration_sha256="d" * 64, native=native)
+        with patch.object(writer, "close", side_effect=cleanup):
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await client.prepare((b"request",))
+        self.assertIs(caught.exception, interruption)
+        self.assertTrue(any(isinstance(item, asyncio.IncompleteReadError) for item in caught.exception.__cause__.exceptions))
+        self.assertIn(cleanup, caught.exception.__cause__.exceptions)
+
     async def test_dependency_timeout_after_timer_cancellation_keeps_its_identity(self):
         foreign = TimeoutError("Independent timeout after cancellation")
 

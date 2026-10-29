@@ -142,8 +142,8 @@ class WorkerClient:
             finally:
                 self._close_after_failure(primary)
             raise
-        except (Exception, asyncio.CancelledError):
-            self.close()
+        except (Exception, asyncio.CancelledError) as primary:
+            self._close_after_failure(primary)
             raise
         finally:
             self._busy = False
@@ -156,11 +156,19 @@ class WorkerClient:
         self._writer.close()
 
     def _close_after_failure(self, primary):
+        previous_cause = None if primary is None else primary.__cause__
+        previous_context = None if primary is None else primary.__context__
         try:
             self.close()
         except Exception as cleanup:
             if type(primary) is NativeWorkerExited:
                 primary.retain_cleanup_failure(cleanup)
+            elif isinstance(primary, asyncio.CancelledError):
+                failures = []
+                for failure in (previous_cause, previous_context, cleanup):
+                    if failure is not None and failure is not primary and all(failure is not item for item in failures):
+                        failures.append(failure)
+                raise primary from BaseExceptionGroup("Scientific exchange interruption and independent close failure", failures)
             elif isinstance(primary, Exception):
                 raise ExceptionGroup("Scientific channel failed and its close failed", (primary, cleanup)) from None
             else:
