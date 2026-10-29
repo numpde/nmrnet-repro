@@ -1992,3 +1992,12 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
    terminal delivery can pause its binding rather than retrying the retained
    request. The shared owner is reviewing operation-specific recovery; retain
    TLS verification, the original failure and the API's exact replay rules.
+
+8. NMRNet operator notices are best effort. An atomic pipe rejects a notice
+   larger than its available record limit, and a full or broken sink can reject
+   even a short notice. The process retains the latest failed notice and output
+   error in memory and attempts to report them at shutdown; later failures can
+   replace that record, and the shutdown notice can also fail. The terminal
+   failure and worker cleanup do not depend on logging. Review a bounded way to
+   signal omitted or unavailable diagnostics without claiming durable storage
+   or introducing a local payload dump.
