@@ -250,6 +250,7 @@ class NativeAttemptFactory:
                        "native": allocation}
             if role == "prediction":
                 options["operation_seconds"] = self.policy.prediction_seconds
+                options["declaration_sha256"] = self.execution_identity["prediction_declaration_sha256"]
                 client = PredictionClient(reader, writer, **options)
             elif role == "reader":
                 client = GeometryClient(reader, writer, **options)

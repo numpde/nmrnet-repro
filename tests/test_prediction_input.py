@@ -617,6 +617,18 @@ class SelectedReleaseTests(unittest.TestCase):
         (root / "provenance.json").write_text(json.dumps(self.receipts[tree]))
         return {"member": name, **identity}
 
+    def test_declaration_digest_identifies_the_exact_cached_selection(self):
+        original = self.declaration.read_bytes()
+        selected = self.loader._selection()
+        self.assertEqual(self.loader.declaration_sha256, hashlib.sha256(original).hexdigest())
+        self.declaration.write_text("{}")
+        self.assertIs(self.loader._selection(), selected)
+        self.assertEqual(self.loader.declaration_sha256, hashlib.sha256(original).hexdigest())
+        replacement = SelectedReleaseModels(declaration_path=self.declaration,
+                                             weight_root=self.root / "weight", checkpoint_root=self.root / "checkpoints")
+        replacement._selection()
+        self.assertNotEqual(replacement.declaration_sha256, self.loader.declaration_sha256)
+
     def test_bad_or_non_angstrom_request_never_reads_the_declaration(self):
         self.declaration.unlink()
         for raw, error in (

@@ -37,6 +37,7 @@ class SelectedReleaseModels:
         self.weight_root = weight_root
         self.checkpoint_root = checkpoint_root
         self._specification = None
+        self.declaration_sha256 = None
         self._observed = {"dictionary": None, "elements": {}}
         self._warnings = []
 
@@ -73,6 +74,7 @@ class SelectedReleaseModels:
             if len(content) > 64 * 1024:
                 raise ValueError("Cannot load prediction models: declaration exceeds the 64 KiB byte limit.")
             self._specification = json.loads(content)
+            self.declaration_sha256 = hashlib.sha256(content).hexdigest()
         return self._specification
 
     def _verified_bytes(self, root, source, expected, role):
@@ -167,6 +169,10 @@ class ReleasedPredictionSession:
     def __init__(self, models):
         self._models = models
         self._prediction = predict.PredictionSession(models.load_dictionary, models.load_selected_element)
+
+    @property
+    def declaration_sha256(self):
+        return self._models.declaration_sha256
 
     def prepare(self, raw_requests):
         handle = self._prediction.prepare(raw_requests)

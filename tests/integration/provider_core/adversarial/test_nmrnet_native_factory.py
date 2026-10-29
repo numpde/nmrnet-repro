@@ -274,7 +274,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             admission_stopping=asyncio.Event(),
             config=object(),
             claims=AttemptClaims.live(),
-            execution_identity={},
+            execution_identity={"prediction_declaration_sha256": "d" * 64},
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=seconds, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),

@@ -68,6 +68,7 @@ class FixedJsonPreparation:
 
 
 class SyntheticPrediction:
+    declaration_sha256 = "d" * 64
     def __init__(self, operation):
         self.operation = operation
         self.before = oom_kills()
@@ -124,7 +125,7 @@ async def controller():
         notices.append({"facts": facts, "failure": failure_evidence(failure, secrets=())})
 
     factory = NativeAttemptFactory(
-        config=None, claims=claims, execution_identity={}, selected_artifacts=ARTIFACTS,
+        config=None, claims=claims, execution_identity={"prediction_declaration_sha256": "d" * 64}, selected_artifacts=ARTIFACTS,
         policy=NativePolicy(15, 20, 5), observation_recovery=observation,
         condition_recovery=conditions, start_policy=start_policy,
         on_delivery_retry=unexpected, on_unconfirmed_phase_progress=unexpected,

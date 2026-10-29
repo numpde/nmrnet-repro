@@ -163,8 +163,11 @@ class PredictionClient(WorkerClient):
     worker retirement when this channel closes or an exchange fails.
     """
 
-    def __init__(self, reader, writer, *, allocation, operation_seconds, native=None):
+    def __init__(self, reader, writer, *, allocation, operation_seconds, declaration_sha256, native=None):
         super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds, native=native)
+        if type(declaration_sha256) is not str or re.fullmatch(r"[0-9a-f]{64}", declaration_sha256) is None:
+            raise ValueError("Prediction requires the admitted model declaration SHA-256.")
+        self._declaration_sha256 = declaration_sha256
         self._prepared = None
         self._executed = False
 
@@ -181,13 +184,18 @@ class PredictionClient(WorkerClient):
             {"operation": "prepare", "requests_base64": [base64.b64encode(raw).decode("ascii") for raw in raw_requests]}
         )
         if (
-            set(reply) != {"kind", "allocation", "token"}
+            set(reply) != {"kind", "allocation", "token", "declaration_sha256"}
             or reply["kind"] != "prepared"
             or type(reply["token"]) is not str
             or re.fullmatch(r"[0-9a-f]{32}", reply["token"]) is None
+            or type(reply["declaration_sha256"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", reply["declaration_sha256"]) is None
         ):
             self.close()
-            raise WorkerProtocolError("Scientific worker returned no valid preparation token")
+            raise WorkerProtocolError("Scientific worker returned an invalid preparation token or model declaration identity")
+        if reply["declaration_sha256"] != self._declaration_sha256:
+            self.close()
+            raise WorkerProtocolError("Scientific worker's model declaration differs from the admitted declaration; this worker's prediction was not dispatched")
         handle = object()
         self._prepared = handle, reply["token"], len(raw_requests)
         return handle

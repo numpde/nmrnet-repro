@@ -67,7 +67,8 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
                 require_request_batch(raw_requests)
                 prepared = prediction.prepare(raw_requests)
                 token = secrets.token_hex(16)
-                reply = {"kind": "prepared", "allocation": allocation, "token": token}
+                reply = {"kind": "prepared", "allocation": allocation, "token": token,
+                         "declaration_sha256": prediction.declaration_sha256}
             elif operation == "execute" and set(request) == {"operation", "allocation", "token"}:
                 if token is None or request["token"] != token:
                     raise WorkerProtocolError("Execution requires this connection's current preparation token")

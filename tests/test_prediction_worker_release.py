@@ -157,7 +157,9 @@ class ReleasedWorkerTests(unittest.TestCase):
             worker.start()
             child.close()
             reader, writer = await asyncio.open_unix_connection(sock=parent)
-            client = PredictionClient(reader, writer, allocation=allocation, operation_seconds=120)
+            declaration_sha256 = hashlib.sha256(Path("/input/prediction-models.json").read_bytes()).hexdigest()
+            client = PredictionClient(reader, writer, allocation=allocation, operation_seconds=120,
+                                      declaration_sha256=declaration_sha256)
             prepared = await client.prepare(raw_requests)
             return await client.execute(prepared)
         finally:
