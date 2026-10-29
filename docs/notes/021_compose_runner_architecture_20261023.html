@@ -59,17 +59,15 @@
     <p>Runtime/configuration checkpoint
       <a href="https://github.com/numpde/nmrnet-repro/commit/cb31917">cb31917</a>
       is deployed at <code>https://nmr.localhost:10443</code> with
-      <code>provider:nmrnet-fw-a</code>, and at <code>https://nmr.dapp32.com</code>
-      with <code>provider:nmrnet-pa-a</code>. Each Docker host has its own
+      <code>[local NMRNet provider]</code>, and at <code>https://nmr.dapp32.com</code>
+      with <code>[production NMRNet provider]</code>. Each Docker host has its own
       <code>nmr-api-delivery</code> project, private queue volume and provider-scoped
       socket; only NMRNet is connected so far. All seven NMRNet roles and both
       long-running shared roles started successfully. The finite volume initializer
       exited zero. Production logs also observe transient CONNECT 502 refusals
       followed by read recovery; healthy containers alone do not prove uninterrupted
       API availability.</p>
-    <p>The new local path executed exactly one fixed chloromethane Job:
-      <code>job:600cf7f2d7dcbf201a5069e92d963a588a021aa719a4b8ab84ab5615920f284f</code>,
-      Attempt <code>execution_attempt:sha256:5b2439a867cada5831c0849af12d4e469f7128007f3b429aa99144a06c0269d6</code>.
+    <p>The new local path executed exactly one fixed chloromethane Job.
       The delivery worker reported a verified, non-replayed COMPLETE receipt for body
       <code>sha256:6491f7b2e300e832b81a6031deb3ad72e46359a8e7fcfb333c786a0bff890c52</code>.
       The first public client stopped on a GET with HTTP 401
@@ -2188,7 +2186,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       briefly overlapped it before both were stopped. No qualification Job had
       been submitted, both stores contained no files, and legacy native inventories showed
       no scientific operations. The corrected maintained definition preserves
-      <code>provider:nmrnet-fw-a</code>, <code>lane:nmrnet-local</code> and
+      <code>[local NMRNet provider]</code>, <code>lane:nmrnet-local</code> and
       <code>generation:local-20261023</code>, plus the original one-endpoint OpenAI
       configuration. Its legacy configuration SHA-256 was
       <code>baa22f26ddbd26ca8cd41a8201a4def55bbd46a1a8fa04a4a674ad6124c6e9ad</code>;
@@ -2211,8 +2209,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       <code>demo</code> Job to the existing seven-role <code>nmr-localhost</code>
       deployment and real API at <code>https://nmr.localhost:10443</code>.
       Source revision was
-      <code>40ef43221f19134daae5da9fd4053542e9844cca</code>; Job reference was
-      <code>job:24a42283a79b0cadfa80ff508a7713acce2986f44a1b87841e504daab75521ae</code>.
+      <code>40ef43221f19134daae5da9fd4053542e9844cca</code>.
       The live OpenAI <code>gpt-5.6-luna</code> interpreter selected
       <code>prepare_pasted</code> in one exchange, with zero corrections; interpretation
       was not scripted. The finite client recorded 32 API requests, one Job creation,
@@ -2396,7 +2393,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       <code>nmr-dapp32-com</code>. Inference imports passed. The seven-role stack
       became ready and received its initial Hello acknowledgement from
       <code>https://nmr.dapp32.com</code>, preserving
-      <code>provider:nmrnet-pa-a</code>, <code>lane:nmrnet-pa-a</code>,
+      <code>[production NMRNet provider]</code>, <code>lane:nmrnet-pa-a</code>,
       <code>generation:nmrnet-pa-a-run</code> and the original selected store.
       The old inactive unit/template, environment profile and empty launcher
       directory were removed. Both old frozen credential sets matched maintained
@@ -2418,8 +2415,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       the subsequently received production prediction below.</p>
     <p id="production-api-delivery"><strong>Real production API delivery,
       24 October 2026:</strong> the maintained client-only witness completed one
-      <code>demo</code> Job against <code>https://nmr.dapp32.com</code>:
-      <code>job:496e737eaae6eaec6d3627162d1db0132591c6993716fc561e360b6a89bf4f6b</code>.
+      Job against the production API.
       It recorded 24 client API requests, including readback polling, and did not
       resubmit the Job. The first configured <code>qwen3.8-flash-next</code> endpoint
       returned HTTP 400; <code>gpt-5.6-luna</code> then selected

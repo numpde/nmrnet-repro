@@ -5708,8 +5708,8 @@
 </span><span id="L5706">metadata and the accepted result document. Readback verified canonical Base64,
 </span><span id="L5707">13721 exact decoded bytes and SHA-256:
 </span><span id="L5708">76cad7f1b0c3fc646de762ab11012e60fd9e5155bd34ac6e226bd6041bcc39b6.
-</span><span id="L5709">Job: job:f4b3e820d658200c22cebcef9d2e2c60bee36e4c5edc7a05868d1465857b8c3c
-</span><span id="L5710">Attempt: execution_attempt:sha256:74fb51ffc24056bbb4665f178938d21c077f333c1788569c437baa07025801fb
+</span><span id="L5709">Job: [Job reference omitted]
+</span><span id="L5710">Attempt: [Attempt reference omitted]
 </span><span id="L5711">Input fingerprint: sha256:f9e0090b8bdc69dbe184b8d461aff07915aac4a3a3f5d6b631aac552d7341b82
 </span><span id="L5712">
 </span><span id="L5713">The new Job/Attempt/source joins passed. Received source bytes/positions/origin,
@@ -5954,8 +5954,8 @@
 </span><span id="L5952">Thirty-six responses to signed public requests identified the expected dev-local topology.
 </span><span id="L5953">Delivered length13732 bytes, SHA-256:
 </span><span id="L5954">3eb7aba1c2d8334b4843076f779e5ff5c1a38f6a02716a5a4091060a4bbb94cc.
-</span><span id="L5955">Job: job:a08816f0567784f74ecdabe0284ecf713cdb40ee06309489afc0abe5c108f0f1
-</span><span id="L5956">Attempt: execution_attempt:sha256:f45606ffeff0988638ffa9bcd64593f6b9ea11fd25b863257ea3f62a09426dd8
+</span><span id="L5955">Job: [Job reference omitted]
+</span><span id="L5956">Attempt: [Attempt reference omitted]
 </span><span id="L5957">The Job/specification/source fingerprint joins passed. Received table source is
 </span><span id="L5958">88 bytes, SHA-256 acb27f16267965125a02049811172c6388fb9027dd41517c65c2cd6dcf87a3a5,
 </span><span id="L5959">with received table line positions1–5. Its identity equals the authored source
@@ -6020,8 +6020,8 @@
 </span><span id="L6018">client/passed.json and thirty responses to signed public requests. Discovery,
 </span><span id="L6019">create(non-replayed), provider selection/open and accepted result readback joined
 </span><span id="L6020">one new Job, one succeeded Attempt and the durable non-replayed complete receipt:
-</span><span id="L6021">Job: job:657a9317a16ae22888fc99cf4821d5bce7229e9bda6369481ec91e8ecf1b34d2
-</span><span id="L6022">Attempt: execution_attempt:sha256:e958e14b2d3f32ab01582080c57f5669fe143fbbc7991ed1ba13357731012f89
+</span><span id="L6021">Job: [Job reference omitted]
+</span><span id="L6022">Attempt: [Attempt reference omitted]
 </span><span id="L6023">Public decoded bytes equal the private scientific result:16389 bytes, SHA-256
 </span><span id="L6024">574dbf183feb23e9ab28e97ce2fb1bf74cc81b3823f83e84245c532a6cb4ad0a.
 </span><span id="L6025">
@@ -6177,9 +6177,9 @@
 </span><span id="L6175">unsigned bearer PUT, not 39 signed requests. One non-replayed Upload reservation
 </span><span id="L6176">and exact 127-byte publication finalized with the expected content hash; a new
 </span><span id="L6177">closed Job acquired the exact singleton attachment, selected NMRNet and opened.
-</span><span id="L6178">Upload: upload:sha256:84f5ab3fa08daaefaaebfc2a64c3c0e23ee01dcb200226440e3d663f46f1379d
-</span><span id="L6179">Job: job:a8ac01322fd8c152efe03032ac803188fdfd440737b7c5bed5d1df1c5cc0ea39
-</span><span id="L6180">Attempt: execution_attempt:sha256:573592b71f2d1b7785862b23256758cb7d6e77c2fcff1d8b9d2e2f5979a766bb
+</span><span id="L6178">Upload: [Upload reference omitted]
+</span><span id="L6179">Job: [Job reference omitted]
+</span><span id="L6180">Attempt: [Attempt reference omitted]
 </span><span id="L6181">Public readback records one succeeded Attempt and accepted result, matching the
 </span><span id="L6182">durable complete receipt with replayed=false. Decoded result length 13507 bytes,
 </span><span id="L6183">SHA-256 fd89e9f7033017bcbc4737111719bb3801b28c190e97806c3e39afadc801d5dc.
@@ -6367,8 +6367,8 @@
 </span><span id="L6365">public API requests; this lane sent no unsigned Upload PUT. One non-replayed
 </span><span id="L6366">Job and one succeeded Attempt join the accepted public result and durable
 </span><span id="L6367">complete receipt with replayed=false:
-</span><span id="L6368">Job: job:81ee96c9b6321d4d046d7070c51a26ce4fd6da65681dca5abab0e7d18f1ae7aa
-</span><span id="L6369">Attempt: execution_attempt:sha256:1abadfe2ac9f00d52518f9c5e33aff080050dfb11fb7d7dec2381bd87d42235d
+</span><span id="L6368">Job: [Job reference omitted]
+</span><span id="L6369">Attempt: [Attempt reference omitted]
 </span><span id="L6370">Public decoded bytes equal the retained scientific result: 26939 bytes, SHA-256
 </span><span id="L6371">8e9c71224697b532f28687163d64d29eb113376329eaf49714bb3b91a3f0c205.
 </span><span id="L6372">
@@ -7702,7 +7702,7 @@
 </span><span id="L7717">  probe_parent=$(umask 077; mktemp -d /tmp/nmrnet-format-choices.XXXXXXXX)
 </span><span id="L7718">  make provider/qualify/interpreter/formats \
 </span><span id="L7719">    INTERPRETER_CONFIG=&quot;$PWD/.work/provider/interpreters/openai/interpreter.toml&quot; \
-</span><span id="L7720">    EXTERNAL_INTERFACE=wlp1s0 RESOLVERS=&#x27;41.212.0.100 8.8.8.8&#x27; \
+</span><span id="L7720">    EXTERNAL_INTERFACE=&lt;interface&gt; RESOLVERS=&lt;resolvers&gt; \
 </span><span id="L7721">    OUTPUT=&quot;$probe_parent/evidence&quot;
 </span><span id="L7722">
 </span><span id="L7723">The explicit interface/resolvers reuse R45&#x27;s local observation; refresh it before
@@ -7789,7 +7789,7 @@
 </span><span id="L7807">followed. The finite client exited1 and the outer Make lane exited2; this is a
 </span><span id="L7808">FAILED external run, not a delivered SDF result or a new scientific reference.
 </span><span id="L7809">Original Upload:
-</span><span id="L7810">  upload:sha256:b3400b6cb4e0cb7c901c5982d98245afc50a9f95022adaca20fe1564cb2c87dc
+</span><span id="L7810">  [Upload reference omitted]
 </span><span id="L7811">Reservation operation_ref:
 </span><span id="L7812">  nmrnet-upload:6a284776f5e8484d97fc7aaf44e2af26
 </span><span id="L7813">Actual deterministic ZIP:1150 bytes, SHA256
@@ -7887,10 +7887,10 @@
 </span><span id="L7916">finalization200 at2026-10-23T05:03:58.361600Z bound that hash/size. This was an
 </span><span id="L7917">explicit evidenced recovery, not a blind automatic retry. No new Upload
 </span><span id="L7918">reservation was sent. One Job was created, attached, selected and opened:
-</span><span id="L7919">  job:74e0ff05bea007edfd83bfe852f83a85db4a19f09115f1ce3faf7ba95e9de5ec
-</span><span id="L7920">  execution_attempt:sha256:9279e29ac5e5d0cbe7a1c6c4b2c1f6d431ee41030d58b15de2bdffe65bd33425
-</span><span id="L7921">  analysis_result:sha256:becde70033a75da1ab603e4b427429c64e16e1f72c3e607a7b308e85e8104548
-</span><span id="L7922">Job create operation_ref nmrnet-first-api:f06d0975bcbc4b26a9d442cb35ce25e9.
+</span><span id="L7919">  [Job reference omitted]
+</span><span id="L7920">  [Attempt reference omitted]
+</span><span id="L7921">  [result reference omitted]
+</span><span id="L7922">Job create operation_ref [operation reference omitted].
 </span><span id="L7923">Specification fingerprint:
 </span><span id="L7924">  sha256:82151a9ca7e2433ff5b4a23dfebd0345ba63056456a62793b654deda847f889a
 </span><span id="L7925">
@@ -7970,7 +7970,7 @@
 </span><span id="L8001">
 </span><span id="L8002">Ambiguity command: make provider/qualify/interpreter/ambiguity with
 </span><span id="L8003">INTERPRETER_CONFIG=.work/provider/interpreters/openai/interpreter.toml (absolute
-</span><span id="L8004">checkout path), EXTERNAL_INTERFACE=wlp1s0, the resolvers above and fresh OUTPUT:
+</span><span id="L8004">checkout path), the selected interface and resolvers and fresh OUTPUT:
 </span><span id="L8005">  /tmp/nmrnet-interpreter-ambiguity-e211390-20261023
 </span><span id="L8006">Process/host budgets800/820s, exchange/retirement25/5s. Actual batch passed4/4,
 </span><span id="L8007">outer exit0; each conversation had zero corrections/preparation attempts:

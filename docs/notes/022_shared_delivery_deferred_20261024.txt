@@ -218,7 +218,7 @@ The maintained client lane passes 44 tests, including real Bash coordinator
 checks for original-versus-current identity selection and paired-input refusal.
 
 An actual four-GET readback of original Job
-job:600cf7f2d7dcbf201a5069e92d963a588a021aa719a4b8ab84ab5615920f284f
+[Job reference omitted]
 passed with paired JOB_RECEIPT and JOB_IDENTITY, without DEPLOYMENT or a current
 producer lookup. Original identity bytes and oracle stayed unchanged. Result SHA-256 remained
 d9794208571eb728be539136a3527c6d7890c6d97d5c57c68582022f590d55d3.
@@ -1269,12 +1269,8 @@ and coordinated incumbent retirement remain required before rollout completion.
 26 October 2026 - Local operational cutover and actual API receipt
 
 One maintained provider/qualify/api/existing-pasted run used the real interpreter
-and retained scientific oracle. Evidence directory:
-.work/qualification/shared-sdk-refac-69346e2
-Job job:02fc0828bad91b5fd9ff64aa3f52cf501e6f5bc98e95fe6bc345372ec3225497
-Attempt execution_attempt:sha256:458c5386657d3dea0b73ef6f0713a1fcc80537c9f9ed8e5c8c191f26a3c11f28
-The API final Attempt read returned succeeded, from 2026-10-26T12:46:25.086803Z
-to 12:46:39.115886Z. passed.json reports scientific_repeatability=true and
+and retained scientific oracle. The API returned a succeeded Attempt;
+passed.json reports scientific_repeatability=true and
 interpretation_scripted=false. This establishes actual remote API publication
 and numerical comparison for one pasted-input Job; it is not a broad benchmark.
 No further local scientific repetition is required for this slice.
@@ -1714,8 +1710,8 @@ load_delivery_service without starting another service or opening the queue.
 For each binding, its installed ProviderAPI performed jobs() with
 analysis_kind_ref=peaks_from_mol, has_provider_execution_attempt=false, limit=1,
 cursor=None through the configuration's actual API proxy socket. Both local
-identities (provider:nmrnet-fw-a and provider:magnet-fw-a) and both production
-identities (provider:nmrnet-pa-a and provider:magnet-pa-a) returned authenticated,
+identities ([local NMRNet provider] and [local Magnet provider]) and both production
+identities ([production NMRNet provider] and [production Magnet provider]) returned authenticated,
 admitted pages with zero items. All four clients confirmed transport retirement;
 both finite commands exited zero. Output contained only provider identity,
 operation, success, item count and retirement confirmation, without credentials,
@@ -1749,9 +1745,7 @@ finding; it is not a new gate on Magnet's current integration and delivery proof
 Production Magnet adoption and authentic replay, 26 October 2026, 19:46 UTC
 
 The actual shared daemon's Docker log contained one matching delivery_published
-event for provider:magnet-pa-a, operation complete, on the original production
-API https://nmr.dapp32.com:
-Attempt execution_attempt:sha256:0953a16e35b10a742b2d143bb68552f6b58e7713f4c6a2013d635919c0966a0b;
+event for the selected provider, operation complete, on the production API:
 body sha256:637a40883622ca7f9a4e8ace96f4bf26c3e4046ea8f02c297e88802c5f5ee5db;
 replayed true.
 The SDK emits that event after a matching API receipt and queue-row removal
