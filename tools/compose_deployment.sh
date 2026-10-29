@@ -246,6 +246,11 @@ initialize_lifetime() {
     [[ $image =~ ^sha256:[0-9a-f]{64}$ && $volume =~ ^[a-z0-9][a-z0-9_-]{0,62}-control-[0-9a-f]{64}$ \
         && $uid =~ ^[1-9][0-9]*$ && $gid =~ ^[1-9][0-9]*$ && -z $extra ]] \
         || { refuse 'the installed provider lifetime grant or its image/owner is malformed.'; return 2; }
+    # The project has no remaining containers at this point. A borrower from
+    # any project, including a stopped container, owns the volume until removed.
+    capture_stop_metadata ps --all --quiet --filter "volume=$volume"
+    [[ ! -s $stop_query ]] \
+        || { refuse 'the provider lifetime volume is attached to another container; inspect its owner before starting.'; return 2; }
     IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
     helper_name=nmrnet-lifetime-${helper_uuid//-/}
     run 120 run --rm --pull never --name "$helper_name" --init --network none --read-only \

@@ -69,7 +69,10 @@ printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
  ps)
     [[ ${TEST_PS_STATUS-0} == 0 ]] || exit "$TEST_PS_STATUS"
-    if [[ " $* " == *' --all '* ]]; then printf '%s' "${TEST_CONTAINERS-}";
+    if [[ " $* " == *' --filter volume='* ]]; then
+        [[ ${TEST_VOLUME_PS_STATUS-0} == 0 ]] || exit "$TEST_VOLUME_PS_STATUS"
+        printf '%s' "${TEST_VOLUME_BORROWERS-}"
+    elif [[ " $* " == *' --all '* ]]; then printf '%s' "${TEST_CONTAINERS-}";
     elif [[ ${TEST_LIVE-false} == true ]]; then printf '%064d\n' 7; fi
     ;;
  run)
@@ -306,6 +309,19 @@ esac
                 result = self.run_command('up', changes=changes)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(len(self.calls()[before:]), 1)
+
+    def test_up_refuses_lifetime_volume_borrowers_before_initialization(self):
+        result = self.run_command('up', changes={'TEST_VOLUME_BORROWERS': CID + '\n'})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('lifetime volume is attached', result.stderr)
+        volume = 'nmr-api-delivery-control-' + '0' * 63 + '1'
+        self.assertIn(['ps', '--all', '--quiet', '--filter', f'volume={volume}'], self.calls())
+        self.assertFalse(any('initialize-lifetime' in call or 'up' in call for call in self.calls()))
+
+    def test_up_refuses_failed_lifetime_borrower_inspection(self):
+        result = self.run_command('up', changes={'TEST_VOLUME_PS_STATUS': '7'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any('initialize-lifetime' in call or 'up' in call for call in self.calls()))
 
     def test_completed_command_exits_without_reading_new_checkout_tail(self):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture', TEST_PAUSE='true')

@@ -2024,11 +2024,3 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
     every supported engine/session failure. When changing build ownership, verify
     the actual client-session and daemon boundaries before changing cleanup or
     claiming that the daemon can still read a removed host path.
-
-12. Lifetime-volume borrowers: tools/compose_deployment.sh initializes the
-    selected external control volume, and tools/provider_deployment.py checks its
-    root ownership, mode and unexpected nonempty state. Startup does not inventory
-    other containers borrowing that volume. Review exact volume identity and
-    borrower admission when changing lifetime-volume ownership; include stopped
-    containers and preserve the existing producer's lock and state. Direct Docker
-    callers remain outside the deployment lock.
