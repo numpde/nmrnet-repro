@@ -77,6 +77,7 @@ class LauncherFixture:
             "check_git_inputs.sh",
             "inference_image.sh",
             "inference_native.sh",
+            "image_lifecycle.sh",
             "inference_inputs.sh",
             "wheelhouse_path.sh",
             "wheelhouse_inputs.sh",
