@@ -221,6 +221,32 @@ class WorkerFramingTests(unittest.TestCase):
         self.assertEqual(reply["kind"], "model_call_failed")
         self.assertIn("model failure", reply["diagnostic"])
 
+    def test_model_failure_with_failed_evidence_recording_is_not_model_only(self):
+        token = "a" * 32
+        raw = encoded_request(atoms=["H"], coordinates=[[0, 0, 0]])
+        connection = RecordingConnection(prepare_frame(raw) + execute_frame(token))
+        models = Mock(
+            declaration_sha256="d" * 64,
+            load_dictionary=Mock(return_value=PredictionDictionary()),
+            load_selected_element=Mock(return_value=(object(), object())),
+            observed_artifacts=Mock(side_effect=OSError("PRIVATE_EVIDENCE_FAILURE")),
+        )
+        session = ReleasedPredictionSession(models)
+        cause = prediction_model.ModelCallFailed("PRIVATE_MODEL_FAILURE")
+        cause.__cause__ = ValueError("PRIVATE_MODEL_CAUSE")
+        with (
+            patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
+            patch("nmrnet_inference.release.importlib.metadata.version", return_value="fixture"),
+            patch.object(prediction_model, "compose_net_input", return_value=object()),
+            patch.object(prediction_model, "predict_composed_element", side_effect=cause),
+        ):
+            serve_connection(connection, session, allocation="test-allocation", io_seconds=1)
+        reply = document(connection.sent[-1][4:])
+        self.assertEqual(reply["kind"], "execution_failed")
+        self.assertIn("PRIVATE_MODEL_FAILURE", reply["diagnostic"])
+        self.assertIn("PRIVATE_MODEL_CAUSE", reply["diagnostic"])
+        self.assertIn("PRIVATE_EVIDENCE_FAILURE", reply["diagnostic"])
+
     def test_later_geometry_failure_sends_cause_and_completed_input_identity_without_values(self):
         requests = (encoded_request(atoms=["H"], coordinates=[[0, 0, 0]]), encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]))
         token = "a" * 32
