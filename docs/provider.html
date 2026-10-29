@@ -612,7 +612,8 @@ first accepted Hello still gates discovery and allocation; a periodic Hello outa
 does not cancel an active prediction. The initial delay is
 <code>service.idle_seconds</code>; it doubles after each failed cycle, capped by the required
 <code>service.api_backoff_max_seconds</code>, which must be at least <code>idle_seconds</code>. Each
-actual wait is randomly selected between half and all of that delay. A complete
+local wait is randomly selected between half and all of that delay. A valid API
+<code>Retry-After</code> delay is added to it and can exceed the local cap. A complete
 successful read cycle or accepted Hello resets its own backoff. Requests keep their
 configured deadlines; an outage may wait until recovery or stop, and stop interrupts
 the backoff wait. A startup
