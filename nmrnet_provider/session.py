@@ -326,11 +326,12 @@ class NMRNetSession:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific failure arrived after retirement began; it cannot be accepted.") from cause
             try:
-                diagnostic = cause.diagnostic
-                if len(diagnostic) > 8192:
-                    diagnostic = {"head": diagnostic[:4096], "tail": diagnostic[-4096:],
-                                  "omitted_characters": len(diagnostic) - 8192}
-                evidence = _evidence({"prediction_failure": {"diagnostic": diagnostic}})
+                diagnostic = json.dumps(cause.diagnostic, ensure_ascii=True).encode("ascii")
+                evidence = _evidence({"prediction_failure": {
+                    "diagnostic_encoding": "JSON string encoded as ASCII",
+                    "diagnostic_bytes": len(diagnostic),
+                    "diagnostic_sha256": hashlib.sha256(diagnostic).hexdigest(),
+                }})
             except Exception as evidence_failure:
                 raise evidence_failure from cause
             if self._on_prediction_failure is not None:

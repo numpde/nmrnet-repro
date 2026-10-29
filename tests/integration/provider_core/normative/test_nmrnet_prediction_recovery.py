@@ -1,6 +1,7 @@
 """An interrupted prediction does not trigger another scientific execution."""
 
 import asyncio
+import hashlib
 import json
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -16,13 +17,14 @@ from provider_core.analysis import AnalysisFailure
 class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_large_diagnostic_does_not_prevent_truthful_failure(self):
         ports = SessionPorts()
-        original = PredictionExecutionFailed("a" * 300000)
+        original = PredictionExecutionFailed("💧" * 300000)
         ports.worker.execute = AsyncMock(side_effect=original)
         prepared = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         outcome = await ports.session.execute(prepared, report_condition=unexpected_condition)
-        diagnostic = json.loads(outcome.evidence.content)["prediction_failure"]["diagnostic"]
-        self.assertEqual(diagnostic["omitted_characters"], 300000 - 8192)
-        self.assertEqual(len(diagnostic["head"] + diagnostic["tail"]), 8192)
+        diagnostic = json.dumps(original.diagnostic, ensure_ascii=True).encode("ascii")
+        evidence = json.loads(outcome.evidence.content)["prediction_failure"]
+        self.assertEqual(evidence["diagnostic_bytes"], len(diagnostic))
+        self.assertEqual(evidence["diagnostic_sha256"], hashlib.sha256(diagnostic).hexdigest())
         self.assertIsInstance(outcome, AnalysisFailure)
         await ports.session.retire()
 
@@ -87,7 +89,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsInstance(outcome, AnalysisFailure)
                     self.assertEqual(outcome.message, "Prediction did not return a complete verified result.")
                     self.assertNotIn(failure.diagnostic, outcome.message)
-                    self.assertIn(failure.diagnostic.encode(), outcome.evidence.content)
+                    self.assertNotIn(failure.diagnostic.encode(), outcome.evidence.content)
                 else:
                     with self.assertRaises(type(failure)) as caught:
                         await session.execute(prepared, report_condition=unexpected_condition)

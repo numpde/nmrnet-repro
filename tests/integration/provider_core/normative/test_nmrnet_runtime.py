@@ -28,7 +28,7 @@ from provider_core.uploads import UploadInputRejected
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_prediction_failure_is_delivered_once_with_private_diagnostic_separate(self):
         ports = SessionPorts()
-        failure = PredictionExecutionFailed("PRIVATE_PREDICTION_DIAGNOSTIC")
+        failure = PredictionExecutionFailed("PRIVATE_PREDICTION_DIAGNOSTIC" + "💧" * 300000)
         ports.worker.execute = AsyncMock(side_effect=failure)
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
