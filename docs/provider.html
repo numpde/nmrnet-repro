@@ -745,14 +745,17 @@ the same pinned progress PUT recovery contract above.</p>
 observation made before local stop and within the Attempt's execution permission
 produces a <code>worker_crashed</code> failure for that exact acknowledged Attempt.
 The provider does not repeat its calculation. The public failure gives the phase
-and verified exit status or signal; protected diagnostics retain the underlying
-cause. A signal alone does not establish an out-of-memory diagnosis. Local stop
+and verified exit status or signal. The provider attempts to log the underlying
+diagnostic for the operator. A signal alone does not establish an out-of-memory diagnosis. Local stop
 requests, channel loss and missing records do not establish a crash. An already
 selected completion or failure keeps its own delivery responsibility.</p>
-<p>Each Attempt dispatches prediction once. A failed or interrupted prediction
-is not repeated automatically; its original failure remains available for
-diagnostics, and the original worker is retired. Diagnostic output uses bounded
-Docker logs; failed output remains a protected in-memory observation.</p>
+<p>With <code>scientific_retry.max_retries = 0</code>, an Attempt dispatches
+prediction at most once. The provider attempts to retire the worker after a failure;
+if retirement cannot be confirmed, it retains the cleanup responsibility.
+It writes bounded diagnostics to Docker logs on a best-effort basis. If the log
+sink cannot accept a notice, the provider keeps the latest failed notice in memory
+and tries to report it during shutdown; that report can also fail. A process
+restart loses the in-memory notice.</p>
 <p>The policy is implemented by
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>,
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and
