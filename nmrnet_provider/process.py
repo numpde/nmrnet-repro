@@ -421,8 +421,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             on_api_retry=report_api_retry,
             on_api_recovered=report_api_recovered,
             factory_ready=lambda: factory.shutdown_ready,
-            on_source_exhausted=lambda failure, pending: report_operator_notice(
-                failure, {"event": "source_recovery_exhausted", "job_ref": pending.input.job_ref}
+            on_held_attempt=lambda failure, pending: report_operator_notice(
+                failure, {"event": "attempt_held", "job_ref": pending.input.job_ref}
             ),
             on_observed_crash=lambda crash: report_attempt_notice(
                 crash.acknowledged, crash,

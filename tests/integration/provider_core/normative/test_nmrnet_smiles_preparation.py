@@ -21,7 +21,7 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
             self.ports.generator.wait_closed.assert_awaited_once_with()
 
         owner = self.ports.owner(choose)
-        prepared = await owner.prepare(self.ports.instructions)
+        prepared = await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.assertIs(type(prepared), GeneratedJobInput)
         self.assertIs(prepared.generated, self.ports.batch)
         self.assertEqual(prepared.source.source_bytes, b"CCl")
@@ -43,7 +43,7 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
                 await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
-        prepared = await owner.prepare(self.ports.instructions)
+        prepared = await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.assertIs(prepared.generated, self.ports.batch)
         self.ports.allocate_generator.assert_awaited_once()
         self.ports.allocate_reader.assert_not_awaited()
@@ -62,7 +62,7 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
-        task = asyncio.create_task(owner.prepare(self.ports.instructions))
+        task = asyncio.create_task(owner.prepare(self.ports.instructions, require_execution=lambda: None))
         try:
             await asyncio.wait_for(entered.wait(), timeout=1)
             self.assertFalse(task.done())

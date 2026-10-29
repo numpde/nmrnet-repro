@@ -820,6 +820,16 @@ resources retire, the service can accept another Job within available capacity.
 The limit is separate from an invalid input diagnosis. Unsettled producer cleanup,
 a full live registry or unresolved lifecycle I/O can block fresh work. A shared publisher
 outage can leave outcomes queued while other Jobs proceed within the queue limits.</p>
+<p>If an Upload remains unavailable, observation of an active Attempt is lost for
+too long, or a prediction returns no usable confirmed result, the provider may
+retain that Attempt without reporting a result or repeating the calculation.
+After the original work and its resources have settled, it can accept another Job
+if capacity remains. The provider attempts to write an <code>attempt_held</code>
+notice to Docker logs with the affected Job and available failure details. Not every failure permits
+continuation: an independent cleanup or control failure still stops the service.
+Held Attempts occupy live capacity. A provider restart loses these in-memory holds;
+it does not reconstruct those Attempts, resume their calculations or report a guessed outcome.
+Results already accepted by the delivery service continue through that service.</p>
 <p>The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified
 attribution and owned guidance for unclear units, conformer count or Upload record

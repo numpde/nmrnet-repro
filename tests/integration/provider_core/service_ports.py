@@ -82,7 +82,7 @@ class ServicePeers(AdmissionPeers):
             "on_api_recovered": lambda kind, failure: self.api_notices.append(("recovered", kind, failure)),
             "on_observed_crash": lambda crash: self.api_notices.append(("worker_crash", crash)),
             "factory_ready": lambda: True,
-            "on_source_exhausted": lambda failure, pending: self.api_notices.append(("source_exhausted", failure, pending)),
+            "on_held_attempt": lambda failure, pending: self.api_notices.append(("attempt_held", failure, pending)),
         }
         return ProviderService(**(arguments | changes))
 

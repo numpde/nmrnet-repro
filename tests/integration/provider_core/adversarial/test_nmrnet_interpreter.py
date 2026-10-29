@@ -58,7 +58,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             task = None
             try:
                 with patch.object(httpcore.AsyncConnectionPool, "handle_async_request", new=observe_head):
-                    task = asyncio.create_task(owner.prepare(ports.instructions))
+                    task = asyncio.create_task(owner.prepare(ports.instructions, require_execution=lambda: None))
                     await asyncio.wait_for(received_head.wait(), 1)
                     task.cancel()
                     if repeated_cancellation:
@@ -100,7 +100,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             other = other_ports.owner(chooser.run, chooser=chooser)
             try:
                 with self.assertRaises(ConversationFailed):
-                    await owner.prepare(ports.instructions)
+                    await owner.prepare(ports.instructions, require_execution=lambda: None)
                 self.assertIsNotNone(owner.interpreter_diagnostics)
                 with self.assertRaisesRegex(ValueError, "diagnostic recipient"):
                     await chooser.run(other_ports.instructions, other)

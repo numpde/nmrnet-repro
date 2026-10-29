@@ -85,7 +85,7 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
             chooser = InputInterpreter((chat_endpoint(peer),), max_turns=6)
             owner = ports.owner(chooser.run, chooser=chooser)
             try:
-                prepared = await owner.prepare(ports.instructions)
+                prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
             except Exception as cause:
                 self.fail(json.dumps(failure_evidence(cause, secrets=("PRIVATE_MODEL_KEY",))))
             finally:
@@ -154,7 +154,7 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
 
                     owner = ports.owner(choose, max_worker_calls=settings.max_worker_calls, seconds=settings.seconds)
                     self.addAsyncCleanup(owner.retire)
-                    prepared = await owner.prepare(ports.instructions)
+                    prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
                     self.assertEqual(len(prepared.geometries), 1)
                     self.assertEqual(ports.allocate_reader.await_count, 2)
                     ports.uploads.acquire.assert_awaited_once()

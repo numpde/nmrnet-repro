@@ -114,7 +114,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
 
                 owner = ports.owner(choose)
                 self.addAsyncCleanup(owner.retire)
-                prepared = await owner.prepare(ports.instructions)
+                prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
                 self.assertEqual(prepared.output.as_dict(), output)
                 output["verbosity"] = "untrusted later mutation"
                 self.assertNotEqual(prepared.output.verbosity.value, output["verbosity"])

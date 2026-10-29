@@ -23,7 +23,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.ports.owner(choose)
         with self.assertRaises(InputRejected):
-            await owner.prepare(self.ports.instructions)
+            await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.ports.allocate_generator.assert_not_awaited()
         await owner.retire()
 
@@ -39,7 +39,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.ports.owner(choose, max_worker_calls=1)
         with self.assertRaisesRegex(ValueError, "select"):
-            await owner.prepare(self.ports.instructions)
+            await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.ports.allocate_generator.assert_not_awaited()
         await owner.retire()
 
@@ -53,7 +53,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.ports.owner(choose)
         with self.assertRaises(ConformerShortfall) as caught:
-            await owner.prepare(self.ports.instructions)
+            await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception, failure)
         self.ports.generator_host.retire.assert_awaited_once()
         self.ports.generator.wait_closed.assert_awaited_once()
@@ -70,7 +70,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.ports.owner(choose)
         with self.assertRaises(PreparationRetirementFailed) as caught:
-            await owner.prepare(self.ports.instructions)
+            await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception.operation_failure, failure)
         self.assertIs(caught.exception.failures[0][1], cleanup)
         self.assertNotIn("PRIVATE_", str(caught.exception))
@@ -91,7 +91,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.ports.owner(choose)
         with self.assertRaisesRegex(ValueError, "select"):
-            await owner.prepare(self.ports.instructions)
+            await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.ports.allocate_generator.assert_awaited_once()
         self.ports.allocate_reader.assert_not_awaited()
         self.ports.uploads.acquire.assert_not_awaited()
@@ -112,7 +112,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
-        task = asyncio.create_task(owner.prepare(self.ports.instructions))
+        task = asyncio.create_task(owner.prepare(self.ports.instructions, require_execution=lambda: None))
         await asyncio.wait_for(entered.wait(), timeout=1)
         task.cancel()
         release.set()
@@ -136,7 +136,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
-        task = asyncio.create_task(owner.prepare(self.ports.instructions))
+        task = asyncio.create_task(owner.prepare(self.ports.instructions, require_execution=lambda: None))
         await asyncio.wait_for(entered.wait(), timeout=1)
         task.cancel()
         with self.assertRaises(asyncio.CancelledError):

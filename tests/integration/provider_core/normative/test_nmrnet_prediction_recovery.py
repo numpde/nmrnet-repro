@@ -13,8 +13,8 @@ from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWo
 
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.process_reports import failure_evidence
-from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess
+from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut
+from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess
 
 
 class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -69,10 +69,10 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             max_retries=1, prediction_seconds=5,
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        with self.assertRaises(asyncio.IncompleteReadError) as caught:
+        with self.assertRaises(AnalysisOutcomeUnresolved) as caught:
             await session.execute(prepared, report_condition=unexpected_condition)
-        self.assertIs(caught.exception, lost)
-        self.assertIs(caught.exception.__context__, first)
+        self.assertIs(caught.exception.__cause__, lost)
+        self.assertIs(lost.__context__, first)
         self.assertEqual(allocation.await_count, 2)
         replacement.execute.assert_awaited_once()
         await session.retire()
@@ -323,8 +323,15 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         await session.retire()
 
     async def test_failure_is_preserved_without_reallocating_or_reexecuting(self):
+        interrupted = asyncio.CancelledError()
+        interrupted.__cause__ = OSError("independent interruption evidence")
+        underlying = TimeoutError()
+        underlying.__cause__ = interrupted
+        timeout_with_interruption = WorkerExchangeTimedOut("Prediction timed out", send_started=True)
+        timeout_with_interruption.__cause__ = underlying
         for failure in (PredictionExecutionFailed("Prediction failed"), ModelCallFailed("Model call failed"),
-                        asyncio.IncompleteReadError(b"", 1), TimeoutError("Prediction timed out")):
+                        asyncio.IncompleteReadError(b"", 1), TimeoutError("Prediction timed out"),
+                        WorkerExchangeTimedOut("Prediction was not sent", send_started=False), timeout_with_interruption):
             with self.subTest(failure=type(failure).__name__):
                 ports = SessionPorts()
                 allocate = AsyncMock(side_effect=ports.allocate_prediction)
@@ -342,6 +349,10 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(outcome.message, "Prediction did not return a complete verified result.")
                     self.assertNotIn(failure.diagnostic, outcome.message)
                     self.assertNotIn(failure.diagnostic.encode(), outcome.evidence.content)
+                elif type(failure) is asyncio.IncompleteReadError:
+                    with self.assertRaises(AnalysisOutcomeUnresolved) as caught:
+                        await session.execute(prepared, report_condition=unexpected_condition)
+                    self.assertIs(caught.exception.__cause__, failure)
                 else:
                     with self.assertRaises(type(failure)) as caught:
                         await session.execute(prepared, report_condition=unexpected_condition)

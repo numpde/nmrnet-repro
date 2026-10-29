@@ -23,6 +23,6 @@ class UploadPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose, max_worker_calls=1)
         self.addAsyncCleanup(owner.retire)
         with self.assertRaisesRegex(ValueError, "select"):
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
         ports.allocate_reader.assert_awaited_once()

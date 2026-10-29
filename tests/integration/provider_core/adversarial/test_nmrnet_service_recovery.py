@@ -22,6 +22,7 @@ from nmrnet_provider.input_geometry import prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import ServiceFailed
+from nmrnet_provider.worker_client import WorkerResultRejected
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
 from provider_core.api import ApiFailure
@@ -34,6 +35,65 @@ from provider_core.uploads import JobUploads
 
 
 class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unusable_prediction_holds_its_job_and_allows_another(self):
+        async with SuccessiveServicePeers(maximum_live_attempts=2, lose_second_completion=False) as fixture:
+            first = fixture.jobs[0]
+            original_api = fixture.api_peer.response_factory
+            rejected = WorkerResultRejected({"kind": "result", "result": "PRIVATE_INCOMPLETE"})
+            failures = []
+
+            def scientific_ports(pending):
+                index = next(i for i, job in enumerate(fixture.jobs) if job.identity == pending.input)
+                ports = SessionPorts()
+                ports.instructions = fixture.jobs[index]
+                ports.uploads.job_ref = ports.instructions.job_ref
+                if index == 0:
+                    ports.worker.execute = AsyncMock(side_effect=rejected)
+                return ports
+
+            async def api_reply(request, body):
+                method, target, _ = request.split(b"\r\n", 1)[0].decode().split()
+                path = urlsplit(target).path
+                if path == "/provider/v1/execution-attempts/start":
+                    verify_signed_request(request, body, origin=fixture.api_peer.origin,
+                                          key=fixture.config.api.identity.private_key)
+                    index = len(fixture.start_bodies)
+                    self.assertLess(index, 2)
+                    self.assertEqual(json.loads(body)["job_ref"], fixture.jobs[index].job_ref)
+                    if index == 1:
+                        self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
+                    fixture.start_bodies.append(body)
+                    return start_response(execution_attempt_ref=fixture.attempt_refs[index],
+                                          job_ref=fixture.jobs[index].job_ref, analysis_kind_ref=ANALYSIS_KIND_REF)
+                if method == "POST" and path.endswith("/fail"):
+                    failures.append(body)
+                result = await original_api(request, body)
+                if method == "POST" and path.endswith("/complete"):
+                    fixture.stop.set()
+                return result
+
+            fixture.scientific_ports = scientific_ports
+            fixture.api_peer.response_factory = api_reply
+            service = fixture.service()
+            fixture.stack.push_async_callback(fixture.settle_service, service)
+            await asyncio.wait_for(service.run(fixture.stop), 8)
+            await fixture.wait_published()
+            self.assertEqual(len(fixture.start_bodies), 2)
+            self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
+            self.assertEqual(len(fixture.complete_bodies), 1)
+            self.assertEqual(failures, [])
+            self.assertTrue(fixture.allocations[0].host.confirmed)
+            self.assertEqual(fixture.allocations[1].worker.events.count("execute"), 1)
+            notices = [notice for notice in fixture.api_notices if notice[0] == "attempt_held"]
+            self.assertEqual(len(notices), 1)
+            self.assertEqual(notices[0][2].input.job_ref, first.job_ref)
+            self.assertIs(notices[0][1].cause.cause.__cause__, rejected)
+            evidence = json.dumps(failure_evidence(notices[0][1], secrets=()))
+            self.assertIn("WorkerResultRejected", evidence)
+            self.assertIn('"result_is_list": false', evidence)
+            self.assertIn('"kind": "result"', evidence)
+            self.assertNotIn("PRIVATE_INCOMPLETE", evidence)
+
     async def test_settled_source_outage_holds_its_job_and_allows_another(self):
         await self.check_settled_source_outage()
 
@@ -167,7 +227,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fixture.allocations[1].worker.events.count("execute"), 1)
             self.assertEqual(len(fixture.complete_bodies), 1)
             self.assertEqual(failure_bodies, [])
-            notices = [notice for notice in fixture.api_notices if notice[0] == "source_exhausted"]
+            notices = [notice for notice in fixture.api_notices if notice[0] == "attempt_held"]
             self.assertEqual(len(notices), 1)
             failure = notices[0][1]
             exhaustion = failure.cause.cause

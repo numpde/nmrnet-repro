@@ -10,6 +10,7 @@ from tools.container_guard import require_container
 
 require_container()
 
+import asyncio
 import hashlib
 import json
 import re
@@ -233,6 +234,27 @@ def _preparation_summary(document, text, diagnostic_window):
 
 def _describe_scientific_owner(current, text, diagnostic_window):
     evidence = _safe_owner_details(current)
+    if type(current) is asyncio.IncompleteReadError:
+        evidence["incomplete_read"] = {"received_bytes": len(current.partial), "expected_bytes": current.expected}
+    if type(current) is WorkerResultRejected:
+        encoded = current.diagnostic.encode("utf-8")
+        evidence["worker_reply"] = {
+            "diagnostic_sha256": hashlib.sha256(encoded).hexdigest(),
+            "diagnostic_utf8_bytes": len(encoded),
+        }
+        try:
+            reply = json.loads(current.diagnostic)
+        except (ValueError, RecursionError):
+            evidence["worker_reply"]["shape_available"] = False
+        else:
+            if type(reply) is dict:
+                kind, result = reply.get("kind"), reply.get("result")
+                evidence["worker_reply"]["kind"] = (
+                    kind if kind in ("result", "failure", "execution_failed", "model_call_failed") else "unrecognized"
+                )
+                evidence["worker_reply"]["result_is_list"] = type(result) is list
+                if type(result) is list:
+                    evidence["worker_reply"]["result_count"] = len(result)
     if type(current) in (WorkerReportedFailure, PredictionExecutionFailed, ModelCallFailed):
         evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
     if type(current) is InputRejected and current.diagnostic is not None:

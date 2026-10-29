@@ -25,10 +25,10 @@
     }
   },
   "files": {
-    "provider_core-0.5.1-install.lock": "e210e69b8235aa179558d484bd23c3677ebd8b747a6cd02d22073019111b43d0",
-    "provider_core-0.5.1-native-install.lock": "2a620cf2a4197f462bc75ea1dddcb07495efd1449534f7f1ca96011d1bcb0b4f",
-    "provider_core-0.5.1-py3-none-any.whl": "3954f220c72cb753c1cc87a77644f1cbd69754a4641c93ea03b9c89ebabb8c8f",
-    "provider_core-0.5.1.tar.gz": "9a059b14b345360d2f1bf48bc677d049808c6d6c7b3829d5b349c746710fb747"
+    "provider_core-0.5.2-install.lock": "43dc06d602945c8ca4c4e1306e7fa31da95d0d33b4a4aaf2698f8a7c3837c885",
+    "provider_core-0.5.2-native-install.lock": "29e2fbe340e667685ca9f70e01db91e908a7c542c0464270488c41df134ec083",
+    "provider_core-0.5.2-py3-none-any.whl": "5611ff7acef3dc720e6d6a07533c29343586e0fb9e481de02d6c491be192cfec",
+    "provider_core-0.5.2.tar.gz": "cd209dfbe107753293cf904305fa721a8d7cd184057ec21d78775ad698d9fdc0"
   },
   "source_files": {
     "MANIFEST.in": {
@@ -38,12 +38,12 @@
     },
     "README.md": {
       "mode": 420,
-      "sha256": "72ba5763d06cc1e6e6b6a44723f9e30be5ca1ea2941f234c0bf5d59c7a46b1fa",
-      "size": 16680
+      "sha256": "52a9c9e79bccc28eb520ba9a06106bc36ea9c39717195bd6818076f870c4e605",
+      "size": 18726
     },
     "pyproject.toml": {
       "mode": 420,
-      "sha256": "d64294109dd0d62b1342f78df0b92fbc93c354f08b20c4519efc18a804509497",
+      "sha256": "42d8bfcd3bdc6a1759ec62587c8ae35bcc4473aceb57ce8d502c8bea1574ecda",
       "size": 588
     },
     "src/provider_core/__init__.py": {
@@ -53,8 +53,8 @@
     },
     "src/provider_core/analysis.py": {
       "mode": 420,
-      "sha256": "1411a4463b0ca9898f0372dd2538a8725656b5fbb95a42837298eecc76b260ae",
-      "size": 6455
+      "sha256": "3d78d6f53a24fbebe3a0f9600605bdaf8f7daf35acf0ac20f28af5876af61354",
+      "size": 7871
     },
     "src/provider_core/api.py": {
       "mode": 420,
@@ -108,8 +108,8 @@
     },
     "src/provider_core/controller.py": {
       "mode": 420,
-      "sha256": "9d1ca5ad2c7beb9eb9f9ede53bb988dc3d3f6feeec42db230a840ab7ca6fd385",
-      "size": 31118
+      "sha256": "1c547fafa475d6d888339e5996b4761637694503c01e6cb9f5441f0d097e3627",
+      "size": 36185
     },
     "src/provider_core/conversation.py": {
       "mode": 420,
@@ -193,13 +193,13 @@
     },
     "src/provider_core/execution.py": {
       "mode": 420,
-      "sha256": "b5243a9f87e351d0bf66c81921d198a578d1b02fe9eb9fc1f5d85b72b436b366",
-      "size": 59216
+      "sha256": "36d01898afa0b0a4daedebda70a9eb389dffad9c49d00bbd513cc1291794c063",
+      "size": 60155
     },
     "src/provider_core/failure_projection.py": {
       "mode": 420,
-      "sha256": "b5747a6519d9e8513568ee74ee9c08068abf797b44ed5a3db1bc49176cd1dc3a",
-      "size": 11724
+      "sha256": "bedc29f73b5b67ccf09fe79e80d926eb06254f7d5053947a434dd92e2f2a19b6",
+      "size": 11893
     },
     "src/provider_core/hello.py": {
       "mode": 420,
@@ -463,8 +463,8 @@
     },
     "tests/fakes/execution.py": {
       "mode": 420,
-      "sha256": "476d4f2315620ac00a365754e4aeae6443344c1de0817e776cf2527b926ae394",
-      "size": 5531
+      "sha256": "58de88a92cef408ae7b22d6f9a123d04b6c37e23ef093fcb151a3558f9ad12fd",
+      "size": 5930
     },
     "tests/fakes/hello.py": {
       "mode": 420,
@@ -1251,6 +1251,11 @@
       "sha256": "f834e7b230187a93c7e9f9c51d87d45f4881f13fd7158471dbd972d581b84896",
       "size": 2337
     },
+    "tests/unit/normative/test_controller_held_failure.py": {
+      "mode": 420,
+      "sha256": "6be058d996b07533f3388cdf5014faa3aab2e9ddf17bec49ff3ad528ff9f7b84",
+      "size": 26692
+    },
     "tests/unit/normative/test_controller_progress.py": {
       "mode": 420,
       "sha256": "b722af279e0068a8a3f2de273d5a09acf36e4e6fa00cf2a6c689decd7872a0f3",
@@ -1330,6 +1335,11 @@
       "mode": 420,
       "sha256": "bd737737310dafc30a876cc25d69ff68949e72422013a01a47052e42a4c2ed21",
       "size": 2562
+    },
+    "tests/unit/normative/test_execution_permission.py": {
+      "mode": 420,
+      "sha256": "78f92f5b36de6ee71c848e71e5b57ce56ad911114e4f968d429e464001048070",
+      "size": 13639
     },
     "tests/unit/normative/test_execution_progress.py": {
       "mode": 420,
@@ -1512,5 +1522,5 @@
       "size": 5770
     }
   },
-  "source_revision": "529fe390d52ded042df687e11230242b0c6f5667"
+  "source_revision": "40c43a19e456d38936d0418725ab295c76078363"
 }

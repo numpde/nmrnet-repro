@@ -135,7 +135,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.session = self.make_session(preparation)
 
         async def acquire():
-            preparation.prepare.assert_awaited_once_with(self.instructions)
+            preparation.prepare.assert_awaited_once_with(self.instructions, require_execution=unexpected_condition.require_execution)
             self.assertEqual(self.worker.events, [])
             return self.worker, self.host, self.worker.runtime
 
@@ -189,7 +189,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertRaisesRegex(RuntimeError, "fixture stops"),
             ):
                 await self.session.execute(candidate, report_condition=unexpected_condition)
-        preparation.prepare.assert_awaited_once_with(self.instructions)
+        preparation.prepare.assert_awaited_once_with(self.instructions, require_execution=unexpected_condition.require_execution)
         dispatch.assert_awaited_once_with((second.request_bytes, first.request_bytes))
         retained = json.loads(candidate.identity.content)["geometries"]
         self.assertEqual(
@@ -223,7 +223,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def assert_late_input_blocked(self, *, rejected):
         entered, release = asyncio.Event(), asyncio.Event()
 
-        async def prepare(_instructions):
+        async def prepare(_instructions, *, require_execution):
+            require_execution()
             entered.set()
             await release.wait()
             if rejected:

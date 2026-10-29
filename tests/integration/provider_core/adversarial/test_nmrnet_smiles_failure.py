@@ -140,7 +140,8 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         entered, release = asyncio.Event(), asyncio.Event()
         failure = ConformerShortfall(replace(ports.batch, conformers=ports.batch.conformers[:1]))
 
-        async def late(_instructions):
+        async def late(_instructions, *, require_execution):
+            require_execution()
             entered.set()
             await release.wait()
             raise failure

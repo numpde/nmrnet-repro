@@ -18,7 +18,8 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWorker
 
 from nmrnet_provider.runtime import assemble_attempt
-from nmrnet_provider.worker_client import ModelCallFailed
+from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
+from nmrnet_provider.process_reports import failure_evidence
 from provider_core.attempt_record import AcknowledgedAttempt
 from provider_core.controller import StartDeferred
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
@@ -27,6 +28,244 @@ from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_malformed_prediction_reply_retains_attempt_and_original_evidence(self):
+        ports = SessionPorts()
+        rejected = WorkerResultRejected({"kind": "result", "result": "PRIVATE_INCOMPLETE"})
+        ports.worker.execute = AsyncMock(side_effect=rejected)
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            (failure,) = await asyncio.gather(controller.run(pending), return_exceptions=True)
+            self.assertIs(controller.require_held_failure(pending, failure), failure)
+            self.assertIs(failure.cause.cause.__cause__, rejected)
+            self.assertTrue(ports.host.confirmed)
+            self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
+            ports.worker.execute.assert_awaited_once()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
+    async def test_post_send_prediction_timeout_retains_attempt_without_retry(self):
+        ports = SessionPorts()
+        timed_out = WorkerExchangeTimedOut("Prediction response was not confirmed.", send_started=True)
+        ports.worker.execute = AsyncMock(side_effect=timed_out)
+        async with RuntimePeers(ports, "smiles") as fixture:
+            fixture.config = replace(fixture.config, scientific_max_retries=1)
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            (failure,) = await asyncio.gather(controller.run(pending), return_exceptions=True)
+            self.assertIs(controller.require_held_failure(pending, failure), failure)
+            self.assertIs(failure.cause.cause.__cause__, timed_out)
+            self.assertTrue(ports.host.confirmed)
+            ports.worker.execute.assert_awaited_once()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
+    async def test_retry_timeout_retains_first_failure_and_does_not_run_again(self):
+        ports = SessionPorts()
+        first = ModelCallFailed("PRIVATE_FIRST_MODEL_FAILURE")
+        ports.worker.execute = AsyncMock(side_effect=first)
+        replacement = ScientificWorker(ports.worker.artifacts, ports.worker.runtime)
+        replacement_host = HostOwner()
+
+        async def timed_out(_handle):
+            try:
+                async with asyncio.timeout(0.001):
+                    await asyncio.Event().wait()
+            except TimeoutError as cause:
+                raise WorkerExchangeTimedOut("Prediction response was not confirmed.", send_started=True) from cause
+
+        replacement.execute = AsyncMock(side_effect=timed_out)
+
+        async def allocate():
+            if not ports.host.confirmed:
+                return ports.worker, ports.host, ports.worker.runtime
+            return replacement, replacement_host, replacement.runtime
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            fixture.config = replace(fixture.config, scientific_max_retries=1)
+            fixture.allocate_prediction.side_effect = allocate
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            (failure,) = await asyncio.gather(controller.run(pending), return_exceptions=True)
+            self.assertIs(controller.require_held_failure(pending, failure), failure)
+            evidence = json.dumps(failure_evidence(failure, secrets=()))
+            self.assertIn("ModelCallFailed", evidence)
+            self.assertIn("WorkerExchangeTimedOut", evidence)
+            self.assertTrue(replacement_host.confirmed)
+            self.assertEqual(fixture.allocate_prediction.await_count, 2)
+            replacement.execute.assert_awaited_once()
+
+    async def test_controller_stop_during_generation_blocks_prediction_allocation(self):
+        ports = SessionPorts()
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def held_generation(*_arguments):
+            entered.set()
+            await release.wait()
+            return ports.batch
+
+        ports.generator.generate = AsyncMock(side_effect=held_generation)
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            task = asyncio.create_task(controller.run(pending))
+            await asyncio.wait_for(entered.wait(), 3)
+            controller.request_stop()
+            release.set()
+            (failure,) = await asyncio.gather(task, return_exceptions=True)
+            self.assertIsInstance(failure, BaseException)
+            self.assertTrue(ports.generator_host.confirmed)
+            fixture.allocate_prediction.assert_not_awaited()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
+    async def test_controller_stop_during_generator_allocation_blocks_generation(self):
+        ports = SessionPorts()
+        entered, release = asyncio.Event(), asyncio.Event()
+        allocate = ports.allocate_generator
+
+        async def held_allocation(**settings):
+            entered.set()
+            await release.wait()
+            return await allocate(**settings)
+
+        async def unexpected_generation(*_arguments):
+            raise RuntimeError("generation began after the stop request")
+
+        ports.generator.generate = AsyncMock(side_effect=unexpected_generation)
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**(fixture.arguments(pending) | {"allocate_generator": held_allocation}))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            task = asyncio.create_task(controller.run(pending))
+            await asyncio.wait_for(entered.wait(), 3)
+            controller.request_stop()
+            release.set()
+            (failure,) = await asyncio.gather(task, return_exceptions=True)
+            self.assertIsInstance(failure, BaseException)
+            ports.generator.generate.assert_not_awaited()
+            self.assertTrue(ports.generator_host.confirmed)
+            fixture.allocate_prediction.assert_not_awaited()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
+    async def test_stop_during_generator_allocation_preserves_retirement_failure(self):
+        ports = SessionPorts()
+        entered, release = asyncio.Event(), asyncio.Event()
+        allocate = ports.allocate_generator
+        ports.generator_host.failure = OSError(5, "PRIVATE_GENERATOR_RETIREMENT")
+
+        async def held_allocation(**settings):
+            entered.set()
+            await release.wait()
+            return await allocate(**settings)
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**(fixture.arguments(pending) | {"allocate_generator": held_allocation}))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            task = asyncio.create_task(controller.run(pending))
+            try:
+                await asyncio.wait_for(entered.wait(), 3)
+                controller.request_stop()
+                release.set()
+                (failure,) = await asyncio.gather(task, return_exceptions=True)
+                evidence = json.dumps(failure_evidence(failure, secrets=()))
+                self.assertIn("ExecutionStopRequested", evidence)
+                self.assertIn("OSError", evidence)
+                self.assertIn('"errno": 5', evidence)
+                ports.generator.generate.assert_not_awaited()
+            finally:
+                release.set()
+                ports.generator_host.failure = None
+
+    async def test_controller_stop_during_preparation_blocks_first_prediction(self):
+        ports = SessionPorts()
+        entered, release = asyncio.Event(), asyncio.Event()
+        prepare = ports.worker.prepare
+
+        async def blocked_execution(_handle):
+            await asyncio.Event().wait()
+
+        ports.worker.execute = AsyncMock(side_effect=blocked_execution)
+
+        async def held_prepare(requests):
+            entered.set()
+            await release.wait()
+            return await prepare(requests)
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            with patch.object(ports.worker, "prepare", side_effect=held_prepare):
+                task = asyncio.create_task(controller.run(pending))
+                await asyncio.wait_for(entered.wait(), 3)
+                controller.request_stop()
+                release.set()
+                (failure,) = await asyncio.gather(task, return_exceptions=True)
+            self.assertIsInstance(failure, BaseException)
+            ports.worker.execute.assert_not_awaited()
+            self.assertTrue(ports.host.confirmed)
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
+    async def test_stop_during_first_retirement_blocks_retry_dispatch(self):
+        await self.check_stop_during_first_retirement(request_controller_stop=False)
+
+    async def test_controller_stop_during_first_retirement_blocks_retry_dispatch(self):
+        await self.check_stop_during_first_retirement(request_controller_stop=True)
+
+    async def check_stop_during_first_retirement(self, *, request_controller_stop):
+        ports = SessionPorts()
+        ports.worker.execute = AsyncMock(side_effect=ModelCallFailed("PRIVATE_FIRST_MODEL_FAILURE"))
+        replacement = ScientificWorker(ports.worker.artifacts, ports.worker.runtime)
+
+        async def blocked_execution(_handle):
+            await asyncio.Event().wait()
+
+        replacement.execute = AsyncMock(side_effect=blocked_execution)
+        replacement_host = HostOwner()
+        entered, release = asyncio.Event(), asyncio.Event()
+        retire = ports.host.retire_channel
+
+        async def held_retirement(worker):
+            entered.set()
+            await release.wait()
+            return await retire(worker)
+
+        async def allocate():
+            if not ports.host.confirmed:
+                return ports.worker, ports.host, ports.worker.runtime
+            return replacement, replacement_host, replacement.runtime
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            fixture.config = replace(fixture.config, scientific_max_retries=1)
+            fixture.allocate_prediction.side_effect = allocate
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            with patch.object(ports.host, "retire_channel", side_effect=held_retirement):
+                task = asyncio.create_task(controller.run(pending))
+                await asyncio.wait_for(entered.wait(), 3)
+                if request_controller_stop:
+                    controller.request_stop()
+                else:
+                    fixture.stop.set()
+                release.set()
+                (failure,) = await asyncio.gather(task, return_exceptions=True)
+            replacement.execute.assert_not_awaited()
+            fixture.allocate_prediction.assert_awaited_once()
+            evidence = json.dumps(failure_evidence(failure, secrets=()))
+            self.assertIn("ModelCallFailed", evidence)
+            self.assertIn("ExecutionStopRequested", evidence)
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
     async def test_configured_model_retry_delivers_one_result_for_same_attempt(self):
         ports = SessionPorts()
         failure = ModelCallFailed("PRIVATE_FIRST_MODEL_FAILURE")

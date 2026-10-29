@@ -77,7 +77,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
 
         owner = self.owner(choose)
-        prepared = await owner.prepare(self.instructions)
+        prepared = await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertEqual([geometry.source_record_number for geometry in prepared.geometries], [2, 1])
         self.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
         self.assertEqual(len(self.readers), 2)
@@ -93,11 +93,11 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
 
         owner = self.owner(choose)
-        prepared = await owner.prepare(self.instructions)
+        prepared = await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertEqual(len(prepared.geometries), 2)
         self.assertEqual(len(self.readers), 1)
         with self.assertRaises(ValueError):
-            await owner.prepare(self.instructions)
+            await owner.prepare(self.instructions, require_execution=lambda: None)
         await owner.retire()
 
     async def test_invalid_options_and_exhausted_read_budget_never_acquire_another_source(self):
@@ -113,7 +113,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose, reads=1)
         with self.assertRaisesRegex(ValueError, "select"):
-            await owner.prepare(self.instructions)
+            await owner.prepare(self.instructions, require_execution=lambda: None)
         self.uploads.acquire.assert_awaited_once()
         self.assertEqual(len(self.readers), 1)
         await owner.retire()
@@ -127,7 +127,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
 
         owner = self.owner(choose, reads=1)
-        prepared = await owner.prepare(self.instructions)
+        prepared = await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertEqual(prepared.geometries[0].source_record_number, 2)
         self.assertEqual(len(self.readers), 1)
         await owner.retire()
@@ -149,7 +149,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose, allocator=allocate)
         with self.assertRaises(PreparationRetirementFailed) as caught:
-            await owner.prepare(self.instructions)
+            await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception.operation_failure, rejection)
         self.assertIs(caught.exception.cause, rejection)
         self.assertEqual(caught.exception.operation_failure.diagnostic, "private native evidence")
@@ -177,7 +177,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose, allocator=allocate)
         with self.assertRaisesRegex(ValueError, "select"):
-            await owner.prepare(self.instructions)
+            await owner.prepare(self.instructions, require_execution=lambda: None)
         with self.assertRaises(PreparationRetirementFailed):
             await owner.retire()
         for transport in self.transports:
@@ -193,7 +193,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose, seconds=0.02)
         with self.assertRaises(InputSelectionTimeLimit):
-            await owner.prepare(self.instructions)
+            await owner.prepare(self.instructions, require_execution=lambda: None)
         await owner.retire()
         for transport in self.transports:
             transport.retire.assert_awaited_once()
@@ -226,7 +226,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose, allocator=allocate)
         with self.assertRaises(asyncio.CancelledError) as caught:
-            await owner.prepare(self.instructions)
+            await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception, cancelled)
         self.assertIs(caught.exception.__cause__.operation_failure, rejection)
         self.readers[0][1].retire.side_effect = None
@@ -244,7 +244,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
 
         owner = self.owner(choose, allocator=allocate)
-        task = asyncio.create_task(owner.prepare(self.instructions))
+        task = asyncio.create_task(owner.prepare(self.instructions, require_execution=lambda: None))
         await entered.wait()
         task.cancel()
         release.set()
@@ -278,7 +278,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
 
         owner = self.owner(choose)
-        preparing = asyncio.create_task(owner.prepare(self.instructions))
+        preparing = asyncio.create_task(owner.prepare(self.instructions, require_execution=lambda: None))
         await entered.wait()
         await owner.retire()
         release.set()

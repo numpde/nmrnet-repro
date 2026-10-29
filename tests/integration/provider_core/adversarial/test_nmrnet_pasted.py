@@ -31,7 +31,7 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
                 owner = ports.owner(partial(choose, ports, change))
                 self.addAsyncCleanup(owner.retire)
                 with self.assertRaises(InputRejected):
-                    await owner.prepare(ports.instructions)
+                    await owner.prepare(ports.instructions, require_execution=lambda: None)
                 ports.allocate_reader.assert_not_awaited()
 
     async def test_multiple_or_malformed_xyz_never_selects_the_first_frame(self):
@@ -40,7 +40,7 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
                 ports = PastedPorts(source, source_format="xyz", source_unit="nm")
                 self.addAsyncCleanup(ports.preparation.retire)
                 with self.assertRaises(InputRejected) as caught:
-                    await ports.preparation.prepare(ports.instructions)
+                    await ports.preparation.prepare(ports.instructions, require_execution=lambda: None)
                 self.assertNotIn("PRIVATE", str(caught.exception))
                 ports.reader_host.retire.assert_awaited_once()
                 self.assertEqual(ports.reader.read.await_args.kwargs["selection"], "all")
@@ -50,7 +50,7 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
         cleanup = OSError("PRIVATE cleanup evidence")
         ports.reader_host.retire.side_effect = cleanup
         with self.assertRaises(PreparationRetirementFailed) as caught:
-            await ports.preparation.prepare(ports.instructions)
+            await ports.preparation.prepare(ports.instructions, require_execution=lambda: None)
         self.assertIsInstance(caught.exception.operation_failure, InputRejected)
         self.assertIn(cleanup, [cause for _phase, cause in caught.exception.failures])
         self.assertNotIn("PRIVATE", str(caught.exception))
@@ -61,7 +61,7 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
     async def test_result_planner_rejects_mismatched_job_source_format_or_unit(self):
         ports = PastedPorts(b"H 0 0 0\n", source_format="table", source_unit="nm")
         self.addAsyncCleanup(ports.preparation.retire)
-        prepared = await ports.preparation.prepare(ports.instructions)
+        prepared = await ports.preparation.prepare(ports.instructions, require_execution=lambda: None)
         source = prepared.source
         for changes in (
             {"job_ref": "job:other"},
@@ -95,5 +95,5 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose, max_worker_calls=1)
         self.addAsyncCleanup(owner.retire)
         with self.assertRaisesRegex(ValueError, "select"):
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         ports.allocate_reader.assert_awaited_once()

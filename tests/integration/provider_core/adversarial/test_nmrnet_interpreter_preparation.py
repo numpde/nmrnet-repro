@@ -40,7 +40,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose)
         with self.assertRaises(RuntimeError) as caught:
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception, failure)
         await owner.retire()
         for transport in ports.transports:
@@ -60,7 +60,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = ports.owner(choose, allocate_generator=allocate)
-        task = asyncio.create_task(owner.prepare(ports.instructions))
+        task = asyncio.create_task(owner.prepare(ports.instructions, require_execution=lambda: None))
         await asyncio.wait_for(entered.wait(), 1)
         task.cancel()
         release.set()
@@ -82,7 +82,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose)
         with self.assertRaises(asyncio.CancelledError):
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         await owner.retire()
         for transport in ports.transports:
             transport.retire.assert_awaited_once()
@@ -98,7 +98,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose, allocate_generator=allocate)
         with self.assertRaises(asyncio.CancelledError) as caught:
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
         self.assertIn('"errno": 5', rendered)
         self.assertNotIn("PRIVATE_ALLOCATION_CAUSE", rendered)
@@ -114,7 +114,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose)
         with self.assertRaises(BaseExceptionGroup) as caught:
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception.exceptions[0], fatal)
         await owner.retire()
         for transport in ports.transports:
@@ -147,7 +147,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose)
         self.addAsyncCleanup(owner.retire)
-        await owner.prepare(ports.instructions)
+        await owner.prepare(ports.instructions, require_execution=lambda: None)
 
     async def test_foreign_timeout_remains_the_original_operational_failure(self):
         ports = SessionPorts()
@@ -434,7 +434,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose)
         self.addAsyncCleanup(owner.retire)
-        prepared = await owner.prepare(ports.instructions)
+        prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
         self.assertEqual(prepared.output.as_dict(), {"verbosity": "medium", "shift_significant_digits": 4})
         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
 
@@ -454,7 +454,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         chooser = SimpleNamespace(run=choose, retire=AsyncMock())
         owner = ports.owner(choose, chooser=chooser)
-        task = asyncio.create_task(owner.prepare(ports.instructions))
+        task = asyncio.create_task(owner.prepare(ports.instructions, require_execution=lambda: None))
         try:
             await asyncio.wait_for(entered.wait(), 1)
             task.cancel()
@@ -520,13 +520,13 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 owner = ports.owner(chooser.run, chooser=chooser)
                 if isinstance(primary, asyncio.CancelledError):
                     with self.assertRaises(asyncio.CancelledError) as caught:
-                        await owner.prepare(ports.instructions)
+                        await owner.prepare(ports.instructions, require_execution=lambda: None)
                     self.assertIs(caught.exception, primary)
                     observed = caught.exception
                     failure = caught.exception.__cause__
                 else:
                     with self.assertRaises(PreparationRetirementFailed) as caught:
-                        await owner.prepare(ports.instructions)
+                        await owner.prepare(ports.instructions, require_execution=lambda: None)
                     observed = primary
                     failure = caught.exception
                 self.assertIs(failure.operation_failure, observed)
@@ -561,7 +561,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         chooser = SimpleNamespace(run=choose, retire=AsyncMock(side_effect=cleanup))
         owner = ports.owner(choose, chooser=chooser)
         with self.assertRaises(asyncio.CancelledError) as caught:
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception, cancelled)
         latest = cancelled.__cause__
         self.assertIs(latest.operation_failure, cancelled)
@@ -590,7 +590,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             retirement_entered.set()
             await owner.retire()
 
-        preparing = asyncio.create_task(owner.prepare(ports.instructions))
+        preparing = asyncio.create_task(owner.prepare(ports.instructions, require_execution=lambda: None))
         await asyncio.wait_for(closing.wait(), 1)
         retiring = asyncio.create_task(retire())
         try:
@@ -613,7 +613,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose, chooser=chooser)
         self.addAsyncCleanup(owner.retire)
         with self.assertRaisesRegex(TypeError, "immutable"):
-            await owner.prepare(ports.instructions)
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
         chooser.retire.assert_awaited_once()
 
     async def test_observation_exceeding_result_capacity_is_rejected_before_json_decode(self):
@@ -646,7 +646,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
 
         chooser = SimpleNamespace(run=choose, retire=AsyncMock())
         owner = ports.owner(choose, chooser=chooser)
-        preparing = asyncio.create_task(owner.prepare(ports.instructions))
+        preparing = asyncio.create_task(owner.prepare(ports.instructions, require_execution=lambda: None))
         await asyncio.wait_for(entered.wait(), 1)
         retiring = asyncio.create_task(owner.retire())
         try:
@@ -707,7 +707,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             chooser = SimpleNamespace(run=choose, retire=AsyncMock())
             owner = ports.owner(choose, chooser=chooser, seconds=0.02)
             with self.assertRaises(PreparationRetirementFailed):
-                await owner.prepare(ports.instructions)
+                await owner.prepare(ports.instructions, require_execution=lambda: None)
             release.set()
             await asyncio.wait_for(finished.wait(), 1)
             await asyncio.sleep(0)

@@ -272,17 +272,21 @@ class ProcessDiagnosticRefusalTests(unittest.TestCase):
         )
         native = WorkerReportedFailure(diagnostic)
         result = WorkerResultRejected({"PRIVATE_RESULT": "not for operator projection"})
-        report = failure_evidence(BaseExceptionGroup("PRIVATE_GROUP", [native, result]), secrets=(secret,))
+        partial = asyncio.IncompleteReadError(b"PRIVATE_PARTIAL", 100)
+        report = failure_evidence(BaseExceptionGroup("PRIVATE_GROUP", [native, result, partial]), secrets=(secret,))
         rendered = json.dumps(report)
         self.assertIn("Native traceback", rendered)
         self.assertIn("final-native-cause", rendered)
         self.assertIn("omitted_characters", rendered)
+        self.assertIn('"received_bytes": 15', rendered)
+        self.assertIn('"expected_bytes": 100', rendered)
         for private in (
             "configured-key",
             "ESCAPED_SECRET_SUFFIX",
             "OTHER_SECRET",
             "REMOTE_SECRET",
             "PRIVATE_RESULT",
+            "PRIVATE_PARTIAL",
             "PRIVATE_GROUP",
         ):
             self.assertNotIn(private, rendered)

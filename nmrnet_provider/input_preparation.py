@@ -149,6 +149,7 @@ class InputPreparation:
         self._source_task = None
         self._worker_task = None
         self._instructions = None
+        self._require_execution = None
         self._candidate = None
         self.last_retirement_failure = None
         self.allocation_failure = None
@@ -175,17 +176,19 @@ class InputPreparation:
             raise TypeError("Interpreter diagnostics must be immutable JSON bytes.")
         self._interpreter_diagnostics = content
 
-    async def prepare(self, instructions):
+    async def prepare(self, instructions, *, require_execution):
         if self._phase is not _Phase.NEW:
             raise ValueError("Input preparation already started or retired; create a new Attempt-owned preparation session.")
         if type(instructions) is not VerifiedJobInput or instructions.job_ref != self._uploads.job_ref:
             raise ValueError("Input preparation requires the verified instructions for its Job's Uploads.")
         self._phase = _Phase.CHOOSING
         self._instructions = instructions
+        self._require_execution = require_execution
         selection_deadline = asyncio.timeout(self._seconds)
         try:
             async with self._conversation():
                 async with selection_deadline:
+                    self._require_execution()
                     self._chooser_task = asyncio.create_task(contain_task_exit(self._run_chooser, instructions))
                     self._chooser_task.add_done_callback(self._observe_chooser)
                     cancellations = asyncio.current_task().cancelling()
@@ -302,6 +305,8 @@ class InputPreparation:
 
     async def _run_chooser(self, instructions):
         try:
+            self._require_choosing()
+            self._require_execution()
             return await self._chooser.run(instructions, self)
         except BaseException as cause:
             self.chooser_failure = cause
@@ -320,6 +325,7 @@ class InputPreparation:
     @asynccontextmanager
     async def _operation(self):
         self._require_choosing()
+        self._require_execution()
         if self._busy:
             raise ValueError("Cannot choose input while another source operation is active.")
         if self._worker_task is not None:
@@ -375,7 +381,8 @@ class InputPreparation:
             self._on_source_observation(failure)
 
     async def _source_call(self, operation, *args):
-        task = asyncio.create_task(contain_task_exit(operation, *args))
+        self._require_execution()
+        task = asyncio.create_task(contain_task_exit(self._start_source_call, operation, *args))
         self._source_task = task
         task.add_done_callback(self._record_source_failure)
         try:
@@ -389,6 +396,11 @@ class InputPreparation:
         finally:
             if task.done() and self._source_task is task:
                 self._source_task = None
+
+    async def _start_source_call(self, operation, *args):
+        self._require_choosing()
+        self._require_execution()
+        return await operation(*args)
 
     def _record_source_failure(self, task):
         try:
@@ -512,12 +524,14 @@ class InputPreparation:
     async def _worker(self, allocator, **configuration):
         """Own one allocation through its operation and confirmed retirement."""
         self._require_choosing()
+        self._require_execution()
         self._worker_calls += 1
-        self._worker_task = asyncio.create_task(contain_task_exit(allocator, **configuration))
+        self._worker_task = asyncio.create_task(contain_task_exit(self._start_worker, allocator, **configuration))
         self._worker_task.add_done_callback(self._record_allocation_failure)
         try:
             client, _ = await asyncio.shield(self._worker_task)
             self._require_choosing()
+            self._require_execution()
             yield client
         except NativeWorkerExited:
             # This allocation task still owns the original grant. Session.retire
@@ -537,6 +551,11 @@ class InputPreparation:
             raise
         else:
             await self._retire_worker()
+
+    async def _start_worker(self, allocator, **configuration):
+        self._require_choosing()
+        self._require_execution()
+        return await allocator(**configuration)
 
     def _record_allocation_failure(self, task):
         try:

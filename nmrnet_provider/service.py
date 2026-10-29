@@ -25,7 +25,8 @@ from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.controller import ControllerFailed
 from provider_core.delivery_client import DeliveryClient, DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
-from provider_core.execution import AttemptExecutor, ExecutionFailed
+from provider_core.analysis import AnalysisOutcomeUnresolved
+from provider_core.execution import AttemptExecutor, ExecutionFailed, ObservationGapExpired
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims, LiveCapacityFull
 from provider_core.task_boundary import contain_task_exit
@@ -141,12 +142,12 @@ class ProviderService:
         on_api_recovered,
         on_observed_crash,
         factory_ready,
-        on_source_exhausted,
+        on_held_attempt,
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
                 callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered,
-                           on_observed_crash, factory_ready, on_source_exhausted)
+                           on_observed_crash, factory_ready, on_held_attempt)
             )
         ):
             raise ValueError(
@@ -161,7 +162,7 @@ class ProviderService:
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self._on_observed_crash = on_observed_crash
-        self._factory_ready, self._on_source_exhausted = factory_ready, on_source_exhausted
+        self._factory_ready, self._on_held_attempt = factory_ready, on_held_attempt
         self.policy = policy
         self.hello_api = ProviderAPI(
             config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology
@@ -403,17 +404,12 @@ class ProviderService:
                 await self._observe_attempt(controller, pending)
             except ControllerFailed as failure:
                 execution = failure.cause
-                if (type(execution) is ExecutionFailed and type(execution.cause) is UploadRecoveryExhausted
-                        and not failure.cleanup_failures and not execution.cleanup_failures
-                        and not execution.cause.cleanup_failures and execution.cause.interruption is None
-                        and execution.api_failure is None and execution.condition_failure is None
-                        and execution.latest_condition_failure is None and execution.delivery_failure is None
-                        and execution.operation_interruption is None and execution.interruption_cause is None
-                        and execution.handoff_interruption is None
-                        and controller.work_settled and controller.shutdown_ready and self._factory_ready()
-                        and controller in self._claims.live_owners()
-                        and self._claims.owns_job(pending.scope, pending.input.job_ref)):
-                    self._on_source_exhausted(failure, pending)
+                if (type(execution) is ExecutionFailed and type(execution.cause) in
+                        (UploadRecoveryExhausted, ObservationGapExpired, AnalysisOutcomeUnresolved)):
+                    controller.require_held_failure(pending, failure)
+                    if not self._factory_ready():
+                        raise
+                    self._on_held_attempt(failure, pending)
                     # The registry keeps this controller and the Job exclusion.
                     self.controller = None
                     continue

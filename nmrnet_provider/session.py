@@ -26,8 +26,8 @@ from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
-from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
+from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut, WorkerResultRejected
+from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
 from provider_core.task_boundary import contain_task_exit
@@ -220,8 +220,7 @@ class NMRNetSession:
         self._prepared = None
         self.last_retirement_failure = None
 
-    # Core requires this named port; NMRNet currently emits no preparation conditions.
-    async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
+    async def prepare(self, acknowledged, instructions, *, report_condition):
         if self._phase is not _Phase.NEW:
             raise ValueError("Scientific session already accepted preparation or retirement; create a new session.")
         self._phase = _Phase.PREPARING
@@ -235,7 +234,9 @@ class NMRNetSession:
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
         self._acknowledged = acknowledged
         try:
-            prepared = await self._input_preparation.prepare(instructions)
+            prepared = await self._input_preparation.prepare(
+                instructions, require_execution=report_condition.require_execution
+            )
         except (NativeWorkerExited, PreparationRetirementFailed) as cause:
             original = cause
             while type(original) is PreparationRetirementFailed:
@@ -257,6 +258,7 @@ class NMRNetSession:
         if type(prepared) not in (PreparedJobInput, GeneratedJobInput):
             raise TypeError("Scientific preparation requires the input owner's frozen supplied or generated geometry collection.")
         try:
+            report_condition.require_execution()
             self._facts["runtime_expectations"] = await self._acquire_prediction(_Phase.PREPARING)
         except NativeWorkerExited as cause:
             raise self._worker_crash(cause, cause=cause) from None
@@ -325,15 +327,14 @@ class NMRNetSession:
             raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
         return AnalysisFailure(code, str(cause), evidence)
 
-    # Core requires this named port; NMRNet currently emits no execution conditions.
-    async def execute(self, handle, *, report_condition):  # noqa: ARG002
+    async def execute(self, handle, *, report_condition):
         if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:
             raise ValueError("Scientific execution requires this session's current prepared handle.")
         prepared = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
         try:
-            result = await self._predict(prepared.requests)
+            result = await self._predict(prepared.requests, report_condition.require_execution)
         except PredictionExecutionFailed as cause:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific failure arrived after retirement began; it cannot be accepted.") from cause
@@ -369,28 +370,29 @@ class NMRNetSession:
         self._phase = _Phase.FINISHED
         return AnalysisSuccess(RESULT_SCHEMA_ID, content, evidence)
 
-    def _require_prediction_active(self):
+    def _require_prediction_active(self, require_execution):
         if self._phase is not _Phase.EXECUTING:
             raise ValueError("Scientific retirement has begun; prediction dispatch is blocked.")
+        require_execution()
 
-    async def _predict(self, requests):
+    async def _predict(self, requests, require_execution):
         """Execute the frozen batch, retaining original owners across a permitted retry."""
         try:
             if not self._max_retries:
-                return await self._predict_once(requests)
+                return await self._predict_once(requests, require_execution)
             deadline = asyncio.get_running_loop().time() + 2 * self._prediction_seconds
             try:
                 async with asyncio.timeout_at(deadline):
-                    return await self._predict_once(requests)
+                    return await self._predict_once(requests, require_execution)
             except ModelCallFailed as first:
                 if type(first) is not ModelCallFailed:
                     raise
-                return await self._retry_prediction(requests, first, deadline)
+                return await self._retry_prediction(requests, first, deadline, require_execution)
         except NativeWorkerExited as cause:
             raise self._worker_crash(cause, cause=cause) from None
 
-    async def _retry_prediction(self, requests, first, deadline):
-        self._require_prediction_active()
+    async def _retry_prediction(self, requests, first, deadline, require_execution):
+        self._require_prediction_active(require_execution)
         failures = await self._retire_prediction(self._worker, self._retirement)
         if failures:
             try:
@@ -400,7 +402,7 @@ class NMRNetSession:
                 raise cleanup from BaseExceptionGroup("Prediction and retirement interruption", (first, previous))
             except Exception as cleanup:
                 raise BaseExceptionGroup("Prediction and its retirement both failed", (first, cleanup)) from None
-        self._require_prediction_active()
+        self._require_prediction_active(require_execution)
         if asyncio.get_running_loop().time() >= deadline:
             first.retry_not_started = "The execution budget expired during worker retirement."
             raise first
@@ -426,7 +428,7 @@ class NMRNetSession:
             raise BaseExceptionGroup("Prediction failed and replacement could not be acquired", (first, acquisition)) from None
         if runtime != self._facts["runtime_expectations"]:
             raise ValueError("Cannot retry prediction: replacement runtime differs from the admitted runtime.") from first
-        self._require_prediction_active()
+        self._require_prediction_active(require_execution)
         if asyncio.get_running_loop().time() >= deadline:
             first.retry_not_started = "The execution budget expired during replacement setup."
             raise first
@@ -440,24 +442,55 @@ class NMRNetSession:
                 first.retry_not_started = "The execution budget expired during replacement preparation."
                 raise first from preparation
             raise ExceptionGroup("Prediction failed and replacement preparation failed", (first, preparation)) from None
-        self._require_prediction_active()
+        self._require_prediction_active(require_execution)
         if asyncio.get_running_loop().time() >= deadline:
             first.retry_not_started = "The execution budget expired during replacement preparation."
             raise first
         if self._on_prediction_failure is not None:
             self._on_prediction_failure(first, self._acknowledged)
-        self._require_prediction_active()
+        self._require_prediction_active(require_execution)
         if asyncio.get_running_loop().time() >= deadline:
             first.retry_not_started = "The execution budget expired before retry dispatch."
             raise first
         async with asyncio.timeout_at(deadline):
-            return await self._worker.execute(worker_handle)
+            return await self._execute_prediction(worker_handle, first_failure=first)
 
-    async def _predict_once(self, requests):
-        self._require_prediction_active()
+    async def _predict_once(self, requests, require_execution):
+        self._require_prediction_active(require_execution)
         worker_handle = await self._worker.prepare(requests)
-        self._require_prediction_active()
-        return await self._worker.execute(worker_handle)
+        self._require_prediction_active(require_execution)
+        return await self._execute_prediction(worker_handle)
+
+    async def _execute_prediction(self, worker_handle, *, first_failure=None):
+        try:
+            return await self._worker.execute(worker_handle)
+        except WorkerExchangeTimedOut as cause:
+            if type(cause) is not WorkerExchangeTimedOut or not cause.send_started:
+                raise
+            timeout = cause.__cause__
+            if timeout is not None:
+                interruption = timeout.__cause__
+                if (type(timeout) is not TimeoutError or type(interruption) is not asyncio.CancelledError
+                        or interruption.__cause__ is not None
+                        or (interruption.__context__ is not None and interruption.__context__ is not first_failure)):
+                    raise
+            raise AnalysisOutcomeUnresolved(
+                "Prediction was sent, but its response was not confirmed before the exchange deadline."
+            ) from cause
+        except WorkerResultRejected as cause:
+            if type(cause) is not WorkerResultRejected:
+                raise
+            raise AnalysisOutcomeUnresolved(
+                "Prediction returned a reply that could not be admitted as a complete result."
+            ) from cause
+        except (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError) as cause:
+            if (type(cause) not in (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError)
+                    or cause.__cause__ is not None
+                    or (cause.__context__ is not None and cause.__context__ is not first_failure)):
+                raise
+            raise AnalysisOutcomeUnresolved(
+                "Prediction's connection ended before its response was confirmed."
+            ) from cause
 
     def _worker_crash(self, failure, *, cause):
         if self._phase is _Phase.PREPARING:

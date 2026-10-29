@@ -13,6 +13,7 @@ from tests.integration.nmrnet.interpreter_ports import UploadPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import InputRejected, PreparedUploadMember
+from nmrnet_provider.input_preparation import _Phase
 from nmrnet_provider.upload_archive import inspect_upload, select_member
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.uploads import VerifiedUpload
@@ -35,6 +36,10 @@ class UploadPreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(AsyncMock(), on_source_observation=observed.append)
         self.addAsyncCleanup(owner.retire)
+        # This isolated source-lifetime test enters below the normal preparation
+        # port, which supplies the phase permission in an assembled session.
+        owner._phase = _Phase.CHOOSING
+        owner._require_execution = lambda: None
         waiter = asyncio.create_task(owner._source_call(acquire))
         await entered.wait()
         waiter.cancel()
@@ -65,7 +70,7 @@ class UploadPreparationTests(unittest.IsolatedAsyncioTestCase):
         ports.uploads.acquire.side_effect = acquire
         owner = ports.owner(choose, on_source_observation=report)
         self.addAsyncCleanup(owner.retire)
-        await owner.prepare(ports.instructions)
+        await owner.prepare(ports.instructions, require_execution=lambda: None)
         self.assertEqual(observed, [(failure, verified)])
 
     async def test_zip_inspection_correction_and_selection_keep_one_verified_snapshot(self):
@@ -116,7 +121,7 @@ class UploadPreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = ports.owner(choose, max_worker_calls=3, allocate_reader=allocate)
         self.addAsyncCleanup(owner.retire)
-        prepared = await owner.prepare(ports.instructions)
+        prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
         self.assertEqual((2, 1), tuple(geometry.source_record_number for geometry in prepared.geometries))
         self.assertEqual(prepared.source.sha256, hashlib.sha256(member_bytes).hexdigest())
         self.assertEqual(prepared.source.upload.sha256, hashlib.sha256(zipped).hexdigest())
