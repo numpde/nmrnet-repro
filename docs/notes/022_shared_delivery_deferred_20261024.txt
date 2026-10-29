@@ -1975,19 +1975,26 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
    original scratch authority or independent proof of its cleanup. An empty new
    scratch directory alone does not establish that the old child was cleaned up.
 
-6. Source recovery has a bounded per-Attempt budget. NMRNet's pending change
+6. Source recovery has a bounded per-Attempt budget. NMRNet's implementation
    permits another Job after a classified Upload outage only when the original
    controller and factory have settled; the failed Job remains claimed. A
    two-Job test against intermediate provider-core source a4cb69fb exercised
    three signed Upload-list 503 responses, the retained first claim, a later
    completed Job, protected outage evidence and shutdown without a fabricated
    FAIL. The earlier 5aab1abd candidate also passed focused Upload-preparation
-   and service checks. Final release and live deployment qualification remain
-   outstanding. The shared design permits continuation only when the other Job
-   has independent resources and capacity is available.
+   and service checks; focused checks also passed against the final release wheel.
+   Live deployment qualification remains outstanding. The shared design permits
+   continuation only when the other Job has independent resources and capacity
+   is available.
    A retained claim still consumes that finite capacity, so continuation alone
    cannot guarantee recovery from repeated outages: admission can eventually
    wait for capacity until this supervisor lifetime ends. A future policy for
    reconciling an Attempt known to have closed needs shared ownership review;
    elapsed time or absence from discovery does not release its claim. Do not
    infer or manufacture a terminal Attempt outcome or discard unresolved ownership.
+
+7. Inference image input capture rejects ignored files anywhere under tools,
+   including ordinary Python bytecode, even though its build context is copied
+   from committed inputs. Review the need for that restriction and its effect
+   on the normal development-to-build workflow; do not weaken checks on files
+   that actually determine executed tools or the captured image inputs.
