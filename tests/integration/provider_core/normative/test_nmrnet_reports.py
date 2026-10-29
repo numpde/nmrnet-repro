@@ -60,7 +60,7 @@ from provider_core.delivery_client import DeliveryRejected
 from provider_core.delivery_store import DeliveryOutcome, DeliveryStorageFailed
 from provider_core.delivery_worker import DeliveryWorkerFailed
 from provider_core.starting import StartFailed, StartRefused
-from provider_core.transport import ExchangeFailed, HttpFileResponse, HttpResponse, HttpResponseHead
+from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file
 
 
@@ -515,11 +515,11 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"grant_issued": true', rendered)
         self.assertNotIn("PRIVATE", rendered)
 
-    async def test_store_response_refusals_reach_renderer_without_becoming_exception_causes(self):
+    async def test_store_response_refusals_reach_renderer_through_transport_cause(self):
         for file_output in (False, True):
             for refusal in ("status", "header", "encoding"):
                 with self.subTest(file_output=file_output, refusal=refusal):
-                    owner, api, _, _ = file_sources()
+                    owner, api, _, client = file_sources()
                     await owner.inspect()
                     headers = store_headers(b"geometry") + (
                         (b"x-request-id", b"request:store-refusal"), (b"x-private", b"PRIVATE_HEADER"),
@@ -529,11 +529,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                         headers = tuple((name, value) for name, value in headers if name != b"content-type")
                     elif refusal == "encoding":
                         headers += ((b"content-encoding", b"PRIVATE_ENCODING"),)
-                    response = (
-                        HttpFileResponse(status, headers, 8, "PRIVATE_FILE_HASH") if file_output
-                        else HttpResponse(status, headers, b"PRIVATE_BODY")
-                    )
-                    with patch.object(owner, "_transfer", AsyncMock(return_value=response)):
+                    client.status, client.headers = status, headers
+                    with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client):
                         with private_source_directory() as (root, directory):
                             with self.assertRaises(UploadFailed) as caught:
                                 if file_output:
@@ -543,8 +540,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                             self.assertEqual(os.listdir(root), [])
                     failure = caught.exception
                     rendered = json.dumps(self.receive(failure))
-                    self.assertIs(failure.response, response)
-                    self.assertIsNone(failure.cause)
+                    self.assertIsInstance(failure.cause, ExchangeFailed)
+                    self.assertEqual(failure.cause.response_head.status, status)
                     self.assertTrue(failure.grant_issued)
                     self.assertIs(owner.last_failure, failure)
                     self.assertIn(f'"status": {status}', rendered)
