@@ -500,6 +500,52 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.confirmed)
         await self.session.retire()
 
+    async def test_shutdown_joins_original_prediction_retirement_after_waiter_cancellation(self):
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = self.host.retire_channel
+
+        async def held_retirement(worker):
+            entered.set()
+            await release.wait()
+            return await original(worker)
+
+        with patch.object(self.host, "retire_channel", side_effect=held_retirement) as retire_channel:
+            waiter = asyncio.create_task(self.session._retire_prediction(self.worker, self.host))
+            await entered.wait()
+            waiter.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await waiter
+            shutdown = asyncio.create_task(self.session.retire())
+            await asyncio.sleep(0)
+            release.set()
+            await shutdown
+        retire_channel.assert_awaited_once_with(self.worker)
+        self.assertTrue(self.host.confirmed)
+        self.assertEqual(self.worker.events, ["close", "closed"])
+
+    async def test_shutdown_does_not_repeat_retirement_that_completed_before_join(self):
+        await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = self.host.retire_channel
+
+        async def held_retirement(worker):
+            entered.set()
+            await release.wait()
+            return await original(worker)
+
+        with patch.object(self.host, "retire_channel", side_effect=held_retirement) as retire_channel:
+            waiter = asyncio.create_task(self.session.retire())
+            await entered.wait()
+            waiter.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await waiter
+            release.set()
+            await self.session._prediction_retirement_task
+            await self.session.retire()
+        retire_channel.assert_awaited_once_with(self.worker)
+        self.assertTrue(self.host.confirmed)
+
     async def test_cleanup_preserves_primary_and_all_later_failures(self):
         await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         first = OSError("private close failure")

@@ -193,6 +193,7 @@ class NMRNetSession:
             raise ValueError("Scientific session requires a prediction allocation owner.")
         self._allocate_prediction = allocate_prediction
         self._worker = self._retirement = None
+        self._prediction_retirement_task = None
         self._prediction_setup = None
         self._input_preparation = input_preparation
         self._on_prediction_failure = on_prediction_failure
@@ -406,6 +407,7 @@ class NMRNetSession:
     async def retire(self):
         if self._phase is _Phase.RETIRED:
             return
+        retry_retirement = self._phase is _Phase.RETIRING
         self._phase = _Phase.RETIRING
         self._prepared = None
         failures = []
@@ -422,7 +424,7 @@ class NMRNetSession:
                 self._prediction_setup = None
         worker, retirement = self._worker, self._retirement
         if retirement is not None:
-            failures.extend(await retirement.retire_channel(worker))
+            failures.extend(await self._retire_prediction(worker, retirement, retry=retry_retirement))
         if (self._prediction_pending or self._prediction_setup is not None
                 or self._worker is not worker or self._retirement is not retirement):
             failures.append(
@@ -436,6 +438,16 @@ class NMRNetSession:
         if failures:
             self._raise_retirement_failure(failures)
         self._phase = _Phase.RETIRED
+
+    async def _retire_prediction(self, worker, retirement, *, retry=False):
+        task = self._prediction_retirement_task
+        failed = task is not None and task.done() and (
+            task.cancelled() or task.exception() is not None or bool(task.result())
+        )
+        if task is None or (retry and failed):
+            task = asyncio.create_task(retirement.retire_channel(worker))
+            self._prediction_retirement_task = task
+        return await asyncio.shield(task)
 
     def _raise_retirement_failure(self, failures):
         self.last_retirement_failure = SessionRetirementFailed(failures)
