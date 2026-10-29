@@ -571,9 +571,8 @@ the source/lock label alone does not identify those platform-wheel bytes.
 Installed-image checks cover the full dependency set, native signing, import
 origins and isolated CLI startup. They contact no API or model and perform no
 prediction.</p>
-<p>The service network components have focused offline checks:</p>
-<pre><code class="language-sh">make test/integration/provider/proxy WHEELHOUSE=/path/to/shared-pool
-</code></pre>
+<p>The shared provider package maintains the
+<a href="https://github.com/numpde/nmr-provider-tools/blob/main/packages/provider-core/tests/integration/test_provider_proxy.py">service proxy integration test</a>.</p>
 <p>The controller's HTTPS transport can use a fixed Unix CONNECT socket. The service
 proxy admits only explicitly granted DNS-name/IPv4 authorities before resolution
 or connection. Local routing requires a complete frozen host-to-IPv4 mapping;

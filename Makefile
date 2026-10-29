@@ -41,7 +41,6 @@ test/integration/provider/prediction-crash:
 .PHONY: geometry/image/build
 .PHONY: provider/image/build
 .PHONY: test/unit/provider/image test/integration/provider-runtime
-.PHONY: test/integration/provider/proxy
 .PHONY: test/integration/rdkit-worker
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
@@ -74,9 +73,6 @@ provider/image/build:
 	bash tools/container.sh $@
 
 test/unit/provider/image test/integration/provider-runtime:
-	bash tools/container.sh $@
-
-test/integration/provider/proxy:
 	bash tools/container.sh $@
 
 test/integration/rdkit-runtime:
@@ -285,7 +281,6 @@ help:
 		'make test/integration/provider/deployment/recovery Check idle delivery restart and reader-process recovery without scientific work (opt-in).' \
 		'make test/unit/provider/deployment     Check finite deployment and API-client orchestration offline.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
-		'make test/integration/provider/proxy   Verify destination TLS through the actual Unix service proxy offline.' \
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
