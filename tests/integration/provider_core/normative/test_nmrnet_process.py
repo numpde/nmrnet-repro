@@ -4,8 +4,10 @@ import asyncio
 import errno
 import hashlib
 import json
+import logging
 import os
 import signal
+import sys
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
@@ -436,7 +438,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     while True:
                         os.write(writer, b"x" * 4096)
                 os.set_blocking(writer, True)
+                # Asyncio's debug logger must not write to the intentionally full
+                # pipe used to exercise the provider's own stderr writer.
+                asyncio_logger = logging.getLogger("asyncio")
                 with (
+                    patch.object(asyncio_logger, "handlers", [logging.StreamHandler(sys.stderr)]),
+                    patch.object(asyncio_logger, "propagate", False),
                     os.fdopen(writer, "w", closefd=False) as output,
                     redirect_stderr(output),
                 ):
