@@ -1,6 +1,7 @@
 """An interrupted prediction does not trigger another scientific execution."""
 
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -13,6 +14,18 @@ from provider_core.analysis import AnalysisFailure
 
 
 class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_large_diagnostic_does_not_prevent_truthful_failure(self):
+        ports = SessionPorts()
+        original = PredictionExecutionFailed("a" * 300000)
+        ports.worker.execute = AsyncMock(side_effect=original)
+        prepared = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        outcome = await ports.session.execute(prepared, report_condition=unexpected_condition)
+        diagnostic = json.loads(outcome.evidence.content)["prediction_failure"]["diagnostic"]
+        self.assertEqual(diagnostic["omitted_characters"], 300000 - 8192)
+        self.assertEqual(len(diagnostic["head"] + diagnostic["tail"]), 8192)
+        self.assertIsInstance(outcome, AnalysisFailure)
+        await ports.session.retire()
+
     async def test_failure_after_retirement_is_not_selected_as_outcome(self):
         ports = SessionPorts()
         session = ports.session
