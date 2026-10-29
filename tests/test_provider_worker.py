@@ -544,6 +544,36 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(writer.sent, [])
         self.assertIn('"send_started": false', json.dumps(failure_evidence(expired.exception, secrets=())))
 
+    async def test_timeout_and_channel_close_failure_remain_independent(self):
+        reader, writer = asyncio.StreamReader(), BufferedWriter()
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64)
+        cleanup = OSError("PRIVATE_CLOSE_FAILURE")
+        with patch.object(writer, "close", side_effect=cleanup):
+            with self.assertRaises(ExceptionGroup) as caught:
+                await client.prepare((b"request",))
+        timeout, reported_cleanup = caught.exception.exceptions
+        self.assertIs(type(timeout), WorkerExchangeTimedOut)
+        self.assertTrue(timeout.send_started)
+        self.assertIs(reported_cleanup, cleanup)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn('"send_started": true', rendered)
+        self.assertIn("OSError", rendered)
+        self.assertNotIn("PRIVATE_CLOSE_FAILURE", rendered)
+
+    async def test_lost_channel_and_close_failure_remain_independent(self):
+        client, writer = self.client(b"")
+        cleanup = OSError("PRIVATE_CLOSE_FAILURE")
+        with patch.object(writer, "close", side_effect=cleanup):
+            with self.assertRaises(ExceptionGroup) as caught:
+                await client.prepare((b"request",))
+        primary, reported_cleanup = caught.exception.exceptions
+        self.assertIs(type(primary), asyncio.IncompleteReadError)
+        self.assertIs(reported_cleanup, cleanup)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn("IncompleteReadError", rendered)
+        self.assertIn("OSError", rendered)
+        self.assertNotIn("PRIVATE_CLOSE_FAILURE", rendered)
+
     async def test_dependency_timeout_after_timer_cancellation_keeps_its_identity(self):
         foreign = TimeoutError("Independent timeout after cancellation")
 

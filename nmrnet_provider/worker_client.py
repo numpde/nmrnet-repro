@@ -117,13 +117,20 @@ class WorkerClient:
                     interruption = cause
                     raise
         except TimeoutError as cause:
-            self.close()
+            timeout = cause
             if interruption is not None and budget.expired() and cause.__cause__ is interruption:
-                raise WorkerExchangeTimedOut(
+                timeout = WorkerExchangeTimedOut(
                     "Scientific exchange exceeded its configured deadline; its response is unconfirmed.",
                     send_started=send_started,
-                ) from cause
-            raise
+                )
+                timeout.__cause__ = cause
+            try:
+                self.close()
+            except Exception as cleanup:
+                raise ExceptionGroup("Scientific exchange timed out and channel close failed", (timeout, cleanup)) from None
+            if timeout is cause:
+                raise
+            raise timeout from cause
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as cause:
             primary = cause
             try:
@@ -152,9 +159,12 @@ class WorkerClient:
         try:
             self.close()
         except Exception as cleanup:
-            if type(primary) is not NativeWorkerExited:
+            if type(primary) is NativeWorkerExited:
+                primary.retain_cleanup_failure(cleanup)
+            elif isinstance(primary, Exception):
+                raise ExceptionGroup("Scientific channel failed and its close failed", (primary, cleanup)) from None
+            else:
                 raise
-            primary.retain_cleanup_failure(cleanup)
 
     async def wait_closed(self):
         """Observe the original local close; caller timeout never cancels it."""
