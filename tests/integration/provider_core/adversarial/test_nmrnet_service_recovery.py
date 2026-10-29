@@ -46,6 +46,9 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
     async def test_source_outage_with_independent_control_failure_does_not_continue(self):
         await self.check_settled_source_outage(source_problem="control")
 
+    async def test_source_outage_with_failed_transport_retirement_does_not_continue(self):
+        await self.check_settled_source_outage(source_problem="retirement")
+
     async def check_settled_source_outage(self, *, source_problem=None):
         async with SuccessiveServicePeers(maximum_live_attempts=2, lose_second_completion=False) as fixture:
             first, second = fixture.jobs[:2]
@@ -119,6 +122,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 service._observe_attempt = observe_with_control_failure
             if source_problem is not None:
                 original_exhausted = JobUploads._recovery_exhausted
+                original_retire = JobUploads._retire_recovery
 
                 def exhausted_with_cleanup(owner, reason, failure):
                     result = original_exhausted(owner, reason, failure)
@@ -128,12 +132,20 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                         result.interruption = OSError("PRIVATE_SOURCE_INTERRUPTION")
                     return result
 
-                with patch.object(JobUploads, "_recovery_exhausted", exhausted_with_cleanup):
+                async def retire_with_failure(owner, failure, *, store_owner):
+                    with patch.object(owner._api, "retire", new=AsyncMock(side_effect=OSError("PRIVATE_RETIREMENT"))):
+                        return await original_retire(owner, failure, store_owner=store_owner)
+
+                with patch.object(JobUploads, "_recovery_exhausted", exhausted_with_cleanup), \
+                     patch.object(JobUploads, "_retire_recovery", retire_with_failure if source_problem == "retirement" else original_retire):
                     with self.assertRaises(ServiceFailed) as caught:
                         await asyncio.wait_for(service.run(fixture.stop), 8)
                 evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
-                self.assertIn("UploadRecoveryExhausted", evidence)
-                if source_problem != "control":
+                self.assertIn("UploadFailed" if source_problem == "retirement" else "UploadRecoveryExhausted", evidence)
+                if source_problem == "retirement":
+                    self.assertIn("OSError", evidence)
+                    self.assertNotIn("PRIVATE_RETIREMENT", evidence)
+                elif source_problem != "control":
                     self.assertIn("independent cleanup" if source_problem == "cleanup" else "acquisition interruption", evidence)
                     self.assertIn("OSError", evidence)
                 else:
