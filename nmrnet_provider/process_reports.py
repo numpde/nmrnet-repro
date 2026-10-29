@@ -120,6 +120,8 @@ def _safe_owner_details(error):
     ):
         return {}
     details = {"message": str(error)}
+    if type(error) is WorkerExchangeTimedOut:
+        details["send_started"] = error.send_started
     if type(error) is ProviderProcessFailed:
         details["requires_host_retirement"] = error.requires_host_retirement
     if type(error) is NativeSetupFailed and type(error.job_ref) is str:

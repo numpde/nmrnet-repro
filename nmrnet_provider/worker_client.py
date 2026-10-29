@@ -41,6 +41,10 @@ class ModelCallFailed(PredictionExecutionFailed):
 class WorkerExchangeTimedOut(TimeoutError):
     """This channel's own exchange deadline elapsed, not a foreign timeout."""
 
+    def __init__(self, message, *, send_started):
+        super().__init__(message)
+        self.send_started = send_started
+
 
 class WorkerResultRejected(WorkerProtocolError):
     """Retain an unexpected decoded result reply without rendering its contents."""
@@ -77,6 +81,7 @@ class WorkerClient:
         self._busy = True
         budget = None
         interruption = None
+        send_started = False
         try:
             loop = asyncio.get_running_loop()
             deadline = loop.time() + self._seconds
@@ -85,13 +90,14 @@ class WorkerClient:
                 try:
                     encoded = frame(request | {"allocation": self._allocation})
                     if loop.time() >= deadline:
-                        raise WorkerExchangeTimedOut("Scientific exchange deadline elapsed before dispatch")
+                        raise WorkerExchangeTimedOut("Scientific exchange deadline elapsed before dispatch", send_started=False)
+                    send_started = True
                     self._writer.write(encoded)
                     await self._writer.drain()
                     size = frame_size(await self._reader.readexactly(4))
                     reply = document(await self._reader.readexactly(size))
                     if loop.time() >= deadline:
-                        raise WorkerExchangeTimedOut("Scientific reply arrived after its exchange deadline")
+                        raise WorkerExchangeTimedOut("Scientific reply arrived after its exchange deadline", send_started=True)
                     if self._closed:
                         raise WorkerProtocolError("Scientific connection closed before the reply could be accepted")
                     if reply.get("allocation") != self._allocation:
@@ -110,7 +116,8 @@ class WorkerClient:
             self.close()
             if interruption is not None and budget.expired() and cause.__cause__ is interruption:
                 raise WorkerExchangeTimedOut(
-                    "Scientific exchange exceeded its configured deadline; its response is unconfirmed."
+                    "Scientific exchange exceeded its configured deadline; its response is unconfirmed.",
+                    send_started=send_started,
                 ) from cause
             raise
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as cause:

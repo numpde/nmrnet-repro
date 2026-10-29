@@ -13,6 +13,7 @@ import multiprocessing
 import socket
 import struct
 import tempfile
+import time
 import traceback
 import unittest
 from contextlib import suppress
@@ -518,13 +519,30 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_owned_exchange_deadline_is_distinct_from_a_foreign_timeout(self):
         reader, writer = asyncio.StreamReader(), BufferedWriter()
         client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64)
-        with self.assertRaises(WorkerExchangeTimedOut):
+        with self.assertRaises(WorkerExchangeTimedOut) as expired:
             await client.prepare((b"request",))
+        self.assertTrue(expired.exception.send_started)
+        self.assertIn('"send_started": true', json.dumps(failure_evidence(expired.exception, secrets=())))
         foreign = TimeoutError("Authored independent timeout")
         client, writer = self.client(b"")
         with patch.object(writer, "drain", side_effect=foreign), self.assertRaises(TimeoutError) as caught:
             await client.prepare((b"request",))
         self.assertIs(caught.exception, foreign)
+
+    async def test_deadline_before_write_reports_no_send(self):
+        client, writer = self.client(b"", seconds=0.01)
+
+        def slow_frame(request):
+            result = frame(request)
+            time.sleep(0.02)
+            return result
+
+        with patch("nmrnet_provider.worker_client.frame", side_effect=slow_frame):
+            with self.assertRaises(WorkerExchangeTimedOut) as expired:
+                await client.prepare((b"request",))
+        self.assertFalse(expired.exception.send_started)
+        self.assertEqual(writer.sent, [])
+        self.assertIn('"send_started": false', json.dumps(failure_evidence(expired.exception, secrets=())))
 
     async def test_dependency_timeout_after_timer_cancellation_keeps_its_identity(self):
         foreign = TimeoutError("Independent timeout after cancellation")
