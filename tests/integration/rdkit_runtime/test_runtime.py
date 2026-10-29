@@ -19,7 +19,11 @@ from tools.wheelhouse import requirements
 
 class RDKitRuntimeNormativeTests(unittest.TestCase):
     def test_installed_distributions_match_the_complete_lock(self):
-        expected = sorted(requirements(Path(__file__).with_name("runtime.lock")))
+        expected = set(requirements(Path(__file__).with_name("runtime.lock")))
+        native_lock = Path(__file__).with_name("native.lock")
+        if native_lock.exists():
+            expected.update(requirements(native_lock))
+        expected = sorted(expected)
         installed = sorted(
             (re.sub(r"[-_.]+", "-", distribution.metadata["Name"]).lower(), distribution.version)
             for distribution in importlib.metadata.distributions()

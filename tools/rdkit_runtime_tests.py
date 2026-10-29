@@ -25,12 +25,14 @@ def capture_inputs(root):
     return wheels, tests, lock
 
 
-def capture_tests(root):
+def capture_tests(root, *, native_lock=None):
     """Keep the import witnesses independent of checkout and user-site imports."""
     tests = root / "tests"
     shutil.copytree("/native-tests", tests, symlinks=True)
     lock = tests / "runtime.lock"
     shutil.copyfile("/input/preparation.lock", lock)
+    if native_lock is not None:
+        shutil.copyfile(native_lock, tests / "native.lock")
     tools = tests / "tools"
     tools.mkdir()
     for name in ("container_guard.py", "artifacts.py", "wheelhouse.py"):
@@ -53,7 +55,7 @@ def run_installed_tests(suite):
     sys.stdout.flush()
     with tempfile.TemporaryDirectory(prefix="rdkit-", dir="/tmp") as temporary:
         root = Path(temporary)
-        tests, _ = capture_tests(root)
+        tests, _ = capture_tests(root, native_lock=Path("/opt/rdkit/provider-core-install.lock"))
         if suite in ("mol", "sdf", "geometry_worker", "smiles", "smiles_worker"):
             for name in ("nmrnet_provider", "nmrnet_inference"):
                 shutil.copytree(Path("/workspace") / name, tests / name, symlinks=True)
