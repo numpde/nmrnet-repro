@@ -14,6 +14,7 @@ import socket
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 if os.environ.get("NMRNET_PREDICTION_PARITY") != "1":
     raise unittest.SkipTest("run make prediction/worker-parity")
@@ -27,7 +28,7 @@ from nmrnet_inference.worker import serve_released_connection
 from nmrnet_provider.input_geometry import prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import ResultPlan
-from nmrnet_provider.worker_client import PredictionClient
+from nmrnet_provider.worker_client import ModelCallFailed, PredictionClient
 from tools import baseline_prepare
 
 WORKER_SOURCES = (
@@ -69,6 +70,22 @@ def released_worker(connection, allocation):
         )
 
 
+def released_worker_with_failed_post_hook(connection, allocation):
+    original = SelectedReleaseModels.load_selected_element
+
+    def selected_with_failed_hook(models, element, dictionary):
+        model, scaler = original(models, element, dictionary)
+
+        def fail_after_forward(_model, _arguments, _result):
+            raise RuntimeError("authored post-hook failure")
+
+        model.register_forward_hook(fail_after_forward)
+        return model, scaler
+
+    with patch.object(SelectedReleaseModels, "load_selected_element", selected_with_failed_hook):
+        released_worker(connection, allocation)
+
+
 class ReleasedWorkerTests(unittest.TestCase):
     def test_released_batch_matches_direct_results_with_geometry_specific_provenance(self):
         """Use unlike synthetic inputs for wiring/parity, not experimental accuracy."""
@@ -83,6 +100,9 @@ class ReleasedWorkerTests(unittest.TestCase):
             weight_root=Path("/weight"),
             checkpoint_root=Path("/checkpoints"),
         )
+        with self.assertRaises(ModelCallFailed) as failed:
+            asyncio.run(self.worker_prediction((requests[0],), "failed-post-hook", released_worker_with_failed_post_hook))
+        self.assertIn("authored post-hook failure", failed.exception.diagnostic)
         expected = tuple(predict_request(raw, loader.load_dictionary, loader.load_selected_element) for raw in requests)
         actual = asyncio.run(self.worker_prediction(requests, "ordered-batch"))
         self.assertEqual(expected, tuple(item["prediction"] for item in actual))
@@ -149,9 +169,9 @@ class ReleasedWorkerTests(unittest.TestCase):
         self.assertEqual(result["provenance"]["artifacts"]["elements"], {})
         self.assertEqual(result["private_warnings"], [])
 
-    async def worker_prediction(self, raw_requests, allocation):
+    async def worker_prediction(self, raw_requests, allocation, worker_target=released_worker):
         parent, child = socket.socketpair()
-        worker = multiprocessing.get_context("spawn").Process(target=released_worker, args=(child, allocation))
+        worker = multiprocessing.get_context("spawn").Process(target=worker_target, args=(child, allocation))
         writer = None
         try:
             worker.start()
