@@ -110,7 +110,7 @@ closed tables; unknown fields fail startup:</p>
 </tbody>
 </table>
 <p><code>scientific_retry.max_retries</code> must be <code>0</code>. Positive
-values are not yet implemented and prevent startup. Prediction runs once per
+values are not yet implemented and prevent startup. Prediction runs at most once per
 Attempt; this setting does not change API or delivery retries.</p>
 <p>The supplied definitions reserve two live Attempt slots, 256 KiB for control
 records and 4 MiB for pending terminal reports. Each slot reserves 128 KiB of
