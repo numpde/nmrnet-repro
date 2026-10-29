@@ -159,4 +159,5 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
             release.set()
         with self.assertRaisesRegex(ValueError, "retirement"):
             await asyncio.wait_for(task, timeout=1)
-        self.assertEqual(ports.worker.events, ["close", "closed"])
+        self.assertEqual(ports.worker.events, [])
+        self.assertFalse(ports.host.confirmed)
