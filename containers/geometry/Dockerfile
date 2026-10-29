@@ -9,7 +9,7 @@ COPY requirements/preparation.lock /opt/rdkit/preparation.lock
 # Hash verification and installation consume the same frozen, read-only wheels.
 # Build networking is disabled by the launcher; no source distributions execute.
 COPY tools/provider_environment.py tools/baseline_prepare.py tools/container_resources.py ./tools/
-COPY requirements/provider-core-install.lock ./requirements/
+COPY requirements/provider-core-native-install.lock ./requirements/
 COPY nmrnet_provider/ ./nmrnet_provider/
 COPY nmrnet_inference/ ./nmrnet_inference/
 RUN --mount=type=bind,from=wheelhouse,target=/wheels \
@@ -17,7 +17,7 @@ RUN --mount=type=bind,from=wheelhouse,target=/wheels \
     python3 -B -m tools.rdkit_environment --root /opt/rdkit \
         --wheels /wheels --lock /opt/rdkit/preparation.lock \
     && python3 -B -m tools.provider_environment --root /opt/rdkit --source /opt/build \
-        --python /opt/rdkit/environment/bin/python --install-lock /opt/build/requirements/provider-core-install.lock --runtime-wheels /runtime-wheels \
+        --python /opt/rdkit/environment/bin/python --install-lock /opt/build/requirements/provider-core-native-install.lock --runtime-wheels /runtime-wheels \
     && /opt/rdkit/environment/bin/python -I -B -m nmrnet_provider.worker_main --help \
     && rm -rf /opt/build
 

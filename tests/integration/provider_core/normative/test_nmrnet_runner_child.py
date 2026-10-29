@@ -21,7 +21,7 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(runner.close)
         identities = []
         for source in (b"H 0 0 0\nC 1.09 0 0\n", b"C 0 0 0\nH 0 1.09 0\n"):
-            operation = NativeOperation(role="reader", endpoint=runner.path, operation_seconds=2, on_notice=Mock())
+            operation = NativeOperation(role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock())
             reader, writer = await operation.start()
             client = GeometryClient(reader, writer, allocation=operation.allocation, operation_seconds=2)
             try:

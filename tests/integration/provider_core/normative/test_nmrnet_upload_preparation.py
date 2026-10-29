@@ -1,5 +1,6 @@
 """Verified ZIP member selection preserves source identity through input ownership."""
 
+import asyncio
 import hashlib
 import io
 import unittest
@@ -18,6 +19,55 @@ from provider_core.uploads import VerifiedUpload
 
 
 class UploadPreparationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelled_source_wait_reports_late_evidence_after_settlement(self):
+        ports = UploadPorts()
+        entered = asyncio.Event()
+        evidence = OSError("late source cleanup failure")
+        observed = []
+
+        async def acquire():
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                ports.uploads.recovery_failure = evidence
+                raise
+
+        owner = ports.owner(AsyncMock(), on_source_observation=observed.append)
+        self.addAsyncCleanup(owner.retire)
+        waiter = asyncio.create_task(owner._source_call(acquire))
+        await entered.wait()
+        waiter.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await waiter
+        self.assertEqual(observed, [])
+        await owner._settle_source()
+        self.assertEqual(observed, [evidence])
+
+    async def test_verified_source_is_owned_before_recovery_is_reported(self):
+        ports = UploadPorts()
+        failure = OSError("source temporarily unavailable")
+        verified = ports.uploads.acquire.return_value
+        observed = []
+
+        async def acquire(_upload_ref):
+            ports.uploads.recovery_failure = failure
+            return verified
+
+        async def choose(_instructions, capability):
+            await capability.prepare_upload(
+                UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,)
+            )
+
+        def report(cause):
+            observed.append((cause, owner._source))
+
+        ports.uploads.acquire.side_effect = acquire
+        owner = ports.owner(choose, on_source_observation=report)
+        self.addAsyncCleanup(owner.retire)
+        await owner.prepare(ports.instructions)
+        self.assertEqual(observed, [(failure, verified)])
+
     async def test_zip_inspection_correction_and_selection_keep_one_verified_snapshot(self):
         ports = UploadPorts()
         readers = []

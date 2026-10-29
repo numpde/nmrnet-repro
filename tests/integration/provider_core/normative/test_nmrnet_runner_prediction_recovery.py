@@ -4,6 +4,7 @@ The child uses the existing framed scientific server and authored outcomes. This
 qualifies the new factory/runner connection, not released-model accuracy or OOM.
 """
 
+import asyncio
 import json
 import sys
 import tempfile
@@ -83,6 +84,7 @@ class RunnerPredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 return owned
 
             factory = NativeAttemptFactory(
+                admission_stopping=asyncio.Event(),
                 config=SimpleNamespace(), claims=object(),
                 execution_identity={}, selected_artifacts=ports.worker.artifacts,
                 policy=NativePolicy(allocation_seconds=3, prediction_seconds=3, source_seconds=1),

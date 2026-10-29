@@ -20,7 +20,7 @@ from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRej
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
-    async def test_sigterm_after_model_headers_retains_effect_uncertainty_and_independent_cleanup(self):
+    async def test_sigterm_drains_model_timeout_and_preserves_independent_cleanup_failure(self):
         for cleanup_failure in (False, True):
             with self.subTest(cleanup_failure=cleanup_failure):
                 async with (
@@ -39,10 +39,10 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     rendered = json.dumps(report)
                     for fact in (
                         "ChatFailed",
-                        '"reason": "request_cancelled"',
+                        '"reason": "exchange_failed"',
                         '"status": 200',
                         "request:interrupted-model",
-                        "may have been processed",
+                        "aggregate deadline expired",
                     ):
                         self.assertIn(fact, rendered)
                     self.assertNotIn("PRIVATE", rendered)

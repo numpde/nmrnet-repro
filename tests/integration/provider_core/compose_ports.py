@@ -9,6 +9,7 @@ import tomli_w
 
 from nmrnet_provider.config import load_provider_config
 from nmrnet_provider.deployment import render_compose
+from provider_core.deployment_binding import parse_deployment_bindings
 from tests.integration.nmrnet.config_ports import ConfigFiles
 
 
@@ -30,12 +31,21 @@ class ComposeFixture:
             "upstream_revision": "b" * 40, "runtime_identity_source": "caller",
             "tool_sources": {"tools/worker.py": {"sha256": "c" * 64, "size": 1}},
         }
-        self.routes = {role: {"mode": "external", "interface": "eth0", "log_level": "INFO"} for role in ("api", "interpreter", "store")}
+        self.routes = {role: {"mode": "external", "interface": "eth0", "log_level": "INFO"} for role in ("interpreter", "store")}
+        self.binding = parse_deployment_bindings(tomli_w.dumps({
+            "project": "nmr-api-delivery", "uid": 1000, "gid": self.config.delivery.endpoint.socket_group_id,
+            "request_seconds": 30, "retry_initial_seconds": 1, "retry_max_seconds": 30,
+            "limits": {"provider_items": 8, "provider_bytes": 16777216, "total_items": 8, "total_bytes": 16777216},
+            "bindings": [{"name": "nmrnet", "socket_path": str(self.config.delivery.endpoint.socket_path),
+                          "api": tomllib.loads(self.files.raw.decode())["api"],
+                          "route": {"mode": "external", "interface": "eth0", "log_level": "INFO",
+                                    "resolver_file": str(self.root / "api-resolv.conf")}}],
+        }).encode()).selected("nmrnet")
 
     def plan(self, **changes):
         arguments = dict(deployment="web", checkout=self.root / "checkout", bundle=self.bundle,
                          uid=1000, gid=1001, prepared=self.root / "prepared", execution=self.execution,
-                         routes=self.routes, shared_image_id="sha256:" + "9" * 64)
+                         routes=self.routes, binding=self.binding, shared_image_id="sha256:" + "9" * 64)
         arguments.update(changes)
         return render_compose(self.config, **arguments)
 

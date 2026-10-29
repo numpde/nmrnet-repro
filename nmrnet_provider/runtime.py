@@ -21,7 +21,7 @@ from provider_core.attempt_record import StartPending
 from provider_core.chat import ChatEndpoint
 from provider_core.controller import AttemptController
 from provider_core.delivery_client import DeliveryClient
-from provider_core.uploads import JobUploads
+from provider_core.uploads import JobUploads, UploadRecovery
 
 
 async def assemble_attempt(
@@ -30,12 +30,15 @@ async def assemble_attempt(
     pending,
     claims,
     stopping,
+    admission_stopping,
     start_policy,
     execution_identity,
     selected_artifacts,
     allocate_prediction,
     on_prediction_retry,
     on_interpreter_failure,
+    on_source_retry,
+    on_source_observation,
     allocate_reader,
     allocate_generator,
     observation_recovery,
@@ -73,6 +76,13 @@ async def assemble_attempt(
         store=source_store_transport,
         store_origin=config.uploads.store_origin,
         limits=config.uploads.limits,
+        recovery=UploadRecovery(
+            maximum_attempts=3,
+            initial_seconds=config.service.policy.idle_seconds,
+            maximum_seconds=config.service.policy.api_backoff_max_seconds,
+            stopping=stopping,
+            on_retry=on_source_retry,
+        ),
     )
     endpoints = tuple(
         ChatEndpoint(
@@ -89,6 +99,7 @@ async def assemble_attempt(
     settings = config.preparation
     preparation = InputPreparation(
         uploads=uploads,
+        on_source_observation=on_source_observation,
         source_api_transport=source_api_transport,
         source_store_transport=source_store_transport,
         allocate_reader=allocate_reader,
@@ -113,6 +124,7 @@ async def assemble_attempt(
         session,
         scope=settings.scope,
         stopping=stopping,
+        admission_stopping=admission_stopping,
         start_policy=start_policy,
         allow_active_start_replay=True,
         delivery=DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,

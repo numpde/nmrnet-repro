@@ -72,7 +72,7 @@ class WheelhouseClientTests(unittest.TestCase):
             inputs = [mount for mount in mounts if ",dst=/input/" in mount]
             self.assertEqual([
                 f"type=bind,src={lock},dst=/input/preparation.lock,readonly",
-                f"type=bind,src={self.root}/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly",
+                f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
                 f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
             ], inputs)
             self.assertNotIn("--source", command)
@@ -256,7 +256,7 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--mount",
                 f"type=bind,src={self.root}/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly",
                 "--mount",
-                f"type=bind,src={self.root}/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly",
+                f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
                 "--mount",
                 f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
                 "--mount",
@@ -279,7 +279,7 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--lock",
                 "/input/preparation.lock",
                 "--lock",
-                "/input/provider-core-install.lock",
+                "/input/provider-core-native-install.lock",
                 "--assets",
                 "/input/provider-core-assets.in",
                 "--source",

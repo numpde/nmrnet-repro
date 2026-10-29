@@ -9,7 +9,7 @@
 !tools/wheelhouse.py
 !tools/build_unicore.py
 !requirements/
-!requirements/provider-core-install.lock
+!requirements/provider-core-native-install.lock
 !requirements/inference.lock
 !requirements/unicore-source.json
 !NMRNetplusplus/

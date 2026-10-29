@@ -115,6 +115,7 @@ class InputPreparation:
         self,
         *,
         uploads,
+        on_source_observation,
         source_api_transport,
         source_store_transport,
         allocate_reader,
@@ -132,6 +133,7 @@ class InputPreparation:
             seconds=seconds,
         )
         self._uploads = uploads
+        self._on_source_observation = on_source_observation
         self._transports = (("source_api_retirement", source_api_transport), ("source_store_retirement", source_store_transport))
         self._allocate_reader = allocate_reader
         self._allocate_generator = allocate_generator
@@ -335,7 +337,9 @@ class InputPreparation:
     async def inspect(self):
         """Expose the actual Upload membership observation, including descriptions."""
         async with self._operation():
-            return await self._source_call(self._uploads.inspect)
+            result = await self._source_call(self._uploads.inspect)
+            self._report_source_observation()
+            return result
 
     async def inspect_upload(self, upload_ref):
         """Inspect cached verified bytes with one separately retired reader allocation.
@@ -362,17 +366,28 @@ class InputPreparation:
     async def _upload_source(self, upload_ref):
         if self._source is None or self._source.upload_ref != upload_ref:
             self._source = await self._source_call(self._uploads.acquire, upload_ref)
+            self._report_source_observation()
         return self._source
 
+    def _report_source_observation(self):
+        failure = self._uploads.recovery_failure
+        if failure is not None:
+            self._on_source_observation(failure)
+
     async def _source_call(self, operation, *args):
-        self._source_task = asyncio.create_task(contain_task_exit(operation, *args))
-        self._source_task.add_done_callback(self._record_source_failure)
+        task = asyncio.create_task(contain_task_exit(operation, *args))
+        self._source_task = task
+        task.add_done_callback(self._record_source_failure)
         try:
-            result = await asyncio.shield(self._source_task)
+            result = await asyncio.shield(task)
             self._require_choosing()
             return result
+        except BaseException:
+            if task.done() and self._source_task is task:
+                self._report_source_observation()
+            raise
         finally:
-            if self._source_task is not None and self._source_task.done():
+            if task.done() and self._source_task is task:
                 self._source_task = None
 
     def _record_source_failure(self, task):
@@ -579,6 +594,7 @@ class InputPreparation:
         if task is None:
             return
         await self._settle_task(task)
+        self._report_source_observation()
         self._source_task = None
 
     async def _settle_task(self, task):

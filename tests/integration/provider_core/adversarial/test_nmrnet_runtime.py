@@ -113,6 +113,9 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             task.cancel("fixture interpretation cancellation")
             with self.assertRaises(asyncio.CancelledError):
                 await task
+            controller.request_stop()
+            with self.assertRaises(ControllerFailed):
+                await asyncio.wait_for(controller.join(), 5)
             await fixture.settle_controller(controller)
             self.assertFalse(ports.host.confirmed)
             self.assertEqual(ports.worker.events, [])

@@ -617,6 +617,14 @@ successful read cycle or accepted Hello resets its own backoff. Requests keep th
 configured deadlines; an outage may wait until recovery or stop, and stop interrupts
 the backoff wait. A startup
 request already in flight still has its exchange/retirement deadlines.</p>
+<p>During Upload selection and acquisition, eligible temporary failures can be
+retried within the same Attempt. Each source operation allows at most three
+attempts, including the first. The provider retires the previous exchange and
+checks that the Job's Upload membership is unchanged before requesting another
+read grant. All attempts share the original request, byte and time limits; stop
+interrupts the wait. Docker diagnostics report the original failure and any
+uncertain earlier grant. Recovery does not repeat interpretation or prediction.
+Source: <a href="https://github.com/numpde/nmr-provider-tools/blob/main/packages/provider-core/src/provider_core/uploads.py">shared Upload owner</a>.</p>
 <p>Safe reads and fresh complete Hello announcements can recover after rate limits
 and HTTP 500, 502, 503 or 504, without treating an unverified error body as API authority.
 The verified API refusals <code>request_body_timeout</code> (HTTP 408),

@@ -81,6 +81,8 @@ class ServicePeers(AdmissionPeers):
             "on_api_retry": lambda kind, failure, seconds: self.api_notices.append(("retry", kind, failure, seconds)),
             "on_api_recovered": lambda kind, failure: self.api_notices.append(("recovered", kind, failure)),
             "on_observed_crash": lambda crash: self.api_notices.append(("worker_crash", crash)),
+            "factory_ready": lambda: True,
+            "on_source_exhausted": lambda failure, pending: self.api_notices.append(("source_exhausted", failure, pending)),
         }
         return ProviderService(**(arguments | changes))
 

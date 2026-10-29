@@ -246,6 +246,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_native_allocation_failure_identifies_selected_job_at_factory_boundary(self):
         factory = NativeAttemptFactory(
+            admission_stopping=asyncio.Event(),
             config=SimpleNamespace(),
             claims=AttemptClaims.live(),
             execution_identity={},

@@ -25,9 +25,11 @@ from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.controller import ControllerFailed
 from provider_core.delivery_client import DeliveryClient, DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
-from provider_core.execution import AttemptExecutor
+from provider_core.execution import AttemptExecutor, ExecutionFailed
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims, LiveCapacityFull
+from provider_core.task_boundary import contain_task_exit
+from provider_core.uploads import UploadRecoveryExhausted
 
 
 LOGGER = logging.getLogger(__name__)
@@ -118,8 +120,10 @@ class ProviderService:
     Empty offerings pause fresh allocation. Work already handed to the factory
     remains owned until it finishes or stop is requested. Reviewed admission and
     discovery read failures retry from a fresh complete view. Hello recovery
-    builds the latest complete announcement after each wait. Unexpected Attempt
-    failures still stop; other mutations/science never use these loops.
+    builds the latest complete announcement after each wait. A settled,
+    classified source outage retains its Job while unrelated work may proceed;
+    unexpected Attempt failures stop the service. Other mutations/science never
+    use these loops.
     Retry/recovery callbacks receive the operation kind and protected failures.
     """
 
@@ -136,10 +140,13 @@ class ProviderService:
         on_api_retry,
         on_api_recovered,
         on_observed_crash,
+        factory_ready,
+        on_source_exhausted,
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
-                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered, on_observed_crash)
+                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered,
+                           on_observed_crash, factory_ready, on_source_exhausted)
             )
         ):
             raise ValueError(
@@ -154,6 +161,7 @@ class ProviderService:
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self._on_observed_crash = on_observed_crash
+        self._factory_ready, self._on_source_exhausted = factory_ready, on_source_exhausted
         self.policy = policy
         self.hello_api = ProviderAPI(
             config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology
@@ -202,8 +210,8 @@ class ProviderService:
         clean = False
         try:
             if not stop.is_set() and await self._await_startup():
-                self._hello_task = self._start_task(self._hello_loop())
-                self.work_task = self._start_task(self._work_loop())
+                self._hello_task = self._start_task(self._hello_loop)
+                self.work_task = self._start_task(self._work_loop)
                 await self._watch()
         except asyncio.CancelledError as cause:
             cancellation = cause
@@ -230,7 +238,7 @@ class ProviderService:
     async def _await_startup(self):
         # Startup may wait for publication availability. Keep its original task
         # in the same cancellable lane as ordinary work, not maintenance.
-        self.work_task = self._start_task(self._startup())
+        self.work_task = self._start_task(self._startup)
         stopped = asyncio.create_task(self._stop.wait())
         try:
             await asyncio.wait({self.work_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
@@ -390,8 +398,18 @@ class ProviderService:
                 return
             controller = self.controller
             try:
-                await controller.run(pending)
+                await self._observe_attempt(controller, pending)
             except ControllerFailed as failure:
+                execution = failure.cause
+                if (type(execution) is ExecutionFailed and type(execution.cause) is UploadRecoveryExhausted
+                        and not failure.cleanup_failures and not execution.cleanup_failures
+                        and controller.work_settled and controller.shutdown_ready and self._factory_ready()
+                        and controller in self._claims.live_owners()
+                        and self._claims.owns_job(pending.scope, pending.input.job_ref)):
+                    self._on_source_exhausted(failure, pending)
+                    # The registry keeps this controller and the Job exclusion.
+                    self.controller = None
+                    continue
                 if type(failure.cause) is not LiveCapacityFull:
                     raise
                 # Capacity refusal precedes START. Retire this unused session;
@@ -401,12 +419,66 @@ class ProviderService:
                 self.controller = None
                 await self._pause(self.policy.idle_seconds)
                 continue
-            finally:
-                operation = controller.operation
-                if isinstance(operation, AttemptExecutor) and operation.observed_crash is not None:
-                    self._on_observed_crash(operation.observed_crash)
             # Held work remains reachable through the shared live registry.
             self.controller = None
+
+    async def _observe_attempt(self, controller, pending):
+        def report_crash():
+            operation = controller.operation
+            if isinstance(operation, AttemptExecutor) and operation.observed_crash is not None:
+                self._on_observed_crash(operation.observed_crash)
+
+        async def run():
+            try:
+                result = await controller.run(pending)
+            except BaseException as primary:
+                try:
+                    report_crash()
+                except (Exception, BaseExceptionGroup, SystemExit, KeyboardInterrupt) as notice:
+                    raise BaseExceptionGroup(
+                        "Attempt failed and its crash diagnostic could not be reported.", (primary, notice),
+                    ) from None
+                raise
+            try:
+                report_crash()
+            except Exception as notice:
+                self._remember("native crash diagnostic", notice)
+            return result
+
+        task = self._start_task(run)
+        interruption = None
+        cancellations = asyncio.current_task().cancelling()
+        while True:
+            try:
+                result = await asyncio.shield(task)
+                break
+            except asyncio.CancelledError as cause:
+                if task.done() and task.cancelled():
+                    try:
+                        task.result()
+                    except asyncio.CancelledError as child:
+                        observer = interruption
+                        if observer is None and asyncio.current_task().cancelling() > cancellations:
+                            observer = cause
+                        if observer is not None:
+                            raise BaseExceptionGroup(
+                                "Attempt observation and the original Attempt were both cancelled.",
+                                (observer, child),
+                            ) from None
+                        raise
+                if interruption is None:
+                    interruption = cause
+                    self._stop.set()
+            except (Exception, BaseExceptionGroup) as cause:
+                if interruption is not None:
+                    raise BaseExceptionGroup(
+                        "Attempt observation was cancelled and the original Attempt also failed.",
+                        (interruption, cause),
+                    ) from None
+                raise
+        if interruption is not None:
+            raise interruption
+        return result
 
     async def _pause(self, seconds):
         try:
@@ -429,7 +501,7 @@ class ProviderService:
             await asyncio.gather(stopped, return_exceptions=True)
 
     def _start_task(self, operation):
-        task = asyncio.create_task(operation)
+        task = asyncio.create_task(contain_task_exit(operation))
         task.add_done_callback(_retrieve_task_failure)
         return task
 
@@ -490,17 +562,11 @@ class ProviderService:
 
     async def _finish_work(self, drain):
         try:
-            if self._attempt_stopping is not None and (
-                self.controller is None or not isinstance(self.controller.operation, AttemptExecutor)
-            ):
-                # Stop a selected START (including its permitted replay) as soon
-                # as admissions close. Only acknowledged execution may drain.
-                self._attempt_stopping.set()
             if drain:
                 finished = await self._wait_task(self.work_task, self.policy.drain_seconds)
-                if not finished and self.controller is not None and isinstance(self.controller.operation, AttemptExecutor):
+                if not finished and self.controller is not None:
                     try:
-                        LOGGER.warning("Provider shutdown is waiting for the admitted Attempt and its result handoff.")
+                        LOGGER.warning("Provider shutdown is waiting for the original Attempt operation and any result handoff.")
                     except Exception as cause:
                         self._remember("shutdown notice", cause)
                     await asyncio.wait({self.work_task})
@@ -525,8 +591,14 @@ class ProviderService:
         failures = []
         for controller in self._owned_controllers():
             previous = self._settlement_tasks.get(controller)
+            if previous is None and controller.shutdown_ready:
+                # A passive live exclusion can be quiescent without permission
+                # to release its claim. Keep the registry's original owner.
+                if self.controller is controller:
+                    self.controller = None
+                continue
             if previous is None or (retry and previous.done() and (previous.cancelled() or previous.exception() is not None)):
-                previous = self._start_task(controller.settle())
+                previous = self._start_task(controller.settle)
                 self._settlement_tasks[controller] = previous
             try:
                 if not await self._wait_task(previous, self.policy.settle_seconds):
@@ -534,7 +606,7 @@ class ProviderService:
                         "Original Attempt settlement is still pending; retain its controller and task before releasing dependencies."
                     )
                 previous.result()
-            except (Exception, asyncio.CancelledError) as cause:
+            except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append(cause)
             else:
                 del self._settlement_tasks[controller]

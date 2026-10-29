@@ -254,9 +254,9 @@ if [[ "$1" == build ]]; then
         execute_wheel_capture "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image" "$native_timeout"
     fi
     if "$print_command"; then
-        print_wheel_capture_plan "$frozen_context" provider-core provider-core-install.lock "$core_capture_root/runtime-wheels" "$python_image"
+        print_wheel_capture_plan "$frozen_context" provider-core provider-core-native-install.lock "$core_capture_root/runtime-wheels" "$python_image"
     else
-        execute_wheel_capture "$frozen_context" provider-core provider-core-install.lock "$core_capture_root/runtime-wheels" "$python_image" "$native_timeout"
+        execute_wheel_capture "$frozen_context" provider-core provider-core-native-install.lock "$core_capture_root/runtime-wheels" "$python_image" "$native_timeout"
     fi
     if ! "$print_command"; then
         inference_native 'base image admission' "$image_admission_timeout" image-id \

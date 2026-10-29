@@ -15,11 +15,93 @@ from tests.integration.nmrnet.test_nmrnet_session import ScientificWorker
 from nmrnet_provider.service import Announcement, ServiceFailed, ServiceRefused
 from provider_core.api import ApiFailure
 from provider_core.controller import ControllerFailed
-from provider_core.execution import ExecutionFailed
+from provider_core.execution import AttemptExecutor, ExecutionFailed
 from provider_core.transport import ExchangeFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
+
+    async def test_attempt_observer_retains_child_cancellation_and_its_cause(self):
+        async with ServicePeers() as fixture:
+            original = asyncio.CancelledError("original Attempt interruption")
+            original.__cause__ = OSError(5, "independent cleanup failure")
+            controller = Mock(operation=None, run=AsyncMock(side_effect=original))
+            service = fixture.service()
+            service._stop = fixture.stop
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await service._observe_attempt(controller, object())
+            self.assertIs(caught.exception, original)
+            self.assertIsInstance(caught.exception.__cause__, OSError)
+
+    async def test_attempt_observer_retains_both_cancellations(self):
+        async with ServicePeers() as fixture:
+            entered, release = asyncio.Event(), asyncio.Event()
+            child = asyncio.CancelledError("original Attempt interruption")
+
+            async def run(_pending):
+                entered.set()
+                await release.wait()
+                raise child
+
+            controller = Mock(operation=None, run=run)
+            service = fixture.service()
+            service._stop = fixture.stop
+            task = asyncio.create_task(service._observe_attempt(controller, object()))
+            try:
+                await entered.wait()
+                task.cancel("observer interruption")
+                await fixture.stop.wait()
+                release.set()
+                with self.assertRaises(BaseExceptionGroup) as caught:
+                    await task
+                observer, observed_child = caught.exception.exceptions
+                self.assertIsInstance(observer, asyncio.CancelledError)
+                self.assertIs(observed_child, child)
+            finally:
+                release.set()
+                await asyncio.gather(task, return_exceptions=True)
+
+    async def test_failed_crash_notice_preserves_the_original_attempt_failure(self):
+        async with ServicePeers() as fixture:
+            primary = RuntimeError("original Attempt failure")
+            for notice in (RuntimeError("crash notice failure"), SystemExit(7),
+                           BaseExceptionGroup("crash notice failure", [SystemExit(8)])):
+                with self.subTest(notice=type(notice).__name__):
+                    operation = Mock(spec=AttemptExecutor)
+                    operation.observed_crash = object()
+                    controller = Mock(operation=operation, run=AsyncMock(side_effect=primary))
+                    service = fixture.service(on_observed_crash=Mock(side_effect=notice))
+                    service._stop = fixture.stop
+                    with self.assertRaises(BaseExceptionGroup) as caught:
+                        await service._observe_attempt(controller, object())
+                    self.assertEqual(caught.exception.exceptions, (primary, notice))
+
+    async def test_cancelled_work_observer_keeps_original_execution_and_report(self):
+        async with ServicePeers() as fixture:
+            fixture.execution_release = asyncio.Event()
+            service = fixture.service(drain_seconds=0.02)
+            task = asyncio.create_task(service.run(fixture.stop))
+            try:
+                await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                original_work = service.work_task
+                original_work.cancel()
+                await asyncio.wait_for(fixture.stop.wait(), 1)
+                original_work.cancel()
+                await asyncio.sleep(0)
+                self.assertFalse(original_work.done())
+                fixture.execution_release.set()
+                with self.assertRaises(ServiceFailed) as caught:
+                    await asyncio.wait_for(task, 3)
+                self.assertIsInstance(caught.exception.cause, asyncio.CancelledError)
+                await fixture.wait_published()
+                self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+                self.assertTrue(service.shutdown_ready)
+            finally:
+                fixture.stop.set()
+                fixture.execution_release.set()
+                await asyncio.gather(task, return_exceptions=True)
+                if service.shutdown_ready:
+                    await fixture.settle_service(service)
 
     async def test_repeated_timing_refusals_remain_stop_responsive_without_science(self):
         for code in ("authentication_window_closed", "signature_expired"):

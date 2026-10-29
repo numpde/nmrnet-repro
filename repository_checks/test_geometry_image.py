@@ -49,7 +49,7 @@ class GeometryImageTests(unittest.TestCase):
         wheel(self.wheelhouse, "unrelated-project", "9.0")
         lock = self.root / "requirements/preparation.lock"
         locked(lock, [("geometryfixture", "1.0", [self.selected])])
-        for name in ("provider-core-install.lock",):
+        for name in ("provider-core-native-install.lock",):
             locked(self.root / "requirements" / name, [("geometryfixture", "1.0", [self.selected])])
         self.fixture.environment["NMRNET_FAKE_VERIFY_WHEELHOUSE"] = "1"
         (self.root / "tests/integration/rdkit_runtime").mkdir(parents=True)

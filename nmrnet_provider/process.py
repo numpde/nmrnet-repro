@@ -360,6 +360,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         api = ProviderAPI(config.api.identity, transport, expected_topology=config.api.expected_topology)
         factory = NativeAttemptFactory(
             config=config,
+            admission_stopping=stop,
             claims=AttemptClaims.live(limits=config.lifecycle.live_limits),
             execution_identity=execution_identity,
             selected_artifacts=selected_artifacts,
@@ -436,6 +437,10 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             on_started=startup_accepted,
             on_api_retry=report_api_retry,
             on_api_recovered=report_api_recovered,
+            factory_ready=lambda: factory.shutdown_ready,
+            on_source_exhausted=lambda failure, pending: report_operator_notice(
+                failure, {"event": "source_recovery_exhausted", "job_ref": pending.input.job_ref}
+            ),
             on_observed_crash=lambda crash: report_attempt_notice(
                 crash.acknowledged, crash,
                 {"event": "worker_crash_observed", "phase": crash.phase,

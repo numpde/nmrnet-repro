@@ -55,6 +55,7 @@ with socket.socket(fileno=args.session_fd) as channel:
 class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
     def factory(self, ports, claims, retry):
         return NativeAttemptFactory(
+            admission_stopping=asyncio.Event(),
             config=SimpleNamespace(), claims=claims,
             execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
             policy=NativePolicy(allocation_seconds=2, prediction_seconds=2, source_seconds=2),
@@ -191,7 +192,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
     async def test_reader_exit_remains_primary_when_both_channel_close_paths_fail(self):
         runner = RunningSupervisor(role="reader", worker_argv=[sys.executable, "-c", PARTIAL_REPLY_CHILD])
         self.addCleanup(runner.close)
-        operation = NativeOperation(role="reader", endpoint=runner.path, operation_seconds=2, on_notice=Mock())
+        operation = NativeOperation(role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock())
         reader, writer = await operation.start()
         client = GeometryClient(reader, writer, allocation=operation.allocation, operation_seconds=2, native=operation)
         try:

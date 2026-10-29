@@ -4,7 +4,7 @@
 !containers/geometry/Dockerfile
 !containers/geometry/Dockerfile.dockerignore
 !requirements/
-!requirements/provider-core-install.lock
+!requirements/provider-core-native-install.lock
 !requirements/preparation.lock
 !tools/
 !tools/container_guard.py

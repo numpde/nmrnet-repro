@@ -18,14 +18,14 @@ fi
 if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
 case "$profile" in
     inference)
-        inputs=(inference.lock preparation.lock unicore-source.json provider-core-install.lock provider-core-assets.in)
+        inputs=(inference.lock preparation.lock unicore-source.json provider-core-native-install.lock provider-core-assets.in)
         build_target=packages/image
-        worker_arguments=(--profile inference --lock /input/inference.lock --lock /input/preparation.lock --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --source /input/unicore-source.json --pool /wheelhouse)
+        worker_arguments=(--profile inference --lock /input/inference.lock --lock /input/preparation.lock --lock /input/provider-core-native-install.lock --assets /input/provider-core-assets.in --source /input/unicore-source.json --pool /wheelhouse)
         ;;
     preparation)
-        inputs=(preparation.lock provider-core-install.lock provider-core-assets.in)
+        inputs=(preparation.lock provider-core-native-install.lock provider-core-assets.in)
         build_target=geometry/image/build
-        worker_arguments=(--profile preparation --lock /input/preparation.lock --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
+        worker_arguments=(--profile preparation --lock /input/preparation.lock --lock /input/provider-core-native-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
         ;;
     provider-core)
         inputs=(provider-core-install.lock provider-core-assets.in)

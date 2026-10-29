@@ -28,9 +28,9 @@ sys.path.append('/consumer')
 from pathlib import Path
 from nmrnet_provider.native_session import NativeOperation
 operation = NativeOperation(role='reader', endpoint=Path(sys.argv[1]) / 'runner.sock',
-                            operation_seconds=1, on_notice=lambda notice: None)
+                            operation_seconds=1, observation_seconds=0.2, on_notice=lambda notice: None)
 try:
-    operation._connect()
+    operation._lease_identity()
 except PermissionError as failure:
     assert 'regular file' in str(failure), str(failure)
 else:
@@ -43,19 +43,97 @@ assert operation.session is None
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelled_adoption_retires_the_allocated_native_child(self):
+        operation = self.operation()
+        original = asyncio.CancelledError("adoption interrupted")
+        original.__cause__ = OSError(5, "adoption cleanup failure")
+
+        async def cancel_adoption(**_options):
+            raise original
+
+        with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=cancel_adoption):
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await operation.start()
+        self.assertIs(caught.exception, original)
+        self.assertIsNotNone(operation.allocation)
+        await operation.retire()
+        self.assertTrue(operation.session.retirement.scratch_released)
+        self.assertIs(operation.last_failure, original)
+
+    async def test_cancelled_start_retains_late_opening_cancellation(self):
+        operation = self.operation()
+        entered, release = asyncio.Event(), asyncio.Event()
+        cleanup = OSError(5, "independent opening cleanup failure")
+        child = asyncio.CancelledError("original opening cancellation")
+        child.__cause__ = cleanup
+
+        async def open_then_cancel():
+            entered.set()
+            await release.wait()
+            raise child
+
+        with patch.object(operation, "_open", side_effect=open_then_cancel):
+            caller = asyncio.create_task(operation.start())
+            await entered.wait()
+            caller.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await caller
+            release.set()
+            await asyncio.sleep(0)
+            await operation.retire()
+            self.assertIs(operation.last_failure, child)
+            self.assertIs(operation.last_failure.__cause__, cleanup)
+
+    async def test_fatal_opening_still_retires_the_allocated_native_child(self):
+        operation = self.operation()
+
+        async def fail_adoption(**_options):
+            raise SystemExit(7)
+
+        with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=fail_adoption):
+            with self.assertRaises(BaseExceptionGroup) as opening:
+                await operation.start()
+        self.assertTrue(any(isinstance(cause, SystemExit) for cause in opening.exception.exceptions))
+        self.assertIsNotNone(operation.allocation)
+        await operation.retire()
+        await operation.settle()
+        self.assertTrue(operation.session.retirement.scratch_released)
+        self.assertEqual(operation.session.control.fileno(), -1)
+        self.assertIs(self.notices.call_args.args[0], opening.exception)
+
+    async def test_observed_channel_failure_while_child_lives_stops_and_joins_original_reader(self):
+        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3, observation_seconds=0.06, on_notice=Mock())
+        await operation.start()
+        try:
+            await operation.observe_failure(asyncio.IncompleteReadError(b"", 1))
+            original_reader = operation._control_retirement
+            self.assertIsNone(operation.session.original_exit)
+            await operation.retire()
+            await operation.settle()
+            self.assertIs(operation._control_retirement, original_reader)
+            self.assertIsNone(operation.proof)
+            self.assertTrue(operation.session.retirement.scratch_released)
+            self.assertIsNone(operation.session.original_exit)
+        finally:
+            if operation.session is not None:
+                operation.session.close()
+            if operation.proof is not None:
+                operation.proof.close()
+
     async def test_stop_before_connect_does_not_allocate_a_retirement_child(self):
         entered, stopped, release = threading.Event(), threading.Event(), threading.Event()
         connect = RunnerSession.connect
         allocations = []
         operation = self.operation()
         stop = operation._request_stop
+        lease_identity = operation._lease_identity
 
-        def gated_session(*arguments, **options):
+        def gated_lease():
             if not entered.is_set():
                 entered.set()
                 if not release.wait(timeout=3):
                     raise TimeoutError("Fixture did not release the stopped connection")
-            return RunnerSession(*arguments, **options)
+            return lease_identity()
 
         def observed_connect(session, **options):
             try:
@@ -69,7 +147,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             stopped.set()
 
         self.addAsyncCleanup(operation.retire)
-        with (patch("nmrnet_provider.native_session.RunnerSession", side_effect=gated_session),
+        with (patch.object(operation, "_lease_identity", side_effect=gated_lease),
               patch.object(RunnerSession, "connect", observed_connect),
               patch.object(operation, "_request_stop", requested_stop)):
             caller = asyncio.create_task(operation.start())
@@ -108,7 +186,9 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(operation.allocation)
             self.assertIsNone(operation.proof)
             self.assertEqual(operation.session.control.fileno(), -1)
-            self.assertIsInstance(self.notices.call_args.args[0], RunnerStartupUnavailable)
+            notice = self.notices.call_args.args[0]
+            failures = notice.exceptions if isinstance(notice, BaseExceptionGroup) else (notice,)
+            self.assertTrue(any(isinstance(failure, RunnerStartupUnavailable) for failure in failures))
         finally:
             if operation.session is not None:
                 operation.session.close()
@@ -135,7 +215,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(TimeoutError):
                     await operation.retire()
                 self.assertFalse(operation._science_closure.done())
-                self.assertEqual(operation.session.control.fileno(), -1)
+                self.assertTrue(operation._control_retirement.done())
                 self.assertGreaterEqual(transport_socket.fileno(), 0)
                 self.assertIsNone(operation.session.science)
                 self.notices.assert_not_called()
@@ -242,6 +322,8 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         original = RunnerSession.connect
 
         def gated(session, **options):
+            if session is not operation.session:
+                return original(session, **options)
             original(session, **options)
             entered.set()
             if not release.wait(3):
@@ -269,7 +351,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
 
     def operation(self):
         self.notices = Mock()
-        return NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=2, on_notice=self.notices)
+        return NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=self.notices)
 
     async def test_opening_cancellation_stops_before_waiting_for_its_original_thread(self):
         admitted, release = threading.Event(), threading.Event()
@@ -308,7 +390,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         operation = self.operation()
         await operation.start()
         entered, release = threading.Event(), threading.Event()
-        original = RunnerSession.retire
+        original = RunnerSession.observe_retirement
 
         def gated(session, **options):
             entered.set()
@@ -316,7 +398,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
                 raise TimeoutError("Test did not release retirement observation")
             return original(session, **options)
 
-        with patch.object(RunnerSession, "retire", gated):
+        with patch.object(RunnerSession, "observe_retirement", gated):
             caller = asyncio.create_task(operation.retire())
             self.assertTrue(await asyncio.to_thread(entered.wait, 2))
             retained = operation._retirement
@@ -336,7 +418,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         original = operation.session
         original.control.close()
         entered, release = threading.Event(), threading.Event()
-        retire = RunnerSession.retire
+        retire = RunnerSession.observe_retirement
 
         def gated(session, **options):
             if session is not original:
@@ -345,7 +427,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
                     raise TimeoutError("Test did not release proof retirement")
             return retire(session, **options)
 
-        with patch.object(RunnerSession, "retire", gated):
+        with patch.object(RunnerSession, "observe_retirement", gated):
             caller = asyncio.create_task(operation.retire())
             self.assertTrue(await asyncio.to_thread(entered.wait, 2))
             proof_task = operation._proof_task
@@ -433,7 +515,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.01)
 
     async def test_expired_cleanup_does_not_acquire_a_fresh_proof_child(self):
-        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3, on_notice=Mock())
+        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3, observation_seconds=0.06, on_notice=Mock())
         await operation.start()
         entered, release = threading.Event(), threading.Event()
 
@@ -443,7 +525,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
                 raise TimeoutError("Test did not release delayed control failure")
             raise OSError("Injected control loss after its cleanup deadline")
 
-        with patch.object(RunnerSession, "retire", delayed_failure):
+        with patch.object(RunnerSession, "observe_retirement", delayed_failure):
             caller = asyncio.create_task(operation.retire())
             self.assertTrue(await asyncio.to_thread(entered.wait, 1))
             try:
@@ -451,7 +533,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
                     await caller
             finally:
                 release.set()
-            await asyncio.gather(operation._control_retirement, return_exceptions=True)
+            await asyncio.gather(asyncio.wrap_future(operation._control_retirement), return_exceptions=True)
             with self.assertRaises(TimeoutError):
                 await operation.retire()
         self.assertIsNone(operation.proof)

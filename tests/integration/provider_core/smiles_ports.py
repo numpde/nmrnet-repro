@@ -33,7 +33,7 @@ class InputPorts:
         upload = VerifiedUpload(
             "job:example", UPLOAD_REF, len(self.source), "sha256:" + hashlib.sha256(self.source).hexdigest(), self.source
         )
-        self.uploads = SimpleNamespace(job_ref="job:example", inspect=AsyncMock(), acquire=AsyncMock(return_value=upload))
+        self.uploads = SimpleNamespace(job_ref="job:example", inspect=AsyncMock(), acquire=AsyncMock(return_value=upload), recovery_failure=None)
         self.transports = (SimpleNamespace(retire=AsyncMock()), SimpleNamespace(retire=AsyncMock()))
         self.reader = SimpleNamespace(
             read=AsyncMock(return_value=prepare_xyz(self.source, source_unit="angstrom", selection=(1,))),
@@ -85,6 +85,7 @@ class InputPorts:
     def owner(self, script, **changes):
         configuration = {
             "uploads": self.uploads,
+            "on_source_observation": Mock(),
             "source_api_transport": self.transports[0],
             "source_store_transport": self.transports[1],
             "allocate_reader": self.allocate_reader,

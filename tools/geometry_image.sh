@@ -5,7 +5,7 @@
 geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Dockerfile.dockerignore
     requirements/preparation.lock tools/artifacts.py tools/container_guard.py
     tools/rdkit_environment.py tools/wheelhouse.py
-    requirements/provider-core-install.lock
+    requirements/provider-core-native-install.lock
     nmrnet_provider nmrnet_inference tools/provider_environment.py
     tools/baseline_prepare.py tools/container_resources.py)
 
@@ -61,8 +61,8 @@ build_geometry_image() {
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     if "$print_command"; then
-        print_wheel_capture_plan "$image_input_directory/context" provider-core provider-core-install.lock "$image_input_directory/runtime-wheels" "$image"
-    elif execute_wheel_capture "$image_input_directory/context" provider-core provider-core-install.lock "$image_input_directory/runtime-wheels" "$image" "$build_timeout"; then :; else
+        print_wheel_capture_plan "$image_input_directory/context" provider-core provider-core-native-install.lock "$image_input_directory/runtime-wheels" "$image"
+    elif execute_wheel_capture "$image_input_directory/context" provider-core provider-core-native-install.lock "$image_input_directory/runtime-wheels" "$image" "$build_timeout"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     local -a build=("${engine[@]}" build --builder default --quiet --network none --pull=false

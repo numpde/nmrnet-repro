@@ -177,6 +177,7 @@ class RuntimePeers:
             "pending": pending,
             "claims": self.claims,
             "stopping": self.stop,
+            "admission_stopping": self.stop,
             "start_policy": LiveStartPolicy(
                 cadence_seconds=self.config.lifecycle.poll_seconds,
                 on_retry=lambda *facts: self.operator_notices.append(("start_retry", facts)),
@@ -189,6 +190,8 @@ class RuntimePeers:
             "allocate_prediction": self.allocate_prediction,
             "on_prediction_retry": None,
             "on_interpreter_failure": lambda index, failure: self.operator_notices.append((index, failure)),
+            "on_source_retry": lambda failure, seconds: self.operator_notices.append(("source_retry", failure, seconds)),
+            "on_source_observation": lambda failure: self.operator_notices.append(("source_observation", failure)),
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
             "observation_recovery": ObservationRecovery(

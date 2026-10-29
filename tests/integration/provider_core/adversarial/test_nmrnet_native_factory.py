@@ -143,6 +143,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(ValueError, "condition recovery"),
         ):
             NativeAttemptFactory(
+                admission_stopping=asyncio.Event(),
                 config=object(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
@@ -164,6 +165,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(ValueError, "phase-progress"),
         ):
             NativeAttemptFactory(
+                admission_stopping=asyncio.Event(),
                 config=object(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
@@ -185,6 +187,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(ValueError, "live START policy"),
         ):
             NativeAttemptFactory(
+                admission_stopping=asyncio.Event(),
                 config=object(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
@@ -218,6 +221,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(ValueError, "delivery retry observer"),
         ):
             NativeAttemptFactory(
+                admission_stopping=asyncio.Event(),
                 config=object(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
@@ -271,6 +275,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
 
     def factory(self, *, seconds):
         return NativeAttemptFactory(
+            admission_stopping=asyncio.Event(),
             config=object(),
             claims=AttemptClaims.live(),
             execution_identity={},

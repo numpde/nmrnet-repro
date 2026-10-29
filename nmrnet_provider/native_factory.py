@@ -36,6 +36,11 @@ class NativePolicy:
         for seconds in (self.allocation_seconds, self.prediction_seconds, self.source_seconds):
             require_seconds(seconds)
 
+    @property
+    def phase_seconds(self):
+        """Share the runner's existing allocation budget between its five stages."""
+        return self.allocation_seconds / 5
+
 
 class NativeSetupFailed(RuntimeError):
     """Keep setup causes with the selected Job, when this owner knows it.
@@ -63,6 +68,7 @@ class NativeAttemptFactory:
         *,
         config,
         claims,
+        admission_stopping,
         execution_identity,
         selected_artifacts,
         policy,
@@ -91,6 +97,7 @@ class NativeAttemptFactory:
         if not callable(on_prediction_retry):
             raise ValueError("Native factory requires a protected prediction-retry observer before allocation.")
         self.config, self.claims = config, claims
+        self.admission_stopping = admission_stopping
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
         self.condition_recovery = condition_recovery
@@ -118,6 +125,7 @@ class NativeAttemptFactory:
                 pending=pending,
                 claims=self.claims,
                 stopping=stopping,
+                admission_stopping=self.admission_stopping,
                 start_policy=self.start_policy,
                 execution_identity=self.execution_identity,
                 selected_artifacts=self.selected_artifacts,
@@ -125,6 +133,12 @@ class NativeAttemptFactory:
                 on_prediction_retry=self.on_prediction_retry,
                 on_interpreter_failure=lambda index, failure: self.on_operator_notice(
                     failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
+                ),
+                on_source_retry=lambda failure, seconds: self.on_operator_notice(
+                    failure, {"event": "source_retry", "job_ref": pending.input.job_ref, "retry_seconds": seconds}
+                ),
+                on_source_observation=lambda failure: self.on_operator_notice(
+                    failure, {"event": "source_acquisition_observation", "job_ref": pending.input.job_ref}
                 ),
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
@@ -222,6 +236,7 @@ class NativeAttemptFactory:
             role=role,
             endpoint=Path("/native") / role / "runner.sock",
             operation_seconds=self.policy.allocation_seconds,
+            observation_seconds=self.policy.phase_seconds,
             on_notice=lambda failure, facts: self.on_operator_notice(failure, {**facts, "job_ref": job_ref}),
         )
         self.allocations.append(allocation)

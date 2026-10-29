@@ -250,6 +250,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
             )
             preparation = InputPreparation(
                 uploads=uploads,
+                on_source_observation=Mock(),
                 source_api_transport=source_api,
                 source_store_transport=source_store,
                 allocate_reader=self.allocate_reader,

@@ -86,9 +86,6 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     if type(local["routes"]) is not dict or set(local["routes"]) != {"interpreter", "store"}:
         raise ConfigurationRejected("deployment.toml owns only interpreter/store routes; the selected shared binding owns the API route.")
     routes = dict(local["routes"])
-    routes["api"] = {key: value for key, value in binding.route.items() if key not in {"resolver_file", "network_id"}}
-    if binding.route["mode"] == "local":
-        routes["api"]["network"] = binding.route["network_id"]
     (bundle / "config").mkdir(mode=0o700)
     (bundle / "secrets").mkdir(mode=0o700)
     for role in ("api", "provider"):
@@ -169,7 +166,7 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     for name in ("inference.lock", "unicore-source.json"):
         _write(bundle / name, source_bytes(source_root / "requirements" / name, 1024 * 1024))
     plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
-                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=routes,
+                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=routes, binding=binding,
                           delivery_project=binding.project, shared_image_id=shared_image_id)
     external = any(route["mode"] == "external" for route in local["routes"].values())
     if external:

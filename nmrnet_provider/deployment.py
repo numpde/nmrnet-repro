@@ -19,6 +19,7 @@ from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected
 from provider_core.delivery_client import delivery_volume_name
+from provider_core.deployment_route import RouteDirectory, RouteProjectionRejected, render_api_route
 from provider_core.producer_checkpoint import checkpoint_volume_name
 from nmrnet_provider.process import _declared_execution
 from nmrnet_provider.startup_capture import _bind_path, startup_authorities, prediction_lifetime_seconds
@@ -80,7 +81,7 @@ def _disjoint(first, second):
 
 
 # silent-defaults: allow-contract -- The installed production relay namespace remains unchanged unless a contained recipe explicitly selects a private project.
-def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes, shared_image_id,
+def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes, binding, shared_image_id,
                    delivery_project="nmr-api-delivery"):
     """Return the seven fixed services without touching Engine or acquiring work.
 
@@ -118,8 +119,8 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     ):
         raise ConfigurationRejected("delivery socket directory must not overlap provider software, frozen inputs, lifetime lock or runtime grants.")
     identity = _declared_execution(execution)
-    if type(routes) is not dict or set(routes) != {"api", "interpreter", "store"}:
-        raise ConfigurationRejected("deployment requires exactly the api, interpreter and store routes.")
+    if type(routes) is not dict or set(routes) != {"interpreter", "store"}:
+        raise ConfigurationRejected("deployment requires exactly the interpreter and store routes; the binding owns the API route.")
     labels = {"io.nmrnet-repro.deployment": deployment, "io.nmrnet-repro.bundle": bundle.name,
               "io.nmrnet-repro.checkout": str(checkout)}
     project = project_name(checkout, deployment)
@@ -127,7 +128,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     services = {}
     provider = _service(identity["controller_image_id"], controller_python, "nmrnet_provider.process", uid=uid, gid=gid, labels=labels,
                         stop_seconds=_provider_stop_seconds(config))
-    provider["depends_on"] = {role: {"condition": "service_started"} for role in ("prediction", "reader", "smiles", "api", "interpreter", "store")}
+    provider["depends_on"] = {role: {"condition": "service_started"} for role in ("prediction", "reader", "smiles", "interpreter", "store")}
     provider["command"] = ["--config", str(bundle / "config/provider.toml"), "--execution", "/input/execution.json",
                            "--models", "/input/prediction-models.json", "--diagnostics", "/run"]
     # Keep this scope's physical volume identity so supervisors contend for
@@ -156,7 +157,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         # SIGTERM during greeting can spend startup twice: greeting delivery,
         # then retirement delivery around TERM/KILL/scratch cleanup. All five
         # stages together fit the existing allocation cleanup allowance.
-        grace = native.allocation_seconds / 5
+        grace = native.phase_seconds
         service["command"] = [role, "--socket", f"/native/{role}/runner.sock", "--scratch", "/scratch",
                               "--io-seconds", str(seconds), "--operation-seconds", str(lifetime),
                               "--startup-seconds", str(grace), "--terminate-seconds", str(grace),
@@ -174,8 +175,22 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         services[role] = service
         provider["volumes"].append(_bind(runtime / role, f"/native/{role}"))
     authorities = startup_authorities(config)
-    networks = {}
-    for role in ("api", "interpreter", "store"):
+    relocated = ({binding.route["resolver_file"]: str(bundle / "api-resolv.conf")}
+                 if binding.route["mode"] == "external" else {})
+    try:
+        api_route = render_api_route(
+            binding, image=shared_image_id, interpreter="/opt/provider-core/environment/bin/python",
+            namespace=project, uid=uid, gid=gid, storage=RouteDirectory(runtime / "route-api"),
+            input_sources=relocated, service_name="api",
+        )
+    except RouteProjectionRejected as cause:
+        raise ConfigurationRejected(str(cause), cause=cause) from cause
+    services.update(api_route.compose["services"])
+    networks = dict(api_route.compose["networks"])
+    provider["depends_on"].update(api_route.client_depends_on)
+    provider["volumes"].append(api_route.client_mount)
+    provider["command"] += ["--api-proxy-socket", api_route.client_socket]
+    for role in ("interpreter", "store"):
         route = routes[role]
         if type(route) is not dict or not {"mode", "interface", "log_level"} <= set(route) or set(route) - {"mode", "interface", "log_level", "addresses", "network"}:
             raise ConfigurationRejected("each deployment route requires mode/interface/log_level and only its applicable address/network grants.")
@@ -218,8 +233,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
                 raise ConfigurationRejected("only local routing accepts a Docker network grant.")
             service["network_mode"] = "host"
             if route["mode"] == "external":
-                resolver = "api-resolv.conf" if role == "api" else "resolv.conf"
-                service["volumes"].append(_bind(bundle / resolver, "/etc/resolv.conf"))
+                service["volumes"].append(_bind(bundle / "resolv.conf", "/etc/resolv.conf"))
         services[role] = service
         provider["volumes"].append(_bind(runtime / ("route-" + role), f"/routes/{role}"))
         provider["command"] += [f"--{role}-proxy-socket", f"/routes/{role}/proxy.sock"]
@@ -227,7 +241,10 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         # Fresh install names make a lost create reply discoverable. All later
         # control still uses only admitted full IDs, never a name as authority.
         service["container_name"] = project + "-" + role + "-" + bundle.name
-        status_role = "proxy" if role in ("api", "interpreter", "store") else role
+        service["labels"].update(labels)
+        if role in api_route.compose["services"]:
+            continue
+        status_role = "proxy" if role in ("interpreter", "store") else role
         status_path = "/run/status.json"
         startup = native.allocation_seconds
         if status_role == "proxy":

@@ -36,9 +36,9 @@ class ComposeRefusalTests(ComposeFixture, unittest.TestCase):
             if route:
                 route = dict(route, log_level="INFO")
             with self.subTest(route=route), self.assertRaises(ConfigurationRejected):
-                self.plan(routes={**self.routes, "api": route})
+                self.plan(routes={**self.routes, "interpreter": route})
         with self.assertRaises(ConfigurationRejected):
-            self.plan(routes={**self.routes, "extra": self.routes["api"]})
+            self.plan(routes={**self.routes, "extra": self.routes["interpreter"]})
 
     def test_writable_store_cannot_mask_runtime_inputs_or_image_software(self):
         for path in (self.bundle, self.bundle.parent.parent / "runtime", self.root / "prepared", self.root / "checkout",
@@ -48,7 +48,7 @@ class ComposeRefusalTests(ComposeFixture, unittest.TestCase):
                 self.plan()
 
     def test_nonroot_identity_and_bundle_ownership_are_required(self):
-        for changes in ({"uid": 0}, {"gid": 0}, {"uid": True}, {"deployment": "../web"},
+        for changes in ({"uid": 0}, {"gid": 0}, {"uid": True}, {"uid": 2**32}, {"deployment": "../web"},
                         {"bundle": self.root / "other/bundles/generation-first"}):
             with self.subTest(changes=changes), self.assertRaises(ConfigurationRejected):
                 self.plan(**changes)

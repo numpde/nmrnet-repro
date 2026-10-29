@@ -181,7 +181,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                                              "execution_attempt_ref": attempt.admission.execution_attempt_ref})
                     elif recovery_kind == "prediction":
                         retired = NativeOperation(role="prediction", endpoint=Path("/unused/runner.sock"),
-                                                  operation_seconds=1, on_notice=Mock())
+                                                  operation_seconds=1, observation_seconds=0.2, on_notice=Mock())
                         retired.session = SimpleNamespace(operation="a" * 32, generation="b" * 32,
                             retirement=None if original_returncode is None else Retirement(original_returncode, True))
                         retired.proof = SimpleNamespace(retirement=Retirement(-15, True))

@@ -17,6 +17,7 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
 from nmrnet_provider.runtime import assemble_attempt
+from nmrnet_provider.runtime_logging import configure_logging
 
 hello_head_numbers = count(1)
 
@@ -43,6 +44,7 @@ async def recording_factory(factory, pending, *, stopping):
             pending=pending,
             claims=factory.claims,
             stopping=stopping,
+            admission_stopping=factory.admission_stopping,
             start_policy=factory.start_policy,
             execution_identity=factory.execution_identity,
             selected_artifacts=factory.selected_artifacts,
@@ -50,6 +52,12 @@ async def recording_factory(factory, pending, *, stopping):
             on_prediction_retry=factory.on_prediction_retry,
             on_interpreter_failure=lambda index, failure: factory.on_operator_notice(
                 failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
+            ),
+            on_source_retry=lambda failure, seconds: factory.on_operator_notice(
+                failure, {"event": "source_retry", "job_ref": pending.input.job_ref, "retry_seconds": seconds}
+            ),
+            on_source_observation=lambda failure: factory.on_operator_notice(
+                failure, {"event": "source_acquisition_observation", "job_ref": pending.input.job_ref}
             ),
             allocate_reader=ports.allocate_reader,
             allocate_generator=ports.allocate_generator,
@@ -93,6 +101,7 @@ async def observed_head(pool, request):
 
 
 if __name__ == "__main__":
+    configure_logging("INFO")
     original_head = httpcore.AsyncHTTPProxy.handle_async_request
     with (
         patch.object(NativeAttemptFactory, "__call__", recording_factory),

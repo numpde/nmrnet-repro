@@ -21,6 +21,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
         settings = GenerationSettings(17, 80, 1)
         config = SimpleNamespace(preparation=SimpleNamespace(generation_settings=settings, generation_seconds=2))
         factory = NativeAttemptFactory(
+            admission_stopping=asyncio.Event(),
             config=config,
             claims=AttemptClaims.live(),
             execution_identity={},

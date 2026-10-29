@@ -34,7 +34,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         self.verified = VerifiedUpload(
             "job:example", UPLOAD_REF, len(self.source), "sha256:" + hashlib.sha256(self.source).hexdigest(), self.source
         )
-        self.uploads = SimpleNamespace(job_ref="job:example", inspect=AsyncMock(), acquire=AsyncMock(return_value=self.verified))
+        self.uploads = SimpleNamespace(job_ref="job:example", inspect=AsyncMock(), acquire=AsyncMock(return_value=self.verified), recovery_failure=None)
         self.transports = (SimpleNamespace(retire=AsyncMock()), SimpleNamespace(retire=AsyncMock()))
         self.readers = []
         self.instructions = verify_job_input(response(), feed=facts())
@@ -55,6 +55,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
     def owner(self, script, *, reads=2, seconds=1, allocator=None):
         return InputPreparation(
             uploads=self.uploads,
+            on_source_observation=Mock(),
             source_api_transport=self.transports[0],
             source_store_transport=self.transports[1],
             allocate_reader=self.allocate if allocator is None else allocator,

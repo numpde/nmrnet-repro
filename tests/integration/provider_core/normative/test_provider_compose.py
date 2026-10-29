@@ -11,7 +11,8 @@ from provider_core.producer_checkpoint import checkpoint_volume_name
 class ComposePlanTests(ComposeFixture, unittest.TestCase):
     def test_fixed_roles_have_exact_images_resources_logging_and_private_grants(self):
         plan = self.plan()
-        self.assertEqual(set(plan["services"]), {"provider", "prediction", "reader", "smiles", "api", "interpreter", "store"})
+        api_role = "api"
+        self.assertEqual(set(plan["services"]), {"provider", "prediction", "reader", "smiles", api_role, "interpreter", "store"})
         for role, service in plan["services"].items():
             self.assertTrue(service["read_only"])
             self.assertTrue(service["init"])
@@ -83,8 +84,15 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         second = self.plan(bundle=self.bundle.parent / "generation-second")
         self.assertEqual(first["name"], second["name"])
         self.assertNotEqual(first["services"]["provider"]["labels"], second["services"]["provider"]["labels"])
-        self.routes["api"] = {"mode": "mapped", "interface": "eno1", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"]}
-        api = self.plan()["services"]["api"]
+        self.binding = replace(self.binding, api=self.binding.api | {"origin": "https://other.example"})
+        rebound = self.plan()
+        self.assertEqual(set(first["services"]), set(rebound["services"]))
+        self.assertNotEqual(first["services"]["api"]["command"], rebound["services"]["api"]["command"])
+        self.assertNotEqual(first["services"]["provider"]["command"], rebound["services"]["provider"]["command"])
+        self.binding = replace(self.binding, api=self.binding.api | {"origin": "https://api.example"})
+        self.binding = replace(self.binding, route={"mode": "mapped", "interface": "eno1", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"]})
+        plan = self.plan()
+        api = plan["services"]["api"]
         self.assertEqual(api["network_mode"], "host")
         self.assertIn("api.example:443", api["command"])
         self.assertIn("api.example=192.0.2.12", api["command"])
@@ -92,12 +100,13 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         self.assertNotIn("192.0.2.12:443", api["command"])
 
     def test_local_proxy_joins_only_its_explicit_network_without_host_network_fallback(self):
-        self.routes["api"] = {"mode": "local", "interface": "eth0", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"], "network": "a" * 64}
+        self.binding = replace(self.binding, route={"mode": "local", "interface": "eth0", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"], "network_id": "a" * 64})
         plan = self.plan()
-        api = plan["services"]["api"]
+        api_role = "api"
+        api = plan["services"][api_role]
         self.assertNotIn("network_mode", api)
-        self.assertEqual(api["networks"], ["api"])
-        self.assertEqual(plan["networks"], {"api": {"external": True, "name": "a" * 64}})
+        self.assertEqual(api["networks"], [api_role])
+        self.assertEqual(plan["networks"], {api_role: {"external": True, "name": "a" * 64}})
         self.assertIn("api.example:443", api["command"])
         self.assertNotIn("/etc/resolv.conf", str(api["volumes"]))
         self.assertEqual(plan["services"]["provider"]["network_mode"], "none")

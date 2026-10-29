@@ -23,12 +23,12 @@ RUN --mount=type=bind,from=wheelhouse,target=/wheelhouse \
     && python3 -m pip check
 
 COPY tools/provider_environment.py tools/baseline_prepare.py tools/container_resources.py ./tools/
-COPY requirements/provider-core-install.lock ./requirements/
+COPY requirements/provider-core-native-install.lock ./requirements/
 COPY nmrnet_provider/ ./nmrnet_provider/
 COPY nmrnet_inference/ ./nmrnet_inference/
 RUN --mount=type=bind,from=runtime-wheels,target=/runtime-wheels \
     python3 -B -m tools.provider_environment --root /opt/inference --source /opt/build \
-        --python /usr/local/bin/python --install-lock /opt/build/requirements/provider-core-install.lock --runtime-wheels /runtime-wheels \
+        --python /usr/local/bin/python --install-lock /opt/build/requirements/provider-core-native-install.lock --runtime-wheels /runtime-wheels \
     && python3 -I -B -m nmrnet_provider.worker_main --help \
     && rm -rf /opt/build
 

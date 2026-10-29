@@ -18,12 +18,59 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
 from provider_core.attempt_record import AcknowledgedAttempt
+from provider_core.controller import StartDeferred
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.job_input import verify_job_input
 from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_late_start_ack_after_admission_stop_does_not_enter_science(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            admission, entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+            original_reply = fixture.api_peer.response_factory
+
+            async def reply(request, body):
+                if request.split(b"\r\n", 1)[0].split()[1].endswith(b"/start"):
+                    entered.set()
+                    await release.wait()
+                return await original_reply(request, body)
+
+            fixture.api_peer.response_factory = reply
+            controller = await assemble_attempt(**(fixture.arguments(pending) | {"admission_stopping": admission}))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            task = asyncio.create_task(controller.run(pending))
+            try:
+                await asyncio.wait_for(entered.wait(), 2)
+                admission.set()
+                release.set()
+                outcome = await asyncio.wait_for(task, 3)
+                self.assertIs(type(outcome), StartDeferred)
+                self.assertTrue(outcome.may_have_committed)
+                self.assertEqual(fixture.model_peer.requests, [])
+                self.assertEqual(ports.worker.events, [])
+                self.assertEqual(sum(b"/start HTTP/1.1" in request for request in fixture.api_peer.requests), 1)
+            finally:
+                release.set()
+                await asyncio.gather(task, return_exceptions=True)
+
+    async def test_stopped_admission_never_starts_or_enters_science(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            admission = asyncio.Event()
+            controller = await assemble_attempt(**(fixture.arguments(pending) | {"admission_stopping": admission}))
+            fixture.stack.push_async_callback(fixture.settle_controller, controller)
+            admission.set()
+            outcome = await controller.run(pending)
+            self.assertIs(type(outcome), StartDeferred)
+            self.assertFalse(outcome.may_have_committed)
+            self.assertFalse(any(b"/start HTTP/1.1" in request for request in fixture.api_peer.requests))
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(ports.worker.events, [])
+
     async def test_terminal_start_replay_never_acquires_prediction_or_interprets_input(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:

@@ -5,7 +5,7 @@ containers/inference/Dockerfile.dockerignore
 nmrnet_inference
 nmrnet_provider
 requirements/inference.lock
-requirements/provider-core-install.lock
+requirements/provider-core-native-install.lock
 requirements/unicore-source.json
 tools/artifacts.py
 tools/baseline_prepare.py

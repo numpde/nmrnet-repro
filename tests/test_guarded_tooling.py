@@ -121,7 +121,7 @@ class ToolingLauncherTests(unittest.TestCase):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock",
-                     "preparation.lock", "provider-core-install.lock", "provider-core-assets.in"):
+                     "preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in"):
             (self.root / f"requirements/{name}").write_text("fixture")
         (self.root / ".work/wheelhouse").mkdir(parents=True)
         (self.root / ".work/packages-stage/lock.TEST").mkdir(parents=True)
@@ -339,6 +339,11 @@ class ToolingLauncherTests(unittest.TestCase):
                 self.assertEqual(
                     [command[index + 1] for index, value in enumerate(command) if value == "--lock"],
                     ["/input/provider-core-install.lock"],
+                )
+            else:
+                self.assertEqual(
+                    [command[index + 1] for index, value in enumerate(command) if value == "--lock"],
+                    ["/input/preparation.lock", "/input/provider-core-native-install.lock"],
                 )
 
 
