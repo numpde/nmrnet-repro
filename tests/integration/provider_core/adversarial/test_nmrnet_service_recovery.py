@@ -29,10 +29,20 @@ from provider_core.delivery_client import DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
 from provider_core.execution import ExecutionRefused
 from provider_core.producer_checkpoint import SuppressedCheckpoint
+from provider_core.uploads import JobUploads
 
 
 class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
     async def test_settled_source_outage_holds_its_job_and_allows_another(self):
+        await self.check_settled_source_outage()
+
+    async def test_source_outage_with_recorded_cleanup_does_not_continue(self):
+        await self.check_settled_source_outage(source_problem="cleanup")
+
+    async def test_source_outage_with_recorded_interruption_does_not_continue(self):
+        await self.check_settled_source_outage(source_problem="interruption")
+
+    async def check_settled_source_outage(self, *, source_problem=None):
         async with SuccessiveServicePeers(maximum_live_attempts=2, lose_second_completion=False) as fixture:
             first, second = fixture.jobs[:2]
             source_requests, failure_bodies = [], []
@@ -92,6 +102,30 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             fixture.api_peer.response_factory = api_reply
             service = fixture.service()
             fixture.stack.push_async_callback(fixture.settle_service, service)
+            if source_problem is not None:
+                original_exhausted = JobUploads._recovery_exhausted
+
+                def exhausted_with_cleanup(owner, reason, failure):
+                    result = original_exhausted(owner, reason, failure)
+                    if source_problem == "cleanup":
+                        result.cleanup_failures = (OSError("PRIVATE_SOURCE_CLEANUP"),)
+                    else:
+                        result.interruption = OSError("PRIVATE_SOURCE_INTERRUPTION")
+                    return result
+
+                with patch.object(JobUploads, "_recovery_exhausted", exhausted_with_cleanup):
+                    with self.assertRaises(ServiceFailed) as caught:
+                        await asyncio.wait_for(service.run(fixture.stop), 8)
+                evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
+                self.assertIn("UploadRecoveryExhausted", evidence)
+                self.assertIn("independent cleanup" if source_problem == "cleanup" else "acquisition interruption", evidence)
+                self.assertIn("OSError", evidence)
+                self.assertNotIn("PRIVATE_SOURCE_", evidence)
+                self.assertEqual(len(fixture.start_bodies), 1)
+                self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
+                self.assertEqual(fixture.allocations[0].worker.events, [])
+                self.assertEqual(failure_bodies, [])
+                return
             await asyncio.wait_for(service.run(fixture.stop), 8)
             await fixture.wait_published()
             self.assertEqual(len(source_requests), 3)

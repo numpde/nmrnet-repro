@@ -405,6 +405,7 @@ class ProviderService:
                 execution = failure.cause
                 if (type(execution) is ExecutionFailed and type(execution.cause) is UploadRecoveryExhausted
                         and not failure.cleanup_failures and not execution.cleanup_failures
+                        and not execution.cause.cleanup_failures and execution.cause.interruption is None
                         and controller.work_settled and controller.shutdown_ready and self._factory_ready()
                         and controller in self._claims.live_owners()
                         and self._claims.owns_job(pending.scope, pending.input.job_ref)):
