@@ -1998,3 +1998,9 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
    from committed inputs. Review the need for that restriction and its effect
    on the normal development-to-build workflow; do not weaken checks on files
    that actually determine executed tools or the captured image inputs.
+
+8. Provider-core 0.5.0 does not classify a TLS handshake EOF as a temporary
+   network failure. A settled Job read can consequently stop a provider, and
+   terminal delivery can pause its binding rather than retrying the retained
+   request. The shared owner is reviewing operation-specific recovery; retain
+   TLS verification, the original failure and the API's exact replay rules.
