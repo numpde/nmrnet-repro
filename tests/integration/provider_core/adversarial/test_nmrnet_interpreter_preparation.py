@@ -301,6 +301,35 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             chooser.retire.side_effect = None
             await session.retire()
 
+    async def test_owned_deadline_during_generation_keeps_failed_worker_retirement_operational(self):
+        ports = SessionPorts()
+        entered = asyncio.Event()
+        cleanup = OSError(5, "PRIVATE_GENERATOR_CLEANUP")
+
+        async def generate(*_arguments):
+            entered.set()
+            await asyncio.Event().wait()
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        ports.generator.generate.side_effect = generate
+        ports.generator_host.failure = cleanup
+        owner = ports.owner(choose, seconds=0.05)
+        session = ports.make_session(owner)
+        try:
+            with self.assertRaises(PreparationRetirementFailed) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertTrue(entered.is_set())
+            evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
+            self.assertIn('"errno": 5', evidence)
+            self.assertNotIn("PRIVATE_GENERATOR_CLEANUP", evidence)
+            self.assertEqual(ports.worker.events, [])
+            self.assertFalse(ports.generator_host.confirmed)
+        finally:
+            ports.generator_host.failure = None
+            await session.retire()
+
     async def test_source_cancellation_keeps_its_owned_operational_cause_out_of_job_limit_classification(self):
         ports = SessionPorts()
         outage = UploadFailed("the source session's cumulative deadline expired", cause=TimeoutError())
