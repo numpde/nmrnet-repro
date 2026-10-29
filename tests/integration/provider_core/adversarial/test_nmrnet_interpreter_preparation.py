@@ -30,6 +30,20 @@ from provider_core.uploads import UploadFailed
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_grouped_interpreter_cleanup_does_not_skip_source_transport_retirement(self):
+        ports = SessionPorts()
+        owner = ports.owner(AsyncMock())
+        fatal = SystemExit(7)
+        failure = BaseExceptionGroup("interpreter cleanup", [fatal])
+        owner._chooser.retire = AsyncMock(side_effect=failure)
+
+        with self.assertRaises(PreparationRetirementFailed) as caught:
+            await owner.retire()
+
+        self.assertIs(caught.exception.failures[0][1], failure)
+        for transport in ports.transports:
+            transport.retire.assert_awaited_once()
+
     async def test_missing_non_json_unit_refuses_before_upload_or_reader_allocation(self):
         ports = SessionPorts()
 

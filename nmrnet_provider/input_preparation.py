@@ -254,7 +254,7 @@ class InputPreparation:
                         await self._retire_chooser()
                     except PreparationRetirementFailed as cleanup_failure:
                         self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
-                    except (Exception, asyncio.CancelledError) as cleanup_failure:
+                    except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cleanup_failure:
                         self._raise_retirement_failure(
                             (("interpreter_retirement", cleanup_failure),), operation_failure=operation_failure
                         )
@@ -285,12 +285,12 @@ class InputPreparation:
         if self._chooser_task is not None:
             try:
                 await self._settle_task(self._chooser_task)
-            except (Exception, asyncio.CancelledError) as cause:
+            except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append(("interpreter_conversation", cause))
         try:
             async with asyncio.timeout(self._seconds):
                 await self._chooser.retire()
-        except (Exception, asyncio.CancelledError) as cause:
+        except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("interpreter_retirement", cause))
         if failures:
             # Keep cancellation as data inside this shared task. Each observing
@@ -514,7 +514,7 @@ class InputPreparation:
                 await self._retire_worker()
             except PreparationRetirementFailed as cleanup_failure:
                 self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
-            except (Exception, asyncio.CancelledError) as cleanup_failure:
+            except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cleanup_failure:
                 self._raise_retirement_failure(
                     (("input_worker_retirement", cleanup_failure),), operation_failure=operation_failure
                 )
@@ -560,7 +560,7 @@ class InputPreparation:
         except asyncio.CancelledError:
             if not task.cancelled() or asyncio.current_task().cancelling() > cancellation_count:
                 raise
-        except Exception:
+        except (Exception, BaseExceptionGroup):
             # A settled operation failure stays on its owner's failure field.
             # Its I/O owners still have to confirm independent resource cleanup.
             if not task.done():
@@ -598,20 +598,20 @@ class InputPreparation:
             await self._retire_chooser()
         except PreparationRetirementFailed as cause:
             failures.extend(cause.failures)
-        except (Exception, asyncio.CancelledError) as cause:
+        except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("interpreter_retirement", cause))
         try:
             await self._settle_source()
-        except (Exception, asyncio.CancelledError) as cause:
+        except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("source_operation", cause))
         try:
             await self._retire_worker()
-        except (Exception, asyncio.CancelledError) as cause:
+        except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("input_worker_retirement", cause))
         for label, transport in self._transports:
             try:
                 await transport.retire()
-            except (Exception, asyncio.CancelledError) as cause:
+            except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append((label, cause))
         if failures:
             self._raise_retirement_failure(failures)
