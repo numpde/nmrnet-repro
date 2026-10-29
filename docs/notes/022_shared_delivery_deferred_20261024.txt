@@ -2014,3 +2014,13 @@ This note records NMRNet-specific follow-up; it does not replace those decisions
     this race at the next image-lifecycle change while preserving the rule that
     incomplete inventory never authorizes removal. Provider readiness is separate
     from this cleanup outcome.
+
+11. Build interruption: tools/inference_native.sh establishes retirement of the
+    local client group, not completion of daemon-side build work. The image-build
+    cleanup removes captured inputs after local retirement; an interrupted build's
+    image outcome remains unconfirmed. Docker describes BuildKit requesting local
+    contexts through the client (https://docs.docker.com/build/concepts/overview/),
+    but this does not by itself prove retirement for
+    every supported engine/session failure. When changing build ownership, verify
+    the actual client-session and daemon boundaries before changing cleanup or
+    claiming that the daemon can still read a removed host path.
