@@ -20,6 +20,35 @@ from provider_core.api import ProviderAPI
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rate_limited_background_calls_respect_retry_after_and_stop(self):
+        for route in ("jobs", "hello"):
+            with self.subTest(route=route):
+                async with ServicePeers() as fixture:
+                    notices = []
+
+                    async def response(request, body):
+                        fixture.api_peer.response_status = 200
+                        fixture.api_peer.response_headers = response_headers()
+                        target = request.split(b"\r\n", 1)[0].split(b" ")[1].split(b"?", 1)[0]
+                        if target == ("/provider/v1/" + route).encode():
+                            fixture.api_peer.response_status = 429
+                            fixture.api_peer.response_headers = (*response_headers(status=429), (b"retry-after", b"60"))
+                            return b"rate limited"
+                        return await fixture.api_reply(request, body)
+
+                    def retry(kind, failure, seconds):
+                        notices.append((kind, failure.status, seconds))
+                        fixture.stop.set()
+
+                    fixture.api_peer.response_factory = response
+                    service = fixture.service(on_api_retry=retry)
+                    fixture.stack.push_async_callback(fixture.settle_service, service)
+                    await asyncio.wait_for(service.run(fixture.stop), 3)
+                    self.assertEqual(len(notices), 1)
+                    self.assertEqual(notices[0][:2], ("read" if route == "jobs" else "hello", 429))
+                    self.assertGreaterEqual(notices[0][2], 60)
+                    self.assertEqual(fixture.allocations, [])
+
     async def test_connect_gateway_outage_recovers_in_the_same_service_before_any_scientific_allocation(self):
         async with ServicePeers() as fixture, UnixProxy(fixture.api_peer.origin, "refuse", refusal_status=502) as proxy:
             settings = fixture.config.api

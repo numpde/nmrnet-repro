@@ -330,6 +330,8 @@ class ProviderService:
                     return None
                 outage, outage_kind = failure, failure_kind
                 wait = random.uniform(delay / 2, delay)
+                if not relay_read:
+                    wait += failure.retry_after_seconds or 0
                 self._on_api_retry(failure_kind, failure, wait)
                 if await self._pause(wait):
                     return None
