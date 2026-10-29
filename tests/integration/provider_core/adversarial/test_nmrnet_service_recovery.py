@@ -24,7 +24,8 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import ServiceFailed
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.controller import LiveStartPolicy, StartDeferred
+from provider_core.api import ApiFailure
+from provider_core.controller import ControllerFailed, LiveStartPolicy, StartDeferred
 from provider_core.delivery_client import DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
 from provider_core.execution import ExecutionRefused
@@ -41,6 +42,9 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_source_outage_with_recorded_interruption_does_not_continue(self):
         await self.check_settled_source_outage(source_problem="interruption")
+
+    async def test_source_outage_with_independent_control_failure_does_not_continue(self):
+        await self.check_settled_source_outage(source_problem="control")
 
     async def check_settled_source_outage(self, *, source_problem=None):
         async with SuccessiveServicePeers(maximum_live_attempts=2, lose_second_completion=False) as fixture:
@@ -102,6 +106,17 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             fixture.api_peer.response_factory = api_reply
             service = fixture.service()
             fixture.stack.push_async_callback(fixture.settle_service, service)
+            if source_problem == "control":
+                observe = service._observe_attempt
+
+                async def observe_with_control_failure(controller, pending):
+                    try:
+                        return await observe(controller, pending)
+                    except ControllerFailed as failure:
+                        failure.cause.api_failure = ApiFailure("independent control write", "unconfirmed")
+                        raise
+
+                service._observe_attempt = observe_with_control_failure
             if source_problem is not None:
                 original_exhausted = JobUploads._recovery_exhausted
 
@@ -109,7 +124,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     result = original_exhausted(owner, reason, failure)
                     if source_problem == "cleanup":
                         result.cleanup_failures = (OSError("PRIVATE_SOURCE_CLEANUP"),)
-                    else:
+                    elif source_problem == "interruption":
                         result.interruption = OSError("PRIVATE_SOURCE_INTERRUPTION")
                     return result
 
@@ -118,8 +133,11 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                         await asyncio.wait_for(service.run(fixture.stop), 8)
                 evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
                 self.assertIn("UploadRecoveryExhausted", evidence)
-                self.assertIn("independent cleanup" if source_problem == "cleanup" else "acquisition interruption", evidence)
-                self.assertIn("OSError", evidence)
+                if source_problem != "control":
+                    self.assertIn("independent cleanup" if source_problem == "cleanup" else "acquisition interruption", evidence)
+                    self.assertIn("OSError", evidence)
+                else:
+                    self.assertIn("independent control write", evidence)
                 self.assertNotIn("PRIVATE_SOURCE_", evidence)
                 self.assertEqual(len(fixture.start_bodies), 1)
                 self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
