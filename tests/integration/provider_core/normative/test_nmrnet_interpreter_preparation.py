@@ -25,6 +25,64 @@ OBSERVATION = b'{"endpoint":{"configuration_id":"fixture","model":"fixture-model
 
 
 class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deadline_during_generation_after_clean_retirement(self):
+        ports = SessionPorts()
+        entered = asyncio.Event()
+
+        async def generate(*_arguments):
+            entered.set()
+            await asyncio.Event().wait()
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        ports.generator.generate.side_effect = generate
+        owner = ports.owner(choose, seconds=0.05)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertTrue(entered.is_set())
+        self.assertTrue(ports.generator_host.confirmed)
+        self.assertIsInstance(outcome, AnalysisFailure)
+        self.assertEqual(outcome.code, "input_selection_time_limit")
+
+    async def test_deadline_waits_for_late_generation_before_selecting_failure(self):
+        ports = SessionPorts()
+        interrupted = asyncio.Event()
+        release = asyncio.Event()
+
+        async def generate(*_arguments):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                interrupted.set()
+                await release.wait()
+                return ports.batch
+
+        async def choose(_instructions, capability):
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        ports.generator.generate.side_effect = generate
+        owner = ports.owner(choose, seconds=0.2)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        task = asyncio.create_task(session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition))
+        try:
+            await asyncio.wait_for(interrupted.wait(), 1)
+            self.assertFalse(task.done())
+            self.assertFalse(ports.generator_host.confirmed)
+            release.set()
+            outcome = await asyncio.wait_for(task, 1)
+            self.assertTrue(ports.generator_host.confirmed)
+            self.assertIsInstance(outcome, AnalysisFailure)
+            self.assertEqual(outcome.code, "input_selection_time_limit")
+            self.assertEqual(ports.worker.events, [])
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
     def test_only_upload_tool_can_derive_unit_from_its_json_file(self):
         tools = {item["function"]["name"]: item["function"]["parameters"] for item in json.loads(_TOOLS)}
         self.assertNotIn("source_unit", tools["prepare_upload"]["required"])
