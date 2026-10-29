@@ -1,5 +1,8 @@
 # Provider policy; the selected shared binding supplies API identity and delivery grants.
-schema_id = "nmrnet.provider.runtime_config.v2"
+schema_id = "nmrnet.provider.runtime_config.v3"
+
+[scientific_retry]
+max_retries = 0
 
 [interpreter]
 max_turns = 6

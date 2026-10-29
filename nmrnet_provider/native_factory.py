@@ -75,7 +75,6 @@ class NativeAttemptFactory:
         observation_recovery,
         condition_recovery,
         on_unconfirmed_phase_progress,
-        on_prediction_retry,
         on_operator_notice,
         start_policy,
         on_delivery_retry,
@@ -94,15 +93,12 @@ class NativeAttemptFactory:
             raise ValueError("Native factory requires a protected delivery retry observer.")
         if not callable(on_unconfirmed_phase_progress):
             raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
-        if not callable(on_prediction_retry):
-            raise ValueError("Native factory requires a protected prediction-retry observer before allocation.")
         self.config, self.claims = config, claims
         self.admission_stopping = admission_stopping
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
         self.condition_recovery = condition_recovery
         self.on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
-        self.on_prediction_retry = on_prediction_retry
         if not callable(on_operator_notice):
             raise ValueError("Native factory requires a protected operator diagnostic observer.")
         self.on_operator_notice = on_operator_notice
@@ -130,7 +126,10 @@ class NativeAttemptFactory:
                 execution_identity=self.execution_identity,
                 selected_artifacts=self.selected_artifacts,
                 allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
-                on_prediction_retry=self.on_prediction_retry,
+                on_prediction_failure=lambda failure, attempt: self.on_operator_notice(
+                    failure, {"event": "prediction_failed", "job_ref": pending.input.job_ref,
+                              "execution_attempt_ref": attempt.admission.execution_attempt_ref}
+                ),
                 on_interpreter_failure=lambda index, failure: self.on_operator_notice(
                     failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
                 ),

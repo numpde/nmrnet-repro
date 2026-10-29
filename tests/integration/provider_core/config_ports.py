@@ -47,7 +47,7 @@ class ConfigFiles:
         ca = ca_line(ca_file)
         model_ca = ca if model_ca_file is None else ca_line(model_ca_file)
         store_ca = ca if store_ca_file is None else ca_line(store_ca_file)
-        self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v2"
+        self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v3"
 
 [api]
 origin = {json.dumps(api_origin)}
@@ -58,6 +58,9 @@ credential_file = {json.dumps(str(self.credential))}
 exchange_seconds = 2
 retirement_seconds = 1
 {ca}
+[scientific_retry]
+max_retries = 0
+
 [interpreter]
 max_turns = 6
 

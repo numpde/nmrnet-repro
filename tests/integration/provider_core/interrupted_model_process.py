@@ -49,7 +49,10 @@ async def recording_factory(factory, pending, *, stopping):
             execution_identity=factory.execution_identity,
             selected_artifacts=factory.selected_artifacts,
             allocate_prediction=ports.allocate_prediction,
-            on_prediction_retry=factory.on_prediction_retry,
+            on_prediction_failure=lambda failure, attempt: factory.on_operator_notice(
+                failure, {"event": "prediction_failed", "job_ref": pending.input.job_ref,
+                          "execution_attempt_ref": attempt.admission.execution_attempt_ref}
+            ),
             on_interpreter_failure=lambda index, failure: factory.on_operator_notice(
                 failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
             ),

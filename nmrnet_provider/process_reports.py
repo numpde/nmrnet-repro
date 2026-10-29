@@ -15,7 +15,7 @@ import json
 import re
 
 from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES
-from nmrnet_provider.config import ConfigurationRejected
+from nmrnet_provider.config import ConfigurationRejected, ScientificRetryNotImplemented
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem
@@ -23,7 +23,6 @@ from nmrnet_provider.native_factory import NativeSetupFailed
 from nmrnet_provider.result import ResultRejected
 from nmrnet_provider.service import ServiceFailed, ServiceRefused
 from nmrnet_provider.session import (
-    PredictionRecoveryFailed,
     PreparationEvidenceFailed,
     ResultAssemblyFailed,
     SessionRetirementFailed,
@@ -84,10 +83,6 @@ def _owned_relationships(error):
         yield "interruption cause", error.interruption_cause
     if kind is PreparationEvidenceFailed:
         yield "preparation failure", error.preparation_failure
-    if kind is PredictionRecoveryFailed:
-        yield "first prediction failure", error.first_failure
-        yield "recovery failure", error.cause
-        yield "interruption cause", error.interruption_cause
 
 
 def _safe_owner_details(error):
@@ -100,12 +95,12 @@ def _safe_owner_details(error):
         ProviderProcessFailed,
         DiagnosticOutputRefused,
         ConfigurationRejected,
+        ScientificRetryNotImplemented,
         ServiceFailed,
         ServiceRefused,
         NativeSetupFailed,
         PreparationRetirementFailed,
         SessionRetirementFailed,
-        PredictionRecoveryFailed,
         PreparationEvidenceFailed,
         ResultAssemblyFailed,
         ResultRejected,

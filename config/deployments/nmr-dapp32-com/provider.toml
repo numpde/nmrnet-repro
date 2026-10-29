@@ -1,7 +1,10 @@
-schema_id = "nmrnet.provider.runtime_config.v2"
+schema_id = "nmrnet.provider.runtime_config.v3"
 
 # Provider policy; the selected shared binding supplies API identity and delivery grants.
 # Local interpreter keys and network settings remain outside this public definition.
+
+[scientific_retry]
+max_retries = 0
 
 [interpreter]
 max_turns = 6

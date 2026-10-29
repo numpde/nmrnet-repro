@@ -51,7 +51,7 @@ fields out of the authored provider definition.</p>
 <p>Installation writes that runtime file under
 <code>secrets/deployments/&lt;name&gt;/bundles/generation-*/config/provider.toml</code>.
 Change the authored inputs and reinstall; do not edit a sealed generation.</p>
-<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v2"</code> and these
+<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v3"</code> and these
 closed tables; unknown fields fail startup:</p>
 <table>
 <thead>
@@ -98,12 +98,20 @@ closed tables; unknown fields fail startup:</p>
 <td>none</td>
 </tr>
 <tr>
+<td><code>scientific_retry</code></td>
+<td><code>max_retries</code></td>
+<td>none</td>
+</tr>
+<tr>
 <td><code>service</code></td>
 <td><code>display_name</code>, <code>description</code>, <code>page_size</code>, <code>maximum_pages</code>, <code>idle_seconds</code>, <code>api_backoff_max_seconds</code>, <code>hello_seconds</code>, <code>drain_seconds</code>, <code>settle_seconds</code>, <code>allocation_seconds</code>, <code>prediction_seconds</code>, <code>source_seconds</code></td>
 <td>none</td>
 </tr>
 </tbody>
 </table>
+<p><code>scientific_retry.max_retries</code> must be <code>0</code>. Positive
+values are not yet implemented and prevent startup. Prediction runs once per
+Attempt; this setting does not change API or delivery retries.</p>
 <p>The supplied definitions reserve two live Attempt slots, 256 KiB for control
 records and 4 MiB for pending terminal reports. Each slot reserves 128 KiB of
 control capacity and a 2 MiB encoded-report allowance before START. These are
@@ -741,16 +749,10 @@ and verified exit status or signal; protected diagnostics retain the underlying
 cause. A signal alone does not establish an out-of-memory diagnosis. Local stop
 requests, channel loss and missing records do not establish a crash. An already
 selected completion or failure keeps its own delivery responsibility.</p>
-<p>For eligible prediction operation failures without a proved worker crash,
-the existing policy permits one replacement within the same live Attempt.
-Exact old-worker retirement, scratch release and local channel closure precede
-replacement. The new worker receives the same ordered geometry bytes, prepares
-its own local token and must report the original runtime. Input interpretation,
-coordinate reading/generation and result assembly are not repeated. Input/protocol
-rejection, caller cancellation and unconfirmed cleanup do not grant replacement.
-The protected <code>prediction_retry_started</code> notice preserves the initiating
-failure and exact Job/Attempt references. Diagnostic output uses bounded Docker
-logs; failed output remains a protected in-memory observation.</p>
+<p>Each Attempt dispatches prediction once. A failed or interrupted prediction
+is not repeated automatically; its original failure remains available for
+diagnostics, and the original worker is retired. Diagnostic output uses bounded
+Docker logs; failed output remains a protected in-memory observation.</p>
 <p>The policy is implemented by
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>,
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and

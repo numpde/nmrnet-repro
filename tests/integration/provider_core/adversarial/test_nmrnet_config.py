@@ -260,7 +260,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 files.raw.replace(b'provider_ref = "provider:example"', b'provider_ref = "provider:other"'),
                 files.raw.replace(b'profile = "dev-local"', b'profile = "run"'),
                 files.raw.replace(b"https://model.example/chat", b"http://model.example/chat"),
-                files.raw.replace(b'schema_id = "nmrnet.provider.runtime_config.v2"', b'schema_id = "PRIVATE"'),
+                files.raw.replace(b'schema_id = "nmrnet.provider.runtime_config.v3"', b'schema_id = "PRIVATE"'),
                 files.raw.replace(b"[api]", b'PRIVATE = "unrecognised"\n[api]'),
                 files.raw.replace(
                     b'consumer_id = "lane:fixture"', b'analysis_kind_ref = "PRIVATE"\nconsumer_id = "lane:fixture"'

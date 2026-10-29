@@ -62,7 +62,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             observation_recovery=ObservationRecovery(2, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(2, 1, Mock(), Mock()),
             start_policy=LiveStartPolicy(cadence_seconds=1, on_retry=Mock(), on_recovered=Mock()),
-            on_prediction_retry=retry, on_operator_notice=Mock(),
+            on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(), on_delivery_retry=Mock(),
         )
 
@@ -105,7 +105,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         session = NMRNetSession(
             allocate_prediction=partial(factory.allocate_prediction, job_ref=ports.instructions.job_ref),
             execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
-            input_preparation=ports.preparation, on_prediction_retry=retry,
+            input_preparation=ports.preparation,
         )
         controller, transport, delivery = self.controller(ports, session, claims, stopping)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
@@ -169,7 +169,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         no_prediction = AsyncMock(side_effect=AssertionError("Prediction cannot follow a failed structure read"))
         session = NMRNetSession(
             allocate_prediction=no_prediction, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=preparation, on_prediction_retry=retry,
+            selected_artifacts=ports.worker.artifacts, input_preparation=preparation,
         )
         controller, transport, delivery = self.controller(ports, session, claims, stopping)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):

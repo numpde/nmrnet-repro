@@ -25,7 +25,7 @@ from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
-from nmrnet_provider.worker_client import PredictionExecutionFailed, WorkerExchangeTimedOut
+from nmrnet_provider.worker_client import PredictionExecutionFailed
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
@@ -63,15 +63,6 @@ class SessionRetirementFailed(RuntimeError):
         self.failures = tuple(failures)
         self.cause = self.failures[0][1]
         self.interruption_cause = None
-
-
-class PredictionRecoveryFailed(RuntimeError):
-    """Retain initiating prediction and later replacement/cleanup causes separately."""
-
-    def __init__(self, first_failure, cause):
-        super().__init__("Prediction recovery did not complete; preserve the first failure and replacement or cleanup evidence.")
-        self.first_failure, self.cause = first_failure, cause
-        self.interruption_cause = cause.__cause__ if isinstance(cause, asyncio.CancelledError) else None
 
 
 class _Phase(Enum):
@@ -196,19 +187,16 @@ class NMRNetSession:
         execution_identity,
         selected_artifacts,
         input_preparation,
-        on_prediction_retry=None,
+        on_prediction_failure=None,
     ):
         if not callable(allocate_prediction):
             raise ValueError("Scientific session requires a prediction allocation owner.")
-        if on_prediction_retry is not None and not callable(on_prediction_retry):
-            raise ValueError("Prediction recovery requires a protected diagnostic observer or explicit disabled recovery.")
         self._allocate_prediction = allocate_prediction
-        self._on_prediction_retry = on_prediction_retry
         self._worker = self._retirement = None
         self._prediction_setup = None
         self._input_preparation = input_preparation
+        self._on_prediction_failure = on_prediction_failure
         self._prediction_pending = False
-        self.prediction_failure = None
         self._acknowledged = None
         self._facts = copy.deepcopy(
             {
@@ -332,7 +320,19 @@ class NMRNetSession:
         prepared = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
-        result = await self._predict(prepared.requests)
+        try:
+            result = await self._predict(prepared.requests)
+        except PredictionExecutionFailed as cause:
+            if self._phase is not _Phase.EXECUTING:
+                raise ValueError("Scientific failure arrived after retirement began; it cannot be accepted.") from cause
+            try:
+                evidence = _evidence({"prediction_failure": {"diagnostic": cause.diagnostic}})
+            except Exception as evidence_failure:
+                raise evidence_failure from cause
+            if self._on_prediction_failure is not None:
+                self._on_prediction_failure(cause, self._acknowledged)
+            self._phase = _Phase.FINISHED
+            return AnalysisFailure("prediction_execution_failed", "Prediction did not return a complete verified result.", evidence)
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
@@ -351,46 +351,17 @@ class NMRNetSession:
 
     def _require_prediction_active(self):
         if self._phase is not _Phase.EXECUTING:
-            raise ValueError("Scientific retirement has begun; prediction dispatch and replacement are blocked.")
+            raise ValueError("Scientific retirement has begun; prediction dispatch is blocked.")
 
     async def _predict(self, requests):
-        """Replay pure prediction once, never input interpretation or result assembly.
-
-        Magnet5578bc3, note033 and E01/E02 unix_runner_backend.generate supply
-        the two-execution contract. Here confirmed native retirement and channel consumption,
-        rather than Docker restart/READY, gate replacement. Each worker prepares
-        the same frozen bytes and issues its own connection-local token.
-        """
+        """Execute the admitted prediction once and retain any observed crash."""
         try:
-            for execution in range(2):
-                self._require_prediction_active()
-                worker_handle = await self._worker.prepare(requests)
-                self._require_prediction_active()
-                try:
-                    return await self._worker.execute(worker_handle)
-                except (
-                    PredictionExecutionFailed,
-                    WorkerExchangeTimedOut,
-                    asyncio.IncompleteReadError,
-                    ConnectionResetError,
-                    BrokenPipeError,
-                ) as cause:
-                    if execution == 1 or self._on_prediction_retry is None:
-                        raise
-                    self.prediction_failure = cause
-                    await self._replace_prediction()
-            raise AssertionError("Prediction execution bound was exhausted without an outcome")
+            self._require_prediction_active()
+            worker_handle = await self._worker.prepare(requests)
+            self._require_prediction_active()
+            return await self._worker.execute(worker_handle)
         except NativeWorkerExited as cause:
-            # A proved exit must reach core before the old prediction retry or
-            # recovery wrapper can turn it into another scientific execution.
             raise self._worker_crash(cause, cause=cause) from None
-        except (Exception, asyncio.CancelledError) as cause:
-            if self.prediction_failure is None:
-                raise
-            failure = PredictionRecoveryFailed(self.prediction_failure, cause)
-            if isinstance(cause, asyncio.CancelledError):
-                raise cause from failure
-            raise failure from None
 
     def _worker_crash(self, failure, *, cause):
         if self._phase is _Phase.PREPARING:
@@ -410,20 +381,6 @@ class NMRNetSession:
             }}),
             cause=cause,
         )
-
-    async def _replace_prediction(self):
-        self._require_prediction_active()
-        failures = await self._retirement.retire_channel(self._worker)
-        if failures:
-            self._raise_retirement_failure(failures)
-        self._require_prediction_active()
-        self._on_prediction_retry(self._acknowledged, self.prediction_failure, self._retirement)
-        self._require_prediction_active()
-        runtime = await self._acquire_prediction(_Phase.EXECUTING)
-        if runtime != self._facts["runtime_expectations"]:
-            raise ValueError(
-                "Replacement prediction runtime differs from the admitted original runtime; prediction is blocked."
-            )
 
     async def _acquire_prediction(self, phase):
         self._prediction_pending = True

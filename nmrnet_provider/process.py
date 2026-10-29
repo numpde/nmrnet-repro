@@ -25,7 +25,7 @@ from builtins import BaseExceptionGroup
 from dataclasses import replace
 from pathlib import Path
 
-from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
+from nmrnet_provider.config import ConfigurationRejected, ScientificRetryNotImplemented, load_provider_config, read_startup_file
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService
@@ -266,17 +266,6 @@ async def _settle_borrowers(service, factory, failures):
     return (service is None or service.shutdown_ready) and (factory is None or factory.shutdown_ready)
 
 
-def _retired_prediction_observation(owner):
-    """Join retry output to the original child; a successor proof has no exit code.
-
-    The factory supplies the native owner. The session invokes this recipient
-    only after its native retirement and local channel settlement.
-    """
-    original = owner.session
-    return {"role": owner.role, "operation": original.operation, "generation": original.generation,
-            "child_returncode": None if original.retirement is None else original.retirement.returncode}
-
-
 async def run_provider(config, *, execution_identity, selected_artifacts, stop, diagnostics):
     """Keep unresolved owners alive until the deployment retires their containers."""
     lifetime = transport = factory = service = None
@@ -406,12 +395,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 attempt,
                 failure,
                 {"event": "api_progress_unconfirmed", "phase": phase, "progress_delivery_confirmed": False},
-            ),
-            on_prediction_retry=lambda attempt, failure, retired: report_attempt_notice(
-                attempt,
-                failure,
-                {"event": "prediction_retry_started", "maximum_executions": 2,
-                 **_retired_prediction_observation(retired)},
             ),
             start_policy=LiveStartPolicy(
                 cadence_seconds=config.lifecycle.poll_seconds,
@@ -572,7 +555,7 @@ def main(arguments=None):
             config, api=options.api_proxy_socket, interpreter=options.interpreter_proxy_socket, store=options.store_proxy_socket
         )
         execution, artifacts = _runtime_facts(options.execution, options.models, config)
-    except (OSError, ConfigurationRejected) as cause:
+    except (OSError, ConfigurationRejected, ScientificRetryNotImplemented) as cause:
         _failure_report((("startup admission", cause),), secrets=(), held=False)
         raise SystemExit(2) from None
     try:

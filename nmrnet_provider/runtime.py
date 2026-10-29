@@ -35,7 +35,7 @@ async def assemble_attempt(
     execution_identity,
     selected_artifacts,
     allocate_prediction,
-    on_prediction_retry,
+    on_prediction_failure,
     on_interpreter_failure,
     on_source_retry,
     on_source_observation,
@@ -61,6 +61,8 @@ async def assemble_attempt(
         raise ValueError("Cannot assemble NMRNet Attempt: admitted configuration and selected pending start are required.")
     if not callable(on_interpreter_failure):
         raise ValueError("Cannot assemble NMRNet Attempt: interpreter failures require an operator diagnostic recipient.")
+    if not callable(on_prediction_failure):
+        raise ValueError("Cannot assemble NMRNet Attempt: prediction failures require an operator diagnostic recipient.")
     if pending.scope != config.lifecycle.scope:
         raise ValueError("Cannot assemble NMRNet Attempt: selection differs from the configured provider scope.")
     if pending.analysis_kind_ref != ANALYSIS_KIND_REF:
@@ -115,7 +117,7 @@ async def assemble_attempt(
         execution_identity=execution_identity,
         selected_artifacts=selected_artifacts,
         input_preparation=preparation,
-        on_prediction_retry=on_prediction_retry,
+        on_prediction_failure=on_prediction_failure,
     )
     settings = config.lifecycle
     return AttemptController.live(

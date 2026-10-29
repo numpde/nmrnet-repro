@@ -188,7 +188,7 @@ class RuntimePeers:
             "execution_identity": {"image_id": "fixture"},
             "selected_artifacts": self.ports.worker.artifacts,
             "allocate_prediction": self.allocate_prediction,
-            "on_prediction_retry": None,
+            "on_prediction_failure": lambda failure, attempt: self.operator_notices.append(("prediction_failed", failure, attempt)),
             "on_interpreter_failure": lambda index, failure: self.operator_notices.append((index, failure)),
             "on_source_retry": lambda failure, seconds: self.operator_notices.append(("source_retry", failure, seconds)),
             "on_source_observation": lambda failure: self.operator_notices.append(("source_observation", failure)),

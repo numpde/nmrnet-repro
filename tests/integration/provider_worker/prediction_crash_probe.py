@@ -128,7 +128,7 @@ async def controller():
         policy=NativePolicy(15, 20, 5), observation_recovery=observation,
         condition_recovery=conditions, start_policy=start_policy,
         on_delivery_retry=unexpected, on_unconfirmed_phase_progress=unexpected,
-        on_prediction_retry=unexpected, on_operator_notice=notice,
+        on_operator_notice=notice,
     )
     facts = FeedInputFacts(
         "job:oom-proof", "nmr.job.specification.text.v1", "sha256:" + hashlib.sha256(RAW).hexdigest(), len(RAW)
@@ -194,7 +194,7 @@ async def controller():
     )
     session = NMRNetSession(
         allocate_prediction=allocate, execution_identity={"fixture": "synthetic native exit"},
-        selected_artifacts=ARTIFACTS, input_preparation=FixedJsonPreparation(), on_prediction_retry=unexpected,
+        selected_artifacts=ARTIFACTS, input_preparation=FixedJsonPreparation(),
     )
     lifecycle = AttemptController.live(
         api, claims, session, scope=pending.scope, stopping=asyncio.Event(), start_policy=start_policy,

@@ -38,6 +38,16 @@ from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_positive_scientific_retry_refuses_startup_without_api_effects(self):
+        async with ProcessPeers() as fixture:
+            fixture.files.write(fixture.files.raw.replace(b"max_retries = 0", b"max_retries = 1"))
+            process = await fixture.start()
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 2)
+            self.assertIn(b"scientific_retry.max_retries", stderr)
+            self.assertNotIn(b"Traceback", stderr)
+            self.assertEqual(fixture.peer.requests, [])
+
     async def test_condition_recovery_receipt_precedes_one_real_model_post(self):
         async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:
             (fixture.diagnostics / "inject-condition-before-input").write_bytes(b"test port\n")
@@ -134,7 +144,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
-        for recovery_kind in ("observation", "start", "delivery", "condition", "prediction", "native"):
+        for recovery_kind in ("observation", "start", "delivery", "condition", "native"):
             for failed_sink in (False, True):
                 with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
@@ -150,7 +160,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             )
             config = replace(fixture.config, interpreter=replace(fixture.config.interpreter, endpoints=endpoints))
             outage = ApiFailure("Attempt API exchange", "maintenance")
-            if recovery_kind in ("prediction", "native"):
+            if recovery_kind == "native":
                 outage = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; " + attempt.admission.job_ref)
 
             class NoticeService:
@@ -160,8 +170,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 def __init__(self, **arguments):
                     if recovery_kind == "native":
                         self.policy = arguments["open_attempt"].on_operator_notice
-                    elif recovery_kind == "prediction":
-                        self.policy = arguments["open_attempt"].on_prediction_retry
                     elif recovery_kind == "delivery":
                         self.policy = arguments["open_attempt"].on_delivery_retry
                     elif recovery_kind == "start":
@@ -179,13 +187,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         self.policy(outage, {"event": "native_lifecycle_settled", "role": "reader",
                                              "job_ref": attempt.admission.job_ref,
                                              "execution_attempt_ref": attempt.admission.execution_attempt_ref})
-                    elif recovery_kind == "prediction":
-                        retired = NativeOperation(role="prediction", endpoint=Path("/unused/runner.sock"),
-                                                  operation_seconds=1, observation_seconds=0.2, on_notice=Mock())
-                        retired.session = SimpleNamespace(operation="a" * 32, generation="b" * 32,
-                            retirement=None if original_returncode is None else Retirement(original_returncode, True))
-                        retired.proof = SimpleNamespace(retirement=Retirement(-15, True))
-                        self.policy(attempt, outage, retired)
                     elif recovery_kind == "delivery":
                         self.policy(attempt, outage, 0.1)
                     elif recovery_kind == "condition":
@@ -235,7 +236,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 notices = [shutdown["notice"]]
                 self.assertIn("OSError", json.dumps(shutdown["output"]))
                 self.assertIn(
-                    "Allocator failed" if recovery_kind in ("prediction", "native") else "Attempt API exchange",
+                    "Allocator failed" if recovery_kind == "native" else "Attempt API exchange",
                     json.dumps(shutdown["failure"]),
                 )
                 self.assertNotIn(attempt.admission.job_ref, content.decode())
@@ -245,9 +246,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             else:
                 notices = [json.loads(line) for line in content.splitlines()]
                 expected = [f"api_{recovery_kind}_retry", f"api_{recovery_kind}_recovered"]
-                if recovery_kind == "prediction":
-                    expected = ["prediction_retry_started"]
-                elif recovery_kind == "native":
+                if recovery_kind == "native":
                     expected = ["native_lifecycle_settled"]
                 elif recovery_kind == "delivery":
                     expected = ["delivery_handoff_retry"]
@@ -261,19 +260,10 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 rendered = json.dumps(shutdown if failed_sink else notice)
                 self.assertNotIn(attempt.admission.job_ref, rendered)
                 self.assertNotIn(attempt.admission.execution_attempt_ref, rendered)
-                if recovery_kind in ("prediction", "native"):
+                if recovery_kind == "native":
                     self.assertIn("Allocator failed", rendered)
                     self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
-                if recovery_kind == "prediction":
-                    self.assertEqual((notice["role"], notice["operation"], notice["generation"]),
-                                     ("prediction", "a" * 32, "b" * 32))
-                    self.assertEqual(notice["child_returncode"], original_returncode)
-                    self.assertNotIn("OOM", rendered)
             self.assertEqual(fixture.peer.requests, [])
-
-    async def test_prediction_retry_keeps_unknown_original_exit_distinct_from_successor_proof(self):
-        await self.check_attempt_reference_redaction(recovery_kind="prediction", failed_sink=False,
-                                                    original_returncode=None)
 
     async def test_active_observation_recovery_reaches_the_operator_with_real_job_and_attempt_context(self):
         async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:

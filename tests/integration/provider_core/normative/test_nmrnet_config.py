@@ -24,6 +24,22 @@ from provider_core.uploads import UploadLimits
 
 
 class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
+    def test_unsupported_scientific_retry_is_refused_before_other_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files = ConfigFiles(directory)
+            files.write(files.raw.replace(b"max_retries = 0", b"max_retries = 1"))
+            files.credential.unlink()
+            with self.assertRaisesRegex(NotImplementedError, "scientific_retry.max_retries"):
+                load_provider_config(files.path)
+
+    def test_scientific_retry_rejects_values_outside_the_contract(self):
+        for value in (b"true", b"-1"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                files = ConfigFiles(directory)
+                files.write(files.raw.replace(b"max_retries = 0", b"max_retries = " + value))
+                with self.assertRaises(config_module.ConfigurationRejected):
+                    load_provider_config(files.path)
+
     def test_live_configuration_reserves_capacity_before_runtime_resources(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)

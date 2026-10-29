@@ -5,15 +5,37 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.integration.nmrnet.compose_ports import deployment_inputs
-from tools.provider_deployment import client_inputs, freeze_deployment
+from tools.provider_deployment import client_inputs, freeze_deployment, main
 from tests.integration.nmrnet.compose_ports import ComposeFixture
 
 
 class DeploymentBundleTests(unittest.TestCase):
+    def test_freeze_cli_reports_unsupported_retry_without_starting_services(self):
+        with tempfile.TemporaryDirectory() as directory:
+            arguments, _ = deployment_inputs(Path(directory))
+            definition = arguments["definition"]
+            definition.write_text(definition.read_text().replace("max_retries = 0", "max_retries = 1"))
+            argv = ["freeze"]
+            for key, value in arguments.items():
+                if key == "source_names":
+                    for source in value:
+                        argv.extend(("--source", str(source)))
+                else:
+                    argv.extend(("--" + key.replace("_", "-"), str(value)))
+            output, errors = io.StringIO(), io.StringIO()
+            with redirect_stdout(output), redirect_stderr(errors):
+                self.assertEqual(main(argv), 2)
+            self.assertEqual(output.getvalue(), "")
+            self.assertIn("scientific_retry.max_retries", errors.getvalue())
+            self.assertNotIn("Traceback", errors.getvalue())
+            self.assertFalse((arguments["bundle"] / "compose.json").exists())
+            self.assertFalse((arguments["bundle"] / "config/provider.toml").exists())
+            self.assertEqual([p for p in (arguments["bundle"] / "secrets").rglob("*") if p.is_file()], [])
+
     def test_client_expectations_stream_current_image_without_exporting_secrets(self):
         with tempfile.TemporaryDirectory() as directory:
             arguments, files = deployment_inputs(Path(directory))

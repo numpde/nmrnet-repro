@@ -47,6 +47,10 @@ if TYPE_CHECKING:
 ANALYSIS_KIND_REF = "peaks_from_mol"
 
 
+class ScientificRetryNotImplemented(NotImplementedError):
+    """A positive scientific retry count is not supported yet."""
+
+
 class ConfigurationRejected(ValueError):
     """Safe startup explanation; original file/parser evidence remains private."""
 
@@ -188,9 +192,15 @@ def _configuration_document(path, read_file):
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
-    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service"}, "configuration")
-    if document["schema_id"] != "nmrnet.provider.runtime_config.v2":
-        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v2.")
+    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service", "scientific_retry"}, "configuration")
+    if document["schema_id"] != "nmrnet.provider.runtime_config.v3":
+        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v3.")
+    retry = document["scientific_retry"]
+    _fields(retry, {"max_retries"}, "scientific_retry")
+    if type(retry["max_retries"]) is not int or retry["max_retries"] < 0:
+        raise ConfigurationRejected("scientific_retry.max_retries must be a nonnegative integer.")
+    if retry["max_retries"] > 0:
+        raise ScientificRetryNotImplemented("Cannot start NMRNet: scientific_retry.max_retries must be 0 until scientific retries are implemented.")
     return raw, document
 
 

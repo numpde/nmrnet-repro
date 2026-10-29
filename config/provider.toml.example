@@ -1,8 +1,11 @@
-schema_id = "nmrnet.provider.runtime_config.v2"
+schema_id = "nmrnet.provider.runtime_config.v3"
 
 # Copy to config/deployments/<name>/provider.toml.
 # API identity, trust and delivery socket grants come from the selected shared binding.
 # Interpreter keys remain in secrets/deployments/<name>/.
+
+[scientific_retry]
+max_retries = 0
 
 [interpreter]
 max_turns = 6

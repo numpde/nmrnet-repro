@@ -41,7 +41,7 @@ from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, N
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.result import ResultRejected
-from nmrnet_provider.session import PredictionRecoveryFailed, PreparationEvidenceFailed, ResultAssemblyFailed
+from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import PredictionExecutionFailed
@@ -119,6 +119,21 @@ class _SwallowingSession(_ReportingSession):
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_prediction_diagnostic_is_bounded_and_redacts_known_secret(self):
+        failure = PredictionExecutionFailed("allocation failed; api_key=PRIVATE_KEY")
+        rendered = json.dumps(failure_evidence(failure, secrets=("PRIVATE_KEY",)))
+        self.assertIn("allocation failed", rendered)
+        self.assertNotIn("PRIVATE_KEY", rendered)
+
+    def test_retry_refusal_is_safe_without_exposing_unrelated_not_implemented_errors(self):
+        from nmrnet_provider.config import ScientificRetryNotImplemented
+
+        refusal = ScientificRetryNotImplemented(
+            "Cannot start NMRNet: scientific_retry.max_retries must be 0 until scientific retries are implemented."
+        )
+        self.assertIn("scientific_retry.max_retries", json.dumps(self.receive(refusal)))
+        self.assertNotIn("PRIVATE_UNRELATED", json.dumps(self.receive(NotImplementedError("PRIVATE_UNRELATED"))))
+
     def live_controller(self, transport, session, *, poll_seconds=1, condition_recovery=None):
         claims = AttemptClaims.live()
         controller = AttemptController.live(
@@ -175,17 +190,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         for private in (key, "FALLBACK_CREDENTIAL_", "PRIVATE_FIELD", "PRIVATE_RESPONSE_DUMP", "PRIVATE_INPUT", "C 0 0 0"):
             self.assertNotIn(private, rendered)
 
-
-    def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_in_stderr(self):
-        first = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; known-key")
-        failure = PredictionRecoveryFailed(first, OSError(errno.EIO, "PRIVATE_PATH"))
-        report = self.receive(failure, secrets=("known-key",))
-        rendered = json.dumps(report)
-        self.assertIn("first prediction failure", rendered)
-        self.assertIn("Allocator failed", rendered)
-        self.assertIn('"errno": 5', rendered)
-        self.assertNotIn("PRIVATE", rendered)
-        self.assertNotIn("known-key", rendered)
 
     async def test_condition_expiry_retains_first_latest_and_uncertainty_in_stderr(self):
         transport = _ConditionOutageTransport(first_failed_put=5)
@@ -254,7 +258,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
-            on_prediction_retry=Mock(),
             on_operator_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             on_delivery_retry=Mock(),
