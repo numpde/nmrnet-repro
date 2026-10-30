@@ -203,8 +203,7 @@ def clocked_client(output, *, ready_at):
         client = Client(
             output,
             Path("/synthetic/unused-key.json"),
-            "192.0.2.1",
-            "fixture0",
+            Path("/run/nmr-api-proxy/proxy.sock"),
             identity,
             "project:user-demo",
             UserAuthorityRefs("demo"),

@@ -44,8 +44,9 @@ configured credential, interpreter keys and TLS roots before any HTTP request,
 native operation or network acquisition.
 Run its focused, offline container tests with
 <code>make test/integration/provider-core/config</code>.</p>
-<p>Deployment installation derives <code>api</code>, <code>delivery.socket_path</code>
-and <code>delivery.socket_group_id</code> from the selected shared binding.
+<p>Deployment installation reads <code>api</code> from the provider's private
+<code>api.toml</code> and obtains <code>delivery.socket_path</code> and
+<code>delivery.socket_group_id</code> from the host's shared settings.
 The table below describes the generated runtime configuration; keep those derived
 fields out of the authored provider definition.</p>
 <p>Installation writes that runtime file under
@@ -94,7 +95,7 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>delivery</code></td>
-<td><code>socket_path</code>, <code>socket_group_id</code>, <code>request_seconds</code>, <code>retirement_seconds</code>, <code>retry_initial_seconds</code>, <code>retry_max_seconds</code></td>
+<td><code>socket_path</code>, <code>socket_group_id</code>, <code>retry_initial_seconds</code>, <code>retry_max_seconds</code></td>
 <td>none</td>
 </tr>
 <tr>
@@ -109,6 +110,7 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 </tbody>
 </table>
+<p>Delivery handoff exchanges use the API exchange and retirement time limits.</p>
 <p><code>scientific_retry.max_retries</code> is <code>0</code> or <code>1</code>.
 The supplied configuration uses <code>0</code>. With <code>1</code>, a model call
 that raises before returning may be retried once with a fresh worker and the same
@@ -185,25 +187,24 @@ sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is exclud
 other unknown fields are refused. Scientific model-byte verification stays with
 the native owner.</p>
 <p>The provider's private <code>deployment.toml</code> declares interpreter and Upload-store
-routes. The shared binding supplies the API route. Each route selects
+routes. The host's shared API proxy supplies the API route. Each scientific route selects
 <code>local</code> (a frozen address on an observed internal Docker network),
 <code>mapped</code> (an explicit host-network IPv4 destination), or <code>external</code>
 (interface-bound DNS). Each requires an explicit interface and
 <code>log_level</code>: <code>INFO</code>, <code>DEBUG</code> or <code>WARNING</code>.
 Mapped/local addresses preserve the configured hostname and port for TLS and signing;
 they do not fall back to DNS. External interpreter/store routes use the provider
-settings' <code>resolvers</code>; an external API route uses the binding's
-<code>resolver_file</code>.</p>
+settings' <code>resolvers</code>.</p>
 <p>Setup downloads use <code>NETWORK_INTERFACE</code>. Running services use the explicit
 interfaces in their route definitions. The choices may be the same or different;
 neither supplies the other. See the
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">provider route example</a>
-and <a href="https://github.com/numpde/nmr-provider-tools/blob/main/config/delivery.example.toml">shared binding example</a>.</p>
+and the shared service's operator settings.</p>
 <h2 id="persistent-user-service">Persistent deployment</h2>
 <p>A named deployment uses Docker Compose and <code>unless-stopped</code> restart
-policy. Its seven containers are the provider, three serial native runners
-(prediction, structure reader and conformer generator), and three proxies
-(API, interpreter and Upload access). The up command finishes after checking
+policy. Its six containers are the provider, three serial native runners
+(prediction, structure reader and conformer generator), and two proxies
+(interpreter and Upload access). The up command finishes after checking
 their configuration and current readiness. Docker must itself start after a host reboot.
 A separate shared delivery service on the same Docker host owns outstanding
 completion and failure requests. It can finish delivery while a provider is
@@ -224,28 +225,35 @@ Keep the path and network settings in that private deployment definition.
 The provider-only Docker volume holds the lifetime lock; final request bodies
 use the delivery service's separate queue volume. Attempt bookkeeping is
 in memory and is not restored after the provider process stops.</p>
-<p>Keep interpreter keys and provider TLS files in
-<code>secrets/deployments/&lt;name&gt;/</code>, named as in the provider definition.
-Keep the host's binding definition as an operator-owned configuration file and
-its credentials as separate secret files, following the
+<p>Keep <code>api.toml</code>, the API credential, interpreter keys and TLS files in
+<code>secrets/deployments/&lt;name&gt;/</code>. The private <code>api.toml</code>
+contains the API fields listed above, with credential and CA paths under
+<code>/srv/nmrnet/input/</code>. Keep the host's shared settings separately, following the
 <a href="https://github.com/numpde/nmr-provider-tools#readme">shared deployment instructions</a>.
-The binding names the exact API credential and optional CA files.
 Private directories require mode 0700 and secret files 0400 or 0600, owned by
-the deployment caller. Shared delivery mounts only the exact configuration,
-credential and trust inputs it needs, read-only. Its queue, IPC sockets and proxy
-runtime directories use Docker volumes. It creates no persistent host deployment
-directory or generated configuration tree.</p>
+the deployment caller. The outbox retains the publication inputs supplied with
+each accepted result in its own private queue.</p>
+<pre><code class="language-toml"># secrets/deployments/&lt;name&gt;/api.toml
+origin = "https://api.example.invalid"
+profile = "dev-local"
+topology = "dev-local"
+provider_ref = "provider:example"
+credential_file = "/srv/nmrnet/input/signing.private.json"
+ca_file = "/srv/nmrnet/input/api-ca.crt"
+exchange_seconds = 10
+retirement_seconds = 5</code></pre>
+<p>Use the actual issued provider identity and API origin. Omit <code>ca_file</code>
+when the API uses system trust.</p>
 <p>Build or load the NMRNet controller, geometry and inference images and the shared
-runtime image first. Use the same binding definition for both deployment owners;
-select NMRNet's binding by name. No separate API block or socket grant belongs in
-the provider definition.</p>
+runtime image first. Use the host's shared settings for the provider socket grants;
+no socket grant belongs in the provider definition.</p>
 <p><code>provider/prepare</code> records the three NMRNet image IDs under
 <code>.work/provider/</code>, <code>.work/preparation/</code> and <code>.work/inference/</code>.
 Install admits those image records and captures the model selection from
 <code>artifacts/prediction-models.json</code>; up uses the frozen generation.</p>
-<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 
-make provider/deployment/install DEPLOYMENT=&lt;name&gt; DELIVERY_BINDINGS=/private/bindings.toml DELIVERY_BINDING=&lt;binding-name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_SETTINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;
 make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
@@ -290,13 +298,12 @@ and reports the incomplete cleanup. Retry it independently with:</p>
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/status PROJECT=&lt;project-name&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/logs PROJECT=&lt;project-name&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;</code></pre>
-<p><code>PROJECT</code> is the <code>project</code> value in the binding definition.
+<p><code>PROJECT</code> is the <code>project</code> value in the shared settings.
 Status, logs and down inspect that project's actual Docker containers; they do not
 need a generated host recipe. Up derives the recipe from the operator's inputs
 and requires the project to be stopped. Keep its referenced input files available.</p>
-<p>One shared service can serve several providers. Its complete binding definition
-and stable project identify the host service. Stopping it retains its queue and
-IPC volumes; its API routes belong to that shared deployment.</p>
+<p>The independently managed shared proxy and outbox serve several providers.
+Their socket volumes and the outbox queue belong to the host deployment.</p>
 <h2 id="update-and-redeploy">Update and redeploy</h2>
 <p>From a clean checkout on the Docker host, using the deployment owner's account:</p>
 <pre><code class="language-sh">git switch main
@@ -307,14 +314,14 @@ git submodule update --init --recursive
 for setup transport. Wheelhouse and setup interface are chosen once:</p>
 <pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
 <p>For a provider-only update, stop NMRNet, install its new generation from the
-existing binding definition, and start it. Shared delivery can continue publishing
+existing shared settings, and start it. Shared delivery can continue publishing
 acknowledged results throughout:</p>
 <pre><code class="language-sh">make provider/deployment/down DEPLOYMENT=&lt;name&gt;
-make provider/deployment/install DEPLOYMENT=&lt;name&gt; DELIVERY_BINDINGS=/private/bindings.toml DELIVERY_BINDING=&lt;binding-name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_SETTINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;</code></pre>
 <p>For a shared-service replacement, coordinate all producers using it, inspect
 outstanding work, stop the incumbent owner, then start the shared owner
-with the complete binding definition and existing queue/IPC identities.
+with the shared settings and existing queue identity. Leave the shared proxy running.
 Do not run two delivery owners or discard unresolved data to complete an update.
 Container removal removes its bounded Docker logs; collect needed diagnostics
 before stopping it. See <a href="#result-delivery-and-storage">delivery ownership</a>
@@ -381,15 +388,15 @@ deferred refinements and further testing are tracked in
 <h3 id="held-delivery">Reconciling held delivery data</h3>
 <p>A held item has no verified matching API receipt. Resolve the reported cause
 and remote Attempt before deciding to discard its local payload. First explicitly
-stop shared delivery; this affects all bindings on this Docker host. Listing and
+stop shared delivery; this affects all providers on this Docker host. Listing and
 discard run offline under the queue's existing exclusive lock and refuse while
 the daemon owns it. They never stop or restart the service automatically.</p>
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/held DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/discard DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
 make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
-<p>The list shows only the selected binding's held metadata and reason, without
-payload bodies or a dump file. Discard requires that exact binding, Attempt and
+<p>The list shows only the selected provider's metadata and reason, without
+payload bodies or a dump file. Discard requires that exact provider, Attempt and
 digest and removes only a held row; pending rows remain unchanged. It proves
 neither API acceptance nor resolution of the remote Attempt. Producer sockets
 have no deletion route. Source:
@@ -404,8 +411,8 @@ targets are excluded from offline test aggregates:</p>
 <p>To check an already installed deployment, use
 <code>make provider/qualify/api/existing-pasted</code> with explicit
 <code>DEPLOYMENT</code>, <code>PROJECT_REF</code>, <code>USER_ID</code>,
-<code>CLIENT_CREDENTIAL_DIRECTORY</code>, <code>CA_FILE</code>, <code>ADDRESS</code>,
-<code>INTERFACE</code>, <code>OUTPUT</code>, <code>API_CLIENT_IMAGE</code> and
+<code>CLIENT_CREDENTIAL_DIRECTORY</code>, <code>CA_FILE</code>, <code>SHARED_SETTINGS</code>,
+<code>SHARED_RUNTIME_IMAGE</code>, <code>OUTPUT</code>, <code>API_CLIENT_IMAGE</code> and
 <code>RETAINED_RESULT</code>. The client directory must contain the entitled user's
 <code>registration.json</code> and <code>signing.private.json</code>; the provider key
 does not authorize user Jobs. Select the historical pasted oracle at
@@ -460,15 +467,14 @@ prediction. The received result cannot supply its own expected image identity.</
 <li><code>PROVIDER_CREDENTIAL</code>, <code>CLIENT_CREDENTIAL_DIRECTORY</code> and <code>CA_FILE</code>: absolute paths
   to the issued provider key, the client's original registration/private pair and
   the API trust certificate. Keys must remain caller-owned and mode 0400/0600.</li>
-<li><code>ADDRESS</code> and <code>INTERFACE</code>: the observed publication's literal IPv4 destination
-  and explicit host interface. The configured origin/port stays unchanged for TLS
-  and signatures. No DNS or direct fallback is attempted.</li>
+<li><code>ADDRESS</code> and <code>INTERFACE</code>: the explicit mapped Upload-store route for
+  the separately staged real-API targets. API client requests use the shared proxy.</li>
 <li><code>API_CLIENT_IMAGE</code>: an immutable local API runtime image ID containing the
   API-owned credential validator/signing example. No implicit pull or installation.</li>
-<li><code>PROVIDER_TOOLS</code>, <code>SHARED_RUNTIME_IMAGE</code> and <code>WHEELHOUSE</code>:
-  the shared owner's checkout, its immutable runtime image, and the cache containing
-  the pinned core source archive. Temporary qualification deployments use that
-  owner's normal commands with an isolated binding definition and project.</li>
+<li><code>SHARED_SETTINGS</code> and <code>SHARED_RUNTIME_IMAGE</code>: the host's
+  operator settings and its immutable shared runtime image. The client borrows the
+  existing proxy socket read-only and checks that its exact volume exists first.
+  Staged targets also require the <code>WHEELHOUSE</code> containing the pinned core archive.</li>
 <li><code>RETAINED_RESULT</code>: an absolute path to the existing scientific comparison
   receipt; its expected hash remains pinned in the fixture client. It is never
   regenerated from this run's predictions.</li>

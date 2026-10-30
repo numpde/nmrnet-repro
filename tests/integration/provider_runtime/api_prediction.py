@@ -18,7 +18,6 @@ import argparse
 import hashlib
 import http.client
 import io
-import ipaddress
 import json
 import math
 import os
@@ -67,9 +66,9 @@ class CarrierFailed(RuntimeError):
 class Client:
     """Freshly sign each finite request; preserve received bytes before admission."""
 
-    def __init__(self, output, credential, address, interface, identity, project_ref, user):
+    def __init__(self, output, credential, proxy_socket, identity, project_ref, user):
         self.output, self.credential, self.count = output, credential, 0
-        self.address, self.interface = address, interface
+        self.proxy_socket = proxy_socket
         self.identity, self.project_ref, self.user = identity, project_ref, user
         origin = urlsplit(identity["origin"])
         self.host, self.port = origin.hostname, origin.port if origin.port is not None else 443
@@ -113,18 +112,17 @@ class Client:
         )
 
     def _exchange(self, prefix, method, path, query, body, headers, maximum_bytes):
-        """Use one bound carrier; callers separately own signed JSON or bearer bytes."""
+        """Use one CONNECT tunnel; callers separately own signed JSON or bearer bytes."""
         connection = http.client.HTTPSConnection(self.host, self.port, timeout=10, context=self.trust)
         failures, phase = [], "connect"
         try:
-            # This finite API client has an already admitted literal IPv4
-            # publication. It needs no proxy resolver or provider SDK in the
-            # independently owned API-client image. TLS retains the authority.
-            outbound = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            connection.set_tunnel(self.host, self.port)
+            outbound = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             connection.sock = outbound
             outbound.settimeout(10)
-            outbound.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, self.interface.encode("ascii") + b"\0")
-            outbound.connect((self.address, self.port))
+            outbound.connect(str(self.proxy_socket))
+            phase = "proxy CONNECT"
+            connection._tunnel()
             connection.sock = self.trust.wrap_socket(outbound, server_hostname=self.host)
             phase = "request dispatch"
             connection.request(method, path + ("?" + query if query else ""), body=body, headers=headers)
@@ -927,8 +925,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--address", required=True)
-    parser.add_argument("--interface", required=True)
+    parser.add_argument("--proxy-socket", required=True, type=Path)
     parser.add_argument("--project-ref", required=True)
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--readback-seconds", required=True, type=int)
@@ -956,10 +953,6 @@ def main():
 
     signal.signal(signal.SIGALRM, deadline_reached)
     signal.alarm(args.process_seconds)
-    require(
-        str(ipaddress.IPv4Address(args.address)) == args.address,
-        "Supply the observed publication's literal canonical IPv4 address",
-    )
     os.umask(0o077)
     output = Path("/output")
     require(not any(output.iterdir()), "Use fresh private client output; an uncertain mutation must not be resubmitted")
@@ -982,7 +975,7 @@ def main():
     with tempfile.TemporaryDirectory() as scratch:
         frozen = Path(scratch) / "signing.private.json"
         frozen.write_bytes(artifacts["signing.private.json"])
-        client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
+        client = Client(output, frozen, args.proxy_socket, identity, project_ref, user)
         if args.job_receipt is None:
             receipt = submit(client, case, case_kind=args.case_kind, upload_receipt=args.upload_receipt)
         else:

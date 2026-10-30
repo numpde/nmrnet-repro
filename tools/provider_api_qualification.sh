@@ -24,43 +24,49 @@ api_witness_wait() {
     provider_host_refuse 'Qualification helper exceeded its host deadline; retain requests and receipts, with no automatic retry.'
 }
 
+api_witness_shared_grant() {
+    local settings=$NMRNET_SHARED_SETTINGS_INPUT image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
+    local directory=$provider_host_root/components/grants projection parent
+    provider_host_path "$settings" || return $?
+    [[ -f $settings && ! -L $settings && $image =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || { provider_host_refuse 'Shared settings and the immutable shared runtime image are required.'; return 2; }
+    mkdir -m 700 -- "$provider_host_root/shared" || return $?
+    shared_settings_snapshot=$provider_host_root/shared/settings.toml
+    local -a grants=(--env PROVIDER_CORE_IN_CONTAINER=1
+        --mount "type=bind,src=$settings,dst=/input/shared.toml,readonly"
+        --mount "type=bind,src=$provider_host_root/shared,dst=/output")
+    local -a argv=(/opt/provider-core/environment/bin/python -I -B -c '
+import json
+from pathlib import Path
+from provider_core.shared_grants import shared_grants
+from provider_core.startup_file import read_startup_file
+path = Path("/output/settings.toml")
+with path.open("xb") as stream:
+    stream.write(read_startup_file("/input/shared.toml", maximum_bytes=65536, label="shared settings"))
+print(json.dumps(shared_grants(path).compose(), sort_keys=True))')
+    provider_host_create grants none "$image" grants argv true || return $?
+    api_witness_wait grants 30 || return $?
+    provider_host_command projection "$directory" logs "${provider_host_ids[grants]}" || return $?
+    projection=$directory/projection.stdout
+    shared_proxy_socket=$(jq -er '.proxy_socket | select(type == "string" and startswith("/"))' "$projection") || return $?
+    shared_socket_gid=$(jq -er '.socket_group_id | select(type == "number" and . > 0 and floor == .)' "$projection") || return $?
+    parent=${shared_proxy_socket%/*}
+    shared_proxy_volume=$(jq -er --arg parent "$parent" '
+        [.mounts[] | select(.target == $parent and .type == "volume" and .read_only == true and .volume.nocopy == true) | .source]
+        | select(length == 1) | .[0] | select(type == "string")' "$projection") || return $?
+    [[ $shared_proxy_volume =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] || return 2
+    provider_host_remove grants || return $?
+    provider_host_command shared-volume "$provider_host_root" volume inspect --format '{{.Name}}' "$shared_proxy_volume" || return $?
+    cmp -s -- "$provider_host_root/shared-volume.stdout" <(printf '%s\n' "$shared_proxy_volume") \
+        || { provider_host_refuse 'The exact shared proxy volume is absent or ambiguous.'; return 2; }
+    shared_proxy_mount=$parent
+}
+
 
 api_witness_stop_deployment() {
-    local invocation_status=${1-0}
     if [[ ${api_deployment_active-false} == true ]]; then
         NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
         api_deployment_active=false
-    fi
-    if [[ ${qualification_delivery_up_attempted-false} == true ]]; then
-        if (( invocation_status != 0 )); then
-            printf 'Private delivery project %s was retained; inspect nmr-provider-tools status/logs using PROJECT=%s. Any queued outcome remains owned there. Do not repeat the Job.\n' \
-                "$qualification_delivery_project" "$qualification_delivery_project" >&2
-            return 0
-        fi
-        qualification_delivery_down || {
-            local failure=$?
-            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
-            return "$failure"
-        }
-        if qualification_delivery_empty; then
-            qualification_delivery_release || {
-                local failure=$?
-                [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
-                return "$failure"
-            }
-        else
-            [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
-            [[ $inference_retirement_confirmed == true ]] || return 2
-            # The client readback passed, but another retained obligation may
-            # remain. Restore its original publisher rather than discard it.
-            qualification_delivery_up || {
-                local failure=$?
-                [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
-                return "$failure"
-            }
-            printf 'Private delivery still owns outcomes; retain project %s and its configuration.\n' "$qualification_delivery_project" >&2
-            return 2
-        fi
     fi
 }
 
@@ -79,8 +85,11 @@ api_witness_finish() {
             if [[ ! -v provider_host_ids[probe] && ! -v provider_host_ids[admission] && ! -v provider_host_ids[selection] \
                 && $inference_retirement_confirmed == true ]]; then provider_host_remove proxy || cleanup=2; fi
         else
-            for role in client stage selection; do provider_host_remove "$role" || cleanup=2; done
-            if [[ ! -v provider_host_ids[client] && ! -v provider_host_ids[stage] && ! -v provider_host_ids[selection] ]] \
+            for role in client stage selection grants; do
+                [[ $inference_retirement_confirmed == true ]] || break
+                provider_host_remove "$role" || cleanup=2
+            done
+            if [[ ! -v provider_host_ids[client] && ! -v provider_host_ids[stage] && ! -v provider_host_ids[selection] && ! -v provider_host_ids[grants] ]] \
                 && api_witness_stop_deployment "$status"; then provider_host_remove peer || cleanup=2
             else cleanup=2; fi
         fi
@@ -222,7 +231,7 @@ api_witness_admission_finish() {
 
 api_witness_existing_pasted() {
     local selector alias value path identity revision
-    local -a required=(PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
+    local -a required=(PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT SHARED_SETTINGS SHARED_RUNTIME_IMAGE)
     if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} || -n ${NMRNET_JOB_IDENTITY_INPUT-} ]]; then
         required+=(JOB_RECEIPT JOB_IDENTITY)
     else
@@ -248,9 +257,8 @@ api_witness_existing_pasted() {
         provider_host_path "$path" || return $?
         provider_host_disjoint "$path" "$provider_host_root" || return $?
     done
-    provider_host_ipv4 "$NMRNET_ADDRESS_INPUT" \
-        && [[ $NMRNET_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] \
-        || { provider_host_refuse 'Supply a literal API IPv4 address, explicit interface and immutable client image ID.'; return 2; }
+    [[ $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || { provider_host_refuse 'Supply an immutable API client image ID.'; return 2; }
     if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
         # Historical readback uses the original caller capture, even after the
         # producer stops or its image changes. Received results cannot self-pin.
@@ -293,6 +301,7 @@ api_witness_existing_pasted() {
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; return 2; }
+    api_witness_shared_grant || return $?
     local source=$provider_host_root/sources
     local -a provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$source/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
@@ -303,9 +312,11 @@ api_witness_existing_pasted() {
         --mount "type=bind,src=$NMRNET_CA_FILE_INPUT,dst=/input/api-ca.crt,readonly"
         --mount "type=bind,src=$provider_host_root/source/identity.json,dst=/input/identity.json,readonly"
         --mount "type=bind,src=$NMRNET_RETAINED_RESULT_INPUT,dst=/input/retained-result.json,readonly"
+        --group-add "$shared_socket_gid"
+        --mount "type=volume,src=$shared_proxy_volume,dst=$shared_proxy_mount,readonly,volume-nocopy"
         --mount "type=bind,src=$provider_host_root/client,dst=/output")
     local -a provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py
-        --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT"
+        --proxy-socket "$shared_proxy_socket" --project-ref "$NMRNET_PROJECT_REF_INPUT"
         --user-id "$NMRNET_USER_ID_INPUT" --readback-seconds 900 --process-seconds 960 --case-kind pasted)
     if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
         provider_host_path "$NMRNET_JOB_RECEIPT_INPUT" || return $?
@@ -313,7 +324,7 @@ api_witness_existing_pasted() {
         provider_host_grants+=(--mount "type=bind,src=$NMRNET_JOB_RECEIPT_INPUT,dst=/input/job-receipt.json,readonly")
         provider_host_argv+=(--job-receipt /input/job-receipt.json)
     fi
-    provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
+    provider_host_create client none "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client 980 || return $?
     provider_host_remove client || return $?
 }
@@ -334,7 +345,7 @@ api_witness_main() {
     local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_address= external_interface= resolvers=
     local -a provider_host_argv=()
     local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF PROVIDER_CREDENTIAL CA_FILE ADDRESS INTERFACE OUTPUT RETAINED_RESULT
-        USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE)
+        USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE SHARED_SETTINGS SHARED_RUNTIME_IMAGE)
     if [[ $mode == scripted-pasted ]]; then
         required+=(LOCAL_NETWORK LOCAL_INTERFACE)
         readback_seconds=180 process_seconds=240 host_seconds=260 interpreter_route=local
@@ -439,8 +450,7 @@ api_witness_main() {
     docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
     declare -gA provider_host_ids=()
     api_witness_mode=$mode api_deployment_active=false provider_host_stop_requested=false
-    source "$repository_root/tools/compose_qualification.sh"
-    qualification_shared_tools || return $?
+    qualification_shared_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
     source "$repository_root/tools/wheelhouse_path.sh"
     select_wheelhouse && require_wheelhouse_pool || return $?
     local delivery_digest delivery_project
@@ -454,11 +464,11 @@ api_witness_main() {
         --mount "type=bind,src=$qualification_source_root/requirements/provider-core-release.json,dst=/fixture/core-release.json,readonly"
         --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly")
-    qualification_delivery_selected=false qualification_delivery_up_attempted=false
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     docker_client_prepare run || return $?
+    api_witness_shared_grant || return $?
     local controller_image prediction_image network_id network_name internal host deadline interpreter_key interpreter_ca
     IFS= read -r controller_image < "$repository_root/.work/provider/image-id"
     IFS= read -r prediction_image < "$repository_root/.work/inference/image-id"
@@ -547,22 +557,17 @@ api_witness_main() {
     mkdir -p -m 700 -- "$repository_root/secrets/deployments" || return $?
     mkdir -m 700 -- "$private" || return $?
     cp -- "$provider_host_root/deployment/"{provider,deployment}.toml "$public/" || return $?
-    for input in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
+    for input in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
         if [[ -f $provider_host_root/deployment/secrets/$input ]]; then
             cp -- "$provider_host_root/deployment/secrets/$input" "$private/$input" || return $?
             chmod 600 -- "$private/$input" || return $?
         fi
     done
-    # Both owners consume the fixture's one neutral API/IPC definition.
     qualification_api_origin=$NMRNET_API_ORIGIN_INPUT
     qualification_provider_ref=$(jq -er '.provider_ref' "$provider_host_root/source/identity.json") || return $?
     NMRNET_DEPLOYMENT_INPUT=$api_deployment_name \
-    NMRNET_DELIVERY_BINDINGS_INPUT=$provider_host_root/deployment/bindings.toml \
-    NMRNET_DELIVERY_BINDING_INPUT=nmrnet NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
+    NMRNET_SHARED_SETTINGS_INPUT=$shared_settings_snapshot NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
         bash "$repository_root/tools/provider_deployment.sh" install || return $?
-    qualification_delivery_select "$provider_host_root/deployment/delivery" "$delivery_project" \
-        "$provider_host_root/deployment/bindings.toml" || return $?
-    qualification_delivery_up || return $?
     # Up can dispatch effects before returning failure. Its original receipts
     # must settle through down before the model peer's route can be withdrawn.
     api_deployment_active=true
@@ -576,6 +581,8 @@ api_witness_main() {
         --mount "type=bind,src=$provider_host_root/source/api-ca.crt,dst=/input/api-ca.crt,readonly"
         --mount "type=bind,src=$provider_host_root/source/identity.json,dst=/input/identity.json,readonly"
         --mount "type=bind,src=$NMRNET_RETAINED_RESULT_INPUT,dst=/input/retained-result.json,readonly"
+        --group-add "$shared_socket_gid"
+        --mount "type=volume,src=$shared_proxy_volume,dst=$shared_proxy_mount,readonly,volume-nocopy"
         --mount "type=bind,src=$provider_host_root/client,dst=/output")
     if [[ $mode == real-smiles || $mode == real-smiles-multiple ]]; then
         provider_host_grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/smiles.json,dst=/fixture/smiles.json,readonly")
@@ -592,10 +599,10 @@ api_witness_main() {
         fi
     fi
     provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py \
-        --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" \
+        --proxy-socket "$shared_proxy_socket" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" \
         --readback-seconds "$readback_seconds" --process-seconds "$process_seconds" --case-kind "$case_kind")
     if [[ -n $upload_receipt ]]; then provider_host_argv+=(--upload-receipt /input/upload-receipt.json); fi
-    provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
+    provider_host_create client none "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client "$host_seconds" || return $?
     provider_host_remove client || return $?
     api_witness_stop_deployment || return $?

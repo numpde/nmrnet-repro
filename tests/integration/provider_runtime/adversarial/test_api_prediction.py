@@ -66,7 +66,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 patch("api_prediction.validate_user_credential_artifacts"),
                 patch("api_prediction.signal.signal"), patch("api_prediction.signal.alarm"),
                 patch("api_prediction.Client") as client, patch("api_prediction.submit") as submit_job,
-                patch.object(sys, "argv", ["client", "--address", "192.0.2.1", "--interface", "fixture0",
+                patch.object(sys, "argv", ["client", "--proxy-socket", "/run/nmr-api-proxy/proxy.sock",
                                           "--project-ref", "project:user-demo", "--user-id", "demo",
                                           "--readback-seconds", "900", "--process-seconds", "960", "--case-kind", "pasted"]),
                 self.assertRaisesRegex(AssertionError, "independent retained scientific receipt differs"),
@@ -299,9 +299,10 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             head = json.loads(next(client.output.glob("*-upload-bytes.head.json")).read_bytes())
             self.assertEqual((head["status"], head["request_id"]), (201, "synthetic-request-id"))
             constructor.assert_called_once_with("api.example", 9443, timeout=10, context=client.trust)
-            bound.assert_called_once_with(socket.AF_INET, socket.SOCK_STREAM)
-            bound.return_value.setsockopt.assert_called_once_with(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"fixture0\0")
-            bound.return_value.connect.assert_called_once_with(("192.0.2.1", 9443))
+            bound.assert_called_once_with(socket.AF_UNIX, socket.SOCK_STREAM)
+            bound.return_value.connect.assert_called_once_with("/run/nmr-api-proxy/proxy.sock")
+            connection.set_tunnel.assert_called_once_with("api.example", 9443)
+            connection._tunnel.assert_called_once_with()
             self.assertEqual(client.trust.wrap_socket.call_args.kwargs["server_hostname"], "api.example")
             connection.close.assert_called_once()
 
@@ -335,7 +336,21 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 head = json.loads(next(client.output.glob("*.head.json")).read_bytes())
                 self.assertEqual((head["status"], head["request_id"]), (200, "synthetic-request-id"))
 
-    def test_bound_raw_socket_is_owned_before_timeout_or_tls_setup_failure(self):
+    def test_proxy_refusal_does_not_dispatch_or_expose_proxy_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            client, _calls, _source, canary = upload_client(Path(temporary), fault=None)
+            del client._exchange
+            connection = Mock()
+            connection._tunnel.side_effect = OSError(5, canary)
+            with (patch("api_prediction.http.client.HTTPSConnection", return_value=connection),
+                  patch("api_prediction.socket.socket"), self.assertRaises(RuntimeError) as caught):
+                client._exchange(client.output / "setup", "GET", "/", "", None, {}, 65536)
+            self.assertIn("proxy CONNECT: OSError", str(caught.exception))
+            self.assertNotIn(canary, str(caught.exception))
+            connection.request.assert_not_called()
+            connection.close.assert_called_once()
+
+    def test_proxy_socket_is_owned_before_timeout_or_tls_setup_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             client, _calls, _source, canary = upload_client(Path(temporary), fault=None)
             del client._exchange
@@ -636,10 +651,8 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
 
         arguments = [
             "api_prediction",
-            "--address",
-            "192.0.2.1",
-            "--interface",
-            "fixture0",
+            "--proxy-socket",
+            "/run/nmr-api-proxy/proxy.sock",
             "--project-ref",
             "project:user-demo",
             "--user-id",

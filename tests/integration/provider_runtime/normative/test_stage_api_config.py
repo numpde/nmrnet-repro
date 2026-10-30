@@ -34,9 +34,9 @@ class StageApiConfigTests(unittest.TestCase):
             )
             public = tomllib.loads((root / "deployment/provider.toml").read_text())
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
-            binding = tomllib.loads((root / "deployment/bindings.toml").read_text())["bindings"][0]
+            api = tomllib.loads((root / "deployment/secrets/api.toml").read_text())
             self.assertNotIn("api", public)
-            self.assertEqual(binding["api"]["ca_file"], str(root / "deployment/secrets/api-ca.pem"))
+            self.assertEqual(api["ca_file"], "/srv/nmrnet/input/api-ca.pem")
             self.assertEqual((root / "deployment/secrets/api-ca.pem").read_bytes(), original_ca)
             self.assertEqual(private["routes"]["interpreter"], {
                 "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["model.example=127.0.0.1"],
@@ -58,12 +58,12 @@ class StageApiConfigTests(unittest.TestCase):
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
             self.assertNotIn("lifetime_root", private)
             self.assertEqual(public["lifecycle"]["lifetime_root"], "/srv/nmrnet/attempts")
-            binding = tomllib.loads((root / "deployment/bindings.toml").read_text())["bindings"][0]
-            self.assertEqual(binding["route"], {
+            api = tomllib.loads((root / "deployment/secrets/api.toml").read_text())
+            self.assertEqual(api["provider_ref"], original["api"]["provider_ref"])
+            self.assertEqual(private["routes"]["store"], {
                 "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["api.example=127.0.0.1"],
             })
             self.assertNotIn("api", private["routes"])
-            self.assertEqual(private["routes"]["store"], binding["route"])
             self.assertEqual(private["routes"]["interpreter"], {"mode": "external", "interface": "external0", "log_level": "INFO"})
             self.assertEqual(private["resolvers"], ["192.0.2.53"])
             selected = public["interpreter"]["endpoints"][0]

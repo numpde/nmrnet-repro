@@ -21,9 +21,16 @@ from pathlib import Path
 OWNER = r"""#!/usr/bin/env bash
 jq() {
     "$TEST_PYTHON" -c 'import json,sys
-document=json.load(open(sys.argv[-1]))
-if sys.argv[2] == ".provider_ref": print(document["provider_ref"])
-elif "outstanding_items" in sys.argv[2]: sys.exit(0 if document["outstanding_items"] == 0 else 1)
+document=json.load(open(sys.argv[-1])); query=" ".join(sys.argv[1:-1])
+if ".provider_ref" in query: print(document["provider_ref"])
+elif ".proxy_socket" in query: print(document["proxy_socket"])
+elif ".socket_group_id" in query: print(document["socket_group_id"])
+elif ".mounts[]" in query:
+    matches=[m["source"] for m in document["mounts"] if m.get("target") == sys.argv[4]
+             and m.get("type") == "volume" and m.get("read_only") is True and m.get("volume", {}).get("nocopy") is True]
+    if len(matches) != 1: sys.exit(1)
+    print(matches[0])
+elif "outstanding_items" in query: sys.exit(0 if document["outstanding_items"] == 0 else 1)
 else: raise AssertionError("Unmodeled jq query")' "$@"
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
@@ -52,6 +59,7 @@ provider_host_create() {
     printf '%s\0' "${captured_command[@]}" > "$TEST_RECORDS/$role.argv"
     provider_host_ids[$role]=$(printf '%064d' 1)
     case "$role" in
+        grants) printf 'shared fixture\n' > "$provider_host_root/shared/settings.toml" ;;
         peer) printf '{}\n' > "$provider_host_root/peer/ready.json" ;;
         selection)
             printf '%s\n' "$TEST_KEY" > "$provider_host_root/selection/key_file.txt"
@@ -64,7 +72,7 @@ provider_host_create() {
             mkdir -m 700 -p "$provider_host_root/deployment/secrets"
             printf 'fixture binding\\n' > "$provider_host_root/deployment/bindings.toml"
             for file in provider.toml deployment.toml; do printf '%s\n' "$file" > "$provider_host_root/deployment/$file"; done
-            for file in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
+            for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
                 printf 'fixture-%s\n' "$file" > "$provider_host_root/deployment/secrets/$file"
             done
             printf 'unselected\n' > "$provider_host_root/deployment/secrets/extra-canary"
@@ -102,6 +110,10 @@ provider_host_command() {
             printf '%s|%s\n' "${directory##*/}" "$((deadline - SECONDS))" >> "$TEST_RECORDS/waits"
             ;;
         membership) printf '127.0.0.1\n' > "$directory/membership.stdout" ;;
+        projection) printf '%s\n' '{"proxy_socket":"/run/nmr-api-proxy/proxy.sock","socket_group_id":1001,"mounts":[{"type":"volume","source":"fixture-proxy-socket","target":"/run/nmr-api-proxy","read_only":true,"volume":{"nocopy":true}}]}' > "$directory/projection.stdout" ;;
+        shared-volume)
+            [[ ${TEST_VOLUME_MISSING-false} != true ]] || return 2
+            printf 'fixture-proxy-socket\n' > "$directory/shared-volume.stdout" ;;
         signal)
             [[ -f $TEST_RECORDS/down-succeeded ]] || return 98
             printf 'signal-peer\n' >> "$TEST_RECORDS/events"
@@ -115,9 +127,7 @@ DEPLOYMENT = r'''#!/usr/bin/env bash
 set -eu
 [[ $1 =~ ^(install|up|down)$ ]]
 if [[ $1 == install ]]; then
-    [[ $# == 1 && $NMRNET_DELIVERY_BINDING_INPUT == nmrnet && -f $NMRNET_DELIVERY_BINDINGS_INPUT ]]
-    digest=$(printf '%s' "${NMRNET_DELIVERY_BINDINGS_INPUT%/deployment/bindings.toml}" | sha256sum)
-    printf 'nmrnet-qualification-%s\n' "${digest:0:24}" > "$TEST_RECORDS/delivery-project"
+    [[ $# == 1 && -f $NMRNET_SHARED_SETTINGS_INPUT ]]
 else
     [[ $# == 1 ]]
 fi
@@ -128,7 +138,7 @@ root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
 public=$root/config/deployments/$NMRNET_DEPLOYMENT_INPUT
 private=$root/secrets/deployments/$NMRNET_DEPLOYMENT_INPUT
 for file in provider.toml deployment.toml; do cmp -s "$public/$file" <(printf '%s\n' "$file"); done
-for file in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
+for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
     cmp -s "$private/$file" <(printf 'fixture-%s\n' "$file")
     [[ $(stat -c '%a' "$private/$file") == 600 ]]
 done
@@ -164,6 +174,38 @@ esac
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
+    def test_api_cleanup_does_not_dispatch_after_unretired_client(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = r'''
+source /fixture/provider_api_qualification.sh
+api_witness_mode=existing-pasted
+api_deployment_active=false
+provider_host_root=$TEST_ROOT
+provider_host_diagnostic=
+inference_diagnostic=
+inference_retirement_confirmed=true
+declare -A provider_host_ids=([client]=original [stage]=remaining)
+provider_host_remove() { printf '%s\n' "$1" >> "$TEST_ROOT/calls"; inference_retirement_confirmed=false; return 2; }
+docker_client_cleanup() { : > "$TEST_ROOT/forbidden-cleanup"; }
+sleep() { : > "$TEST_ROOT/held"; command sleep "$@"; }
+api_witness_finish
+'''
+            process = subprocess.Popen(["bash", "-c", script], env=dict(os.environ, TEST_ROOT=str(root)),
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+            try:
+                deadline = time.monotonic() + 2
+                while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertIsNone(process.poll())
+                self.assertTrue((root / "held").exists())
+                self.assertEqual((root / "calls").read_text().splitlines(), ["client"])
+                self.assertFalse((root / "forbidden-cleanup").exists())
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGTERM)
+                process.communicate(timeout=3)
+
     def test_compose_cleanup_never_dispatches_after_a_client_fails_to_retire(self):
         for phase in ("logs",):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
@@ -224,40 +266,15 @@ compose_witness_finish
         script = r'''
 source /fixture/provider_api_qualification.sh
 api_deployment_active=false
-qualification_delivery_up_attempted=true
-inference_retirement_confirmed=true
-effect() {
-    printf '%s\n' "$1"
-    if [[ $1 == "$TEST_PHASE" ]]; then
-        inference_retirement_confirmed=false
-        inference_diagnostic='original cleanup diagnostic'
-        return 7
-    fi
-}
-qualification_delivery_down() { effect down; }
-qualification_delivery_empty() {
-    effect inspection || return $?
-    if [[ $TEST_PHASE == restore ]]; then
-        inference_diagnostic='queue still owns outcomes'
-        return 2
-    fi
-}
-qualification_delivery_release() { effect remove; }
-qualification_delivery_up() { effect restore; }
+qualification_delivery_down() { printf 'unexpected shared shutdown\n'; return 7; }
 api_witness_stop_deployment 0
 '''
-        for phase, effects in (("down", ["down"]), ("inspection", ["down", "inspection"]),
-                               ("remove", ["down", "inspection", "remove"]),
-                               ("restore", ["down", "inspection", "restore"])):
-            with self.subTest(phase=phase):
-                result = subprocess.run(["bash", "-c", script], env=dict(os.environ, TEST_PHASE=phase),
-                                        capture_output=True, text=True, timeout=3)
-                self.assertEqual(result.returncode, 2 if phase == "inspection" else 7, result.stderr)
-                self.assertEqual(result.stdout.splitlines(), effects)
-                self.assertIn("original cleanup diagnostic", result.stderr)
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
 
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
-        for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent"):
+        for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent", "missing-volume"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 repository, records, output = root / "repository", root / "records", root / "output"
@@ -295,12 +312,16 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.touch()
                 environment = dict(PATH=os.environ["PATH"], TEST_RECORDS=str(records),
+                    TEST_PYTHON=sys.executable, NMRNET_SHARED_SETTINGS_INPUT=str(root / "shared.toml"),
+                    NMRNET_SHARED_RUNTIME_IMAGE_INPUT="sha256:" + "a" * 64,
                     TEST_QUERY_FAILED=str(scenario == "query-failure").lower(), NMRNET_DEPLOYMENT_INPUT="original",
+                    TEST_VOLUME_MISSING=str(scenario == "missing-volume").lower(),
                     NMRNET_PROJECT_REF_INPUT="project:fixture", NMRNET_USER_ID_INPUT="fixture",
                     NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT=str(root / "credentials"),
                     NMRNET_CA_FILE_INPUT=str(root / "ca.pem"), NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
                     NMRNET_ADDRESS_INPUT="127.0.0.1", NMRNET_INTERFACE_INPUT="fixture0",
                     NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64, NMRNET_OUTPUT_INPUT=str(output))
+                (root / "shared.toml").write_text("shared fixture\n")
                 result = subprocess.run(["bash", str(script), "existing-pasted"], env=environment,
                                         capture_output=True, text=True, timeout=10, check=False)
                 if scenario == "existing-output":
@@ -309,21 +330,26 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertFalse((records / "query").exists())
                     self.assertFalse((records / "creates").exists())
                     continue
-                self.assertEqual(result.returncode, 7 if scenario == "query-failure" else 0, result.stderr)
+                self.assertEqual(result.returncode, 7 if scenario == "query-failure" else 2 if scenario == "missing-volume" else 0, result.stderr)
                 self.assertEqual((records / "query").read_text(), "client-inputs\n")
                 self.assertFalse((records / "deployments").exists())
                 if scenario == "query-failure":
                     self.assertFalse(output.exists())
                     self.assertFalse((records / "creates").exists())
+                elif scenario == "missing-volume":
+                    self.assertNotIn("client|", (records / "creates").read_text())
+                    self.assertEqual((records / "removals").read_text(), "grants\n")
                 else:
                     if scenario == "missing-parent":
                         self.assertEqual(output.parent.stat().st_mode & 0o777, 0o700)
                     self.assertEqual((records / "creates").read_text().splitlines(),
-                                     ["client|host|sha256:" + "a" * 64 + "|true"])
-                    self.assertEqual((records / "removals").read_text(), "client\n")
+                                     ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"])
+                    self.assertEqual((records / "removals").read_text(), "grants\nclient\n")
                     grants = (records / "client.grants").read_bytes()
                     self.assertNotIn(b"/attempts", grants)
                     self.assertNotIn(b"model_peer", grants)
+                    self.assertIn(b"fixture-proxy-socket", grants)
+                    self.assertIn(b"--group-add\x001001\x00", grants)
 
     def _ambiguity(self, root, *, missing=None, failed=False, changed=False, probe="ambiguity"):
         repository, records, output = root / "repository", root / "records", root / "output"
@@ -475,7 +501,6 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
             ("failed-install", (180, 240, 260)),
             ("failed-up", (180, 240, 260)),
             ("failed-down", (180, 240, 260)),
-            ("failed-inspection", (180, 240, 260)),
         ):
             with self.subTest(mode=profile), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -565,6 +590,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 selectors = {
                     "PROVIDER_TOOLS": str(shared),
                     "SHARED_RUNTIME_IMAGE": image,
+                    "SHARED_SETTINGS": str(root / "shared.toml"),
                     "WHEELHOUSE": str(root / "wheelhouse"),
                     "API_ORIGIN": "https://nmr.localhost:10443",
                     "TOPOLOGY": "dev-local",
@@ -585,6 +611,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "RESOLVERS": "192.0.2.53 198.51.100.53",
                 }
                 (root / "wheelhouse").mkdir()
+                (root / "shared.toml").write_text("shared fixture\n")
                 selected_key, selected_ca = str(root / "selected-key"), str(root / "selected-ca")
                 environment = {
                     "PATH": os.environ["PATH"],
@@ -602,19 +629,12 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 result = subprocess.run(
                     ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
-                expected_status = 2 if failed == "inspection" else 7 if failed else 0
+                expected_status = 7 if failed else 0
                 self.assertEqual(result.returncode, expected_status, result.stderr)
                 calls = [row.split("|") for row in (records / "deployments").read_text().splitlines()]
                 if failed:
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("qualified;", result.stdout)
-                    if failed == "inspection":
-                        self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
-                        events = (records / "events").read_text().splitlines()
-                        self.assertLess(events.index("delivery-empty"), len(events) - 1 - events[::-1].index("delivery-up"))
-                        self.assertNotIn("delivery-remove", events)
-                        self.assertIn("Any queued outcome remains owned there", result.stderr)
-                        continue
                     if failed == "down":
                         self.assertEqual([row[0] for row in calls], ["install", "up", "down", "down"])
                         self.assertEqual((records / "creates").read_text().count("client|"), 1)
@@ -636,14 +656,10 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(calls[0][1], deployment_names)
                 deployment_names.add(calls[0][1])
                 events = (records / "events").read_text().splitlines()
-                self.assertLess(events.index("install"), events.index("delivery-up"))
-                self.assertLess(events.index("delivery-up"), events.index("up"))
+                self.assertLess(events.index("install"), events.index("up"))
                 self.assertLess(events.index("up"), events.index("create-client"))
                 self.assertLess(events.index("client"), events.index("down"))
-                self.assertLess(events.index("down"), events.index("delivery-down"))
-                self.assertLess(events.index("delivery-down"), events.index("delivery-empty"))
-                self.assertNotIn("delivery-remove", events)
-                self.assertIn("Stopped shared qualification volumes retained", result.stderr)
+                self.assertFalse(any(event.startswith("delivery-") for event in events))
                 if mode == "scripted-pasted":
                     self.assertLess(events.index("down"), events.index("signal-peer"))
                     self.assertLess(events.index("signal-peer"), events.index("peer"))
@@ -670,17 +686,20 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 creates = (records / "creates").read_text().splitlines()
                 self.assertEqual(
                     [line.split("|")[0] for line in creates],
-                    ["peer", "stage", "client"] if mode == "scripted-pasted" else ["selection", "stage", "client"],
+                    ["grants", "peer", "stage", "client"] if mode == "scripted-pasted" else ["grants", "selection", "stage", "client"],
                 )
                 self.assertTrue(all(line.endswith("|true") for line in creates))
                 self.assertIn(f"stage|none|{image}|true", creates)
-                self.assertIn(f"client|host|{image}|true", creates)
+                self.assertIn(f"client|none|{image}|true", creates)
                 waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
                 self.assertIn(int(waits["client"]), (clocks[2], clocks[2] - 1))
                 stage_grants = (records / "stage.grants").read_text().split("\0")[:-1]
                 self.assertIn(f"type=bind,src={output}/deployment,dst={output}/deployment", stage_grants)
                 self.assertFalse(any(grant.startswith(f"type=bind,src={output},") for grant in stage_grants))
                 client_grants = (records / "client.grants").read_text().split("\0")[:-1]
+                self.assertIn("--group-add", client_grants)
+                self.assertIn("type=volume,src=fixture-proxy-socket,dst=/run/nmr-api-proxy,readonly,volume-nocopy", client_grants)
+                self.assertEqual(client_argv[client_argv.index("--proxy-socket") + 1], "/run/nmr-api-proxy/proxy.sock")
                 self.assertEqual(any("dst=/input/upload-receipt.json,readonly" in grant for grant in client_grants), resumed)
                 if resumed:
                     self.assertEqual(client_argv[-2:], ["--upload-receipt", "/input/upload-receipt.json"])

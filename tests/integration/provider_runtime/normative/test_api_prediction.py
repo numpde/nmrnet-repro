@@ -96,6 +96,7 @@ class QualificationContextTests(unittest.TestCase):
             "CLIENT_CREDENTIAL_DIRECTORY": str(self.root / "credentials"),
             "CA_FILE": str(self.root / "ca.pem"), "ADDRESS": "127.0.0.1", "INTERFACE": "lo",
             "OUTPUT": str(output), "API_CLIENT_IMAGE": "sha256:" + "c" * 64,
+            "SHARED_SETTINGS": str(self.root / "shared.toml"), "SHARED_RUNTIME_IMAGE": "sha256:" + "d" * 64,
             "RETAINED_RESULT": str(self.root / "independent-oracle.json"),
             "DEPLOYMENT": "" if receipt or identity else "replacement",
         }

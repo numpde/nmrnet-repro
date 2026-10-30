@@ -17,7 +17,7 @@ from stage_api_config import inspect_interpreter, stage
 from tests.fakes.credential import document, encoded
 
 from nmrnet_provider.config import load_provider_config
-from provider_core.transport import HttpResponse
+from provider_core.transport import HttpResponse, HttpResponseHead
 from provider_core.upload_response import ReadGrant, UploadMember, UploadSet
 from provider_core.uploads import JobUploads
 
@@ -75,19 +75,17 @@ def upload_sources(limits):
         last_failure=None,
     )
 
-    async def exchange(_request, *, maximum_bytes, account_bytes):
+    async def exchange(_request, *, maximum_bytes, account_bytes, before_body):
         assert maximum_bytes == len(body)
-        account_bytes(len(body))
-        return HttpResponse(
-            200,
-            (
+        headers = (
                 (b"content-type", b"application/octet-stream"),
                 (b"cache-control", b"no-store"),
                 (b"content-length", str(len(body)).encode()),
                 (b"content-digest", b"sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()) + b":"),
-            ),
-            body,
-        )
+            )
+        before_body(HttpResponseHead(200, headers))
+        account_bytes(len(body))
+        return HttpResponse(200, headers, body)
 
     store = SimpleNamespace(exchange=AsyncMock(side_effect=exchange), retirement_confirmed=True, last_failure=None)
     owner = JobUploads("job:example", api=api, store=store, store_origin="https://store.example", limits=limits)
