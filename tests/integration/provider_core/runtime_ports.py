@@ -9,7 +9,9 @@ import asyncio
 import base64
 import hashlib
 import json
+import sys
 import tempfile
+import threading
 from contextlib import AsyncExitStack
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
@@ -34,11 +36,20 @@ from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
 from provider_core.lifetime import ProviderLifetime
 from provider_core.controller import ControllerFailed, LiveStartPolicy
-from provider_core.delivery_service import DeliveryBinding, DeliveryService
-from provider_core.delivery_client import DeliveryClient
 from provider_core.delivery_store import QueueLimits
+from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
+from provider_core.shared_delivery_ipc import SharedDeliverySocket
+from provider_core.shared_delivery_service import SharedDeliveryService
 from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
+
+
+class JoinedDeliveryProxy(ServiceProxyServer):
+    daemon_threads = False
+
+
+# Failed fixture owners retain their peers and temporary files for inspection.
+HELD_FIXTURES = []
 
 
 def require_api_credentials(request):
@@ -78,16 +89,19 @@ class RuntimePeers:
         self.output = {"verbosity": "max"}
         self.corrupt_input = False
         self.stack = AsyncExitStack()
+        self.resources = AsyncExitStack()
+        self.relay = self.relay_task = None
+        self.proxy = self.proxy_thread = None
 
     async def __aenter__(self):
         try:
-            self.api_peer = await self.stack.enter_async_context(api_tls_peer("success", response_factory=self.api_reply))
-            self.model_peer = await self.stack.enter_async_context(TlsPeer("success", response_factory=self.model_reply))
+            self.api_peer = await self.resources.enter_async_context(api_tls_peer("success", response_factory=self.api_reply))
+            self.model_peer = await self.resources.enter_async_context(TlsPeer("success", response_factory=self.model_reply))
             headers = tuple((name, value) for name, value in store_headers(self.ports.source) if name != b"content-length")
-            self.store_peer = await self.stack.enter_async_context(
+            self.store_peer = await self.resources.enter_async_context(
                 TlsPeer("success", response_body=self.ports.source, response_headers=headers)
             )
-            directory = self.stack.enter_context(tempfile.TemporaryDirectory())
+            directory = self.resources.enter_context(tempfile.TemporaryDirectory())
             self.files = ConfigFiles(
                 directory,
                 api_origin=self.api_peer.origin,
@@ -112,29 +126,34 @@ class RuntimePeers:
             relay_root = Path(directory) / "relay-state"
             relay_root.mkdir(mode=0o700)
             self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
-            publisher = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport(),
-                                    expected_topology=self.config.api.expected_topology)
-            self.relay = DeliveryService(
+            policy = ServicePolicy.admit("local", [urlsplit(self.api_peer.origin).netloc], ["127.0.0.1=127.0.0.1"])
+            self.proxy = JoinedDeliveryProxy(Path(directory) / "delivery-proxy.sock", "lo", policy, status_directory=Path(directory))
+            self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
+            self.proxy_thread.start()
+            endpoint = self.config.delivery.endpoint
+            self.relay = SharedDeliveryService(
                 relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
-                bindings=(DeliveryBinding(self.config.delivery.endpoint, publisher),), request_seconds=2,
+                socket=SharedDeliverySocket(endpoint.socket_path, endpoint.socket_group_id),
+                proxy_socket=Path(directory) / "delivery-proxy.sock", request_seconds=2,
                 retry_initial_seconds=0.01, retry_max_seconds=0.1,
                 on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
                 diagnostic_status=lambda: {"output_failures": 0},
             )
             self.relay_task = asyncio.create_task(self.relay.run())
-            self.stack.push_async_callback(self.close_relay)
             await asyncio.wait_for(self.relay.ready.wait(), 2)
-            self.delivery = DeliveryClient(self.config.delivery.endpoint,
-                exchange_seconds=self.config.delivery.request_seconds,
-                retirement_seconds=self.config.delivery.retirement_seconds)
-            self.stack.push_async_callback(self.delivery.retire)
             return self
         except BaseException:
-            await self.stack.aclose()
+            await self.__aexit__(*sys.exc_info())
             raise
 
     async def __aexit__(self, *error):
-        return await self.stack.__aexit__(*error)
+        try:
+            suppressed = await self.stack.__aexit__(*error)
+        except BaseException:
+            HELD_FIXTURES.append(self)
+            raise
+        await self.close_resources()
+        return suppressed
 
     async def settle_controller(self, controller):
         try:
@@ -148,8 +167,49 @@ class RuntimePeers:
 
     async def close_relay(self):
         self.relay.request_stop()
-        await asyncio.wait_for(asyncio.shield(self.relay_task), 3)
+        try:
+            await asyncio.wait_for(asyncio.shield(self.relay_task), 3)
+        except BaseException:
+            if self.relay_task.done():
+                await self.relay.close()
+            raise
         await self.relay.close()
+
+    async def close_resources(self):
+        relay_failure = None
+        try:
+            if self.relay_task is not None:
+                try:
+                    await self.close_relay()
+                except BaseException as error:
+                    if not self.relay.retirement_confirmed:
+                        raise
+                    relay_failure = error
+                if not self.relay.retirement_confirmed:
+                    raise AssertionError("Delivery relay retirement is unconfirmed; retain fixture resources.")
+            if self.proxy is not None:
+                if self.proxy_thread is not None and self.proxy_thread.ident is not None:
+                    await self.close_proxy(self.proxy, self.proxy_thread)
+                else:
+                    self.proxy.server_close()
+            await self.resources.aclose()
+        except BaseException:
+            HELD_FIXTURES.append(self)
+            raise
+        if relay_failure is not None:
+            raise relay_failure
+
+    async def close_proxy(self, proxy, thread):
+        await asyncio.to_thread(proxy.shutdown)
+        await asyncio.to_thread(thread.join, 2)
+        if thread.is_alive():
+            raise AssertionError("Delivery proxy listener did not stop.")
+        if isinstance(proxy._threads, list):
+            for worker in tuple(proxy._threads):
+                await asyncio.to_thread(worker.join, 2)
+                if worker.is_alive():
+                    raise AssertionError("Delivery proxy CONNECT worker did not stop; scratch remains owned.")
+        proxy.server_close()
 
     async def wait_published(self, count=1):
         async with asyncio.timeout(3):

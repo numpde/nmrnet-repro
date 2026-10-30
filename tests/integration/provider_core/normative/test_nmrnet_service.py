@@ -499,6 +499,9 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 return tool_reply("report", "report_input_problem", {"issue": issue, "message": report})
 
             async def recipient(request, body):
+                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
+                self.assertNotIn(b"authorization:", request.lower())
+                self.assertNotIn(b"private_model_key", request.lower())
                 if request.split(b"\r\n", 1)[0].endswith(b"/fail HTTP/1.1"):
                     self.assertTrue(request.startswith(b"POST "))
                     self.assertFalse(fixture.allocations[0].host.confirmed)
@@ -542,10 +545,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             fixture.allocations[0].allocate_generator.assert_not_awaited()
             self.assertEqual(fixture.store_peer.requests, [])
             self.assertIsNone(fixture.result)
-            for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True):
-                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
-                self.assertNotIn(b"authorization:", request.lower())
-                self.assertNotIn(b"private_model_key", request.lower())
 
     async def test_stop_drains_the_original_execution_and_publication_when_it_finishes(self):
         async with ServicePeers() as fixture:
@@ -582,6 +581,14 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_initial_admission_and_hello_precede_fresh_allocation_and_exact_lifecycle(self):
         async with ServicePeers() as fixture:
+            original_reply = fixture.api_peer.response_factory
+
+            async def verify_reply(request, body):
+                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
+                self.assertNotIn(b"authorization:", request.lower())
+                return await original_reply(request, body)
+
+            fixture.api_peer.response_factory = verify_reply
             service = fixture.service()
             service.policy = replace(service.policy, hello_seconds=30)
             with patch.object(DeliveryClient, "pending", AsyncMock(side_effect=AssertionError("outbox reads are unavailable")), create=True):
@@ -595,9 +602,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             await fixture.wait_published()
             self.assertEqual(fixture.result["input_fingerprint"], ports.instructions.identity.input_fingerprint)
-            for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True):
-                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
-                self.assertNotIn(b"authorization:", request.lower())
             self.assertTrue(service.hello_api.retirement_confirmed)
 
     async def test_hello_refresh_uses_current_snapshot_while_scientific_execution_is_blocked(self):

@@ -174,6 +174,39 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE_MODEL_KEY", repr(config))
                 self.assertNotIn(directory, repr(config))
 
+    async def test_publication_material_retains_the_same_startup_bytes(self):
+        async with TlsPeer("success") as peer:
+            with tempfile.TemporaryDirectory() as directory:
+                peer_ca = Path(peer.scratch.name) / "cert.pem"
+                ca = Path(directory) / "api-ca.pem"
+                ca.write_bytes(peer_ca.read_bytes())
+                files = ConfigFiles(directory, api_origin=peer.origin, ca_file=ca,
+                                    model_ca_file=peer_ca, store_ca_file=peer_ca)
+                credential_bytes = files.credential.read_bytes()
+                ca_bytes = ca.read_bytes()
+                read_file = config_module.read_startup_file
+                reads = []
+
+                def observe_reads(path, **options):
+                    content = read_file(path, **options)
+                    if options["label"] in ("API signing credential", "API CA"):
+                        reads.append(options["label"])
+                        Path(path).write_bytes(b"replacement after admission")
+                    return content
+
+                with patch("nmrnet_provider.config.read_startup_file", side_effect=observe_reads):
+                    config = load_provider_config(files.path)
+
+                self.assertEqual(reads, ["API signing credential", "API CA"])
+                self.assertEqual(config.publication.credential_bytes, credential_bytes)
+                self.assertEqual(config.publication.ca_bytes, ca_bytes)
+                self.assertEqual(config.publication.origin, config.api.identity.origin)
+                self.assertEqual(config.publication.provider_ref, config.lifecycle.scope.provider_ref)
+                self.assertEqual(config.api.identity.credential_ref, "credential:example")
+                self.assertEqual(config.api.http.trust.cert_store_stats()["x509"], 1)
+                self.assertNotIn(credential_bytes.decode(), repr(config))
+                self.assertNotIn(credential_bytes.decode(), repr(config.publication))
+
     async def test_loaded_private_ca_is_the_exact_trust_used_by_the_actual_carrier(self):
         async with TlsPeer(
             "success", response_body=b'{"choices":[{"message":{"role":"assistant","content":"fixture"},"finish_reason":"stop"}]}'

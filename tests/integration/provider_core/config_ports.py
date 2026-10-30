@@ -108,8 +108,6 @@ observation_gap_seconds = 30
 [delivery]
 socket_path = {json.dumps(str(self.root / "delivery/http.sock"))}
 socket_group_id = {os.getegid()}
-request_seconds = 2
-retirement_seconds = 1
 retry_initial_seconds = 0.01
 retry_max_seconds = 0.1
 

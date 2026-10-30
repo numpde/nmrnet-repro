@@ -4,15 +4,13 @@ import unittest
 import os
 from dataclasses import replace
 from tests.integration.nmrnet.compose_ports import ComposeFixture
-from provider_core.delivery_client import delivery_volume_name
 from provider_core.producer_checkpoint import checkpoint_volume_name
 
 
 class ComposePlanTests(ComposeFixture, unittest.TestCase):
     def test_fixed_roles_have_exact_images_resources_logging_and_private_grants(self):
         plan = self.plan()
-        api_role = "api"
-        self.assertEqual(set(plan["services"]), {"provider", "prediction", "reader", "smiles", api_role, "interpreter", "store"})
+        self.assertEqual(set(plan["services"]), {"provider", "prediction", "reader", "smiles", "interpreter", "store"})
         for role, service in plan["services"].items():
             self.assertTrue(service["read_only"])
             self.assertTrue(service["init"])
@@ -48,13 +46,12 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         control = grants[str(self.root / "attempts")]
         self.assertEqual(control, {"type": "volume", "source": checkpoint_volume_name(self.config.lifecycle.scope),
                                    "target": str(self.root / "attempts"), "read_only": False, "volume": {"nocopy": True}})
-        ipc = grants[str(self.config.delivery.endpoint.socket_path.parent)]
-        self.assertEqual(ipc, {"type": "volume", "source": delivery_volume_name(
-            self.config.api.identity.origin, self.config.lifecycle.scope.provider_ref),
-            "target": str(self.config.delivery.endpoint.socket_path.parent), "read_only": True, "volume": {"nocopy": True}})
+        shared = self.grants.compose()
+        for mount in shared["mounts"]:
+            self.assertEqual(grants[mount["target"]], mount)
         self.assertEqual(provider["group_add"], [str(os.getegid())])
-        self.assertEqual(plan["volumes"], {name: {"name": name, "external": True}
-                                         for name in (control["source"], ipc["source"])})
+        self.assertEqual(plan["volumes"], shared["volumes"] | {control["source"]: {"name": control["source"], "external": True}})
+        self.assertIn(str(self.grants.proxy_socket), provider["command"])
         for role, service in services.items():
             if role != "provider":
                 self.assertFalse(any(grant["type"] == "volume" for grant in service["volumes"]))
@@ -79,34 +76,10 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         self.assertEqual(io, lifetime)
         self.assertEqual(self.config.service.native.prediction_seconds, 5)
 
-    def test_project_identity_survives_bundle_refresh_and_routes_preserve_exact_authority(self):
+    def test_project_identity_survives_bundle_refresh_with_shared_grants(self):
         first = self.plan()
         second = self.plan(bundle=self.bundle.parent / "generation-second")
         self.assertEqual(first["name"], second["name"])
         self.assertNotEqual(first["services"]["provider"]["labels"], second["services"]["provider"]["labels"])
-        self.binding = replace(self.binding, api=self.binding.api | {"origin": "https://other.example"})
-        rebound = self.plan()
-        self.assertEqual(set(first["services"]), set(rebound["services"]))
-        self.assertNotEqual(first["services"]["api"]["command"], rebound["services"]["api"]["command"])
-        self.assertNotEqual(first["services"]["provider"]["command"], rebound["services"]["provider"]["command"])
-        self.binding = replace(self.binding, api=self.binding.api | {"origin": "https://api.example"})
-        self.binding = replace(self.binding, route={"mode": "mapped", "interface": "eno1", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"]})
-        plan = self.plan()
-        api = plan["services"]["api"]
-        self.assertEqual(api["network_mode"], "host")
-        self.assertIn("api.example:443", api["command"])
-        self.assertIn("api.example=192.0.2.12", api["command"])
-        self.assertIn("eno1", api["command"])
-        self.assertNotIn("192.0.2.12:443", api["command"])
-
-    def test_local_proxy_joins_only_its_explicit_network_without_host_network_fallback(self):
-        self.binding = replace(self.binding, route={"mode": "local", "interface": "eth0", "log_level": "INFO", "addresses": ["api.example=192.0.2.12"], "network_id": "a" * 64})
-        plan = self.plan()
-        api_role = "api"
-        api = plan["services"][api_role]
-        self.assertNotIn("network_mode", api)
-        self.assertEqual(api["networks"], [api_role])
-        self.assertEqual(plan["networks"], {api_role: {"external": True, "name": "a" * 64}})
-        self.assertIn("api.example:443", api["command"])
-        self.assertNotIn("/etc/resolv.conf", str(api["volumes"]))
-        self.assertEqual(plan["services"]["provider"]["network_mode"], "none")
+        self.assertEqual(first["volumes"], second["volumes"])
+        self.assertEqual(first["services"]["provider"]["command"][-2:], second["services"]["provider"]["command"][-2:])

@@ -54,6 +54,10 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             async def api_reply(request, body):
                 method, target, _ = request.split(b"\r\n", 1)[0].decode().split()
                 path = urlsplit(target).path
+                if path == "/provider/v1/jobs" and len(fixture.start_bodies) >= 2:
+                    verify_signed_request(request, body, origin=fixture.api_peer.origin,
+                                          key=fixture.config.api.identity.private_key)
+                    return json.dumps(page() | {"analysis_kind_ref": ANALYSIS_KIND_REF, "next_cursor": None, "jobs": []}).encode()
                 if path == "/provider/v1/execution-attempts/start":
                     verify_signed_request(request, body, origin=fixture.api_peer.origin,
                                           key=fixture.config.api.identity.private_key)
@@ -136,7 +140,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 verify_signed_request(request, body, origin=fixture.api_peer.origin,
                                       key=fixture.config.api.identity.private_key)
                 if path == "/provider/v1/jobs":
-                    jobs = [first] if not fixture.start_bodies else [first, second]
+                    jobs = [] if len(fixture.start_bodies) >= 2 else ([first] if not fixture.start_bodies else [second])
                     return json.dumps(page() | {
                         "analysis_kind_ref": ANALYSIS_KIND_REF, "next_cursor": None,
                         "jobs": [{**asdict(job.identity), "analysis_kind_ref": ANALYSIS_KIND_REF,

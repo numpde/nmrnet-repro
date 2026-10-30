@@ -20,7 +20,7 @@ from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.chat import ChatEndpoint
 from provider_core.controller import AttemptController
-from provider_core.delivery_client import DeliveryClient
+from provider_core.shared_delivery_client import SharedDeliveryClient
 from provider_core.uploads import JobUploads, UploadRecovery
 
 
@@ -131,8 +131,9 @@ async def assemble_attempt(
         admission_stopping=admission_stopping,
         start_policy=start_policy,
         allow_active_start_replay=True,
-        delivery=DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,
-                                retirement_seconds=config.delivery.retirement_seconds),
+        delivery=SharedDeliveryClient(config.delivery.endpoint, config.publication,
+                                      exchange_seconds=config.api.http.exchange_seconds,
+                                      retirement_seconds=config.api.http.retirement_seconds),
         on_delivery_retry=on_delivery_retry,
         delivery_retry_initial_seconds=config.delivery.retry_initial_seconds,
         delivery_retry_max_seconds=config.delivery.retry_max_seconds,

@@ -18,9 +18,12 @@ class DeploymentBundleTests(unittest.TestCase):
     def test_old_api_route_admission_uses_the_retained_recipe(self):
         with tempfile.TemporaryDirectory() as directory:
             arguments, _ = deployment_inputs(Path(directory))
-            freeze_deployment(**arguments)
             bundle = arguments["bundle"]
             route = bundle.parent.parent / "runtime/route-api"
+            (bundle / "compose.json").write_text(json.dumps({"services": {"api": {"volumes": [
+                {"type": "bind", "source": str(route), "target": "/route", "read_only": False}
+            ]}}}))
+            (bundle / "compose.json").chmod(0o600)
             require_old_api_route(bundle, route)
             with self.assertRaises(ConfigurationRejected):
                 require_old_api_route(bundle, route.parent / "route-store")
@@ -90,20 +93,15 @@ class DeploymentBundleTests(unittest.TestCase):
             freeze_deployment(**arguments)
             self.assertEqual(previous, {path.relative_to(first): path.read_bytes() for path in first.rglob("*") if path.is_file()})
             self.assertNotEqual((first / "config/provider.toml").read_bytes(), (second / "config/provider.toml").read_bytes())
-            self.assertEqual((second / "secrets/api/signing.json").read_bytes(), files.credential.read_bytes())
+            self.assertEqual((second / "secrets/provider/signing.private.json").read_bytes(), files.credential.read_bytes())
             self.assertEqual((second / "secrets/provider/interpreter.key").read_bytes(), files.key.read_bytes())
             plan = json.loads((second / "compose.json").read_bytes())
-            self.assertEqual(len(plan["services"]), 7)
-            api_role = "api"
-            api = plan["services"][api_role]
-            resolver = next(grant for grant in api["volumes"] if grant["target"] == "/etc/resolv.conf")
-            self.assertEqual(resolver["source"], str(second / "api-resolv.conf"))
-            self.assertTrue(resolver["read_only"])
+            self.assertEqual(len(plan["services"]), 6)
+            self.assertNotIn("api", plan["services"])
             provider = plan["services"]["provider"]
-            self.assertEqual(provider["depends_on"][api_role], {"condition": "service_healthy"})
             socket = provider["command"][provider["command"].index("--api-proxy-socket") + 1]
             grant = next(item for item in provider["volumes"] if socket.startswith(item["target"] + "/"))
-            self.assertEqual(grant["source"], str(second.parent.parent / "runtime/route-api"))
+            self.assertEqual(grant["source"], "nmr-api-delivery-proxy-socket")
             self.assertTrue(grant["read_only"])
             self.assertEqual(plan["name"], json.loads((first / "compose.json").read_bytes())["name"])
             self.assertEqual((second / "resolv.conf").read_text(), "nameserver 192.0.2.53\n")
@@ -122,19 +120,18 @@ class DeploymentBundleTests(unittest.TestCase):
             self.assertEqual((second / "prediction-models.json").read_bytes(), arguments["models"].read_bytes())
             self.assertNotIn("PRIVATE_MODEL_KEY", (second / "compose.json").read_text())
             self.assertEqual({path.relative_to(second).as_posix() for path in second.rglob("*") if path.is_file()}, {
-                "config/provider.toml", "secrets/api/signing.json", "secrets/provider/interpreter.key",
+                "config/provider.toml", "secrets/provider/signing.private.json", "secrets/provider/interpreter.key",
                 "execution.json", "prediction-models.json", "inference.lock", "unicore-source.json",
-                "compose.json", "resolv.conf", "api-resolv.conf",
+                "compose.json", "resolv.conf",
             })
 
 
 class ProviderNamespacePlanTests(ComposeFixture, unittest.TestCase):
     def test_production_default_plan_is_unchanged_and_private_checkout_changes_all_provider_names(self):
         default = self.plan()
-        self.assertEqual(default, self.plan(delivery_project="nmr-api-delivery"))
-        private = self.plan(checkout=self.root / "private-checkout", delivery_project="nmr-qualification-private")
+        private = self.plan(checkout=self.root / "private-checkout")
         self.assertNotEqual(default["name"], private["name"])
-        self.assertTrue(set(default["volumes"]).isdisjoint(private["volumes"]))
+        self.assertEqual(default["volumes"], private["volumes"])
         self.assertEqual(set(default["services"]), set(private["services"]))
         self.assertTrue({service["container_name"] for service in default["services"].values()}.isdisjoint(
             service["container_name"] for service in private["services"].values()))

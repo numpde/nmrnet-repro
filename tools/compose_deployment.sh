@@ -41,7 +41,7 @@ flock --nonblock "$deployment_lock" || { refuse 'another command is active; noth
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
-helper_name= lifetime_query= stop_query= binding_inputs_directory=
+helper_name= lifetime_query= stop_query=
 finish() {
     local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
@@ -63,10 +63,6 @@ finish() {
             printf 'Deployment inspection metadata remains owned by an unretired client: %q.\n' "$stop_query" >&2
         fi
     fi
-    if [[ $inference_retirement_confirmed == true && -z $helper_name && -n $binding_inputs_directory ]]; then
-        rm -f -- "$binding_inputs_directory/definition.toml" "$binding_inputs_directory/paths" || cleanup=$?
-        rmdir -- "$binding_inputs_directory" || cleanup=$?
-    fi
     if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || cleanup=$?; fi
     [[ $status != 0 || $cleanup == 0 ]] || status=$cleanup
     [[ -z $primary_diagnostic ]] || printf '%s\n' "$primary_diagnostic" >&2
@@ -74,7 +70,6 @@ finish() {
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Inspect Docker Compose status/logs and retain the selected configuration; an interrupted client does not prove Engine-side rollback. No automatic retry was sent.\n' >&2
         [[ -z $helper_name ]] || printf 'Configuration helper, if still present: %s\n' "$helper_name" >&2
-        [[ -z $binding_inputs_directory ]] || printf 'If retained, private binding input snapshot: %s\n' "$binding_inputs_directory" >&2
     fi
     exit "$status"
 }
@@ -96,16 +91,39 @@ capture_stop_metadata() {
     [[ $(stat -c '%s' -- "$stop_query") -lt 4096 ]] \
         || { refuse 'provider inspection reached its metadata limit; no dependencies were stopped.'; return 2; }
 }
-capture_route_inventory() {
-    inference_native 'old API route inventory' 30 stdio bash -eu -c '
+capture_inventory() {
+    local operation=$1; shift
+    inference_native "$operation" 30 stdio bash -eu -c '
         output=$1; shift
         ulimit -f 1024
         exec "$@" > "$output"
     ' bash "$stop_query" "${engine[@]}" "$@"
     [[ $inference_retirement_confirmed == true ]] \
-        || { refuse 'route inventory has not settled; no route data was removed.'; return 2; }
+        || { refuse 'deployment inventory has not settled; no owned resources were removed.'; return 2; }
     [[ $(stat -c '%s' -- "$stop_query") -lt 1048576 ]] \
-        || { refuse 'route inventory reached its metadata limit; no route data was removed.'; return 2; }
+        || { refuse 'deployment inventory reached its metadata limit; no owned resources were removed.'; return 2; }
+}
+require_no_old_route_borrowers() {
+    local route_directory=$root/runtime/route-api source
+    local -a containers=()
+    path "$route_directory"
+    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+    capture_inventory 'old API route inventory' ps --all --quiet
+    mapfile -t containers < "$stop_query"
+    if (( ${#containers[@]} )); then
+        capture_inventory 'old API route inventory' inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${containers[@]}"
+        while IFS= read -r source; do
+            [[ -n $source ]] || continue
+            source=$(realpath -m -- "$source")
+            source=${source%/}
+            if [[ $source == "$route_directory" || $source == "$route_directory/"* || $route_directory == "$source/"* ]]; then
+                refuse 'a container still mounts the old API directory or an overlapping path; no route data was removed.'
+                return 2
+            fi
+        done < "$stop_query"
+    fi
+    rm -- "$stop_query"
+    stop_query=
 }
 provider_state() {
     capture_stop_metadata inspect --type container --format '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}}' "$provider_id"
@@ -163,19 +181,22 @@ select_bundle() {
     [[ -d $bundle && -f $bundle/compose.json && ! -L $bundle/compose.json ]] || return 2
 }
 retire_generations() {
-    local records sources= candidate source borrowed removed=0 kept=0
+    local candidate source borrowed removed=0 kept=0
     local -a containers=() mounts=()
     # The deployment lock serializes supported installs/up/down. Inspect every
     # container, including stopped borrowers and mounts above or within a bundle.
-    records=$(run 30 ps --all --quiet)
-    if [[ -n $records ]]; then
-        mapfile -t containers <<< "$records"
-        sources=$(run 30 inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${containers[@]}")
+    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+    capture_inventory 'deployment generation inventory' ps --all --quiet
+    mapfile -t containers < "$stop_query"
+    if (( ${#containers[@]} )); then
+        capture_inventory 'deployment generation inventory' inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${containers[@]}"
         while IFS= read -r source; do
             [[ -n $source ]] || continue
             mounts+=("$(realpath -m -- "$source")")
-        done <<< "$sources"
+        done < "$stop_query"
     fi
+    rm -- "$stop_query"
+    stop_query=
     for candidate in "$root/bundles"/generation-*; do
         [[ -d $candidate && ! -L $candidate ]] || continue
         [[ $candidate != "$bundle" ]] || { kept=$((kept + 1)); continue; }
@@ -212,34 +233,19 @@ helper() {
         "${helper_grants[@]}" --entrypoint "$python" "$image" -I -B "$@"
     helper_name=
 }
-select_binding_inputs() {
-    local definition=${NMRNET_DELIVERY_BINDINGS_INPUT-}
-    binding_name=${NMRNET_DELIVERY_BINDING_INPUT-}
+select_shared_inputs() {
+    local definition=${NMRNET_SHARED_SETTINGS_INPUT-}
     shared_runtime_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
-    [[ -n $definition && $binding_name =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$ ]] \
-        || { refuse 'supply DELIVERY_BINDINGS=<file> and DELIVERY_BINDING=<name>.'; return 2; }
+    [[ -n $definition ]] || { refuse 'supply SHARED_SETTINGS=<file>.'; return 2; }
     [[ $shared_runtime_image =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { refuse 'supply SHARED_RUNTIME_IMAGE=<immutable image ID> from nmr-provider-tools.'; return 2; }
     inference_native 'shared runtime image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$shared_runtime_image"
     [[ $inference_result == "$shared_runtime_image" ]] || { refuse 'the shared runtime image identity differs from the selection.'; return 2; }
     definition=$(realpath -e -- "$definition")
     path "$definition"
-    [[ -f $definition && $(stat -c '%s' -- "$definition") -le 65536 ]] \
-        || { refuse 'DELIVERY_BINDINGS must select a regular definition of at most 65536 bytes.'; return 2; }
-    binding_inputs_directory=$(umask 077; mktemp -d /tmp/nmrnet-binding-inputs.XXXXXXXX)
-    cp -- "$definition" "$binding_inputs_directory/definition.toml"
-    helper_grants=(--mount "type=bind,src=$binding_inputs_directory/definition.toml,dst=/input/bindings.toml,readonly")
-    helper "$shared_runtime_image" /opt/provider-core/environment/bin/python -m provider_core.deployment_binding paths \
-        --definition /input/bindings.toml --binding "$binding_name" > "$binding_inputs_directory/paths"
-    mapfile -d '' -t binding_input_paths < "$binding_inputs_directory/paths"
+    [[ -f $definition ]] || { refuse 'SHARED_SETTINGS must select a regular definition.'; return 2; }
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle"
-        --mount "type=bind,src=$binding_inputs_directory/definition.toml,dst=/input/bindings.toml,readonly")
-    local input
-    for input in "${binding_input_paths[@]}"; do
-        path "$input"
-        [[ -f $input ]] || { refuse 'a selected binding trust/resolver input is not a regular file.'; return 2; }
-        helper_grants+=(--mount "type=bind,src=$input,dst=$input,readonly")
-    done
+        --mount "type=bind,src=$definition,dst=/input/shared-settings.toml,readonly")
 }
 initialize_lifetime() {
     image_record provider
@@ -278,13 +284,19 @@ initialize_lifetime() {
 }
 if [[ $action == install ]]; then
     # Reconfiguration is explicit; stop the existing deployment before install.
-    existing=$(run 15 ps --quiet --filter "label=com.docker.compose.project=$project")
-    [[ -z $existing ]] || { refuse 'stop this deployment before replacing its configuration.'; exit 2; }
+    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+    capture_stop_metadata ps --quiet --filter "label=com.docker.compose.project=$project"
+    [[ ! -s $stop_query ]] || { refuse 'stop this deployment before replacing its configuration.'; exit 2; }
+    rm -- "$stop_query"
+    stop_query=
+    [[ ! -e $root/runtime/route-api && ! -L $root/runtime/route-api ]] \
+        || { refuse 'retire the old API route with the selected old recipe before installing.'; exit 2; }
+    require_no_old_route_borrowers
     image_record provider; controller_image=$selected_image
     bundle=$(mktemp -d "$root/bundles/generation-XXXXXXXX")
-    select_binding_inputs
+    select_shared_inputs
     private_directory "$root/runtime"
-    for runtime_role in prediction reader smiles route-api route-interpreter route-store; do
+    for runtime_role in prediction reader smiles route-interpreter route-store; do
         private_directory "$root/runtime/$runtime_role"
     done
     # The runner borrows a stable lock inode across container replacement.
@@ -329,11 +341,6 @@ if [[ $action == install ]]; then
     for file in "$root/"*; do
         [[ -f $file && ! -L $file ]] || continue
         path "$file"
-        # A selected API trust input may also live in this producer directory.
-        # Its exact read-only grant was already added by select_binding_inputs.
-        for binding_input in "${binding_input_paths[@]}"; do
-            if [[ $file == "$binding_input" ]]; then continue 2; fi
-        done
         helper_grants+=(--mount "type=bind,src=$file,dst=$file,readonly")
     done
     helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py freeze \
@@ -342,7 +349,7 @@ if [[ $action == install ]]; then
         --settings "$repository_root/config/deployments/$deployment_name/deployment.toml" \
         --secrets "$root" --bundle "$bundle" --models /source/artifacts/prediction-models.json \
         --deployment "$deployment_name" --checkout "$repository_root" --uid "$caller_uid" --gid "$caller_gid" \
-        --delivery-bindings /input/bindings.toml --delivery-binding "$binding_name" --shared-image-id "$shared_runtime_image" \
+        --shared-settings /input/shared-settings.toml --shared-image-id "$shared_runtime_image" \
         --prepared "$repository_root/.work/prepared" --image-id "$scientific_image" --geometry-image-id "$geometry_image" \
         --controller-image-id "$controller_image" --repository-revision "$revision" --upstream-revision "$upstream_revision"
     [[ -f $bundle/compose.json && ! -L $bundle/compose.json ]] || exit 2
@@ -354,7 +361,7 @@ if [[ $action == install ]]; then
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
     retire_generations
-    printf 'Ensure shared delivery is running through nmr-provider-tools using this binding definition.\n'
+    printf 'Ensure the shared proxy and outbox are running through nmr-provider-tools.\n'
     printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
     exit 0
 fi
@@ -365,22 +372,7 @@ if [[ $action == retire-generations ]]; then
 fi
 if [[ $action == retire-api-route ]]; then
     route_directory=$root/runtime/route-api
-    path "$route_directory"
-    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
-    capture_route_inventory ps --all --quiet
-    mapfile -t containers < "$stop_query"
-    if (( ${#containers[@]} )); then
-        capture_route_inventory inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${containers[@]}"
-        while IFS= read -r source; do
-            [[ -n $source ]] || continue
-            source=$(realpath -m -- "$source")
-            source=${source%/}
-            if [[ $source == "$route_directory" || $source == "$route_directory/"* || $route_directory == "$source/"* ]]; then
-                refuse 'a container still mounts the old API directory or an overlapping path; no route data was removed.'
-                exit 2
-            fi
-        done < "$stop_query"
-    fi
+    require_no_old_route_borrowers
     if [[ ! -e $route_directory ]]; then
         printf 'Old API route directory is absent.\n'
         exit 0
@@ -433,7 +425,7 @@ case $action in
         ;;
     down)
         printf 'Restart: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
-        printf 'Reconfigure: make provider/deployment/install DEPLOYMENT=%q DELIVERY_BINDINGS=<file> DELIVERY_BINDING=<name> SHARED_RUNTIME_IMAGE=<image ID>\n' "$deployment_name"
+        printf 'Reconfigure: make provider/deployment/install DEPLOYMENT=%q SHARED_SETTINGS=<file> SHARED_RUNTIME_IMAGE=<image ID>\n' "$deployment_name"
         ;;
 esac
 exit "$?"

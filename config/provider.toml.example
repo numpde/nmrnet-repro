@@ -1,8 +1,8 @@
 schema_id = "nmrnet.provider.runtime_config.v3"
 
 # Copy to config/deployments/<name>/provider.toml.
-# API identity, trust and delivery socket grants come from the selected shared binding.
-# Interpreter keys remain in secrets/deployments/<name>/.
+# API settings and credentials live in secrets/deployments/<name>/api.toml and
+# separate input files. Socket grants come from the host's shared settings.
 
 [scientific_retry]
 max_retries = 0
@@ -69,7 +69,5 @@ prediction_seconds = 90
 source_seconds = 10
 
 [delivery]
-request_seconds = 30
-retirement_seconds = 5
 retry_initial_seconds = 1
 retry_max_seconds = 30

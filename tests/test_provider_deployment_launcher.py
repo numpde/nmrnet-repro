@@ -43,6 +43,12 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
     if [[ $result == image-id ]]; then inference_result=$("$@") || status=$?; else "$@" || status=$?; fi
     if [[ $operation == 'old API route inventory' && " $* " == *' inspect --format '* ]]; then
         inference_retirement_confirmed=${TEST_INSPECT_RETIRED-${TEST_RETIRED-true}}
+    elif [[ $operation == 'old API route inventory' ]]; then
+        inference_retirement_confirmed=${TEST_INVENTORY_RETIRED-${TEST_RETIRED-true}}
+    elif [[ $operation == 'deployment generation inventory' && " $* " == *' inspect --format '* ]]; then
+        inference_retirement_confirmed=${TEST_GENERATION_INSPECT_RETIRED-${TEST_RETIRED-true}}
+    elif [[ $operation == 'provider stop inspection' && " $* " == *' ps --quiet '* ]]; then
+        inference_retirement_confirmed=${TEST_PROJECT_RETIRED-${TEST_RETIRED-true}}
     else
         inference_retirement_confirmed=${TEST_RETIRED-true}
     fi
@@ -148,8 +154,8 @@ esac
         (self.provider / 'unselected-directory').mkdir(mode=0o700)
         (self.provider / 'unselected-directory/canary').write_text('never grant this root\n')
         self.bundle = self.selected(self.provider)
-        self.bindings = self.root / "bindings.toml"
-        self.bindings.write_text("# explicit neutral binding fixture\\n")
+        self.shared_settings = self.root / "shared.toml"
+        self.shared_settings.write_text("# shared settings fixture\n")
 
     def selected(self, root):
         bundles = root / 'bundles'
@@ -163,7 +169,7 @@ esac
 
     def run_command(self, action, role='provider', *, changes=None, extra=()):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
-                           NMRNET_DELIVERY_BINDINGS_INPUT=str(self.bindings), NMRNET_DELIVERY_BINDING_INPUT='fixture',
+                           NMRNET_SHARED_SETTINGS_INPUT=str(self.shared_settings),
                            NMRNET_SHARED_RUNTIME_IMAGE_INPUT='sha256:' + format(9, '064d'))
         environment.update(changes or {})
         return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
@@ -361,7 +367,7 @@ esac
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('through nmr-provider-tools using this binding definition', result.stdout)
+        self.assertIn('shared proxy and outbox are running', result.stdout)
         call = next(call for call in self.calls() if 'freeze' in call)
         for pair in (['--network', 'none'], ['--cap-drop', 'ALL'], ['--pull', 'never'],
                      ['--security-opt', 'no-new-privileges:true'], ['--user', f'{os.getuid()}:{os.getgid()}'],
@@ -439,6 +445,48 @@ esac
         self.assertTrue(self.bundle.exists())
         self.assertIn('Retired the old API route', result.stdout)
 
+    def test_install_preserves_old_recipe_until_api_route_is_retired(self):
+        route = self.provider / 'runtime/route-api'
+        route.mkdir(parents=True, mode=0o700)
+        result = self.run_command('install')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('retire the old API route', result.stderr)
+        self.assertTrue(route.exists())
+        self.assertTrue(self.bundle.exists())
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+        self.assertFalse(any('freeze' in call for call in self.calls()))
+
+    def test_unretired_install_preflight_retains_client_and_recipe(self):
+        result = self.run_command('install', changes={'TEST_RETIRED': 'false'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual([call[0] for call in self.calls()], ['ps'])
+        self.assertFalse((self.root / 'cleanup').exists())
+        self.assertTrue(self.bundle.exists())
+
+    def test_unretired_generation_inventory_retains_client_and_bundles(self):
+        obsolete = self.provider / 'bundles/generation-unused'
+        obsolete.mkdir()
+        for changes in ({'TEST_RETIRED': 'false'},
+                        {'TEST_CONTAINERS': CID, 'TEST_GENERATION_INSPECT_RETIRED': 'false'}):
+            with self.subTest(changes=changes):
+                (self.root / 'cleanup').unlink(missing_ok=True)
+                result = self.run_command('retire-generations', changes=changes)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((self.root / 'cleanup').exists())
+                self.assertTrue(obsolete.exists())
+                self.assertTrue(self.bundle.exists())
+
+    def test_install_refuses_an_absent_old_route_still_mounted_by_a_container(self):
+        route = self.provider / 'runtime/route-api'
+        result = self.run_command('install', changes={
+            'TEST_CONTAINERS': CID, 'TEST_MOUNTS': str(route) + '\n',
+        })
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('still mounts', result.stderr)
+        self.assertTrue(self.bundle.exists())
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+        self.assertFalse(any('freeze' in call for call in self.calls()))
+
     def test_retire_api_route_refuses_any_overlapping_container_mount(self):
         route = self.provider / 'runtime/route-api'
         route.mkdir(parents=True, mode=0o700)
@@ -514,12 +562,11 @@ esac
         self.assertEqual(target.read_text(), 'keep original bytes')
         self.assertFalse(any('freeze' in call for call in self.calls()))
 
-    def test_selected_neutral_binding_is_passed_to_the_provider_freezer(self):
+    def test_shared_settings_are_passed_to_the_provider_freezer(self):
         result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
         call = next(call for call in self.calls() if 'freeze' in call)
-        self.assertEqual(call[call.index('--delivery-bindings') + 1], '/input/bindings.toml')
-        self.assertEqual(call[call.index('--delivery-binding') + 1], 'fixture')
+        self.assertEqual(call[call.index('--shared-settings') + 1], '/input/shared-settings.toml')
         self.assertNotIn('--delivery-project', call)
 
     def test_failed_helper_is_removed_by_its_original_name_without_reexecution(self):
@@ -534,9 +581,10 @@ esac
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
 
     def test_unretired_local_helper_never_dispatches_a_new_cleanup_client(self):
-        result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false'})
+        result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false',
+                                                     'TEST_INVENTORY_RETIRED': 'true', 'TEST_PROJECT_RETIRED': 'true'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps', 'image', 'run'])
+        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'run'])
         self.assertFalse((self.root / 'cleanup').exists())
         self.assertIn('Configuration helper, if still present:', result.stderr)
 

@@ -33,8 +33,8 @@ build_provider_image() {
         printf '%s\n' 'Starting the provider requires controller, prediction, geometry and delivery images and both prepared model archives.' \
             'Choose a deployment name. Write config/deployments/<name>/provider.toml and private deployment.toml; put credentials in secrets/deployments/<name>/.'
         next_make_command 'After configuring that deployment, install its inputs:' provider/deployment/install 'DEPLOYMENT=<name>' \
-            'DELIVERY_BINDINGS=/path/to/bindings.toml' 'DELIVERY_BINDING=<binding-name>' 'SHARED_RUNTIME_IMAGE=sha256:<shared-image-id>'
-        printf '%s\n' 'Start shared delivery through nmr-provider-tools using the complete host binding definition.'
+            'SHARED_SETTINGS=/path/to/shared.toml' 'SHARED_RUNTIME_IMAGE=sha256:<shared-image-id>'
+        printf '%s\n' 'Start the shared proxy and outbox through nmr-provider-tools using the host settings.'
         next_make_command 'Then start the provider:' provider/deployment/up 'DEPLOYMENT=<name>'
         printf '%s\n' 'Configuration: https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration'
     )

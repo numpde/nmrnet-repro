@@ -1,4 +1,4 @@
-# Provider policy; the selected shared binding supplies API identity and delivery grants.
+# Provider policy; API identity is private and socket grants come from the host.
 schema_id = "nmrnet.provider.runtime_config.v3"
 
 [scientific_retry]
@@ -65,7 +65,5 @@ prediction_seconds = 90
 source_seconds = 10
 
 [delivery]
-request_seconds = 30
-retirement_seconds = 5
 retry_initial_seconds = 1
 retry_max_seconds = 30

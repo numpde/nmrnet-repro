@@ -23,8 +23,8 @@ import tomllib
 from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.api_config import (
-    ApiConfigurationRejected, ApiSettings, HttpsSettings,
-    api_settings, https_settings,
+    ApiConfigurationRejected, ApiPublicationMaterial, ApiSettings, HttpsSettings,
+    api_settings_with_material, https_settings,
 )
 from provider_core.attempt_record import RecoveryScope
 from provider_core.ownership import LiveAttemptLimits
@@ -119,14 +119,10 @@ class LifecycleSettings:
 @dataclass(frozen=True, slots=True, repr=False)
 class DeliverySettings:
     endpoint: DeliveryEndpoint
-    request_seconds: float
-    retirement_seconds: float
     retry_initial_seconds: float
     retry_max_seconds: float
 
     def __post_init__(self):
-        _positive_seconds(self.request_seconds)
-        _positive_seconds(self.retirement_seconds)
         require_delivery_retry_settings(self.retry_initial_seconds, self.retry_max_seconds)
 
 
@@ -140,6 +136,7 @@ class ServiceSettings:
 @dataclass(frozen=True, slots=True, repr=False)
 class ProviderConfig:
     api: ApiSettings
+    publication: ApiPublicationMaterial
     interpreter: InterpreterSettings
     uploads: UploadSettings
     preparation: PreparationSettings
@@ -161,9 +158,10 @@ def _read_provider_config(path, read_file, *, read_api_file):
     # Only known owner messages may cross this disclosure boundary. Raw TOML,
     # filesystem and SSL errors remain private causes instead of public text.
     try:
-        api, provider_ref = _api(document["api"], read_api_file)
+        api, provider_ref, publication = _api(document["api"], read_api_file)
         return ProviderConfig(
             api,
+            publication,
             _interpreter(document["interpreter"], read_file),
             _uploads(document["uploads"], read_file),
             _preparation(document["preparation"]),
@@ -239,7 +237,7 @@ def _https(table, label, read_file):
 
 def _api(table, read_file):
     try:
-        return api_settings(table, read_file)
+        return api_settings_with_material(table, read_file)
     except ApiConfigurationRejected as failure:
         raise ConfigurationRejected(str(failure), cause=failure.cause) from None
 
@@ -360,11 +358,10 @@ def _lifecycle(table, api_origin, provider_ref):
 
 
 def _delivery(table, api_origin, provider_ref):
-    _fields(table, {"socket_path", "socket_group_id", "request_seconds", "retirement_seconds", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
+    _fields(table, {"socket_path", "socket_group_id", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
     return DeliverySettings(
         DeliveryEndpoint(api_origin, provider_ref, _path(table["socket_path"], "Delivery socket"),
                          socket_group_id=table["socket_group_id"]),
-        table["request_seconds"], table["retirement_seconds"],
         table["retry_initial_seconds"], table["retry_max_seconds"],
     )
 

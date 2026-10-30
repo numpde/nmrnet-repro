@@ -4,10 +4,10 @@ import asyncio
 import json
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from tests.integration.nmrnet.interpreter_ports import UploadPorts
-from tests.integration.nmrnet.runtime_ports import RuntimePeers
+from tests.integration.nmrnet.runtime_ports import HELD_FIXTURES, RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
@@ -16,6 +16,21 @@ from provider_core.uploads import UploadFailed, UploadInputRejected
 
 
 class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unconfirmed_relay_retirement_retains_live_fixture_resources(self):
+        fixture = await RuntimePeers(UploadPorts(), "upload").__aenter__()
+        try:
+            with patch.object(fixture, "close_relay", new=AsyncMock(side_effect=TimeoutError("relay did not retire"))):
+                with self.assertRaises(TimeoutError):
+                    await fixture.__aexit__(None, None, None)
+            self.assertIn(fixture, HELD_FIXTURES)
+            self.assertFalse(fixture.relay_task.done())
+            self.assertTrue(fixture.proxy_thread.is_alive())
+            self.assertTrue(fixture.config.delivery.endpoint.socket_path.exists())
+        finally:
+            await fixture.close_resources()
+            if fixture in HELD_FIXTURES:
+                HELD_FIXTURES.remove(fixture)
+
     async def test_upload_grant_digest_and_budget_failures_never_invite_model_correction(self):
         for failure_kind in ("grant", "digest", "budget"):
             with self.subTest(failure_kind=failure_kind):

@@ -199,10 +199,9 @@ override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin W
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
 unexport LOG_LEVEL
 unexport DEPLOYMENT
-unexport DELIVERY_BINDINGS DELIVERY_BINDING SHARED_RUNTIME_IMAGE PROVIDER_TOOLS
+unexport SHARED_SETTINGS SHARED_RUNTIME_IMAGE PROVIDER_TOOLS
 override export NMRNET_PROVIDER_TOOLS_INPUT := $(if $(filter command line,$(origin PROVIDER_TOOLS)),$(value PROVIDER_TOOLS))
-override export NMRNET_DELIVERY_BINDINGS_INPUT := $(if $(filter command line,$(origin DELIVERY_BINDINGS)),$(value DELIVERY_BINDINGS))
-override export NMRNET_DELIVERY_BINDING_INPUT := $(if $(filter command line,$(origin DELIVERY_BINDING)),$(value DELIVERY_BINDING))
+override export NMRNET_SHARED_SETTINGS_INPUT := $(if $(filter command line,$(origin SHARED_SETTINGS)),$(value SHARED_SETTINGS))
 override export NMRNET_SHARED_RUNTIME_IMAGE_INPUT := $(if $(filter command line,$(origin SHARED_RUNTIME_IMAGE)),$(value SHARED_RUNTIME_IMAGE))
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
 unexport UPLOAD_RECEIPT
@@ -265,7 +264,7 @@ help:
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
 		'make provider/prepare SHARED_RUNTIME_IMAGE=sha256:<id> Acquire dependencies/models and build images; choose cache and interface once.' \
-		'make provider/deployment/install DEPLOYMENT=<name> DELIVERY_BINDINGS=<file> DELIVERY_BINDING=<name> SHARED_RUNTIME_IMAGE=sha256:<id> Freeze provider inputs from one shared binding.' \
+		'make provider/deployment/install DEPLOYMENT=<name> SHARED_SETTINGS=<file> SHARED_RUNTIME_IMAGE=sha256:<id> Freeze provider inputs with shared socket grants.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \

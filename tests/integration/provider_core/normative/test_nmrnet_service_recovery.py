@@ -177,8 +177,9 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
                 self.assertEqual(len(fixture.allocations), 2)
                 fixture.require_retired_science(2)
-                retained = fixture.relay.queue.next_pending(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref)
-                self.assertEqual(retained.body, fixture.accepted_outcomes[1])
+                retained = fixture.relay.queue.next_pending_handoff(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref)
+                self.assertEqual(retained.outcome.body, fixture.accepted_outcomes[1])
+                self.assertEqual(retained.publication, fixture.config.publication)
                 fixture.stop = asyncio.Event()
                 fixture.attempt_stopping = asyncio.Event()
                 third_allowed = True

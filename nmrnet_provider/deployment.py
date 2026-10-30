@@ -18,8 +18,6 @@ import re
 from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected
-from provider_core.delivery_client import delivery_volume_name
-from provider_core.deployment_route import RouteDirectory, RouteProjectionRejected, render_api_route
 from provider_core.producer_checkpoint import checkpoint_volume_name
 from nmrnet_provider.process import _declared_execution
 from nmrnet_provider.startup_capture import _bind_path, startup_authorities, prediction_lifetime_seconds
@@ -50,12 +48,11 @@ def _provider_stop_seconds(config):
     lifecycle, policy, native = config.lifecycle, config.service.policy, config.service.native
     retirement = config.api.http.retirement_seconds
     settlement = ((2 + lifecycle.live_limits.maximum_attempts) * policy.settle_seconds
-                  + 2 * retirement + config.delivery.retirement_seconds)
+                  + 3 * retirement)
     draining_shutdown = 2 * policy.drain_seconds + settlement
     setup_settlement = 2 * native.allocation_seconds + max(
         native.prediction_seconds, native.source_seconds, config.preparation.generation_seconds)
-    startup = max(config.api.http.exchange_seconds + retirement,
-                  config.delivery.request_seconds + config.delivery.retirement_seconds)
+    startup = config.api.http.exchange_seconds + retirement
     final_dependencies = retirement
     return sum((startup, draining_shutdown, 2 * settlement, setup_settlement, final_dependencies))
 
@@ -80,21 +77,17 @@ def _disjoint(first, second):
         raise ConfigurationRejected("independent deployment grants overlap; keep the lifetime lock, frozen inputs and runtime leaves separate.")
 
 
-# silent-defaults: allow-contract -- The installed production relay namespace remains unchanged unless a contained recipe explicitly selects a private project.
-def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes, binding, shared_image_id,
-                   delivery_project="nmr-api-delivery"):
-    """Return the seven fixed services without touching Engine or acquiring work.
+def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, execution, routes, grants, shared_image_id):
+    """Return the fixed services without touching Engine or acquiring work.
 
     Role locks and directory privacy are admitted/created by the finite host owner.
     Only the matching runtime leaf enters each native runner; only the provider
     receives frozen credentials and the writable lifetime-lock volume. Native scratch and
     per-start process diagnostics are private tmpfs, never host log dump paths.
     """
-    if type(delivery_project) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", delivery_project) is None:
-        raise ConfigurationRejected("delivery project requires one explicit lowercase Compose project name of up to 63 characters.")
     if type(deployment) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", deployment) is None:
         raise ConfigurationRejected("deployment requires an explicit name of up to 48 letters, digits, underscores or hyphens.")
-    if any(type(value) is not int or value < 1 for value in (uid, gid)):
+    if any(type(value) is not int or not 1 <= value <= 4294967294 for value in (uid, gid)):
         raise ConfigurationRejected("deployment requires an explicit nonroot caller UID and GID.")
     if type(shared_image_id) is not str or re.fullmatch(r"sha256:[0-9a-f]{64}", shared_image_id) is None:
         raise ConfigurationRejected("deployment requires the shared runtime's full immutable image ID.")
@@ -120,7 +113,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         raise ConfigurationRejected("delivery socket directory must not overlap provider software, frozen inputs, lifetime lock or runtime grants.")
     identity = _declared_execution(execution)
     if type(routes) is not dict or set(routes) != {"interpreter", "store"}:
-        raise ConfigurationRejected("deployment requires exactly the interpreter and store routes; the binding owns the API route.")
+        raise ConfigurationRejected("deployment requires exactly the interpreter and store routes; the host owns the API route.")
     labels = {"io.nmrnet-repro.deployment": deployment, "io.nmrnet-repro.bundle": bundle.name,
               "io.nmrnet-repro.checkout": str(checkout)}
     project = project_name(checkout, deployment)
@@ -133,16 +126,17 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
                            "--models", "/input/prediction-models.json", "--diagnostics", "/run"]
     # Keep this scope's physical volume identity so supervisors contend for
     # the same lifetime lock across container replacement.
-    control_volume = checkpoint_volume_name(config.lifecycle.scope, namespace=delivery_project)
+    control_volume = checkpoint_volume_name(config.lifecycle.scope, namespace=grants.project)
     provider["volumes"] = [_bind(bundle, bundle), _bind(bundle / "execution.json", "/input/execution.json"),
                            _bind(bundle / "prediction-models.json", "/input/prediction-models.json"),
                            {"type": "volume", "source": control_volume, "target": str(lifetime_root), "read_only": False,
                             "volume": {"nocopy": True}}]
-    delivery_volume = delivery_volume_name(config.delivery.endpoint.api_origin, config.delivery.endpoint.provider_ref, namespace=delivery_project)
-    provider["volumes"].append({"type": "volume", "source": delivery_volume,
-                                "target": str(socket_root), "read_only": True,
-                                "volume": {"nocopy": True}})
-    provider["group_add"] = [str(config.delivery.endpoint.socket_group_id)]
+    if (config.delivery.endpoint.socket_path, config.delivery.endpoint.socket_group_id) != (grants.outbox_socket, grants.gid):
+        raise ConfigurationRejected("delivery endpoint must match the shared outbox socket grant.")
+    shared = grants.compose()
+    provider["volumes"].extend(shared["mounts"])
+    provider["group_add"] = shared["group_add"]
+    provider["command"] += ["--api-proxy-socket", str(grants.proxy_socket)]
     services["provider"] = provider
     native = config.service.native
     for role in ("prediction", "reader", "smiles"):
@@ -175,21 +169,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         services[role] = service
         provider["volumes"].append(_bind(runtime / role, f"/native/{role}"))
     authorities = startup_authorities(config)
-    relocated = ({binding.route["resolver_file"]: str(bundle / "api-resolv.conf")}
-                 if binding.route["mode"] == "external" else {})
-    try:
-        api_route = render_api_route(
-            binding, image=shared_image_id, interpreter="/opt/provider-core/environment/bin/python",
-            namespace=project, uid=uid, gid=gid, storage=RouteDirectory(runtime / "route-api"),
-            input_sources=relocated, service_name="api",
-        )
-    except RouteProjectionRejected as cause:
-        raise ConfigurationRejected(str(cause), cause=cause) from cause
-    services.update(api_route.compose["services"])
-    networks = dict(api_route.compose["networks"])
-    provider["depends_on"].update(api_route.client_depends_on)
-    provider["volumes"].append(api_route.client_mount)
-    provider["command"] += ["--api-proxy-socket", api_route.client_socket]
+    networks = {}
     for role in ("interpreter", "store"):
         route = routes[role]
         if type(route) is not dict or not {"mode", "interface", "log_level"} <= set(route) or set(route) - {"mode", "interface", "log_level", "addresses", "network"}:
@@ -242,22 +222,19 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         # control still uses only admitted full IDs, never a name as authority.
         service["container_name"] = project + "-" + role + "-" + bundle.name
         service["labels"].update(labels)
-        if role in api_route.compose["services"]:
-            continue
         status_role = "proxy" if role in ("interpreter", "store") else role
         status_path = "/run/status.json"
         startup = native.allocation_seconds
         if status_role == "proxy":
             startup = 5
         if role == "provider":
-            startup = (config.delivery.request_seconds + config.delivery.retirement_seconds
-                       + config.api.http.exchange_seconds + config.api.http.retirement_seconds)
+            startup = 2 * (config.api.http.exchange_seconds + config.api.http.retirement_seconds)
         service["healthcheck"] = {"test": ["CMD", service["entrypoint"][0], "-I", "-B", "-m",
                                                   "provider_core.process_status", status_path, status_role],
                                   "interval": "5s", "timeout": "2s", "retries": 3,
                                   "start_period": f"{math.ceil(startup)}s"}
     return {"name": project, "services": services, "networks": networks,
-            "volumes": {name: {"name": name, "external": True} for name in (delivery_volume, control_volume)}}
+            "volumes": shared["volumes"] | {control_volume: {"name": control_volume, "external": True}}}
 
 
 def compose_bytes(plan):

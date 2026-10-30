@@ -18,14 +18,14 @@ from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import job, page
 from tests.integration.nmrnet.config_ports import ConfigFiles
-from tests.integration.nmrnet.runtime_ports import RuntimePeers
+from tests.integration.nmrnet.runtime_ports import HELD_FIXTURES, RuntimePeers
 from tests.integration.nmrnet.smiles_ports import InputPorts
 from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.config import load_provider_config
-from provider_core.api import ProviderAPI
-from provider_core.delivery_service import DeliveryBinding, DeliveryService
 from provider_core.delivery_store import QueueLimits
+from provider_core.shared_delivery_ipc import SharedDeliverySocket
+from provider_core.shared_delivery_service import SharedDeliveryService
 from provider_core.lifetime import ProviderLifetime
 from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
 
@@ -94,14 +94,22 @@ class ProcessPeers:
             **model_options,
         )
         self.config = load_provider_config(self.files.path)
+        port = urlsplit(self.peer.origin).port
+        authorities = [f"127.0.0.1:{port}"]
+        if self.model_peer is not None:
+            authorities.append(f"127.0.0.1:{urlsplit(self.model_peer.origin).port}")
+        policy = ServicePolicy.admit("local", authorities, ["127.0.0.1=127.0.0.1"])
+        self.proxy = JoinedServiceProxy(self.root / "proxy.sock", "lo", policy, status_directory=self.root)
+        self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
+        self.proxy_thread.start()
         relay_root = self.root / "relay-state"
         relay_root.mkdir(mode=0o700)
         self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
-        publisher = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport(),
-                                expected_topology=self.config.api.expected_topology)
-        self.relay = DeliveryService(
+        endpoint = self.config.delivery.endpoint
+        self.relay = SharedDeliveryService(
             relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
-            bindings=(DeliveryBinding(self.config.delivery.endpoint, publisher),), request_seconds=2,
+            socket=SharedDeliverySocket(endpoint.socket_path, endpoint.socket_group_id),
+            proxy_socket=self.root / "proxy.sock", request_seconds=2,
             retry_initial_seconds=0.01, retry_max_seconds=0.1,
             on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
             diagnostic_status=lambda: {"output_failures": 0},
@@ -137,14 +145,6 @@ class ProcessPeers:
         )
         for path in (self.execution, self.models):
             path.chmod(0o600)
-        port = urlsplit(self.peer.origin).port
-        authorities = [f"127.0.0.1:{port}"]
-        if self.model_peer is not None:
-            authorities.append(f"127.0.0.1:{urlsplit(self.model_peer.origin).port}")
-        policy = ServicePolicy.admit("local", authorities, ["127.0.0.1=127.0.0.1"])
-        self.proxy = JoinedServiceProxy(self.root / "proxy.sock", "lo", policy, status_directory=self.root)
-        self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
-        self.proxy_thread.start()
         self.proxy_arguments = [
             part
             for role in ("api", "interpreter", "store")
@@ -161,7 +161,11 @@ class ProcessPeers:
             if self.relay_task is not None:
                 # Reuse the existing real relay's stop/join/close owner before
                 # releasing its API peer or any producer socket grants.
-                await RuntimePeers.close_relay(self)
+                try:
+                    await RuntimePeers.close_relay(self)
+                except BaseException:
+                    HELD_FIXTURES.append(self)
+                    raise
             try:
                 if self.proxy_thread is not None and self.proxy_thread.is_alive():
                     await asyncio.to_thread(self.proxy.shutdown)
