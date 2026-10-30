@@ -23,7 +23,6 @@ from nmrnet_provider.admission import AdmissionPolicy, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.controller import ControllerFailed
-from provider_core.delivery_client import DeliveryClient
 from provider_core.analysis import AnalysisOutcomeUnresolved
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ObservationGapExpired
 from provider_core.hello import AnalysisOffering
@@ -156,8 +155,6 @@ class ProviderService:
             raise ValueError("NMRNet service requires the shared Attempt claims.")
         self.config, self.api, self._claims = config, api, claims
         self._attempt_stopping = None
-        self.delivery = DeliveryClient(config.delivery.endpoint, exchange_seconds=config.delivery.request_seconds,
-                                       retirement_seconds=config.delivery.retirement_seconds)
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self._on_observed_crash = on_observed_crash
@@ -194,7 +191,6 @@ class ProviderService:
             and all(controller.shutdown_ready for controller in self._owned_controllers())
             and self.api.retirement_confirmed
             and self.hello_api.retirement_confirmed
-            and self.delivery.retirement_confirmed
         )
 
     async def run(self, stop):
@@ -519,7 +515,6 @@ class ProviderService:
             for operation, function in (
                 ("Attempt settlement", lambda: self._settle_controller(retry=retry_settlement)),
                 ("execution API retirement", self._retire_api),
-                ("delivery control retirement", self.delivery.retire),
             ):
                 failure = await self._cleanup(operation, function)
                 if failure is not None:
