@@ -597,7 +597,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "SHARED_RUNTIME_IMAGE": image,
                     "DEPLOYMENT": "localhost",
                     "WHEELHOUSE": str(root / "wheelhouse"),
-                    "API_ORIGIN": "https://nmr.localhost:10443",
+                    "API_ORIGIN": "https://storage.example",
                     "TOPOLOGY": "dev-local",
                     "PROJECT_REF": "project:user-demo",
                     "USER_ID": "demo",

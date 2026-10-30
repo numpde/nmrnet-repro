@@ -58,8 +58,8 @@
     <h3 id="shared-delivery-deployed">Observed shared-delivery cutover, 24 October 2026</h3>
     <p>Runtime/configuration checkpoint
       <a href="https://github.com/numpde/nmrnet-repro/commit/cb31917">cb31917</a>
-      is deployed at <code>https://nmr.localhost:10443</code> with
-      <code>[local NMRNet provider]</code>, and at <code>https://nmr.dapp32.com</code>
+      is deployed at <code>https://storage.example</code> with
+      <code>[local NMRNet provider]</code>, and at <code>https://storage.example</code>
       with <code>[production NMRNet provider]</code>. Each Docker host has its own
       <code>nmr-api-delivery</code> project, private queue volume and provider-scoped
       socket; only NMRNet is connected so far. All seven NMRNet roles and both
@@ -2207,7 +2207,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
     <p id="local-api-delivery"><strong>Real local API delivery, 24 October 2026:</strong> the maintained
       <code>provider/qualify/api/existing-pasted</code> lane submitted exactly one
       <code>demo</code> Job to the existing seven-role <code>nmr-localhost</code>
-      deployment and real API at <code>https://nmr.localhost:10443</code>.
+      deployment and real API at <code>https://storage.example</code>.
       Source revision was
       <code>40ef43221f19134daae5da9fd4053542e9844cca</code>.
       The live OpenAI <code>gpt-5.6-luna</code> interpreter selected
@@ -2392,7 +2392,7 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       installed as <code>generation-2ADWCLjN</code> for
       <code>nmr-dapp32-com</code>. Inference imports passed. The seven-role stack
       became ready and received its initial Hello acknowledgement from
-      <code>https://nmr.dapp32.com</code>, preserving
+      <code>https://storage.example</code>, preserving
       <code>[production NMRNet provider]</code>, <code>lane:nmrnet-pa-a</code>,
       <code>generation:nmrnet-pa-a-run</code> and the original selected store.
       The old inactive unit/template, environment profile and empty launcher
