@@ -1,351 +1,215 @@
-NMRNet adoption of the host-owned API proxy
-==========================================
+NMRNet adoption of the shared API proxy and outbox
+=================================================
 
-Status: design, 30 October 2026. Implementation and deployment remain to be done.
-Canonical shared design and proxy ownership belong to nmr-provider-tools note
-020. NMRNet owns its consumer, local lifecycle
-and retirement changes. This note records public contracts and relative source
-references; instance settings and operational evidence stay private.
+Status: design, 30 October 2026. The authoritative joint design is
+nmr-provider-tools/notes/020_shared_api_proxy_redesign_20261030.txt. No source
+conversion, SDK release or deployment is claimed here.
 
-Outcome and completion
-------------------------
+Outcome and boundaries
+----------------------
 
-NMRNet borrows one host-owned API socket. Its provider remains network-isolated,
-signs its own requests and verifies API TLS through CONNECT. Delivery retains its
-original binding, intake, durable queue and exact command/retry semantics. Native
-prediction, reader and smiles workers, interpreter/store routes, lifetime locks,
-models and scientific settings keep their existing ownership.
+NMRNet uses two independently managed host services: an API CONNECT proxy for
+its signed API exchanges and a durable outbox for terminal result handoff. Each
+has one shared socket volume and access group. NMRNet borrows both read-only;
+it cannot create, initialize, remove, restart or reconfigure either service.
+The outbox uses the same API proxy for publication. Provider restart or removal
+does not remove accepted work or the material needed for outbox retries.
 
-For this refactor, preserving old configuration while preparing its replacement
-and avoiding interruption of old delivery are not requirements, including when
-delivery has results to send. Configuration may be replaced and services may be
-interrupted during cutover. Use existing storage ownership, signing/TLS and queue
-semantics; add no staging, continuity or rollback system for the old topology.
+The first joint deployment uses the existing nmr.localhost API: all four providers
+and the outbox operate through the shared grants; eight old API proxies and unused
+private API and delivery intake resources are retired. Actual API access, delivery
+progress when work exists, pending work, health and retirement are observed. A
+build, listener or single provider does not establish the joint outcome. Local
+results do not establish remote deployment. Each host acquires source and issued
+artifacts through GitHub and builds there using maintained targets.
 
-All four providers AND delivery must use the shared proxy, with the eight old
-API proxies retired, to complete the joint milestone. NMRNet's part requires its
-actual running provider and maintained real-API paths to use the shared grant,
-working API access and original delivery intake, and retirement of its old API
-resources after their clients settle. A build or listener health alone does not
-establish this. Correct retained retries need not finish before transport cutover;
-a publisher paused by incorrect inputs must be repaired through its owner.
+Old configuration preservation and uninterrupted delivery are not cutover gates,
+even with pending results. Configuration can be replaced and services interrupted.
+Existing queue ownership, exact accepted commands, signing/TLS and uncertainty
+rules still apply. Do not overlap queue owners, discard or retarget retained work,
+or replay an uncertain START or rerun science to manufacture progress.
 
-First integration is here against the existing API at nmr.localhost. Use real
-providers and delivery through maintained workflows. Local results establish no
-remote deployment claim. For each later authorized host rollout, push committed
-source/issued artifacts, acquire them from GitHub there and build there. No side
-checkout, transferred deployment bundle, copied image or private source overlay.
+Shared contract needed by NMRNet
+--------------------------------
 
-The first deployment establishes the proxy baseline: image selection, destination,
-network settings, socket/group, storage and independent lifecycle. Later provider
-improvements and SDK upgrades must not reconfigure, restart or replace that proxy
-or recreate its socket volume. A deliberate later host-baseline change is separate
-work under its owner. NMRNet's planned follow-ups require no new proxy capability.
+The SDK supplies both client grants and a self-contained terminal handoff. Its
+exact symbols, volume names, socket paths, groups and wire format remain to be
+agreed with the shared owner; no previously proposed static binding projection,
+per-provider socket or release version is assumed. A provider joins using the two
+grants and its own API inputs, without delivery registration or an operator edit.
 
-Shared contract required before implementation
-------------------------------------------------
+The handoff contains the exact terminal operation/body, Job/Attempt and API/provider
+identity, API settings, original issued signing credential and optional CA material.
+Pass usable credential/trust bytes through the SDK contract: provider-container
+paths, in-memory key objects and pre-signed requests are not sufficient transport.
+The outbox durably commits the result and publication inputs together before ACK,
+and signs each retry itself. An ambiguous ACK leaves the original producer
+obligation under existing reconciliation rules; durable acceptance is not API
+acceptance. Protect retained secrets and queue/WAL/backup data; never put them in
+logs, status, exceptions or public notes. Rotation or revocation cannot silently
+substitute another identity; retained work must be held or failed visibly by its
+owner if its authority cannot be used.
+An acknowledgement on replay must reflect the inputs actually retained; changed
+publication material cannot silently replace the original or be claimed stored.
 
-Use the SDK's single client projection of a host-owned named volume, read-only
-mount, socket path and supplementary access GID. Configuration belongs in existing
-operator inputs and the shared binding admission path, without a second NMRNet
-route definition. The concrete contract below is the current working agreement;
-it is not an issued interface or release. Neither a release version nor instance
-values are guessed here. The repository release record selects provider-core 0.5.2;
-that is an inspected source pin, not a claim that it supplies this new interface.
+Use additive API and outbox mounts/groups alongside the lifetime, native,
+interpreter and store grants. Both shared volumes are external and excluded from
+ordinary and custom deletion. A one-off docker run client must check the exact
+volume exists before launch; nocopy alone can create a named volume. Preserve
+provider network_mode none, client-side signing/TLS and independent scientific
+routes. The shared intake is a trusted local submitter boundary. The SDK's
+credential parser checks artifact fields and matching key pair; that alone does
+not prove API issuance or authorization. The API authenticates publication.
+There is no provider queue-read operation or secret disclosure in replies, but a
+conflict refusal for a guessed matching identity can reveal limited existence
+information; this limited disclosure is accepted for the controlled host. Apply
+per-provider and total limits without a provider registry;
+do not claim cryptographic per-provider socket authentication or zero metadata
+leakage.
 
-The volume is external: true with its exact host-owned name. Clients cannot create,
-initialize, relabel or remove it. Missing storage blocks launch and is reported to
-the shared owner. There is no private fallback, cross-project depends_on or grant
-of the router's network settings to the provider. Merge the API mount and GID with
-existing mounts/groups, preserving the distinct delivery intake group even when
-the two selected GIDs happen to match.
+The provider-facing outbox supports only submission and its acknowledgement or
+refusal; there is no pending, capacity, inventory or status read. Operator
+inspection remains separate. NMRNet must replace both its pending-capacity gate
+and queued-Job exclusion. A refusal after computation is not equivalent to the
+former pre-start capacity check.
 
-For one-off docker run clients, explicitly check that the exact borrowed volume
-exists before launch: named-volume mounts can create missing storage, and nocopy
-alone does not prevent that. Reuse the maintained launch owner for this check;
-Compose's external declaration cannot protect a separate docker run invocation.
+NMRNet's result.py currently bounds the public result at 786432 bytes. Keep
+that result-body budget; bound the complete handoff for supported body plus
+credential, CA and encoding overhead. The existing 2 MiB intake ceiling cannot
+be assumed adequate for all providers' larger bodies and publication inputs.
+Reject oversized inputs visibly at the owner; never truncate a result or its
+publication material to fit the envelope.
 
-Working contract from canonical 020:
+One host-owned operator input controls live proxy capacity, logging and allowed
+CONNECT authorities and outbox capacity, retry and logging. Provider replacement
+must not restart the proxy or recreate its socket. Lower capacity affects new
+admission without dropping active tunnels or pending work. Invalid reload retains
+the last applied settings and reports failure; invalid startup fails visibly.
+Host process identity, network and storage remain independently owned deployment
+settings. Establish sufficient actual PID/thread/memory budgets for live limits.
 
-* One top-level api_proxy table in the existing binding TOML owns project, uid,
-  gid, origin and route; per-binding API identities/trust/budgets remain. Selected
-  client API origins must match the host's single allowed CONNECT authority.
-* Socket storage derives from that project as <api_proxy.project>-socket. The
-  public example project is nmr-api-proxy; instance selection remains private.
-  Fixed client mount/socket are /run/nmr-api-proxy and
-  /run/nmr-api-proxy/proxy.sock. This nested mount must coexist with NMRNet's
-  existing /run tmpfs and separate delivery socket, without masking status files.
-* provider_core.deployment_route.render_api_client(binding) returns exactly
-  compose, client_socket, client_mount and client_group_add. compose declares
-  only the shared-api volume alias, external with its exact derived name; the
-  mount uses that alias, read-only and nocopy. client_group_add contains the
-  decimal-string API GID. Merge these fields rather than replacing NMRNet grants.
-* python -m provider_core.deployment_route client --definition FILE --binding NAME
-  emits those same four JSON fields for one-off launchers. Resolve the alias via
-  compose.volumes to the exact volume before inspection and docker run; never
-  pass the Compose alias as a physical volume name. The Python consumer needs
-  no image, runtime UID, namespace or resolver-relocation arguments.
-* Selected-binding input_paths contains credentials and optional CA only. Host
-  resolver access belongs to independent proxy rendering. NMRNet freezes its
-  client projection and API inputs, without copying the host route settings.
-* Selected DeploymentBinding.api_proxy contains project/gid only. The SDK's
-  deployment_binding.client_definition_bytes(definition, *, binding_name) and
-  client-definition --definition FILE --binding NAME action emit the selected
-  binding and unchanged delivery settings as TOML, with api_proxy.project/gid.
-  The capture CLI emits raw TOML, separately from the four-field JSON projection;
-  do not run its output through a JSON decoder or extend ApiClientProjection.
-  The same client loader accepts this capture without host uid/origin/route;
-  host rendering requires those fields from the original operator definition.
-  Consumers neither parse host policy themselves nor reconstruct stripped fields.
-  Delivery needs the separate all-bindings export (binding_name=None in Python,
-  --all instead of --binding in the CLI) to preserve all four original bindings.
-  NMRNet continues using its selected-binding export; it does not assemble or
-  install delivery's document. Delivery projects one shared API mount/GID for
-  its bindings rather than four duplicate mounts at the fixed client path.
-
-The shared-api alias does not collide with NMRNet's current physical-name volume
-keys. The fixed socket requires no runtime CLI redesign: --api-proxy-socket already
-accepts it.
-
-The host proxy uses a nonroot UID different from consumer UIDs. Restricted group
-traversal and socket connection must work from both Compose and one-off clients;
-clients receive no lock/readiness ownership. The shared owner preserves the proxy
-lifetime lock and stale-socket rules, with restrictive birth permissions:
-directory 0710 and socket 0660. Resource budgets remain host-owned.
-
-Before freezing the baseline, the shared owner must support this local API's
-admitted destination and TLS hostname, ordinary combined traffic plus existing
-maintenance reads, and current bounded CONNECT exchanges/reconnection. Capacity
-is settled during initial joint bringup using existing traffic and bounded budgets;
-no speculative 8x32 requirement, per-provider attribution or load campaign. Client
-timeouts, signing identities, trust, operation certainty and retry classification
-remain with their current owners. Proxy loss never proves that START failed or
-authorizes replay, science rerun or rewritten queued commands.
-
-Inspected source and concrete NMRNet changes
----------------------------------------------
-
-1. nmrnet_provider/deployment.py::render_compose currently calls render_api_route
-   with RouteDirectory(runtime / "route-api"), merges API services/networks and
-   adds an API depends_on. Replace that entire production ownership with the SDK
-   client projection. Add its external volume declaration, read-only mount, socket
-   argument and supplementary group. Initialize networks from the scientific
-   route needs rather than the removed API projection. Preserve provider network
-   mode none, existing delivery/lifetime grants and the five local dependencies:
-   prediction, reader, smiles, interpreter and store. Remove API-service-specific
-   status handling and correct the obsolete fixed-service description.
-
-2. tools/provider_deployment.py::freeze_deployment selects the original delivery
-   binding and freezes API credentials/trust. Keep that selection and capture.
-   Stop reading binding.route as network policy and copying api-resolv.conf.
-   Freeze the admitted client grant in the existing Compose generation. Keep
-   deployment.toml interpreter/store routes and their resolv.conf when needed;
-   deleting API DNS capture does not remove scientific DNS authority.
-
-3. tools/compose_deployment.sh::select_binding_inputs uses the SDK paths command.
-   Adopt its new client-only file grants, preserving selected key/CA reads and
-   removing API resolver grants. Stop creating runtime/route-api for new installs.
-   SHARED_RUNTIME_IMAGE still selects code for owned scientific proxies and
-   binding helpers; it does not select or redeploy the host API proxy. Keep
-   immutable-image admission and existing source capture through committed inputs.
-   Today this seam temporarily copies the full operator definition and grants it
-   to the freezer; it does not retain that document in the published generation.
-   Use the admitted snapshot with the SDK client-definition action, then give
-   paths and the freezer that selected client TOML instead of the whole document.
-   Keep binding_name unchanged so load_deployment_bindings(...).selected(name)
-   still selects the original identity. Reparse the SDK-produced capture and
-   compare the admitted client/delivery facts through the existing freeze path.
-   Retain only the existing frozen config, credential/CA bytes and client grant;
-   add no permanent definition copy or new configuration parser for NMRNet.
-
-4. Lifecycle remains install/up/down/status/logs/retire-generations through
-   tools/provider_deployment.sh. Existing install refuses a running project;
-   up requires an empty project; down waits for successful provider exit before
-   removing dependencies. Preserve these actual semantics for this cutover rather
-   than promising seamless replacement. Repair any demonstrated settlement blocker
-   at its owner without forced removal or a generic lifecycle rewrite.
-
-5. Existing initialize_lifetime selects only the writable producer lock volume at
-   /srv/nmrnet/attempts. Do not broaden that initializer to the API volume. Current
-   retirement inspects all container mount sources, including stopped borrowers,
-   and removes unused configuration bundles only. It does not remove runtime
-   directories or named volumes. Preserve that boundary and add narrowly owned
-   obsolete API-directory retirement to maintained tooling if needed for cutover,
-   after all old clients/containers release it. Never scan/delete peer resources.
-   Do not add a blanket exemption to journal, worker or lifetime ownership checks;
-   only the specifically borrowed API grant is external wherever admission applies.
-
-6. Convert maintained real-API staging paths in tools/provider_api_qualification.sh,
-   tests/integration/provider_runtime/stage_api_config.py and binding_inputs.py.
-   They currently author private API route settings for real-API provider runs.
-   Use the same admitted shared client grant as production. Keep original caller
-   identity, trust and retained Job readback; do not resubmit an uncertain Job.
-   Trace direct real-API client networking in existing-pasted/api_prediction.py
-   and use the shared CONNECT grant for that maintained API path as well. Preserve
-   the separate interpreter ambiguity/model route: its destination is scientific,
-   not the NMR API, despite using the same proxy implementation.
-
-7. Disposable authored-API fixtures in compose_peer.py and offline Compose tests
-   remain test infrastructure. Adapt their calls to the new SDK contract through
-   the existing fixture owner; keep disposable route lifecycles confined there.
-   They neither own the production host proxy nor require changing its destination
-   to run tests. Do not remove a fixture's route merely because production stops
-   rendering one. Audit remaining API route creation by caller and destination.
-
-8. Adopt the issued SDK via the existing requirements/provider-core-release.json,
-   install/native locks, package acquisition and image build paths. Update only
-   affected dependency records through their owning tooling. Preserve scientific
-   package/model identity; an SDK source/build check is not numerical proof.
-
-Tier 1: first complete deployment and retirement
+Admission and bounded handoff without queue reads
 -------------------------------------------------
 
-A. Converge this design and the SDK contract with Magnet, NMRPeak and SECS. The
-   shared owner records the contract and supplies private host inputs and issued
-   release. Continue unblocked source preparation; do not invent a release pin,
-   copy SDK source or manufacture another provider identity while waiting.
+Remove the pending() read in admission.py. Keep the authenticated API Job feed's
+has_provider_execution_attempt=false filter and existing live claims. The API
+implementation tests for any Attempt by this provider regardless of state;
+while that record exists, its Job is excluded. Do not infer permanent exclusion
+if an Attempt is removed or an API observation is incomplete.
 
-B. Implement the owned seam and use the existing focused lanes:
-   make test/integration/provider-core/compose and make test/unit/provider/deployment.
-   Update normative/adversarial Compose/freezer checks and launcher fixtures to
-   prove the API grant is external/read-only, both groups survive, scientific and
-   delivery grants remain, and NMRNet creates no API service/network dependency.
-   Retain current stopped-borrower and failure-before-deletion checks. Add only
-   cheap cases needed for changed behavior or an observed failure; no new harness.
+In the inspected API source, ordinary Job cleanup purges Attempts only for a
+DELETED Job; targeted cleanup first sets that state. The unattempted feed requires
+an OPEN Job, so this purge does not make the same deleted Job selectable. A
+source search found no other production Attempt-deletion call; integration tests
+have their own deletion calls. This evidence is provider-relative: the filter
+uses the authenticated provider principal, which must remain the original
+identity. It does not establish behavior for uninspected database operations,
+other deployments, outbox capacity or producer crashes.
 
-C. Build through maintained image targets. The controller and binding helper must
-   both contain the issued SDK that admits client-only TOML. Bring up the shared
-   proxy and check signed API access using an actual client with its intended
-   identity, TLS trust, mount and supplementary groups. This may happen after
-   stopping the old deployment; no incumbent-preserving preflight or separate
-   check-api command is required for this refactor.
+NMRNet's work loop processes one controller serially and the existing executor
+retains its exact selected outcome while retrying full or unavailable delivery.
+Keep that owner and its existing bounded live Attempt/report claims. While the
+handoff is unresolved, do not release that owner or admit further work through
+this loop. A full outbox can therefore be discovered after science, unlike the
+old pre-start capacity gate. This is an accepted throughput and resource tradeoff,
+not proof that the former gate still exists. Do not introduce a local queue or
+reservation protocol to recreate it.
 
-D. Use maintained down, install, up in that order for replacement. Retain lifetime
-   storage, original delivery queue/intake, binding identity and exact commands.
-   A blocked down is handled through its existing settlement owner; configuration
-   preservation and uninterrupted delivery are not additional cutover gates.
-   NMRNet never drives the independent shared services' lifecycle.
-   Finish owned old API-directory retirement using the still-selected old recipe
-   before install can prune it. Install automatically retires unused generations;
-   once down removes the old containers there may be no borrower retaining that
-   recipe. Do not defer ownership discovery until after installing the new plan.
+On verified durable ACK, the outbox owns the exact accepted handoff and retry
+material; the producer releases its terminal claim under the existing lifecycle.
+The API's provider-relative Attempt filter prevents selecting that Job again
+while its Attempt row exists, regardless of terminal or expired state. Use that
+existing authority rather than mirroring the outbox's queued Job inventory.
+Confirm the deployed API's Attempt retention and identity assumptions as part of
+normal integration; do not assert the behavior after a record is removed.
 
-E. Observe the running provider and all required workers/routes, selected images,
-   shared socket/group, signed API read and original delivery intake. Check health,
-   logs and restart counts through maintained paths. Account privately for pending
-   or held delivery state; observe actual progress where work exists. A ready
-   listener or preserved bytes cannot disguise a paused publisher. Reuse existing
-   authorized local scenarios; no new synthetic science campaign is required.
+On producer restart, use existing START/checkpoint recovery and effect-certainty
+rules. The terminal-selected checkpoint carries a digest/length, not body bytes;
+a crash before durable outbox ACK can leave the original obligation unresolved.
+Hold/report it under existing recovery rather than inventing a result, rerunning
+science or claiming accepted bytes survived. A new local durable result journal
+or restart barrier would strengthen this existing pre-ACK uncertainty, so neither
+is a prerequisite for this transport cutover. Existing queue limits still bound
+outbox storage; active-owner limits bound live producer retention, not results
+lost before acknowledgement or every possible failure timing.
 
-F. Confirm NMRNet's old API container and unused private route directory were
-   removed by the maintained down/retirement operations before install. Keep
-   selected and stopped-borrowed generations. Shared owner retires old delivery API roles;
-   each other provider retires its own. Verify ordinary NMRNet down/up and image
-   maintenance leave the shared proxy and socket volume intact. Count actual API
-   proxy roles across the joint topology, not just total containers.
+Concrete NMRNet changes
+-----------------------
 
-G. Local completion requires all four providers plus delivery and old-proxy
-   retirement. Record source, builds and observed running results separately.
-   Later host rollouts repeat host-local acquisition/build/deployment checks,
-   preserving confirmed milestones and each host's independent proxy baseline.
+1. nmrnet_provider/deployment.py currently renders a private API RouteDirectory
+   and derives a delivery volume from API/provider identity. Replace both with
+   the SDK's shared grants. Add external read-only mounts and supplementary GIDs
+   without replacing other grants. Remove private API services, dependency and
+   resolver projection; keep the five native/interpreter/store dependencies,
+   provider network isolation and the independently owned scientific routes.
+2. tools/provider_deployment.py currently selects a static delivery binding,
+   freezes its API credential/CA and copies its API resolver. Replace selection
+   with existing provider-owned API configuration plus the two SDK grants. Keep
+   client identity, trust and secret capture, but no outbox registration or
+   per-binding router configuration. Retain interpreter/store DNS inputs when
+   their independently owned routes require them.
+3. tools/compose_deployment.sh currently obtains binding file paths and builds
+   private route-api directories. Adapt its maintained install inputs to the new
+   SDK contract and stop creating that API route. Preserve image admission and
+   generation/worker lifetime ownership. The old route is a host bind directory:
+   down and retire it using its old owning recipe before install's automatic
+   generation cleanup discards the evidence. This is resource retirement, not an
+   old-configuration continuity requirement.
+4. nmrnet_provider/config.py currently constructs DeliveryEndpoint from identity
+   and a per-provider socket; runtime.py and service.py use DeliveryClient. Adapt
+   their existing configuration and terminal-handoff boundary to the new SDK.
+   Ensure every terminal path carries admitted API settings and credential/trust
+   material to the outbox, with no extra provider-side publication registry.
+   Preserve existing durable acceptance, retry, shutdown and effect-certainty
+   behavior. Replace pending-dependent admission using the API filter and bounded
+   live owner above. Do not broaden signing material to scientific workers.
+5. Convert maintained real-API staging/readback in tools/provider_api_qualification.sh
+   and tests/integration/provider_runtime, including independently networked client
+   paths, to the shared API grant. Preserve original readback identity and do not
+   resubmit uncertain Jobs. Interpreter/model and store routes remain separate.
+   Disposable authored-API fixtures retain test-owned routes and their cleanup;
+   adapt fixture inputs without adding a production private-proxy fallback.
+6. Adopt the issued SDK through existing requirements records, lock, acquisition
+   and image build workflows. Do not guess a release, copy SDK source, alter model
+   identity or treat a build as scientific or live-deployment proof.
 
-Recover components through their maintained workflows on the shared socket.
-Do not restore an older durable queue, overlap queue owners, infer the outcome
-of an interrupted request or recreate private fallback proxies. Keep existing
-effect uncertainty; interruption does not change request or queue semantics.
+Tier 1 rollout and checks
+-------------------------
 
-Alternatives and reasons
---------------------------
+Implement the provider seam and use the affected existing Compose and provider
+lifecycle checks. Check both external mounts/groups, retained native and scientific
+grants, no private production API service, and self-contained handoff behavior
+through the SDK's maintained tests. Cover a lost acknowledgement and retained
+publication material through the existing owners; do not add a new topology or
+stress framework. Actual SDK wire/secret handling needs source review once issued.
 
-Borrow a delivery-owned private proxy: rejected. Its lifetime and owner-only
-permissions couple provider API calls to delivery replacement. A host-owned group
-socket separates both services without sharing credentials.
+Bring up the host proxy and outbox, use an existing signed API check, then replace
+ready providers through maintained down/install/up paths. Retirement of NMRNet's
+old bind directory must precede install pruning its ownership recipe. Delivery
+may be interrupted and old config overwritten; an empty queue is not required.
+The shared owner converts actual old queued items with their original identity
+and signing inputs. Missing inputs leave affected work retained and reported,
+not discarded or retargeted. Resolve observed integration failures at their owner.
 
-Replace provider mount/group lists: rejected. It loses existing delivery intake,
-lifetime and scientific grants. Add the small client grant at composition time.
+Observe NMRNet's actual image, shared socket/group grants, signed API access,
+worker/scientific routes and outbox intake. Account for pending/held work and
+observe publication progress when available. Confirm normal provider lifecycle
+leaves both host services and their storage alone. The shared owner verifies all
+four providers, the outbox and retirement of old private API/intake resources.
 
-Keep API network settings in every frozen generation: rejected. That duplicates
-host authority and lets provider replacement appear to change the shared router.
-Capture only client grant, API identity and trust; scientific routes stay local.
+Later work and alternatives
+---------------------------
 
-Make the provider host-networked or run it as root: rejected. Neither is needed
-for a Unix socket grant, and both bypass current isolation. Fix actual group,
-mount or trust faults without world-writable sockets or disabled TLS.
+Client help/status and small regressions for observed faults follow the first
+joint deployment. Existing NMRNet follow-ups remain in
+docs/notes/022_shared_delivery_deferred_20261024.txt.
+Later provider changes use the running proxy and its live operator controls.
+Multiple-API orchestration, dynamic registration, per-provider proxies and new
+migration/load frameworks are outside this work unless a concrete need arises.
 
-Introduce rolling-update orchestration, discovery or a route registry now:
-rejected. The current finite lifecycle can execute the transport cutover; repair
-demonstrated blockers narrowly. A second control plane adds maintenance without
-helping the agreed first deployment.
-
-Input replacement and owned retirement
-----------------------------------------
-
-Replace definitions through maintained configuration/provisioning; separate old
-and new files and matching old-image recovery selections are not prerequisites.
-The shared owner exports delivery's all-bindings client document and replaces its
-publisher on the retained queue. NMRNet uses only its selected export. Original
-binding identities, intake grants, signers and queued command bytes retain their
-meaning even when delivery is interrupted with pending work.
-
-Keep only the old recipe evidence needed to retire owned resources correctly.
-NMRNet down loads its retained Compose recipe without reparsing DELIVERY_BINDINGS.
-Use it to remove the old containers and identify the obsolete private API
-directory; finish that scoped retirement before install prunes unused bundles.
-This is a cleanup dependency, not a requirement to keep old configuration usable
-or maintain an old runtime. Keep down/status and retirement usable from the
-upgraded main checkout through retained Compose/Docker facts, without an old SDK
-parsing the new definition. Do not add a compatibility reader or fake borrower.
-
-Bring up the host proxy, check a real signed client, convert delivery and ready
-providers through their maintained paths, and retire obsolete API resources.
-Service interruption and configuration replacement are accepted during this
-sequence; neither an empty queue nor uninterrupted publisher service is a gate.
-Stop the old queue owner before starting its replacement, using the existing
-delivery lifecycle. A concrete settlement or cleanup failure is repaired narrowly
-at its owning command. Each provider keeps its own lifecycle; readiness of all
-other providers is not a prerequisite for NMRNet's conversion.
-
-Tier 2 and excluded projects
--------------------------------
-
-NMRNet follow-ups remain in docs/notes/022_shared_delivery_deferred_20261024.txt,
-under their existing owners and triggers. In this refactor, improve client
-status/help, simplify client code exposed by integration and add regressions for
-demonstrated faults after Tier 1. NMRNet owner revisits those when changing the
-affected client/lifecycle path. These improvements must use the deployed proxy
-contract and capacity, without a shared proxy operation. Recheck latest owning
-status before treating an older deferral as open; do not duplicate historical
-incidents or private cleanup inventories here.
-
-Tier 3 excludes multiple APIs, dynamic registration, provider attribution or
-fairness in the encrypted listener, a new configuration model, migration framework,
-full-topology harness, exhaustive stress/chaos campaigns and independent science
-qualification. None is a promised continuation. An observed correctness failure
-belongs in Tier 1 even when broader work in that category is excluded.
-
-Cross-provider findings
---------------------
-
-Magnet notes/048_shared_api_proxy_adoption_20261030.txt distinguishes real-API
-candidate validation from authored-API fixtures. NMRNet likewise converts its
-maintained real-API clients while preserving independently owned fixture routes.
-Its current proxy storage is a host bind directory and retirement is bundle-only;
-Magnet's volume-checker assumptions do not apply to that directory.
-
-NMRPeak notes/010_shared_api_proxy_adoption_20261030.txt identifies implicit volume
-creation by one-off docker run clients, including mounts with nocopy. NMRNet's
-one-off launchers therefore resolve the exact volume name and check existence.
-
-SECS notes/010_shared_api_proxy_adoption_20261030.txt identifies the old-service
-inventory trap. NMRNet retires its old project using the retained original recipe
-before installing the new service set. Inspection against only the new plan
-cannot establish ownership of removed roles. Scientific/model routes remain
-independently owned in every provider.
-
-NMRNet's freezer already selects by name through the SDK and needs API/delivery
-facts rather than host routing fields. The selected client TOML fits that existing
-boundary; the private rendering/resolver capture uses of binding.route disappear.
-Keep fixture route inputs explicit at their test-owned boundary rather than
-restoring production route fields to client captures. The four-field client grant
-and raw-TOML capture remain separate interfaces. Compatibility must be checked
-against the issued SDK during implementation; source review alone cannot prove it.
+Sharing an old delivery-owned proxy would couple direct API calls to outbox
+lifetime. Running proxy and outbox in one process has the same failure-domain
+problem. Static delivery bindings and dedicated intake sockets require operator
+edits when providers join or leave and leave publication authority outside the
+accepted item. The two independent shared services and self-contained handoff
+address those problems while keeping scientific routes and client TLS independent.
