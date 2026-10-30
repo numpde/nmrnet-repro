@@ -417,7 +417,7 @@ targets are excluded from offline test aggregates:</p>
 <p>To check an already installed deployment, use
 <code>make provider/qualify/api/existing-pasted</code> with explicit
 <code>DEPLOYMENT</code>, <code>PROJECT_REF</code>, <code>USER_ID</code>,
-<code>CLIENT_CREDENTIAL_DIRECTORY</code>, <code>CA_FILE</code>, <code>SHARED_SETTINGS</code>,
+<code>CLIENT_CREDENTIAL_DIRECTORY</code>, <code>CA_FILE</code>,
 <code>SHARED_RUNTIME_IMAGE</code>, <code>OUTPUT</code>, <code>API_CLIENT_IMAGE</code> and
 <code>RETAINED_RESULT</code>. The client directory must contain the entitled user's
 <code>registration.json</code> and <code>signing.private.json</code>; the provider key
@@ -437,9 +437,10 @@ Failed or uncertain submissions are retained and never resubmitted automatically
 <code>JOB_RECEIPT=/absolute/path/to/original/client/created.json</code> and
 <code>JOB_IDENTITY=/absolute/path/to/original/source/identity.json</code> to the same
 <code>existing-pasted</code> target, with a fresh <code>OUTPUT</code> and the original
-client, project, network and oracle selectors. <code>DEPLOYMENT</code> is unnecessary
-in this mode. Expected execution comes from that original capture, so readback
-still works after redeployment or producer shutdown. It performs GET requests for
+client, project, network and oracle selectors. <code>DEPLOYMENT</code> still selects
+the local shared proxy grant settings in this mode. Expected execution comes from
+that original capture, so readback still works after redeployment or producer shutdown.
+  It performs GET requests for
 that original Job only; it does not create, select or open another Job, or repeat
 prediction. The received result cannot supply its own expected image identity.</p>
 <ul>
@@ -477,10 +478,10 @@ prediction. The received result cannot supply its own expected image identity.</
   the separately staged real-API targets. API client requests use the shared proxy.</li>
 <li><code>API_CLIENT_IMAGE</code>: an immutable local API runtime image ID containing the
   API-owned credential validator/signing example. No implicit pull or installation.</li>
-<li><code>SHARED_SETTINGS</code> and <code>SHARED_RUNTIME_IMAGE</code>: for qualification,
-  <code>SHARED_SETTINGS</code> selects this checkout's
-  <code>config/deployments/&lt;name&gt;/deployment.toml</code>, which supplies the shared
-  project and socket group. <code>SHARED_RUNTIME_IMAGE</code> is the immutable shared
+<li><code>DEPLOYMENT</code> and <code>SHARED_RUNTIME_IMAGE</code>: qualification selects
+  <code>config/deployments/&lt;name&gt;/deployment.toml</code> using the existing named
+  deployment selector. The file supplies the shared project and socket group.
+  <code>SHARED_RUNTIME_IMAGE</code> is the immutable shared
   runtime image. The client borrows the existing proxy socket read-only and checks
   that its exact volume exists first.
   Staged targets also require the <code>WHEELHOUSE</code> containing the pinned core archive.</li>

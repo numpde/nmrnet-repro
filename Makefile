@@ -201,7 +201,6 @@ unexport LOG_LEVEL
 unexport DEPLOYMENT
 unexport SHARED_SETTINGS SHARED_RUNTIME_IMAGE PROVIDER_TOOLS
 override export NMRNET_PROVIDER_TOOLS_INPUT := $(if $(filter command line,$(origin PROVIDER_TOOLS)),$(value PROVIDER_TOOLS))
-override export NMRNET_SHARED_SETTINGS_INPUT := $(if $(filter command line,$(origin SHARED_SETTINGS)),$(value SHARED_SETTINGS))
 override export NMRNET_SHARED_RUNTIME_IMAGE_INPUT := $(if $(filter command line,$(origin SHARED_RUNTIME_IMAGE)),$(value SHARED_RUNTIME_IMAGE))
 override export NMRNET_DEPLOYMENT_INPUT := $(if $(filter command line,$(origin DEPLOYMENT)),$(value DEPLOYMENT))
 unexport UPLOAD_RECEIPT
@@ -284,13 +283,13 @@ help:
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
-		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.html for required selectors.' \
-		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job; paired JOB_RECEIPT=<created.json> JOB_IDENTITY=<original source/identity.json> instead reads the original Job only. Fresh OUTPUT required (opt-in).' \
-		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
-		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
-		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
-		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
-		'make provider/qualify/api/real-sdf-zip [UPLOAD_RECEIPT=...]  Opt in to one SDF ZIP Upload and API Job; an explicit original receipt resumes that reservation after storage reconciliation.' \
+		'make provider/qualify/api/pasted DEPLOYMENT=<name> Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.html for required selectors.' \
+		'make provider/qualify/api/existing-pasted DEPLOYMENT=<name> Submit one fixed Job; paired JOB_RECEIPT=<created.json> JOB_IDENTITY=<original source/identity.json> reads that Job only. DEPLOYMENT selects local shared grants in either mode. Fresh OUTPUT required (opt-in).' \
+		'make provider/qualify/api/real-pasted DEPLOYMENT=<name>  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
+		'make provider/qualify/api/real-smiles DEPLOYMENT=<name>  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
+		'make provider/qualify/api/real-smiles-multiple DEPLOYMENT=<name>  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
+		'make provider/qualify/api/real-upload DEPLOYMENT=<name>  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
+		'make provider/qualify/api/real-sdf-zip DEPLOYMENT=<name> [UPLOAD_RECEIPT=...]  Opt in to one SDF ZIP Upload and API Job; an explicit original receipt resumes that reservation after storage reconciliation.' \
 		'make provider/qualify/interpreter/ambiguity  Opt in to four selected-model ambiguity decisions; no API Jobs or scientific work.' \
 		'make provider/qualify/interpreter/formats  Opt in to three MOL/PDB/MOL2 argument choices; no API Jobs or structure parsing.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \

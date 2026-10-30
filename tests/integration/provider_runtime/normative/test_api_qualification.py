@@ -315,7 +315,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 local_settings.parent.mkdir(parents=True)
                 local_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
                 environment = dict(PATH=os.environ["PATH"], TEST_RECORDS=str(records),
-                    TEST_PYTHON=sys.executable, NMRNET_SHARED_SETTINGS_INPUT=str(local_settings),
+                    TEST_PYTHON=sys.executable,
                     NMRNET_SHARED_RUNTIME_IMAGE_INPUT="sha256:" + "a" * 64,
                     TEST_QUERY_FAILED=str(scenario == "query-failure").lower(), NMRNET_DEPLOYMENT_INPUT="original",
                     TEST_VOLUME_MISSING=str(scenario == "missing-volume").lower(),
@@ -595,7 +595,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 selectors = {
                     "PROVIDER_TOOLS": str(shared),
                     "SHARED_RUNTIME_IMAGE": image,
-                    "SHARED_SETTINGS": str(local_settings),
+                    "DEPLOYMENT": "localhost",
                     "WHEELHOUSE": str(root / "wheelhouse"),
                     "API_ORIGIN": "https://nmr.localhost:10443",
                     "TOPOLOGY": "dev-local",
@@ -669,6 +669,10 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertLess(events.index("signal-peer"), events.index("peer"))
                 stage_argv = (records / "stage.argv").read_text().split("\0")[:-1]
                 self.assertIn("--deployment", stage_argv)
+                self.assertEqual(
+                    stage_argv[stage_argv.index("--deployment-settings") + 1],
+                    "/input/deployment.toml",
+                )
                 self.assertEqual(stage_argv[stage_argv.index("--api-interface") + 1], "lo")
                 self.assertEqual(stage_argv[stage_argv.index("--api-address") + 1], "127.0.0.1")
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
@@ -695,9 +699,14 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertTrue(all(line.endswith("|true") for line in creates))
                 self.assertIn(f"stage|none|{image}|true", creates)
                 self.assertIn(f"client|none|{image}|true", creates)
+                deployment_settings = repository / "config/deployments/localhost/deployment.toml"
+                grant_mount = f"type=bind,src={deployment_settings},dst=/input/deployment.toml,readonly"
+                grant_inputs = (records / "grants.grants").read_text().split("\0")[:-1]
+                self.assertIn(grant_mount, grant_inputs)
                 waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
                 self.assertIn(int(waits["client"]), (clocks[2], clocks[2] - 1))
                 stage_grants = (records / "stage.grants").read_text().split("\0")[:-1]
+                self.assertIn(grant_mount, stage_grants)
                 self.assertIn(f"type=bind,src={output}/deployment,dst={output}/deployment", stage_grants)
                 self.assertFalse(any(grant.startswith(f"type=bind,src={output},") for grant in stage_grants))
                 client_grants = (records / "client.grants").read_text().split("\0")[:-1]

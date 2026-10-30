@@ -24,15 +24,23 @@ api_witness_wait() {
     provider_host_refuse 'Qualification helper exceeded its host deadline; retain requests and receipts, with no automatic retry.'
 }
 
+api_witness_select_deployment_settings() {
+    local deployment=${NMRNET_DEPLOYMENT_INPUT-}
+    [[ $deployment =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] \
+        || { provider_host_refuse 'Select a named local deployment.'; return 2; }
+    api_witness_deployment_settings=$repository_root/config/deployments/$deployment/deployment.toml
+    provider_host_path "$api_witness_deployment_settings" || return $?
+    [[ -f $api_witness_deployment_settings && ! -L $api_witness_deployment_settings ]] \
+        || { provider_host_refuse 'The selected local deployment.toml is unavailable.'; return 2; }
+}
+
 api_witness_shared_grant() {
-    local settings=$NMRNET_SHARED_SETTINGS_INPUT image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
+    local deployment_settings=$1 image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
     local directory=$provider_host_root/components/grants projection parent
-    provider_host_path "$settings" || return $?
-    [[ $settings == "$repository_root"/config/deployments/*/deployment.toml \
-        && -f $settings && ! -L $settings && $image =~ ^sha256:[0-9a-f]{64}$ ]] \
-        || { provider_host_refuse 'Select a local deployment.toml and an immutable shared runtime image.'; return 2; }
+    [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || { provider_host_refuse 'Select an immutable shared runtime image.'; return 2; }
     local -a grants=(--env PROVIDER_CORE_IN_CONTAINER=1
-        --mount "type=bind,src=$settings,dst=/input/deployment.toml,readonly")
+        --mount "type=bind,src=$deployment_settings,dst=/input/deployment.toml,readonly")
     local -a argv=(/opt/provider-core/environment/bin/python -I -B -c '
 import json
 from pathlib import Path
@@ -225,16 +233,14 @@ api_witness_admission_finish() {
 
 api_witness_existing_pasted() {
     local selector alias value path identity revision
-    local -a required=(PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT SHARED_SETTINGS SHARED_RUNTIME_IMAGE)
+    local -a required=(PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT DEPLOYMENT SHARED_RUNTIME_IMAGE)
     if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} || -n ${NMRNET_JOB_IDENTITY_INPUT-} ]]; then
         required+=(JOB_RECEIPT JOB_IDENTITY)
-    else
-        required+=(DEPLOYMENT)
     fi
     for selector in "${required[@]}"; do
         alias=NMRNET_${selector}_INPUT value=
         value=${!alias-}
-        [[ -n $value ]] || { printf 'Missing explicit command-line selector: %s. Fresh submission needs DEPLOYMENT; readback needs paired JOB_RECEIPT and JOB_IDENTITY. No API request was sent.\n' "$selector" >&2; return 2; }
+        [[ -n $value ]] || { printf 'Missing explicit command-line selector: %s. DEPLOYMENT selects local shared grants; readback also needs paired JOB_RECEIPT and JOB_IDENTITY. No API request was sent.\n' "$selector" >&2; return 2; }
     done
     [[ $(id -u) != 0 && $(id -g) != 0 ]] || return 2
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -244,6 +250,8 @@ api_witness_existing_pasted() {
     # refusals must still reach the operator. The component owner replaces this
     # recipient when it adopts the first cleanup obligations below.
     trap api_witness_admission_finish EXIT
+    local api_witness_deployment_settings
+    api_witness_select_deployment_settings || return $?
     provider_host_path "$provider_host_root" || return $?
     [[ ! -e $provider_host_root && ! -L $provider_host_root ]] \
         || { provider_host_refuse 'Use fresh client output; preserve any uncertain original Job and do not resubmit it.'; return 2; }
@@ -295,7 +303,7 @@ api_witness_existing_pasted() {
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; return 2; }
-    api_witness_shared_grant || return $?
+    api_witness_shared_grant "$api_witness_deployment_settings" || return $?
     local source=$provider_host_root/sources
     local -a provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$source/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
@@ -339,7 +347,7 @@ api_witness_main() {
     local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_address= external_interface= resolvers=
     local -a provider_host_argv=()
     local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF PROVIDER_CREDENTIAL CA_FILE ADDRESS INTERFACE OUTPUT RETAINED_RESULT
-        USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE SHARED_SETTINGS SHARED_RUNTIME_IMAGE)
+        USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE DEPLOYMENT SHARED_RUNTIME_IMAGE)
     if [[ $mode == scripted-pasted ]]; then
         required+=(LOCAL_NETWORK LOCAL_INTERFACE)
         readback_seconds=180 process_seconds=240 host_seconds=260 interpreter_route=local
@@ -364,6 +372,9 @@ api_witness_main() {
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     source "$repository_root/tools/provider.sh"
     provider_host_diagnostic= provider_host_root=$NMRNET_OUTPUT_INPUT
+    trap api_witness_admission_finish EXIT
+    local api_witness_deployment_settings
+    api_witness_select_deployment_settings || return $?
     provider_host_path "$provider_host_root" || return $?
     provider_host_disjoint "$provider_host_root" "$repository_root" || return $?
     local -a input_paths=("$NMRNET_PROVIDER_CREDENTIAL_INPUT" "$NMRNET_CA_FILE_INPUT" "$NMRNET_RETAINED_RESULT_INPUT"
@@ -460,7 +471,7 @@ api_witness_main() {
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
     docker_client_prepare run || return $?
-    api_witness_shared_grant || return $?
+    api_witness_shared_grant "$api_witness_deployment_settings" || return $?
     local controller_image prediction_image network_id network_name internal host deadline interpreter_key interpreter_ca
     IFS= read -r controller_image < "$repository_root/.work/provider/image-id"
     IFS= read -r prediction_image < "$repository_root/.work/inference/image-id"
@@ -490,7 +501,7 @@ api_witness_main() {
     fi
     local -a stage_grants=("${support_grants[@]}" --env PYTHONPATH=/fixture
         --mount "type=bind,src=$qualification_source_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
-        --mount "type=bind,src=$NMRNET_SHARED_SETTINGS_INPUT,dst=/input/deployment.toml,readonly"
+        --mount "type=bind,src=$api_witness_deployment_settings,dst=/input/deployment.toml,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly")
     if [[ $mode != scripted-pasted ]]; then
@@ -517,7 +528,7 @@ api_witness_main() {
     provider_host_argv=("${support_argv[@]}" --script /fixture/stage.py -- \
         --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT" \
         --prediction-image-id "$prediction_image" \
-        --deployment --shared-settings /input/deployment.toml --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
+        --deployment --deployment-settings /input/deployment.toml --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
         --interpreter-route "$interpreter_route")
     if [[ $mode == scripted-pasted ]]; then
         provider_host_argv+=(--interpreter-interface "$local_interface" --interpreter-network "$network_id" --interpreter-address "$local_address")

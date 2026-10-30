@@ -64,7 +64,7 @@ def inspect_interpreter(path, output):
 
 
 def stage_deployment(root, *, api_interface, api_address, interpreter_route,
-                     interpreter_interface, interpreter_network, interpreter_address, resolvers, shared_settings):
+                     interpreter_interface, interpreter_network, interpreter_address, resolvers, deployment_settings):
     """Translate this admitted fixture into the production named-deployment inputs.
 
     Keep the original API-issued key bytes. Only the
@@ -102,7 +102,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
     for name in ("credential_file", "ca_file"):
         if name in api:
             api[name] = str(secrets / Path(api[name]).name)
-    grants = shared_grants(shared_settings)
+    grants = shared_grants(deployment_settings)
     write_deployment_inputs(
         destination, document, api=api, api_route=mapped,
         routes={"interpreter": interpreter, "store": mapped}, project=grants.project, gid=grants.gid,
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     parser.add_argument("--topology")
     parser.add_argument("--prediction-image-id")
     parser.add_argument("--deployment", action="store_true")
-    parser.add_argument("--shared-settings", type=Path)
+    parser.add_argument("--deployment-settings", type=Path)
     parser.add_argument("--api-interface")
     parser.add_argument("--api-address")
     parser.add_argument("--interpreter-route", choices=("local", "external"))
@@ -245,5 +245,5 @@ if __name__ == "__main__":
                 args.root, api_interface=args.api_interface, api_address=args.api_address,
                 interpreter_route=args.interpreter_route, interpreter_interface=args.interpreter_interface,
                 interpreter_network=args.interpreter_network, interpreter_address=args.interpreter_address,
-                resolvers=args.resolver, shared_settings=args.shared_settings,
+                resolvers=args.resolver, deployment_settings=args.deployment_settings,
             )
