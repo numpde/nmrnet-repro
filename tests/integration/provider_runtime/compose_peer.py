@@ -250,8 +250,10 @@ async def serve(root, seconds, case, delivery_project):
             calls["start"] += 1
             if calls["start"] > expected_jobs:
                 raise AssertionError("The connected witness must not create another Attempt")
-        if path == "/provider/v1/jobs" and (case == "recovery" or (peer.result is not None and case != "successive")):
-            # Keep discovery signed even after withdrawing the completed fixture.
+        if path == "/provider/v1/jobs" and (
+            case == "recovery" or calls["start"] > calls["complete"] or calls["complete"] >= expected_jobs
+        ):
+            # A claimed Job is not offered again while its result is published.
             from tests.fakes.api_tls import verify_signed_request
 
             verify_signed_request(request, body, origin=peer.peer.origin, key=peer.config.api.identity.private_key)
