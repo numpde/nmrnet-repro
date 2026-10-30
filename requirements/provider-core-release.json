@@ -25,10 +25,10 @@
     }
   },
   "files": {
-    "provider_core-0.5.3-install.lock": "7b479bbd79cdbe66c05d7665eafc8d77755d30d532a58f49ae3b10b7596c1a81",
-    "provider_core-0.5.3-native-install.lock": "0117ccd68375d7751a5c771984f6d1c9d187ef73928f2eeb37b9c09c8a041a48",
-    "provider_core-0.5.3-py3-none-any.whl": "51dcc1506bcd659303d779e7ee90f5a679866c0ada36cb5921b766b72b4fd6c1",
-    "provider_core-0.5.3.tar.gz": "3ae239b518cb72e15f7ef52041369c257007fc2abcfbd08c56569b393bee22f4"
+    "provider_core-0.5.4-install.lock": "4875571149e3f0196bb8785b67d259c452e9f6ec8931c8307b45bf351ee486e8",
+    "provider_core-0.5.4-native-install.lock": "657bb2ca5ec2646e15359e3086478de11718bbf626247dc9108179801d10670f",
+    "provider_core-0.5.4-py3-none-any.whl": "7a3d8d6b44e39a3fac84d6abecb0a08f84a4c881d15f8d5d2e6dd9e36472beeb",
+    "provider_core-0.5.4.tar.gz": "8f647967d119dfcaafc64596e2ad3dd0b73712dc8bfe540e8ada0809f6e8da87"
   },
   "source_files": {
     "MANIFEST.in": {
@@ -43,7 +43,7 @@
     },
     "pyproject.toml": {
       "mode": 420,
-      "sha256": "f0f60d6da79b195f4226a60f0273afb2f232578f8de9721fd3106fd39f194136",
+      "sha256": "f9f5c88a878ae01ee04ed8965ec0ed4e9d22c71d0e0ee30ec63a942e4422a4aa",
       "size": 588
     },
     "src/provider_core/__init__.py": {
@@ -168,8 +168,8 @@
     },
     "src/provider_core/delivery_store.py": {
       "mode": 420,
-      "sha256": "62d53705cdd32fc73ae16b94e351f4e2ade9ca0d2e34e4ee8f4fcfd756a96e5a",
-      "size": 21992
+      "sha256": "01d29f432df843908988be6902a44faefb7c1f2a4a94ff7694d2b944a7d98beb",
+      "size": 23099
     },
     "src/provider_core/delivery_worker.py": {
       "mode": 420,
@@ -198,8 +198,8 @@
     },
     "src/provider_core/execution.py": {
       "mode": 420,
-      "sha256": "36d01898afa0b0a4daedebda70a9eb389dffad9c49d00bbd513cc1291794c063",
-      "size": 60155
+      "sha256": "3254c493f22008a28fceb71d261a9e5262c5d4e5097be0e4b5cd68cf8712a392",
+      "size": 60279
     },
     "src/provider_core/failure_projection.py": {
       "mode": 420,
@@ -243,8 +243,8 @@
     },
     "src/provider_core/process_status.py": {
       "mode": 420,
-      "sha256": "f7fe29656ee541cd922ca4b4cb346e2b662f53f57a50ea8b33eabb409bbceca5",
-      "size": 4802
+      "sha256": "ff9af6b12c82a50400db51c84dab7453243ce4cc20f18b178f18983bec0ad430",
+      "size": 6082
     },
     "src/provider_core/producer_checkpoint.py": {
       "mode": 420,
@@ -298,8 +298,8 @@
     },
     "src/provider_core/shared_delivery_service.py": {
       "mode": 420,
-      "sha256": "6c13c09f318e91721a12d5e7de5140b5ce1bf6616757b909d7f5382d2f44332c",
-      "size": 9241
+      "sha256": "20d1e953326217653abb2859735a055c8dfbf0179a1676e9f5a1b08b0d535f53",
+      "size": 10857
     },
     "src/provider_core/shared_delivery_worker.py": {
       "mode": 420,
@@ -776,10 +776,15 @@
       "sha256": "dc683f453c5c28a43b571c3512ab187ba7520b654a4873b4a8c230021441551e",
       "size": 17233
     },
+    "tests/integration/delivery/normative/test_resilience_proxy_malformed.py": {
+      "mode": 420,
+      "sha256": "c4006815205de9ae6d9e35c9443b2aa85e81ea957ff4b4cb51e3d0b45f399027",
+      "size": 1674
+    },
     "tests/integration/delivery/normative/test_shared_delivery_ipc.py": {
       "mode": 420,
-      "sha256": "2b3d402da955014540ea952560088bac96a927ea19bd12c95efeebbb0717e17f",
-      "size": 3912
+      "sha256": "897b3ba47f9490a61e84903270ead6f3cb6c8002084171820b44ea1eaba533e5",
+      "size": 5725
     },
     "tests/integration/delivery/normative/test_shared_delivery_service.py": {
       "mode": 420,
@@ -995,6 +1000,21 @@
       "mode": 420,
       "sha256": "4ae5c356a5401f6dcdd9a2e535c315b2999e356d8f02282a68f8bfcc556848a2",
       "size": 2819
+    },
+    "tests/resilience_proposals/test_resilience_authorization_recovery.py": {
+      "mode": 420,
+      "sha256": "349f87c8baa58c0201b0144f27068f9a4ac08648fa06a843eceb9e1b25cd121d",
+      "size": 7808
+    },
+    "tests/resilience_proposals/test_resilience_binding_isolation.py": {
+      "mode": 420,
+      "sha256": "ae9ab10789513f0e24f01c4501b25d20105ef1541fc9d078c6f3d9f74226b421",
+      "size": 7996
+    },
+    "tests/resilience_proposals/test_resilience_proxy_capacity.py": {
+      "mode": 420,
+      "sha256": "e09c5ec57ad092733a54590a6fb67df20ec088c9726fae66e7554de777eefaed",
+      "size": 5127
     },
     "tests/run_suite.py": {
       "mode": 420,
@@ -1296,6 +1316,11 @@
       "sha256": "620a7bee1769626ee8d6adef5f6eefbe193983384e175f73b62f00495bbe4b69",
       "size": 21034
     },
+    "tests/unit/normative/test_condition_retry_after.py": {
+      "mode": 420,
+      "sha256": "5a4b75b7a20cda439ef2acfcee03e6b2932482280412c3e96958e02d036f6cac",
+      "size": 4872
+    },
     "tests/unit/normative/test_controller.py": {
       "mode": 420,
       "sha256": "ffe294ab155cf9921cd4aa2a8d4fcd9b7998d5009c3aa4f1b32c08f6992c5e33",
@@ -1355,6 +1380,11 @@
       "mode": 420,
       "sha256": "72adc14a25d251823ac15919024d08c0993eb21a166fe1d817f5d8da395f97a5",
       "size": 2968
+    },
+    "tests/unit/normative/test_delivery_operator_status.py": {
+      "mode": 420,
+      "sha256": "17018555c308cf32b47039a8b85d998b76383707793bdd5fc020fa3719fdab2c",
+      "size": 5249
     },
     "tests/unit/normative/test_delivery_store.py": {
       "mode": 420,
@@ -1468,8 +1498,8 @@
     },
     "tests/unit/normative/test_process_status.py": {
       "mode": 420,
-      "sha256": "c8589e766fc7e248a6482b8d63ddcf5ea263c30cdb55fac1ef85ea076a9ed224",
-      "size": 3223
+      "sha256": "ef981ef9480d523b0c05fa69e4655cdcee01336ce8f0835e5ac2de7bbc79cdbf",
+      "size": 4660
     },
     "tests/unit/normative/test_producer_checkpoint.py": {
       "mode": 420,
@@ -1587,5 +1617,5 @@
       "size": 5770
     }
   },
-  "source_revision": "c5a44cfeffd642d20a9945692845600ff05c8c99"
+  "source_revision": "a0b130ea15c2cfeeb82c840887e7ad0d1884d26e"
 }
