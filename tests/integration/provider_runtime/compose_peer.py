@@ -208,6 +208,7 @@ async def serve(root, seconds, case, delivery_project):
     successive_inputs = tuple(verify_job_input(response(instructions, job_ref=job),
         feed=replace(facts(instructions), job_ref=job)) for job in ("job:compose-first", "job:compose-second")) if case == "successive" else ()
     calls = {"model": 0, "start": 0, "complete": 0, "hello": 0, "download": 0}
+    discoveries = 0
     oracle_bytes = Path("/fixture/expected.json").read_bytes()
     expected = json.loads(oracle_bytes, parse_float=Decimal)["geometries"]["chloromethane"]
 
@@ -242,6 +243,7 @@ async def serve(root, seconds, case, delivery_project):
         return peer.ports.source
 
     async def api_reply(request, body):
+        nonlocal discoveries
         require_api_credentials(request)
         path = urlsplit(request.split(b"\r\n", 1)[0].decode().split()[1]).path
         if path.endswith("/hello"):
@@ -257,6 +259,9 @@ async def serve(root, seconds, case, delivery_project):
             from tests.fakes.api_tls import verify_signed_request
 
             verify_signed_request(request, body, origin=peer.peer.origin, key=peer.config.api.identity.private_key)
+            if case == "recovery":
+                discoveries += 1
+                publish("discoveries.json", {"count": discoveries})
             empty = page()
             empty.update(analysis_kind_ref=ANALYSIS_KIND_REF, jobs=[], next_cursor=None)
             return json.dumps(empty).encode()

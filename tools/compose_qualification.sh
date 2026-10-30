@@ -206,25 +206,8 @@ compose_witness_reader_crash() {
     compose_witness_wait "$peer_data/reader-crash-receipt.json" "$budget"
 }
 
-compose_witness_notice() {
-    local identifier=$1 event=$2 since=$3 logs deadline=$((SECONDS + 30))
-    local needle="\"event\":\"$event\""
-    while (( SECONDS < deadline )); do
-        compose_witness_capture 'read bounded qualification recovery notices' 10 bash -c \
-            'exec "$@" 2>&1' bash "${engine[@]}" logs --since "$since" --tail 80 "$identifier" || return $?
-        logs=$qualification_observation
-        if [[ $logs == *"$needle"* ]]; then
-            printf '%s\n' "$logs"
-            return 0
-        fi
-        sleep 0.1
-    done
-    printf 'Qualification did not observe %s within its diagnostic window; inspect Docker logs.\n' "$event" >&2
-    return 2
-}
-
 compose_witness_relay_restart() {
-    local identifier before after queue_before queue_after since
+    local identifier before after queue_before queue_after discovery_before discovery_after deadline
     compose_witness_role provider || return $?
     identifier=$qualification_role
     compose_witness_capture 'observe idle provider before relay restart' 10 "${engine[@]}" inspect \
@@ -234,12 +217,18 @@ compose_witness_relay_restart() {
     compose_witness_capture 'observe private queue file before restart' 10 "${engine[@]}" exec \
         "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3 || return $?
     queue_before=$qualification_observation
-    since=$(date -u +'%Y-%m-%dT%H:%M:%S.%NZ')
     qualification_delivery_down || return $?
     qualification_delivery_empty || return $?
-    compose_witness_notice "$identifier" api_delivery_retry "$since" || return $?
+    compose_witness_wait "$peer_data/discoveries.json" 30 || return $?
+    discovery_before=$(jq -er '.count | select(type == "number" and . >= 1 and floor == .)' "$peer_data/discoveries.json") || return $?
+    deadline=$((SECONDS + 30))
+    while :; do
+        discovery_after=$(jq -er '.count | select(type == "number" and . >= 1 and floor == .)' "$peer_data/discoveries.json") || return $?
+        (( discovery_after > discovery_before )) && break
+        (( SECONDS < deadline )) || { printf '%s\n' 'Signed API discovery did not continue while the outbox was stopped.' >&2; return 2; }
+        sleep 0.1
+    done
     qualification_delivery_up || return $?
-    compose_witness_notice "$identifier" api_delivery_recovered "$since" || return $?
     compose_witness_capture 'observe idle provider after relay restart' 10 "${engine[@]}" inspect \
         --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier" || return $?
     after=$qualification_observation
@@ -255,7 +244,7 @@ compose_witness_relay_restart() {
         printf '%s\n' 'The private queue file identity changed across delivery restart.' >&2
         return 2
     }
-    printf '%s\n' 'Private relay restarted with an empty retained queue; the idle provider process stayed unchanged.'
+    printf '%s\n' 'Signed API discovery continued while the idle outbox was stopped; the queue file and provider process identities stayed unchanged across restart.'
 }
 
 compose_witness_finish() {
