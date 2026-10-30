@@ -392,9 +392,9 @@ stop shared delivery; this affects all providers on this Docker host. Listing an
 discard run offline under the queue's existing exclusive lock and refuse while
 the daemon owns it. They never stop or restart the service automatically.</p>
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;
-make -C /path/to/nmr-provider-tools delivery/deployment/held DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
-make -C /path/to/nmr-provider-tools delivery/deployment/discard DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
-make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/bindings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
+make -C /path/to/nmr-provider-tools delivery/deployment/held DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/discard DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
 <p>The list shows only the selected provider's metadata and reason, without
 payload bodies or a dump file. Discard requires that exact provider, Attempt and
 digest and removes only a held row; pending rows remain unchanged. It proves
@@ -722,9 +722,10 @@ exact-request replay policy, freshly signing the same body and retiring each
 original exchange before a permitted retry. Reviewed authentication/rate-limit
 responses remain in paced retry with fresh signatures; repeated refusals require
 credential, clock or permission investigation. Explicit environment/identity
-mismatches and unrecognized binding failures pause that binding; correct its
-definition or trust settings, then stop and start shared delivery. An item-specific
-conflict holds its request. These facts remain
+mismatches and unusable original publication inputs pause publication for that
+provider. Inspect the retained work and reconcile its original identity and trust;
+do not silently substitute another credential. An item-specific conflict holds
+its request. These facts remain
 visible in Docker logs, without repeating interpretation, geometry generation
 or prediction. The replay authority is the
 <a href="provider-core/fixtures.html">API contract fixture</a> and
