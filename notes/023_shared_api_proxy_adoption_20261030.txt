@@ -160,6 +160,13 @@ Concrete NMRNet changes
    their existing configuration and terminal-handoff boundary to the new SDK.
    Ensure every terminal path carries admitted API settings and credential/trust
    material to the outbox, with no extra provider-side publication registry.
+   ProviderConfig currently retains parsed signing identity and TLS context, not
+   the original credential/CA bytes and API fields needed by the handoff. Capture
+   publication material through the SDK from the same bounded startup reads used
+   for API admission; do not reconstruct an issued credential from a key object
+   or reread changing secret files for each result. Retain it privately and pass
+   it only to the delivery owner. The outbox must reconstruct and verify its own
+   signing/TLS client from the accepted material.
    Preserve existing durable acceptance, retry, shutdown and effect-certainty
    behavior. Replace pending-dependent admission using the API filter and bounded
    live owner above. Do not broaden signing material to scientific workers.
