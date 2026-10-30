@@ -15,6 +15,7 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -30,7 +31,7 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.startup_capture import _bind_path, _source_path
 from provider_core.response_json import ResponseRejected, read_document
 from provider_core.chat import ChatEndpoint
-from provider_core.shared_grants import shared_grants
+from provider_core.shared_grants import SharedGrants
 
 INPUT_ROOT = Path("/srv/nmrnet/input")
 
@@ -45,7 +46,7 @@ def _write(path, raw):
 
 def freeze_deployment(definition, settings, secrets, bundle, source_root, models,
                       *, source_names, deployment, checkout, uid, gid, prepared,
-                      shared_settings, shared_image_id, **identities):
+                      shared_image_id, **identities):
     """Freeze admitted inputs into a fresh generation for Compose normalization.
 
     No API/model request, store opening or worker allocation occurs. Failed
@@ -65,10 +66,17 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         local = tomllib.loads(local_raw.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise ConfigurationRejected("provider and deployment definitions must contain valid UTF-8 TOML.") from None
-    try:
-        grants = shared_grants(_bind_path(shared_settings))
-    except ValueError as failure:
-        raise ConfigurationRejected(f"Cannot admit shared socket grants: {failure}", cause=failure) from None
+    if not {"maximum_startup_bytes", "routes", "deployment"} <= set(local) or set(local) - {
+        "maximum_startup_bytes", "routes", "resolvers", "deployment"
+    }:
+        raise ConfigurationRejected("deployment.toml requires maximum_startup_bytes, routes and shared deployment grants; only external routing accepts resolvers.")
+    grant_input = local["deployment"]
+    project = grant_input.get("project") if type(grant_input) is dict else None
+    group_id = grant_input.get("gid") if type(grant_input) is dict else None
+    if (type(project) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,48}", project) is None
+            or type(group_id) is not int or not 0 < group_id <= 4294967294):
+        raise ConfigurationRejected("deployment.toml [deployment] requires the shared project name and nonzero socket group ID.")
+    grants = SharedGrants(project, group_id)
     if "delivery" not in document or type(document["delivery"]) is not dict:
         raise ConfigurationRejected("provider definition requires a delivery table with its IPC intake policy.")
     if "api" in document:
@@ -80,13 +88,9 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     except (ValueError, UnicodeError):
         raise ConfigurationRejected("provider API settings require valid UTF-8 TOML.") from None
     if {"socket_path", "socket_group_id"} & document["delivery"].keys():
-        raise ConfigurationRejected("delivery socket grants must come from the shared operator settings.")
+        raise ConfigurationRejected("delivery socket grants come from deployment.toml [deployment].")
     document["delivery"].update(socket_path=str(grants.outbox_socket), socket_group_id=grants.gid)
     raw = tomli_w.dumps(document).encode("utf-8")
-    if not {"maximum_startup_bytes", "routes"} <= set(local) or set(local) - {
-        "maximum_startup_bytes", "routes", "resolvers"
-    }:
-        raise ConfigurationRejected("deployment.toml requires maximum_startup_bytes and routes; only external routing accepts resolvers.")
     maximum = local["maximum_startup_bytes"]
     if type(maximum) is not int or maximum < 1:
         raise ConfigurationRejected("deployment maximum_startup_bytes must be a positive integer.")
@@ -275,7 +279,7 @@ def main(arguments=None):
     parser = argparse.ArgumentParser(description="Prepare deployment configuration and export public-client expectations offline.")
     operations = parser.add_subparsers(dest="operation", required=True)
     freeze = operations.add_parser("freeze", help="Freeze one deployment generation without starting services.")
-    for name in ("definition", "settings", "secrets", "bundle", "source-root", "models", "checkout", "prepared", "shared-settings"):
+    for name in ("definition", "settings", "secrets", "bundle", "source-root", "models", "checkout", "prepared"):
         freeze.add_argument("--" + name, type=Path, required=True)
     freeze.add_argument("--source", dest="source_names", action="append", required=True)
     freeze.add_argument("--deployment", required=True)

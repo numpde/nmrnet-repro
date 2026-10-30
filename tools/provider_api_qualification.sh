@@ -28,22 +28,16 @@ api_witness_shared_grant() {
     local settings=$NMRNET_SHARED_SETTINGS_INPUT image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
     local directory=$provider_host_root/components/grants projection parent
     provider_host_path "$settings" || return $?
-    [[ -f $settings && ! -L $settings && $image =~ ^sha256:[0-9a-f]{64}$ ]] \
-        || { provider_host_refuse 'Shared settings and the immutable shared runtime image are required.'; return 2; }
-    mkdir -m 700 -- "$provider_host_root/shared" || return $?
-    shared_settings_snapshot=$provider_host_root/shared/settings.toml
+    [[ $settings == "$repository_root"/config/deployments/*/deployment.toml \
+        && -f $settings && ! -L $settings && $image =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || { provider_host_refuse 'Select a local deployment.toml and an immutable shared runtime image.'; return 2; }
     local -a grants=(--env PROVIDER_CORE_IN_CONTAINER=1
-        --mount "type=bind,src=$settings,dst=/input/shared.toml,readonly"
-        --mount "type=bind,src=$provider_host_root/shared,dst=/output")
+        --mount "type=bind,src=$settings,dst=/input/deployment.toml,readonly")
     local -a argv=(/opt/provider-core/environment/bin/python -I -B -c '
 import json
 from pathlib import Path
 from provider_core.shared_grants import shared_grants
-from provider_core.startup_file import read_startup_file
-path = Path("/output/settings.toml")
-with path.open("xb") as stream:
-    stream.write(read_startup_file("/input/shared.toml", maximum_bytes=65536, label="shared settings"))
-print(json.dumps(shared_grants(path).compose(), sort_keys=True))')
+print(json.dumps(shared_grants(Path("/input/deployment.toml")).compose(), sort_keys=True))')
     provider_host_create grants none "$image" grants argv true || return $?
     api_witness_wait grants 30 || return $?
     provider_host_command projection "$directory" logs "${provider_host_ids[grants]}" || return $?
@@ -414,6 +408,7 @@ api_witness_main() {
             tests/integration/provider_runtime/stage_api_config.py
             tests/integration/provider_runtime/api_prediction.py
             config/provider.toml.example
+            config/deployment.toml.example
             tests/integration/provider_core/config_ports.py tests/integration/provider_runtime/binding_inputs.py
             "tests/fixtures/preparation/$case_fixture")
         if [[ $case_kind == sdf-zip ]]; then inputs+=(tests/fixtures/preparation/normative/butane_conformers.sdf); fi
@@ -430,7 +425,7 @@ api_witness_main() {
         "$mode" "$readback_seconds" "$process_seconds" "$host_seconds" > "$provider_host_root/qualification-profile.txt"
     if [[ $mode == real-sdf-zip ]]; then
         (cd -- "$qualification_source_root"; sha256sum -- "${inputs[@]}") > "$provider_host_root/qualification-sources.sha256"
-    else sha256sum -- "$repository_root/Makefile" "$repository_root/config/provider.toml.example" "$repository_root/tools/provider_api_qualification.sh" \
+    else sha256sum -- "$repository_root/Makefile" "$repository_root/config/provider.toml.example" "$repository_root/config/deployment.toml.example" "$repository_root/tools/provider_api_qualification.sh" \
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
         "$repository_root/tools/"{provider_deployment.sh,compose_deployment.sh,provider_deployment.py,operator_guidance.sh} \
@@ -453,9 +448,6 @@ api_witness_main() {
     qualification_shared_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
     source "$repository_root/tools/wheelhouse_path.sh"
     select_wheelhouse && require_wheelhouse_pool || return $?
-    local delivery_digest delivery_project
-    delivery_digest=$(printf '%s' "$provider_host_root" | sha256sum)
-    delivery_project=nmrnet-qualification-${delivery_digest:0:24}
     local -a support_argv=(/opt/provider/environment/bin/python -I -B /fixture/support.py fixture
         --release /fixture/core-release.json --pool /wheelhouse --target /fixture)
     local -a support_grants=(--env NMRNET_IN_CONTAINER=1 --env PROVIDER_CORE_IN_CONTAINER=1
@@ -498,6 +490,7 @@ api_witness_main() {
     fi
     local -a stage_grants=("${support_grants[@]}" --env PYTHONPATH=/fixture
         --mount "type=bind,src=$qualification_source_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
+        --mount "type=bind,src=$NMRNET_SHARED_SETTINGS_INPUT,dst=/input/deployment.toml,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly")
     if [[ $mode != scripted-pasted ]]; then
@@ -524,7 +517,7 @@ api_witness_main() {
     provider_host_argv=("${support_argv[@]}" --script /fixture/stage.py -- \
         --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT" \
         --prediction-image-id "$prediction_image" \
-        --deployment --delivery-project "$delivery_project" --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
+        --deployment --shared-settings /input/deployment.toml --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
         --interpreter-route "$interpreter_route")
     if [[ $mode == scripted-pasted ]]; then
         provider_host_argv+=(--interpreter-interface "$local_interface" --interpreter-network "$network_id" --interpreter-address "$local_address")
@@ -566,7 +559,7 @@ api_witness_main() {
     qualification_api_origin=$NMRNET_API_ORIGIN_INPUT
     qualification_provider_ref=$(jq -er '.provider_ref' "$provider_host_root/source/identity.json") || return $?
     NMRNET_DEPLOYMENT_INPUT=$api_deployment_name \
-    NMRNET_SHARED_SETTINGS_INPUT=$shared_settings_snapshot NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
+    NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
         bash "$repository_root/tools/provider_deployment.sh" install || return $?
     # Up can dispatch effects before returning failure. Its original receipts
     # must settle through down before the model peer's route can be withdrawn.

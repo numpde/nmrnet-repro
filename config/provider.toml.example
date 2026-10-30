@@ -2,7 +2,7 @@ schema_id = "nmrnet.provider.runtime_config.v3"
 
 # Copy to config/deployments/<name>/provider.toml.
 # API settings and credentials live in secrets/deployments/<name>/api.toml and
-# separate input files. Socket grants come from the host's shared settings.
+# separate input files. Socket grants come from deployment.toml [deployment].
 
 [scientific_retry]
 max_retries = 0

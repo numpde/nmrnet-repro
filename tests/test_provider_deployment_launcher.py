@@ -154,8 +154,6 @@ esac
         (self.provider / 'unselected-directory').mkdir(mode=0o700)
         (self.provider / 'unselected-directory/canary').write_text('never grant this root\n')
         self.bundle = self.selected(self.provider)
-        self.shared_settings = self.root / "shared.toml"
-        self.shared_settings.write_text("# shared settings fixture\n")
 
     def selected(self, root):
         bundles = root / 'bundles'
@@ -169,7 +167,6 @@ esac
 
     def run_command(self, action, role='provider', *, changes=None, extra=()):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
-                           NMRNET_SHARED_SETTINGS_INPUT=str(self.shared_settings),
                            NMRNET_SHARED_RUNTIME_IMAGE_INPUT='sha256:' + format(9, '064d'))
         environment.update(changes or {})
         return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
@@ -562,12 +559,12 @@ esac
         self.assertEqual(target.read_text(), 'keep original bytes')
         self.assertFalse(any('freeze' in call for call in self.calls()))
 
-    def test_shared_settings_are_passed_to_the_provider_freezer(self):
+    def test_local_deployment_settings_are_passed_to_the_provider_freezer(self):
         result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
         call = next(call for call in self.calls() if 'freeze' in call)
-        self.assertEqual(call[call.index('--shared-settings') + 1], '/input/shared-settings.toml')
-        self.assertNotIn('--delivery-project', call)
+        self.assertEqual(call[call.index('--settings') + 1], str(self.root / 'config/deployments/fixture/deployment.toml'))
+        self.assertNotIn('--shared-settings', call)
 
     def test_failed_helper_is_removed_by_its_original_name_without_reexecution(self):
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7'})

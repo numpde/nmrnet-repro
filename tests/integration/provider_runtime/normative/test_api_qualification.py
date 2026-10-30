@@ -126,16 +126,16 @@ provider_host_command() {
 DEPLOYMENT = r'''#!/usr/bin/env bash
 set -eu
 [[ $1 =~ ^(install|up|down)$ ]]
+[[ $NMRNET_DEPLOYMENT_INPUT =~ ^qualification-api-[A-Za-z0-9]{8}$ ]]
+root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+public=$root/config/deployments/$NMRNET_DEPLOYMENT_INPUT
 if [[ $1 == install ]]; then
-    [[ $# == 1 && -f $NMRNET_SHARED_SETTINGS_INPUT ]]
+    [[ $# == 1 && -f $public/deployment.toml ]]
 else
     [[ $# == 1 ]]
 fi
-[[ $NMRNET_DEPLOYMENT_INPUT =~ ^qualification-api-[A-Za-z0-9]{8}$ ]]
 printf '%s|%s\n' "$1" "$NMRNET_DEPLOYMENT_INPUT" >> "$TEST_RECORDS/deployments"
 printf '%s\n' "$1" >> "$TEST_RECORDS/events"
-root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
-public=$root/config/deployments/$NMRNET_DEPLOYMENT_INPUT
 private=$root/secrets/deployments/$NMRNET_DEPLOYMENT_INPUT
 for file in provider.toml deployment.toml; do cmp -s "$public/$file" <(printf '%s\n' "$file"); done
 for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
@@ -158,13 +158,13 @@ set -eu
 action=$1
 case $action in
     held)
-        [[ -f $DELIVERY_BINDINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
+        [[ -f $SHARED_SETTINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
         printf 'delivery-empty\n' >> "$TEST_RECORDS/events"
         [[ ${TEST_FAIL-} != inspection ]] || exit 7
         printf '%s\n' '{"outstanding_items":0}'
         ;;
     up)
-        [[ -f $DELIVERY_BINDINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
+        [[ -f $SHARED_SETTINGS && $SHARED_RUNTIME_IMAGE == sha256:* ]]
         printf 'delivery-up\n' >> "$TEST_RECORDS/events"
         ;;
     down) [[ $PROJECT == nmrnet-qualification-* ]]; printf 'delivery-down\n' >> "$TEST_RECORDS/events" ;;
@@ -311,8 +311,11 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     path = repository / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.touch()
+                local_settings = repository / "config/deployments/original/deployment.toml"
+                local_settings.parent.mkdir(parents=True)
+                local_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
                 environment = dict(PATH=os.environ["PATH"], TEST_RECORDS=str(records),
-                    TEST_PYTHON=sys.executable, NMRNET_SHARED_SETTINGS_INPUT=str(root / "shared.toml"),
+                    TEST_PYTHON=sys.executable, NMRNET_SHARED_SETTINGS_INPUT=str(local_settings),
                     NMRNET_SHARED_RUNTIME_IMAGE_INPUT="sha256:" + "a" * 64,
                     TEST_QUERY_FAILED=str(scenario == "query-failure").lower(), NMRNET_DEPLOYMENT_INPUT="original",
                     TEST_VOLUME_MISSING=str(scenario == "missing-volume").lower(),
@@ -321,7 +324,6 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     NMRNET_CA_FILE_INPUT=str(root / "ca.pem"), NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
                     NMRNET_ADDRESS_INPUT="127.0.0.1", NMRNET_INTERFACE_INPUT="fixture0",
                     NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64, NMRNET_OUTPUT_INPUT=str(output))
-                (root / "shared.toml").write_text("shared fixture\n")
                 result = subprocess.run(["bash", str(script), "existing-pasted"], env=environment,
                                         capture_output=True, text=True, timeout=10, check=False)
                 if scenario == "existing-output":
@@ -566,6 +568,9 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     target = repository / name
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.touch()
+                local_settings = repository / "config/deployments/localhost/deployment.toml"
+                local_settings.parent.mkdir(parents=True, exist_ok=True)
+                local_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
                 image = "sha256:" + "a" * 64
                 (repository / "tools/inference_native.sh").write_text(
                     'inference_native() { shift 3; "$@"; }; controller_native() { shift 3; "$@"; }\n'
@@ -590,7 +595,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 selectors = {
                     "PROVIDER_TOOLS": str(shared),
                     "SHARED_RUNTIME_IMAGE": image,
-                    "SHARED_SETTINGS": str(root / "shared.toml"),
+                    "SHARED_SETTINGS": str(local_settings),
                     "WHEELHOUSE": str(root / "wheelhouse"),
                     "API_ORIGIN": "https://nmr.localhost:10443",
                     "TOPOLOGY": "dev-local",
@@ -611,7 +616,6 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "RESOLVERS": "192.0.2.53 198.51.100.53",
                 }
                 (root / "wheelhouse").mkdir()
-                (root / "shared.toml").write_text("shared fixture\n")
                 selected_key, selected_ca = str(root / "selected-key"), str(root / "selected-ca")
                 environment = {
                     "PATH": os.environ["PATH"],

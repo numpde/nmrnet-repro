@@ -46,7 +46,9 @@ Run its focused, offline container tests with
 <code>make test/integration/provider-core/config</code>.</p>
 <p>Deployment installation reads <code>api</code> from the provider's private
 <code>api.toml</code> and obtains <code>delivery.socket_path</code> and
-<code>delivery.socket_group_id</code> from the host's shared settings.
+<code>delivery.socket_group_id</code> from this provider's
+<code>config/deployments/&lt;name&gt;/deployment.toml</code> shared project and group.
+The shared SDK derives the socket paths and volume names from those values.
 The table below describes the generated runtime configuration; keep those derived
 fields out of the authored provider definition.</p>
 <p>Installation writes that runtime file under
@@ -228,7 +230,9 @@ in memory and is not restored after the provider process stops.</p>
 <p>Keep <code>api.toml</code>, the API credential, interpreter keys and TLS files in
 <code>secrets/deployments/&lt;name&gt;/</code>. The private <code>api.toml</code>
 contains the API fields listed above, with credential and CA paths under
-<code>/srv/nmrnet/input/</code>. Keep the host's shared settings separately, following the
+<code>/srv/nmrnet/input/</code>. Keep the shared proxy/outbox project name and socket
+group ID in this provider's <code>config/deployments/&lt;name&gt;/deployment.toml</code>.
+The shared service's operational settings stay in nmr-provider-tools. Follow the
 <a href="https://github.com/numpde/nmr-provider-tools#readme">shared deployment instructions</a>.
 Private directories require mode 0700 and secret files 0400 or 0600, owned by
 the deployment caller. The outbox retains the publication inputs supplied with
@@ -245,22 +249,24 @@ retirement_seconds = 5</code></pre>
 <p>Use the actual issued provider identity and API origin. Omit <code>ca_file</code>
 when the API uses system trust.</p>
 <p>Build or load the NMRNet controller, geometry and inference images and the shared
-runtime image first. Use the host's shared settings for the provider socket grants;
-no socket grant belongs in the provider definition.</p>
+runtime image first. Copy <code>config/deployment.toml.example</code> to
+<code>config/deployments/&lt;name&gt;/deployment.toml</code>. Set its
+<code>[deployment].project</code> and <code>[deployment].gid</code> to the shared
+proxy/outbox Compose project and socket group; keep the shared service's operational
+settings in nmr-provider-tools. No socket grant belongs in the public provider definition.</p>
 <p><code>provider/prepare</code> records the three NMRNet image IDs under
 <code>.work/provider/</code>, <code>.work/preparation/</code> and <code>.work/inference/</code>.
 Install admits those image records and captures the model selection from
 <code>artifacts/prediction-models.json</code>; up uses the frozen generation.</p>
-<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up SHARED_SETTINGS=/path/to/nmr-provider-tools/config/deployments/localhost/settings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 
-make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_SETTINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;
 make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
 make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code></pre>
-<p>Install freezes a new input generation and refuses replacement while that
-provider is running. Up requires an empty project; if containers remain, inspect
-their status and use down before starting again. An incomplete or abnormal
+<p>Install reads this deployment's <code>deployment.toml</code>, freezes provider inputs and shared socket grants into a new generation, switches the selected generation, and retires unused generations. It requires this provider to be stopped and does not start the provider, proxy or outbox. Start the shared proxy and outbox with nmr-provider-tools first. Up requires an empty NMRNet provider Compose project. The shared proxy and outbox use a separate nmr-provider-tools project; leave them running. If NMRNet provider containers remain, inspect
+their status and run <code>make provider/deployment/down DEPLOYMENT=&lt;name&gt;</code> before starting again. An incomplete or abnormal
 deployment may require inspection before down can safely remove its dependencies.
 Up initializes the provider's lifetime-lock volume, starts the
 proxies and serial native runners, then waits for provider readiness, including
@@ -314,10 +320,10 @@ git submodule update --init --recursive
 for setup transport. Wheelhouse and setup interface are chosen once:</p>
 <pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
 <p>For a provider-only update, stop NMRNet, install its new generation from the
-existing shared settings, and start it. Shared delivery can continue publishing
+existing local <code>deployment.toml</code>, and start it. Shared delivery can continue publishing
 acknowledged results throughout:</p>
 <pre><code class="language-sh">make provider/deployment/down DEPLOYMENT=&lt;name&gt;
-make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_SETTINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;</code></pre>
 <p>For a shared-service replacement, coordinate all producers using it, inspect
 outstanding work, stop the incumbent owner, then start the shared owner
@@ -392,9 +398,9 @@ stop shared delivery; this affects all providers on this Docker host. Listing an
 discard run offline under the queue's existing exclusive lock and refuse while
 the daemon owns it. They never stop or restart the service automatically.</p>
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/down PROJECT=&lt;project-name&gt;
-make -C /path/to/nmr-provider-tools delivery/deployment/held DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
-make -C /path/to/nmr-provider-tools delivery/deployment/discard DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
-make -C /path/to/nmr-provider-tools delivery/deployment/up DELIVERY_BINDINGS=/private/shared.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
+make -C /path/to/nmr-provider-tools delivery/deployment/held SHARED_SETTINGS=/path/to/nmr-provider-tools/config/deployments/localhost/settings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/discard SHARED_SETTINGS=/path/to/nmr-provider-tools/config/deployments/localhost/settings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE API_ORIGIN=&lt;exact-origin&gt; PROVIDER_REF=&lt;provider-ref&gt; EXECUTION_ATTEMPT_REF=&lt;attempt-ref&gt; BODY_SHA256=&lt;held-digest&gt;
+make -C /path/to/nmr-provider-tools delivery/deployment/up SHARED_SETTINGS=/path/to/nmr-provider-tools/config/deployments/localhost/settings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
 <p>The list shows only the selected provider's metadata and reason, without
 payload bodies or a dump file. Discard requires that exact provider, Attempt and
 digest and removes only a held row; pending rows remain unchanged. It proves
@@ -471,9 +477,12 @@ prediction. The received result cannot supply its own expected image identity.</
   the separately staged real-API targets. API client requests use the shared proxy.</li>
 <li><code>API_CLIENT_IMAGE</code>: an immutable local API runtime image ID containing the
   API-owned credential validator/signing example. No implicit pull or installation.</li>
-<li><code>SHARED_SETTINGS</code> and <code>SHARED_RUNTIME_IMAGE</code>: the host's
-  operator settings and its immutable shared runtime image. The client borrows the
-  existing proxy socket read-only and checks that its exact volume exists first.
+<li><code>SHARED_SETTINGS</code> and <code>SHARED_RUNTIME_IMAGE</code>: for qualification,
+  <code>SHARED_SETTINGS</code> selects this checkout's
+  <code>config/deployments/&lt;name&gt;/deployment.toml</code>, which supplies the shared
+  project and socket group. <code>SHARED_RUNTIME_IMAGE</code> is the immutable shared
+  runtime image. The client borrows the existing proxy socket read-only and checks
+  that its exact volume exists first.
   Staged targets also require the <code>WHEELHOUSE</code> containing the pinned core archive.</li>
 <li><code>RETAINED_RESULT</code>: an absolute path to the existing scientific comparison
   receipt; its expected hash remains pinned in the fixture client. It is never

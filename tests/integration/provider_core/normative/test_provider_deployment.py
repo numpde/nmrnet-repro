@@ -99,9 +99,11 @@ class DeploymentBundleTests(unittest.TestCase):
             self.assertEqual(len(plan["services"]), 6)
             self.assertNotIn("api", plan["services"])
             provider = plan["services"]["provider"]
+            self.assertEqual(provider["group_add"], ["1001"])
+            self.assertIn("fixture-delivery-outbox-socket", plan["volumes"])
             socket = provider["command"][provider["command"].index("--api-proxy-socket") + 1]
             grant = next(item for item in provider["volumes"] if socket.startswith(item["target"] + "/"))
-            self.assertEqual(grant["source"], "nmr-api-delivery-proxy-socket")
+            self.assertEqual(grant["source"], "fixture-delivery-proxy-socket")
             self.assertTrue(grant["read_only"])
             self.assertEqual(plan["name"], json.loads((first / "compose.json").read_bytes())["name"])
             self.assertEqual((second / "resolv.conf").read_text(), "nameserver 192.0.2.53\n")

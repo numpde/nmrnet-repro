@@ -264,7 +264,7 @@ help:
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
 		'make provider/prepare SHARED_RUNTIME_IMAGE=sha256:<id> Acquire dependencies/models and build images; choose cache and interface once.' \
-		'make provider/deployment/install DEPLOYMENT=<name> SHARED_SETTINGS=<file> SHARED_RUNTIME_IMAGE=sha256:<id> Freeze provider inputs with shared socket grants.' \
+		'make provider/deployment/install DEPLOYMENT=<name> SHARED_RUNTIME_IMAGE=sha256:<id> Read local deployment.toml; require provider stopped; freeze/select, retire only unborrowed generations.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \

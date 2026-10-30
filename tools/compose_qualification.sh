@@ -19,7 +19,7 @@ qualification_delivery_command() {
     local -a selection
     case $action in
         up|held|discard)
-            selection=("DELIVERY_BINDINGS=$qualification_delivery_definition" "SHARED_RUNTIME_IMAGE=$qualification_shared_image") ;;
+            selection=("SHARED_SETTINGS=$qualification_delivery_definition" "SHARED_RUNTIME_IMAGE=$qualification_shared_image") ;;
         down|status|logs) selection=("PROJECT=$qualification_delivery_project") ;;
         *) return 2 ;;
     esac
@@ -117,7 +117,6 @@ compose_witness_role() {
 
 compose_witness_provider() {
     NMRNET_DEPLOYMENT_INPUT=$deployment \
-    NMRNET_SHARED_SETTINGS_INPUT=$peer_data/shared-settings/settings.toml \
     NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
         bash "$repository_root/tools/provider_deployment.sh" "$@"
 }

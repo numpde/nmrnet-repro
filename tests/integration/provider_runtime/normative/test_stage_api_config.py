@@ -18,6 +18,12 @@ from nmrnet_provider.config import load_provider_config
 
 
 class StageApiConfigTests(unittest.TestCase):
+    def shared_settings(self, root):
+        path = root / "deployment.toml"
+        path.write_text('[deployment]\nproject = "fixture-delivery"\ngid = 1001\n')
+        path.chmod(0o600)
+        return path
+
     def test_recovery_fixture_uses_its_original_ca_and_explicit_mapped_interpreter(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -29,7 +35,7 @@ class StageApiConfigTests(unittest.TestCase):
             path.write_text(path.read_text().replace("api-ca.crt", "api-ca.pem"))
             (root / "deployment").mkdir(mode=0o700)
             stage_deployment(
-                root, delivery_project="nmrnet-qualification-stage", api_interface="lo", api_address="127.0.0.1", interpreter_route="mapped",
+                root, shared_settings=self.shared_settings(root), api_interface="lo", api_address="127.0.0.1", interpreter_route="mapped",
                 interpreter_interface="lo", interpreter_address="127.0.0.1", interpreter_network=None, resolvers=[],
             )
             public = tomllib.loads((root / "deployment/provider.toml").read_text())
@@ -42,6 +48,7 @@ class StageApiConfigTests(unittest.TestCase):
                 "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["model.example=127.0.0.1"],
             })
             self.assertNotIn("resolvers", private)
+            self.assertEqual(private["deployment"], {"project": "fixture-delivery", "gid": 1001})
 
     def test_named_deployment_keeps_credential_bytes_store_and_selected_model(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -50,7 +57,7 @@ class StageApiConfigTests(unittest.TestCase):
             (root / "deployment").mkdir(mode=0o700)
             original = tomllib.loads((root / "source/provider.toml").read_text())
             stage_deployment(
-                root, delivery_project="nmrnet-qualification-stage", api_interface="lo", api_address="127.0.0.1", interpreter_interface="external0",
+                root, shared_settings=self.shared_settings(root), api_interface="lo", api_address="127.0.0.1", interpreter_interface="external0",
                 interpreter_route="external", interpreter_network=None, interpreter_address=None,
                 resolvers=["192.0.2.53"],
             )
@@ -64,6 +71,7 @@ class StageApiConfigTests(unittest.TestCase):
                 "mode": "mapped", "interface": "lo", "log_level": "INFO", "addresses": ["api.example=127.0.0.1"],
             })
             self.assertNotIn("api", private["routes"])
+            self.assertEqual(private["deployment"], {"project": "fixture-delivery", "gid": 1001})
             self.assertEqual(private["routes"]["interpreter"], {"mode": "external", "interface": "external0", "log_level": "INFO"})
             self.assertEqual(private["resolvers"], ["192.0.2.53"])
             selected = public["interpreter"]["endpoints"][0]

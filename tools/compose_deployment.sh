@@ -233,19 +233,13 @@ helper() {
         "${helper_grants[@]}" --entrypoint "$python" "$image" -I -B "$@"
     helper_name=
 }
-select_shared_inputs() {
-    local definition=${NMRNET_SHARED_SETTINGS_INPUT-}
+select_shared_runtime() {
     shared_runtime_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
-    [[ -n $definition ]] || { refuse 'supply SHARED_SETTINGS=<file>.'; return 2; }
     [[ $shared_runtime_image =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { refuse 'supply SHARED_RUNTIME_IMAGE=<immutable image ID> from nmr-provider-tools.'; return 2; }
     inference_native 'shared runtime image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$shared_runtime_image"
     [[ $inference_result == "$shared_runtime_image" ]] || { refuse 'the shared runtime image identity differs from the selection.'; return 2; }
-    definition=$(realpath -e -- "$definition")
-    path "$definition"
-    [[ -f $definition ]] || { refuse 'SHARED_SETTINGS must select a regular definition.'; return 2; }
-    helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle"
-        --mount "type=bind,src=$definition,dst=/input/shared-settings.toml,readonly")
+    helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
 }
 initialize_lifetime() {
     image_record provider
@@ -294,7 +288,7 @@ if [[ $action == install ]]; then
     require_no_old_route_borrowers
     image_record provider; controller_image=$selected_image
     bundle=$(mktemp -d "$root/bundles/generation-XXXXXXXX")
-    select_shared_inputs
+    select_shared_runtime
     private_directory "$root/runtime"
     for runtime_role in prediction reader smiles route-interpreter route-store; do
         private_directory "$root/runtime/$runtime_role"
@@ -349,7 +343,7 @@ if [[ $action == install ]]; then
         --settings "$repository_root/config/deployments/$deployment_name/deployment.toml" \
         --secrets "$root" --bundle "$bundle" --models /source/artifacts/prediction-models.json \
         --deployment "$deployment_name" --checkout "$repository_root" --uid "$caller_uid" --gid "$caller_gid" \
-        --shared-settings /input/shared-settings.toml --shared-image-id "$shared_runtime_image" \
+        --shared-image-id "$shared_runtime_image" \
         --prepared "$repository_root/.work/prepared" --image-id "$scientific_image" --geometry-image-id "$geometry_image" \
         --controller-image-id "$controller_image" --repository-revision "$revision" --upstream-revision "$upstream_revision"
     [[ -f $bundle/compose.json && ! -L $bundle/compose.json ]] || exit 2
@@ -425,7 +419,7 @@ case $action in
         ;;
     down)
         printf 'Restart: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
-        printf 'Reconfigure: make provider/deployment/install DEPLOYMENT=%q SHARED_SETTINGS=<file> SHARED_RUNTIME_IMAGE=<image ID>\n' "$deployment_name"
+        printf 'Reconfigure: make provider/deployment/install DEPLOYMENT=%q SHARED_RUNTIME_IMAGE=<image ID>\n' "$deployment_name"
         ;;
 esac
 exit "$?"

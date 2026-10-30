@@ -53,6 +53,9 @@ class QualificationContextTests(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
+        self.shared_settings = self.root / "config/deployments/localhost/deployment.toml"
+        self.shared_settings.parent.mkdir(parents=True)
+        self.shared_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
         tools = self.root / "tools"
         tools.mkdir()
         source = Path("/fixture/provider_api_qualification.sh").read_text()
@@ -96,7 +99,7 @@ class QualificationContextTests(unittest.TestCase):
             "CLIENT_CREDENTIAL_DIRECTORY": str(self.root / "credentials"),
             "CA_FILE": str(self.root / "ca.pem"), "ADDRESS": "127.0.0.1", "INTERFACE": "lo",
             "OUTPUT": str(output), "API_CLIENT_IMAGE": "sha256:" + "c" * 64,
-            "SHARED_SETTINGS": str(self.root / "shared.toml"), "SHARED_RUNTIME_IMAGE": "sha256:" + "d" * 64,
+            "SHARED_SETTINGS": str(self.shared_settings), "SHARED_RUNTIME_IMAGE": "sha256:" + "d" * 64,
             "RETAINED_RESULT": str(self.root / "independent-oracle.json"),
             "DEPLOYMENT": "" if receipt or identity else "replacement",
         }

@@ -58,12 +58,10 @@ def deployment_inputs(root):
     document["lifecycle"]["lifetime_root"] = "/srv/nmrnet/attempts"
     document["interpreter"]["endpoints"][0]["key_file"] = "/srv/nmrnet/input/interpreter.key"
     definition.write_text(tomli_w.dumps(document))
-    shared_settings = root / "shared.toml"
-    shared_settings.write_text(tomli_w.dumps({"deployment": {"project": "nmr-api-delivery", "gid": 1001}}))
-    shared_settings.chmod(0o600)
     settings = root / "config/deployments/web/deployment.toml"
     settings.parent.mkdir(parents=True, mode=0o700)
     settings.write_text('maximum_startup_bytes = 65536\nresolvers = ["192.0.2.53"]\n'
+                        '[deployment]\nproject = "fixture-delivery"\ngid = 1001\n'
                         + "".join(f'[routes.{role}]\nmode = "external"\ninterface = "eth0"\nlog_level = "INFO"\n' for role in ("interpreter", "store")))
     settings.chmod(0o600)
     source_root = root / "source"
@@ -87,7 +85,7 @@ def deployment_inputs(root):
     bundle.mkdir(mode=0o700)
     return dict(definition=definition, settings=settings, secrets=files.root, bundle=bundle,
                 source_root=source_root, source_names=tuple(sources), models=models, deployment="web", checkout=root / "checkout", uid=1000, gid=1001,
-                prepared=root / "prepared", shared_settings=shared_settings, shared_image_id="sha256:" + "9" * 64,
+                prepared=root / "prepared", shared_image_id="sha256:" + "9" * 64,
                 image_id="sha256:" + "1" * 64,
                 geometry_image_id="sha256:" + "2" * 64, controller_image_id="sha256:" + "3" * 64,
                 repository_revision="a" * 40, upstream_revision="b" * 40), files

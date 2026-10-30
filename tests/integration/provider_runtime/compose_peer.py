@@ -348,7 +348,7 @@ async def serve(root, seconds, case, delivery_project):
         actual_api = tomllib.loads(files.raw.decode())["api"]
         write_deployment_inputs(
             root, runtime, api=actual_api, api_route=route,
-            routes={"interpreter": route, "store": route}, project=delivery_project,
+            routes={"interpreter": route, "store": route}, project=delivery_project, gid=os.getegid(),
             maximum_startup_bytes=4194304, resolvers=[], shared_fixture=True,
         )
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin,
