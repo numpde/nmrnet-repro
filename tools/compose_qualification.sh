@@ -60,10 +60,13 @@ qualification_delivery_empty() {
 }
 
 qualification_delivery_release() {
-    # Shared down preserves volumes. This fixture has no second lifecycle or
-    # destructive storage owner; the explicit evidence directory identifies them.
-    printf 'Stopped shared qualification volumes retained for project %s.\n' "$qualification_delivery_project" >&2
-    qualification_delivery_selected=false
+    qualification_fixture_shared retire
+}
+
+qualification_fixture_shared() {
+    controller_native 'disposable shared fixture lifecycle' untimed stdio \
+        bash "$capture/tools/compose_fixture_shared.sh" "$1" "$scratch" \
+        "$qualification_delivery_project" "$qualification_shared_image" "$qualification_provider_tools"
 }
 
 qualification_delivery_daemon() {
@@ -102,7 +105,7 @@ compose_witness_role() {
 
 compose_witness_provider() {
     NMRNET_DEPLOYMENT_INPUT=$deployment \
-    NMRNET_DELIVERY_BINDINGS_INPUT=$peer_data/bindings.toml NMRNET_DELIVERY_BINDING_INPUT=nmrnet \
+    NMRNET_SHARED_SETTINGS_INPUT=$peer_data/shared-settings/settings.toml \
     NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$qualification_shared_image \
         bash "$repository_root/tools/provider_deployment.sh" "$@"
 }
@@ -258,8 +261,15 @@ compose_witness_finish() {
             exit 2
         }
         if (( status == 0 )); then
-            if qualification_delivery_empty; then qualification_delivery_release || cleanup=$?
-            else cleanup=$?; fi
+            if ! qualification_delivery_empty || ! qualification_delivery_release; then
+                [[ -z $worker_retirement_diagnostic ]] || printf '%s\n' "$worker_retirement_diagnostic" >&2
+                printf 'Disposable shared owners remain unresolved; retain their peer, settings and receipts: %s\n' "$scratch" >&2
+                if [[ $inference_retirement_confirmed != true ]]; then while :; do sleep 1 || :; done; fi
+                exit 2
+            fi
+        else
+            printf 'Failed qualification retains its disposable proxy, peer, queue and settings: %s\n' "$scratch" >&2
+            exit "$status"
         fi
         [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
     fi
@@ -333,7 +343,7 @@ compose_witness_main() {
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
         tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/runner_crash_probe.py \
-        tests/integration/provider_core tools/compose_runner_events.sh tools/provider_consumer_tests.py \
+        tests/integration/provider_core tools/compose_runner_events.sh tools/compose_fixture_shared.sh tools/provider_consumer_tests.py \
         requirements/provider-core-release.json tests/integration/provider_runtime/binding_inputs.py \
         tests/fixtures/preparation/expected.json tests/fixtures/preparation/smiles.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
@@ -368,7 +378,7 @@ compose_witness_main() {
     worker_retirement_command start "$scratch/peer" "${engine[@]}" start "$peer_id" || return $?
     compose_witness_wait "$peer_data/ready.json" 15 || return $?
     cp -- "$peer_data/provider.toml" "$peer_data/deployment.toml" "$public/" || return $?
-    for input in interpreter.key model-ca.pem store-ca.pem; do
+    for input in api.toml signing.private.json api-ca.pem interpreter.key model-ca.pem store-ca.pem; do
         cp -- "$peer_data/configuration/$input" "$private/$input" || return $?
         chmod 600 -- "$private/$input" || return $?
     done
@@ -376,8 +386,13 @@ compose_witness_main() {
     qualification_provider_ref=$(jq -er '.provider_ref' "$peer_data/ready.json") || return $?
     compose_witness_provider install || return $?
     deployment_installed=true
-    qualification_delivery_select "$scratch/delivery" "$delivery_project" "$peer_data/bindings.toml" || return $?
+    qualification_delivery_select "$scratch/delivery" "$delivery_project" "$peer_data/shared-settings/settings.toml" || return $?
+    if ! qualification_fixture_shared preflight; then
+        qualification_delivery_selected=false
+        return 2
+    fi
     qualification_delivery_up || return $?
+    qualification_fixture_shared capture || return $?
     compose_witness_provider up || return $?
     if [[ $scientific_case == recovery ]]; then
         compose_witness_relay_restart || return $?

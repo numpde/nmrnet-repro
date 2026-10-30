@@ -652,7 +652,7 @@ case "$1" in
                     unit_tests=(-v tests.test_prediction_input tests.test_provider_input)
                 fi
                 if [[ "$1" == test/unit/provider/deployment ]]; then
-                    unit_tests=(-v tests.test_provider_deployment_launcher
+                    unit_tests=(-v tests.test_provider_deployment_launcher tests.test_compose_fixture_shared
                         test_api_qualification_normative
                         tests.test_docker_client.DockerClientTests.test_actual_client_sees_empty_private_config_and_fixed_environment)
                     command+=(--mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_qualification.py,dst=/workspace/test_api_qualification_normative.py,readonly"

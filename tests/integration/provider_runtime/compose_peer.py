@@ -342,7 +342,7 @@ async def serve(root, seconds, case, delivery_project):
         write_deployment_inputs(
             root, runtime, api=actual_api, api_route=route,
             routes={"interpreter": route, "store": route}, project=delivery_project,
-            maximum_startup_bytes=4194304, resolvers=[],
+            maximum_startup_bytes=4194304, resolvers=[], shared_fixture=True,
         )
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin,
                                "provider_ref": actual_api["provider_ref"]})
