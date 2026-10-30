@@ -1,13 +1,6 @@
 /.work/
-# Operator deployment inputs follow magnet-deploy's config/secrets split.
-/config/deployments/*
-!/config/deployments/nmr-dapp32-com/
-/config/deployments/nmr-dapp32-com/*
-!/config/deployments/nmr-dapp32-com/provider.toml
-!/config/deployments/nmr-dapp32-com/qwen.toml.disabled
-!/config/deployments/nmr-localhost/
-/config/deployments/nmr-localhost/*
-!/config/deployments/nmr-localhost/provider.toml
+# Keep generic TOML examples tracked; named deployment inputs stay local.
+/config/deployments/
 /secrets/
 __pycache__/
 *.py[cod]
