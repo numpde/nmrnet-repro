@@ -9,13 +9,13 @@ from tests.integration.nmrnet.admission_ports import AdmissionPeers, feed_respon
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.fakes.api_tls import verify_signed_request
 
-from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionPolicy, select_pending_start
 from nmrnet_provider.runtime import assemble_attempt
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint, checkpoint_acknowledgement
 
 
 class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_relay_capacity_precedes_fresh_selected_start_without_remote_attempt_traversal(self):
+    async def test_fresh_selected_start_without_remote_attempt_traversal(self):
         ports = SessionPorts()
         policy = AdmissionPolicy(page_size=2, maximum_pages=3)
         async with AdmissionPeers(ports) as fixture:
@@ -26,8 +26,7 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             }
             second = first | {"job_ref": "job:second"}
             fixture.feed_replies = [feed_response(jobs=[first, second], next_cursor=None)]
-            await require_admission_ready(fixture.config, fixture.api, delivery=fixture.delivery, policy=policy, owner=self)
-            pending = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset(), claims=fixture.claims)
+            pending = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims)
             self.assertEqual(pending.input, ports.instructions.identity)
             self.assertEqual(pending.scope, fixture.config.lifecycle.scope)
             body = json.loads(pending.body)
@@ -36,6 +35,7 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             self.assertEqual(ports.worker.events, [])
             self.assertEqual(fixture.request_paths, ["/provider/v1/jobs"])
+            self.assertIn(b"has_provider_execution_attempt=false", fixture.api_peer.requests[0])
             for request, raw in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True):
                 self.assertEqual(raw, b"")
                 self.assertNotIn(b"authorization:", request.lower())
@@ -66,7 +66,7 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                     next_cursor="Yg",
                 ),
             ]
-            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, excluded_jobs=frozenset(), claims=fixture.claims)
+            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, claims=fixture.claims)
             self.assertEqual(selected.input.job_ref, "job:z")
             self.assertEqual(json.loads(selected.body)["job_ref"], "job:z")
             self.assertEqual(len(fixture.api_peer.requests), 2)
@@ -86,9 +86,9 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                 "nmrnet_provider.admission.secrets.token_hex",
                 side_effect=AssertionError("Empty discovery must create no start key"),
             ):
-                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset(), claims=fixture.claims))
+                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims))
             fixture.feed_replies = None
-            selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, excluded_jobs=frozenset(), claims=fixture.claims)
+            selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims)
             self.assertEqual(selected.input, ports.instructions.identity)
             self.assertNotIn(b"cursor=", fixture.api_peer.requests[2])
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())

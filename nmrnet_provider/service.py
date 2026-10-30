@@ -19,12 +19,11 @@ from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionPolicy, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.controller import ControllerFailed
-from provider_core.delivery_client import DeliveryClient, DeliveryUnavailable
-from provider_core.delivery_store import DeliveryFull
+from provider_core.delivery_client import DeliveryClient
 from provider_core.analysis import AnalysisOutcomeUnresolved
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ObservationGapExpired
 from provider_core.hello import AnalysisOffering
@@ -237,8 +236,7 @@ class ProviderService:
             raise self.last_failure from None
 
     async def _await_startup(self):
-        # Startup may wait for publication availability. Keep its original task
-        # in the same cancellable lane as ordinary work, not maintenance.
+        # Startup remains cancellable independently of ordinary work.
         self.work_task = self._start_task(self._startup)
         stopped = asyncio.create_task(self._stop.wait())
         try:
@@ -251,35 +249,18 @@ class ProviderService:
     async def _startup(self):
         if self._stop.is_set():
             return False
-        try:
-            await self._read_until_available(self._admission)
-        except DeliveryFull:
-            pass  # Announce the service; the paced work loop waits for relay capacity.
-        if self._stop.is_set():
-            return False
         await self._hello_until_available()
         if self._stop.is_set():
             return False
         self._on_started()
         return not self._stop.is_set()
 
-    async def _admission(self):
-        return await require_admission_ready(self.config, self.api, delivery=self.delivery,
-                                             policy=self.policy.admission, owner=self)
-
-    async def _select_after_admission(self):
-        """Observe the complete live view before starting a fresh discovery walk."""
-        try:
-            relay = await self._admission()
-        except DeliveryFull:
-            return None
-        if self._stop.is_set():
-            return None
-        return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self,
-                                         excluded_jobs=frozenset(item["job_ref"] for item in relay["items"]), claims=self._claims)
+    async def _select_job(self):
+        return await select_pending_start(self.config, self.api, policy=self.policy.admission,
+                                          owner=self, claims=self._claims)
 
     async def _read_until_available(self, operation):
-        """Repeat only the supplied admission/read cycle, in its original task.
+        """Repeat the supplied Job discovery in its original task.
 
         Each failed page abandons the whole view. No allocation or mutation is
         inside this boundary. Backoff resets after the complete cycle succeeds;
@@ -293,12 +274,12 @@ class ProviderService:
         )
 
     async def _until_api_available(self, operation, *, api, permit_retry, kind):
-        """Pace reviewed API availability and idle relay reads after I/O settles.
+        """Pace reviewed API availability after I/O settles.
 
         The read caller repeats its whole view; Hello constructs current state.
         This owner never retains request bytes or authorizes another mutation.
         """
-        delay, outage, outage_kind = self.policy.idle_seconds, None, kind
+        delay, outage = self.policy.idle_seconds, None
         while not self._stop.is_set():
             previous_failure = api.last_failure
             try:
@@ -312,34 +293,25 @@ class ProviderService:
                     # its new interruption; Hello has its own uncertainty output.
                     raise cause from api.last_failure
                 raise
-            except (ApiFailure, DeliveryUnavailable) as failure:
-                relay_read = isinstance(failure, DeliveryUnavailable)
-                if relay_read and (api is not self.api or kind != "read"):
-                    raise
-                failure_kind = "delivery" if relay_read else kind
+            except ApiFailure as failure:
                 try:
-                    if relay_read:
-                        await self.delivery.retire()
-                    else:
-                        await api.retire(owner=self)
+                    await api.retire(owner=self)
                 except (Exception, asyncio.CancelledError, BaseExceptionGroup):
-                    self._remember(f"API {failure_kind} before failed transport retirement", failure)
+                    self._remember(f"API {kind} before failed transport retirement", failure)
                     raise
-                if not (self.delivery.can_retry(failure) if relay_read else permit_retry(failure)):
+                if not permit_retry(failure):
                     raise
                 if self._stop.is_set():
                     return None
-                outage, outage_kind = failure, failure_kind
-                wait = random.uniform(delay / 2, delay)
-                if not relay_read:
-                    wait += failure.retry_after_seconds or 0
-                self._on_api_retry(failure_kind, failure, wait)
+                outage = failure
+                wait = random.uniform(delay / 2, delay) + (failure.retry_after_seconds or 0)
+                self._on_api_retry(kind, failure, wait)
                 if await self._pause(wait):
                     return None
                 delay = min(self.policy.api_backoff_max_seconds, delay * 2)
             else:
                 if outage is not None:
-                    self._on_api_recovered(outage_kind, outage)
+                    self._on_api_recovered(kind, outage)
                 return result
         return None
 
@@ -379,7 +351,7 @@ class ProviderService:
             if not self._snapshot().analysis_offerings:
                 await self._pause(self.policy.idle_seconds)
                 continue
-            pending = await self._read_until_available(self._select_after_admission)
+            pending = await self._read_until_available(self._select_job)
             if self._stop.is_set():
                 return
             if pending is None:

@@ -8,7 +8,6 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.api import response_headers, signature_window_problem
-from tests.fakes.delivery import outcome
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_nmrnet_session import ScientificWorker
 
@@ -192,7 +191,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             outage = ApiFailure("read live inventory", "unavailable", cause=ExchangeFailed("Timed out", primary=TimeoutError()))
             cleanup = ExchangeFailed("Original read retirement remains unconfirmed", primary=OSError("PRIVATE_CLEANUP"))
             with (
-                patch.object(service, "_admission", AsyncMock(side_effect=outage)),
+                patch.object(service, "_select_job", AsyncMock(side_effect=outage)),
                 patch.object(fixture.api, "retire", AsyncMock(side_effect=cleanup)),
                 self.assertRaises(ServiceFailed) as caught,
             ):
@@ -200,7 +199,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             causes = [cause for _operation, cause in caught.exception.failures]
             self.assertIn(outage, causes)
             self.assertIn(cleanup, causes)
-            self.assertEqual(fixture.api_peer.requests, [])
+            self.assertEqual(len(fixture.api_peer.requests), 1)
             self.assertEqual(fixture.allocations, [])
             self.assertEqual(fixture.api_notices, [])
             await fixture.settle_service(service)
@@ -321,23 +320,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     with suppress(ServiceFailed):
                         await task
                 await fixture.settle_service(service)
-
-    async def test_full_relay_announces_without_discovery_or_allocation(self):
-        async with ServicePeers() as fixture:
-            for worker in fixture.relay.workers.values():
-                worker.request_stop()
-            await asyncio.gather(*fixture.relay._worker_tasks)
-            for suffix in "01234567":
-                fixture.relay.queue.enqueue(replace(outcome(provider=fixture.config.lifecycle.scope.provider_ref, suffix=suffix),
-                                                   api_origin=fixture.config.lifecycle.scope.api_origin))
-            service = fixture.service(on_started=fixture.stop.set)
-            await asyncio.wait_for(service.run(fixture.stop), 2)
-            self.assertEqual(len(fixture.hellos), 1)
-            self.assertNotIn("discover", fixture.events)
-            self.assertNotIn("start", fixture.events)
-            self.assertEqual(fixture.allocations, [])
-            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            await fixture.settle_service(service)
 
     async def test_initial_hello_or_started_callback_failure_sends_no_discovery_or_allocation(self):
         for failure in ("hello", "callback"):

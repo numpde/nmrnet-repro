@@ -1,9 +1,4 @@
-"""Select never-attempted Jobs outside live ownership and queued delivery.
-
-The registry excludes current Job/key owners. Shared delivery excludes its exact
-queued Jobs without claiming API publication. An old remote Attempt does not
-block unrelated work, and these observations never authorize scientific replay.
-"""
+"""Select Jobs without provider Attempts or existing live ownership."""
 
 from tools.container_guard import require_container
 
@@ -15,7 +10,6 @@ from dataclasses import dataclass
 from nmrnet_provider.config import ANALYSIS_KIND_REF, ProviderConfig
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.delivery_store import DeliveryFull
 from provider_core.paging import paging_query
 
 
@@ -41,26 +35,15 @@ def _require_context(config, api, policy, owner):
         raise ValueError("Admission API must use the configured signing identity and topology.")
 
 
-async def require_admission_ready(config, api, *, delivery, policy, owner):
-    """Read relay capacity; old remote Attempts do not block unrelated Jobs."""
-    _require_context(config, api, policy, owner)
-    relay = await delivery.pending()
-    if (len(relay["items"]) >= relay["capacity"]["provider_items"]
-            or sum(item["body_bytes"] for item in relay["items"]) >= relay["capacity"]["provider_bytes"]):
-        raise DeliveryFull("Delivery capacity is full; wait for existing results before starting more computation.")
-    return relay
-
-
-async def select_pending_start(config, api, *, policy, owner, excluded_jobs, claims):
-    """Choose a never-attempted Job outside current delivery and live ownership."""
+async def select_pending_start(config, api, *, policy, owner, claims):
+    """Choose a never-attempted Job outside current live ownership."""
     _require_context(config, api, policy, owner)
     cursor, seen = None, set()
     for _page_number in range(policy.maximum_pages):
         page = await api.jobs(analysis_kind_ref=ANALYSIS_KIND_REF, has_provider_execution_attempt=False,
                               limit=policy.page_size, cursor=cursor, owner=owner)
         for selected in page.jobs:
-            if (selected.input.job_ref not in excluded_jobs
-                    and not claims.owns_job(config.lifecycle.scope, selected.input.job_ref)):
+            if not claims.owns_job(config.lifecycle.scope, selected.input.job_ref):
                 body = start_body(selected.input.job_ref, secrets.token_hex(16))
                 return StartPending(config.lifecycle.scope, selected.analysis_kind_ref, selected.input, body)
         cursor = _next_cursor(page.next_cursor, seen, operation="Job discovery")

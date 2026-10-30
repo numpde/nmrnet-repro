@@ -13,7 +13,7 @@ class ConsumerLauncherTests(unittest.TestCase):
             "config": ["test_nmrnet_config.py"],
             "uploads": ["test_nmrnet_upload_session.py", "test_upload_preparation.py", "test_nmrnet_upload_preparation.py"],
             "prepared-identity": ["test_nmrnet_session.py", "test_nmrnet_prediction_recovery.py"],
-            "delivery": ["test_nmrnet_service_delivery.py"],
+            "delivery": ["test_nmrnet_service_recovery.py"],
         }
         with tempfile.TemporaryDirectory() as pool:
             for name, patterns in selections.items():

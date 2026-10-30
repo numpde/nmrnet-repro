@@ -600,7 +600,7 @@ case "$1" in
                     command+=(test_nmrnet_service_admission.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
-                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py test_nmrnet_service_delivery.py)
+                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/recovery ]]; then
                     command+=(test_nmrnet_service_recovery.py test_nmrnet_reference_lifecycle.py test_nmrnet_prediction_recovery.py)
@@ -621,7 +621,7 @@ case "$1" in
                     command+=(test_nmrnet_session.py test_nmrnet_prediction_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/delivery ]]; then
-                    command+=(test_nmrnet_service_delivery.py)
+                    command+=(test_nmrnet_service_recovery.py)
                 fi
                 ;;
             test/unit/provider/deployment|test/unit/provider/result|\

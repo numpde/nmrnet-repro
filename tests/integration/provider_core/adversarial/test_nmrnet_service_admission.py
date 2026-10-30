@@ -4,47 +4,24 @@ import asyncio
 import unittest
 from dataclasses import asdict, replace
 
-from tests.fakes.delivery import outcome
 from tests.integration.nmrnet.admission_ports import AdmissionPeers, feed_response
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.admission import AdmissionIncomplete, AdmissionPolicy, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionIncomplete, AdmissionPolicy, select_pending_start
 from provider_core.api import ApiFailure, ProviderAPI
-from provider_core.delivery_store import DeliveryFull
 
 
 class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
-    async def test_full_real_relay_refuses_before_api_reads(self):
-        ports = SessionPorts()
-        async with AdmissionPeers(ports) as fixture:
-            queue = fixture.relay.inbox.queue
-
-            def retain_held(item):
-                with queue._serial:
-                    queue.enqueue(item)
-                    queue.hold(item, "Authored capacity fixture")
-
-            for index in range(queue.limits.provider_items):
-                item = replace(outcome(provider=fixture.config.lifecycle.scope.provider_ref, suffix=format(index, "x")),
-                               api_origin=fixture.api.origin)
-                await fixture.relay.inbox.storage(retain_held, item)
-            with self.assertRaises(DeliveryFull):
-                await require_admission_ready(fixture.config, fixture.api, delivery=fixture.delivery,
-                                              policy=AdmissionPolicy(1, 2), owner=self)
-            self.assertEqual(fixture.api_peer.requests, [])
-            self.assertEqual(ports.worker.events, [])
-            await ports.session.retire()
-
-    async def test_live_job_and_queued_job_are_excluded_without_a_global_attempt_walk(self):
+    async def test_live_job_is_excluded_without_a_global_attempt_walk(self):
         ports = SessionPorts()
         async with AdmissionPeers(ports) as fixture:
             pending = await fixture.discover()
             # Exercise the SDK's actual provider-wide index; no START is sent.
             claim = fixture.claims.claim_live(pending, lifecycle_owner=self)
             row = asdict(pending.input) | {"analysis_kind_ref": "peaks_from_mol", "created_at": "2026-10-18T00:00:00Z"}
-            fixture.feed_replies = [feed_response(jobs=[row, row | {"job_ref": "job:queued"}, row | {"job_ref": "job:free"}])]
+            fixture.feed_replies = [feed_response(jobs=[row, row | {"job_ref": "job:free"}])]
             selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(3, 2),
-                                                 owner=self, excluded_jobs={"job:queued"}, claims=fixture.claims)
+                                                 owner=self, claims=fixture.claims)
             self.assertEqual(selected.input.job_ref, "job:free")
             self.assertEqual(fixture.request_paths, ["/provider/v1/jobs", "/provider/v1/jobs"])
             self.assertTrue(claim.active)
@@ -61,7 +38,7 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                     with self.assertRaises(ApiFailure if failure == "bad_body" else AdmissionIncomplete) as caught:
                         await select_pending_start(fixture.config, fixture.api,
                             policy=AdmissionPolicy(1, 3 if failure == "cycle" else 2), owner=self,
-                            excluded_jobs=frozenset(), claims=fixture.claims)
+                            claims=fixture.claims)
                     self.assertNotIn("PRIVATE", str(caught.exception))
                     self.assertEqual(len(fixture.api_peer.requests), 2)
                     self.assertEqual(ports.worker.events, [])
@@ -75,13 +52,12 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                 foreign = ProviderAPI(identity, fixture.config.api.http.new_transport(), expected_topology=topology)
                 try:
                     with self.assertRaises(ValueError):
-                        await require_admission_ready(fixture.config, foreign, delivery=fixture.delivery,
-                                                      policy=AdmissionPolicy(1, 2), owner=self)
+                        await select_pending_start(fixture.config, foreign, policy=AdmissionPolicy(1, 2), owner=self, claims=fixture.claims)
                 finally:
                     await foreign.retire()
             for policy, owner in ((AdmissionPolicy(1, 2), None), (object(), self)):
                 with self.assertRaises(ValueError):
-                    await require_admission_ready(fixture.config, fixture.api, delivery=fixture.delivery, policy=policy, owner=owner)
+                    await select_pending_start(fixture.config, fixture.api, policy=policy, owner=owner, claims=fixture.claims)
             self.assertEqual(fixture.api_peer.requests, [])
             await ports.session.retire()
 
@@ -95,7 +71,7 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with AdmissionPeers(ports) as fixture:
             fixture.api_peer.mode = "headers-stall"
             task = asyncio.create_task(select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(1, 2),
-                owner=self, excluded_jobs=frozenset(), claims=fixture.claims))
+                owner=self, claims=fixture.claims))
             await asyncio.wait_for(fixture.api_peer.received.wait(), 1)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
