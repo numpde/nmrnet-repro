@@ -137,3 +137,22 @@ class DisposableSharedFixtureTests(unittest.TestCase):
         self.assertTrue((self.root / "reservation").exists())
         self.assertEqual(len((self.root / "mutations").read_text().splitlines()), 1)
         self.assertTrue((self.root / (self.project + "-queue")).exists())
+
+    def test_release_uses_captured_source_after_main_locals_are_gone(self):
+        command = r'''set -eu
+source /workspace/tools/compose_qualification.sh
+scratch=$TEST_SCRATCH
+qualification_delivery_project=$TEST_PROJECT
+qualification_shared_image=$TEST_IMAGE
+qualification_provider_tools=$TEST_ROOT
+controller_native() {
+    [[ $4 == bash && $5 == "$scratch/source/tools/compose_fixture_shared.sh" && $6 == retire ]]
+}
+qualification_delivery_release
+'''
+        result = subprocess.run(
+            ["bash", "-c", command], env=self.env | {"TEST_SCRATCH": str(self.scratch),
+                "TEST_PROJECT": self.project, "TEST_IMAGE": self.image},
+            text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)

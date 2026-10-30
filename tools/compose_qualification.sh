@@ -65,7 +65,7 @@ qualification_delivery_release() {
 
 qualification_fixture_shared() {
     controller_native 'disposable shared fixture lifecycle' untimed stdio \
-        bash "$capture/tools/compose_fixture_shared.sh" "$1" "$scratch" \
+        bash "$scratch/source/tools/compose_fixture_shared.sh" "$1" "$scratch" \
         "$qualification_delivery_project" "$qualification_shared_image" "$qualification_provider_tools"
 }
 
