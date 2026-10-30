@@ -73,7 +73,8 @@ class DocumentationTests(unittest.TestCase):
         # The remaining exceptions are the README, data and a plain-text design record.
         exceptions = {"README.md", "nmrnet_provider/about/hello.md",
                       "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
-                      "docs/notes/022_shared_delivery_deferred_20261024.txt"}
+                      "docs/notes/022_shared_delivery_deferred_20261024.txt",
+                      "notes/023_shared_api_proxy_adoption_20261030.txt"}
         leftovers = [
             name
             for name in paths
