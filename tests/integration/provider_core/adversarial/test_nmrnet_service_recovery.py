@@ -484,7 +484,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
     async def test_selected_report_retries_original_bytes_after_stop_and_drain_expiry(self):
         async with ServicePeers() as fixture:
             controllers, bodies = [], []
-            pressured, recovered, window_elapsed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+            pressured, retried, recovered, window_elapsed = (asyncio.Event() for _ in range(4))
             open_original = fixture.open_attempt
 
             async def open_attempt(pending, *, stopping):
@@ -496,6 +496,8 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     bodies.append(outcome.body)
                     if not recovered.is_set():
                         pressured.set()
+                        if len(bodies) >= 2:
+                            retried.set()
                         raise DeliveryFull('Authored full queue; retain the selected report')
                     return await submit(outcome)
 
@@ -515,6 +517,10 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
                     await asyncio.wait_for(pressured.wait(), 3)
+                    await asyncio.wait_for(retried.wait(), 3)
+                    self.assertEqual(len(controllers), 1)
+                    self.assertEqual(len(fixture.allocations), 1)
+                    self.assertEqual(fixture.events.count('discover'), 1)
                     driver = service.work_task
                     (controller,) = controllers
                     fixture.stop.set()

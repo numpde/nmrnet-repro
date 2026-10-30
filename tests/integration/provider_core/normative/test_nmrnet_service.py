@@ -4,6 +4,7 @@ import asyncio
 import json
 import unittest
 from dataclasses import replace
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers, signature_window_problem
@@ -17,6 +18,7 @@ from tests.fakes.api_tls import verify_signed_request
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import Announcement, ServiceFailed
 from provider_core.api import ProviderAPI
+from provider_core.delivery_client import DeliveryClient
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -582,7 +584,8 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
         async with ServicePeers() as fixture:
             service = fixture.service()
             service.policy = replace(service.policy, hello_seconds=30)
-            await asyncio.wait_for(service.run(fixture.stop), 3)
+            with patch.object(DeliveryClient, "pending", AsyncMock(side_effect=AssertionError("outbox reads are unavailable")), create=True):
+                await asyncio.wait_for(service.run(fixture.stop), 3)
             await fixture.settle_service(service)
             self.assertEqual(fixture.events[:5], ["hello", "started", "discover", "allocate", "start"])
             self.assertEqual(len(fixture.allocations), 1)
