@@ -271,6 +271,7 @@ help:
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
 		'make provider/deployment/down DEPLOYMENT=<name> Await provider exit before removing dependencies; retain blocked work and data volumes.' \
 		'make provider/deployment/retire-generations DEPLOYMENT=<name> Remove unused frozen inputs; keep selected and container-borrowed generations.' \
+		'make provider/deployment/retire-api-route DEPLOYMENT=<name> Retire the stopped old API route directory using its retained recipe.' \
 		'make packages/images/retire           Remove obsolete NMRNet images; preserve prepared, selected and container-referenced images.' \
 		'make test/unit/packages/images        Test image retirement ownership and preservation offline.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
@@ -385,7 +386,7 @@ provider/prepare:
 
 .PHONY: provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 .PHONY: provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
-.PHONY: provider/deployment/retire-generations
+.PHONY: provider/deployment/retire-generations provider/deployment/retire-api-route
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
 	bash tools/compose_qualification.sh
@@ -394,7 +395,7 @@ test/integration/provider/deployment:
 test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:
 	bash tools/compose_qualification.sh $(notdir $@)
 
-provider/deployment/install provider/deployment/status provider/deployment/logs provider/deployment/down provider/deployment/retire-generations:
+provider/deployment/install provider/deployment/status provider/deployment/logs provider/deployment/down provider/deployment/retire-generations provider/deployment/retire-api-route:
 	bash tools/provider_deployment.sh $(notdir $@)
 
 provider/deployment/up:

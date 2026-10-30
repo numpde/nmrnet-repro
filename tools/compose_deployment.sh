@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
-[[ $# == 2 && $role == provider && $action =~ ^(install|up|down|status|logs|client-inputs|retire-generations)$ ]] || exit 2
+[[ $# == 2 && $role == provider && $action =~ ^(install|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
 caller_uid=$(id -u) caller_gid=$(id -g)
 [[ $caller_uid != 0 && $caller_gid != 0 ]] || { printf '%s\n' 'Run Compose deployment as its nonroot owner.' >&2; exit 2; }
 refuse() { printf 'Cannot %s %s deployment: %s\n' "$action" "$role" "$1" >&2; return 2; }
@@ -60,7 +60,7 @@ finish() {
         if [[ $inference_retirement_confirmed == true ]]; then
             rm -f -- "$stop_query" || cleanup=$?
         else
-            printf 'Provider stop metadata remains owned by an unretired client: %q.\n' "$stop_query" >&2
+            printf 'Deployment inspection metadata remains owned by an unretired client: %q.\n' "$stop_query" >&2
         fi
     fi
     if [[ $inference_retirement_confirmed == true && -z $helper_name && -n $binding_inputs_directory ]]; then
@@ -95,6 +95,17 @@ capture_stop_metadata() {
         || { refuse 'provider inspection has not settled; no dependencies were stopped.'; return 2; }
     [[ $(stat -c '%s' -- "$stop_query") -lt 4096 ]] \
         || { refuse 'provider inspection reached its metadata limit; no dependencies were stopped.'; return 2; }
+}
+capture_route_inventory() {
+    inference_native 'old API route inventory' 30 stdio bash -eu -c '
+        output=$1; shift
+        ulimit -f 1024
+        exec "$@" > "$output"
+    ' bash "$stop_query" "${engine[@]}" "$@"
+    [[ $inference_retirement_confirmed == true ]] \
+        || { refuse 'route inventory has not settled; no route data was removed.'; return 2; }
+    [[ $(stat -c '%s' -- "$stop_query") -lt 1048576 ]] \
+        || { refuse 'route inventory reached its metadata limit; no route data was removed.'; return 2; }
 }
 provider_state() {
     capture_stop_metadata inspect --type container --format '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}}' "$provider_id"
@@ -350,6 +361,39 @@ fi
 select_bundle
 if [[ $action == retire-generations ]]; then
     retire_generations
+    exit 0
+fi
+if [[ $action == retire-api-route ]]; then
+    route_directory=$root/runtime/route-api
+    path "$route_directory"
+    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+    capture_route_inventory ps --all --quiet
+    mapfile -t containers < "$stop_query"
+    if (( ${#containers[@]} )); then
+        capture_route_inventory inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${containers[@]}"
+        while IFS= read -r source; do
+            [[ -n $source ]] || continue
+            source=$(realpath -m -- "$source")
+            source=${source%/}
+            if [[ $source == "$route_directory" || $source == "$route_directory/"* || $route_directory == "$source/"* ]]; then
+                refuse 'a container still mounts the old API directory or an overlapping path; no route data was removed.'
+                exit 2
+            fi
+        done < "$stop_query"
+    fi
+    if [[ ! -e $route_directory ]]; then
+        printf 'Old API route directory is absent.\n'
+        exit 0
+    fi
+    [[ -d $route_directory && $(stat -c '%u:%a' -- "$route_directory") == "$caller_uid:700" ]] \
+        || { refuse 'the old API route must be the caller-owned private directory.'; exit 2; }
+    image_record provider
+    helper_grants=(--mount "type=bind,src=$bundle/compose.json,dst=$bundle/compose.json,readonly"
+        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
+    helper "$selected_image" /opt/provider/environment/bin/python /input/provider_deployment.py old-api-route \
+        --bundle "$bundle" --directory "$route_directory"
+    rm -rf --one-file-system -- "$route_directory"
+    printf 'Retired the old API route directory.\n'
     exit 0
 fi
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")

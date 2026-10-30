@@ -9,11 +9,22 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.integration.nmrnet.compose_ports import deployment_inputs
-from tools.provider_deployment import client_inputs, freeze_deployment, main
+from tools.provider_deployment import client_inputs, freeze_deployment, main, require_old_api_route
+from nmrnet_provider.config import ConfigurationRejected
 from tests.integration.nmrnet.compose_ports import ComposeFixture
 
 
 class DeploymentBundleTests(unittest.TestCase):
+    def test_old_api_route_admission_uses_the_retained_recipe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            arguments, _ = deployment_inputs(Path(directory))
+            freeze_deployment(**arguments)
+            bundle = arguments["bundle"]
+            route = bundle.parent.parent / "runtime/route-api"
+            require_old_api_route(bundle, route)
+            with self.assertRaises(ConfigurationRejected):
+                require_old_api_route(bundle, route.parent / "route-store")
+
     def test_freeze_cli_reports_unsupported_retry_without_starting_services(self):
         with tempfile.TemporaryDirectory() as directory:
             arguments, _ = deployment_inputs(Path(directory))

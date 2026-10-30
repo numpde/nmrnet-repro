@@ -41,7 +41,11 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
     inference_diagnostic=
     printf '%s|%s|%s\\n' "$operation" "$seconds" "$result" >> "$repository_root/budgets"
     if [[ $result == image-id ]]; then inference_result=$("$@") || status=$?; else "$@" || status=$?; fi
-    inference_retirement_confirmed=${TEST_RETIRED-true}
+    if [[ $operation == 'old API route inventory' && " $* " == *' inspect --format '* ]]; then
+        inference_retirement_confirmed=${TEST_INSPECT_RETIRED-${TEST_RETIRED-true}}
+    else
+        inference_retirement_confirmed=${TEST_RETIRED-true}
+    fi
     if [[ $status != 0 ]]; then
         if [[ $operation == 'retire deployment configuration helper' ]]; then
             inference_diagnostic=${TEST_CLEANUP_DIAGNOSTIC-}
@@ -82,6 +86,7 @@ case $1 in
     elif [[ " $* " == *' lifetime-owner '* ]]; then
         printf 'sha256:%064d nmr-api-delivery-control-%064d %s %s\n' 9 1 "$(id -u)" "$(id -g)"
     fi
+    [[ " $* " != *' old-api-route '* ]] || exit "${TEST_ROUTE_ADMISSION_STATUS-0}"
     arguments=("$@")
     for ((i=0;i<${#arguments[@]};i++)); do
       case ${arguments[i]} in
@@ -94,7 +99,9 @@ case $1 in
     if [[ " $* " == *'.State.Status'* ]]; then
         if [[ -f $root/provider-stopped ]]; then printf '%s\n' "${TEST_PROVIDER_STOPPED_STATE-exited 0 false}";
         else printf '%s\n' "${TEST_PROVIDER_STATE-running 0 false}"; fi
-    elif [[ " $* " == *'.Mounts'* ]]; then printf '%s' "${TEST_MOUNTS-}";
+    elif [[ " $* " == *'.Mounts'* ]]; then
+        if [[ ${TEST_INVENTORY_LIMIT-false} == true ]]; then head -c 1048576 /dev/zero
+        else printf '%s' "${TEST_MOUNTS-}"; fi
     else printf 'sha256:%064d\n' 9; fi
     ;;
  image) printf 'sha256:%064d\n' 9 ;;
@@ -418,6 +425,68 @@ esac
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertTrue(unselected.exists())
         self.assertTrue(self.bundle.exists())
+
+    def test_retire_api_route_preserves_owned_neighbors_and_recipe(self):
+        route = self.provider / 'runtime/route-api'
+        route.mkdir(parents=True, mode=0o700)
+        (route / 'ready').write_text('ready\n')
+        neighbor = self.provider / 'runtime/route-store'
+        neighbor.mkdir(mode=0o700)
+        result = self.run_command('retire-api-route')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(route.exists())
+        self.assertTrue(neighbor.exists())
+        self.assertTrue(self.bundle.exists())
+        self.assertIn('Retired the old API route', result.stdout)
+
+    def test_retire_api_route_refuses_any_overlapping_container_mount(self):
+        route = self.provider / 'runtime/route-api'
+        route.mkdir(parents=True, mode=0o700)
+        for mount in (str(route), str(route / 'ready'), str(route.parent), '/'):
+            with self.subTest(mount=mount):
+                result = self.run_command('retire-api-route', changes={
+                    'TEST_CONTAINERS': CID, 'TEST_MOUNTS': mount + '\n',
+                })
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(route.exists())
+                self.assertIn('still mounts', result.stderr)
+
+    def test_retire_api_route_retains_directory_when_admission_or_inspection_fails(self):
+        route = self.provider / 'runtime/route-api'
+        route.mkdir(parents=True, mode=0o700)
+        for changes in ({'TEST_ROUTE_ADMISSION_STATUS': '7'},
+                        {'TEST_CONTAINERS': CID, 'TEST_INSPECT_STATUS': '7'}):
+            with self.subTest(changes=changes):
+                result = self.run_command('retire-api-route', changes=changes)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(route.exists())
+
+    def test_absent_api_route_still_refuses_a_container_borrower(self):
+        route = self.provider / 'runtime/route-api'
+        result = self.run_command('retire-api-route', changes={
+            'TEST_CONTAINERS': CID, 'TEST_MOUNTS': str(route) + '\n',
+        })
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('still mounts', result.stderr)
+        self.assertFalse(route.exists())
+        for changes in ({'TEST_PS_STATUS': '7'},
+                        {'TEST_CONTAINERS': CID, 'TEST_INSPECT_STATUS': '7'},
+                        {'TEST_CONTAINERS': CID, 'TEST_INVENTORY_LIMIT': 'true'}):
+            with self.subTest(changes=changes):
+                result = self.run_command('retire-api-route', changes=changes)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('directory is absent', result.stdout)
+        for changes in ({'TEST_RETIRED': 'false'},
+                        {'TEST_CONTAINERS': CID, 'TEST_INSPECT_RETIRED': 'false'}):
+            with self.subTest(changes=changes):
+                (self.root / 'cleanup').unlink(missing_ok=True)
+                result = self.run_command('retire-api-route', changes=changes)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('directory is absent', result.stdout)
+                self.assertFalse((self.root / 'cleanup').exists())
+        result = self.run_command('retire-api-route')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('directory is absent', result.stdout)
 
     def test_native_lifetime_locks_are_created_private_and_keep_their_inode(self):
         result = self.run_command('install')

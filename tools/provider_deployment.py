@@ -210,6 +210,16 @@ def lifetime_owner(bundle):
     return provider["image"], grants[0]["source"], uid, gid
 
 
+def require_old_api_route(bundle, directory):
+    """Admit only the private API directory named by the retained recipe."""
+    plan = creation_plan(bundle)
+    api = plan.get("services", {}).get("api", {})
+    grants = [grant for grant in api.get("volumes", []) if grant.get("target") == "/route"]
+    if (len(grants) != 1 or grants[0].get("type") != "bind"
+            or grants[0].get("source") != str(directory) or grants[0].get("read_only") is not False):
+        raise ConfigurationRejected("Cannot retire the old API route: the selected recipe does not grant its private directory to the API service.")
+
+
 def initialize_lifetime(uid, gid):
     """Initialize only a fresh volume root; an existing producer owns its data."""
     if os.geteuid() != 0 or uid <= 0 or gid <= 0:
@@ -288,6 +298,9 @@ def main(arguments=None):
     client.add_argument("--client-root", type=Path, required=True)
     lifetime = operations.add_parser("lifetime-owner", help="Print the installed provider lifetime grant and its image/owner.")
     lifetime.add_argument("--bundle", type=Path, required=True)
+    route = operations.add_parser("old-api-route", help="Admit the old API directory from its retained recipe.")
+    route.add_argument("--bundle", type=Path, required=True)
+    route.add_argument("--directory", type=Path, required=True)
     initialize = operations.add_parser("initialize-lifetime", help="Initialize a fresh mounted provider lifetime volume.")
     initialize.add_argument("--uid", type=int, required=True)
     initialize.add_argument("--gid", type=int, required=True)
@@ -302,6 +315,9 @@ def main(arguments=None):
             return 0
         elif operation == "lifetime-owner":
             sys.stdout.write(" ".join(lifetime_owner(**values)) + "\n")
+            return 0
+        elif operation == "old-api-route":
+            require_old_api_route(**values)
             return 0
         elif operation == "initialize-lifetime":
             initialize_lifetime(**values)

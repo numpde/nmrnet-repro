@@ -270,6 +270,12 @@ stopped. Shared delivery and its queue remain available throughout.</p>
 any generation mounted by a container, including a stopped container, remain.
 To retire unused generations without reconfiguring or stopping the provider:</p>
 <pre><code class="language-sh">make provider/deployment/retire-generations DEPLOYMENT=&lt;name&gt;</code></pre>
+<p>When moving a stopped deployment from its private API route to a shared route,
+retire its old API directory before installing the new configuration:</p>
+<pre><code class="language-sh">make provider/deployment/retire-api-route DEPLOYMENT=&lt;name&gt;</code></pre>
+<p>The command checks the selected recipe and refuses to remove a directory still
+mounted by any container, including a stopped one. It does not remove shared
+socket volumes or the interpreter and store routes.</p>
 <p>After a successful <code>make provider/deployment/up</code>, image retirement
 removes obsolete NMRNet images. It preserves images referenced by any container,
 including stopped containers, all selected deployment recipes and current image
