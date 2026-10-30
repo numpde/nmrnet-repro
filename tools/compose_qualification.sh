@@ -92,15 +92,27 @@ compose_witness_wait() {
     done
 }
 
+compose_witness_capture() {
+    local operation=$1 budget=$2
+    shift 2
+    inference_native "$operation" "$budget" stdio bash -eu -c '
+        output=$1; shift
+        umask 077
+        ulimit -f 64
+        exec "$@" > "$output"
+    ' bash "$scratch/observation" "$@" || return $?
+    [[ -f $scratch/observation && ! -L $scratch/observation && $(stat -c %s -- "$scratch/observation") -lt 65536 ]] || return 2
+    qualification_observation=$(< "$scratch/observation")
+}
+
 compose_witness_role() {
-    local identifier
-    identifier=$(inference_native 'locate private qualification role' 10 stdio "${engine[@]}" ps --all --no-trunc --quiet \
-        --filter "label=io.nmrnet-repro.deployment=$deployment" --filter "label=com.docker.compose.service=$1") || return $?
-    [[ $identifier =~ ^[0-9a-f]{64}$ ]] || {
+    compose_witness_capture 'locate private qualification role' 10 "${engine[@]}" ps --all --no-trunc --quiet \
+        --filter "label=io.nmrnet-repro.deployment=$deployment" --filter "label=com.docker.compose.service=$1" || return $?
+    [[ $qualification_observation =~ ^[0-9a-f]{64}$ ]] && cmp -s "$scratch/observation" <(printf '%s\n' "$qualification_observation") || {
         printf 'Qualification role %s is absent or ambiguous.\n' "$1" >&2
         return 2
     }
-    printf '%s\n' "$identifier"
+    qualification_role=$qualification_observation
 }
 
 compose_witness_provider() {
@@ -121,10 +133,12 @@ compose_witness_native_events() {
     local stage=$1 role identifier projection event operation value reason deadline=$((SECONDS + 15))
     local -A starts=() retirements=()
     for role in prediction reader smiles; do
-        identifier=$(compose_witness_role "$role") || return $?
+        compose_witness_role "$role" || return $?
+        identifier=$qualification_role
         while true; do
-            projection=$(inference_native 'observe bounded native lifecycle fields' 10 stdio \
-                bash "$capture/tools/compose_runner_events.sh" "$identifier" "${engine[@]}") || return $?
+            compose_witness_capture 'observe bounded native lifecycle fields' 10 \
+                bash "$capture/tools/compose_runner_events.sh" "$identifier" "${engine[@]}" || return $?
+            projection=$qualification_observation
             starts=() retirements=()
             while IFS=$'\t' read -r event operation value reason; do
                 [[ -n $event ]] || continue
@@ -156,9 +170,11 @@ compose_witness_native_events() {
 
 compose_witness_reader_crash() {
     local identifier before after operation program budget status=0 deadline=$((SECONDS + 60))
-    identifier=$(compose_witness_role reader) || return $?
-    before=$(inference_native 'observe reader before controlled crash' 10 stdio "${engine[@]}" inspect \
-        --format '{{.RestartCount}}' "$identifier") || return $?
+    compose_witness_role reader || return $?
+    identifier=$qualification_role
+    compose_witness_capture 'observe reader before controlled crash' 10 "${engine[@]}" inspect \
+        --format '{{.RestartCount}}' "$identifier" || return $?
+    before=$qualification_observation
     [[ $before == 0 ]] || return 2
     : > "$peer_data/reader-crash-start"
     compose_witness_wait "$peer_data/reader-crash-operation" 15 || return $?
@@ -173,12 +189,14 @@ compose_witness_reader_crash() {
     if (( status != 0 )); then printf 'Controlled crash exec exited %s; awaiting the independent old-child observer.\n' "$status" >&2; fi
     budget=$((deadline - SECONDS)); (( budget > 0 )) || return 2
     compose_witness_wait "$peer_data/reader-old-child-exited.json" "$budget" || return $?
-    budget=$((deadline - SECONDS)); (( budget > 0 )) || return 2
-    inference_native 'wait for restarted qualification roles' "$budget" stdio \
-        env NMRNET_DEPLOYMENT_INPUT="$deployment" bash "$repository_root/tools/provider_deployment.sh" up || return $?
-    after=$(inference_native 'observe reader after controlled crash' 10 stdio "${engine[@]}" inspect \
-        --format '{{.RestartCount}}' "$identifier") || return $?
-    [[ $after =~ ^[1-9][0-9]*$ ]] || return 2
+    while :; do
+        compose_witness_capture 'observe restarted reader health' 10 "${engine[@]}" inspect \
+            --format '{{.RestartCount}}|{{.State.Running}}|{{.State.Health.Status}}' "$identifier" || return $?
+        after=$qualification_observation
+        [[ $after =~ ^[1-9][0-9]*\|true\|healthy$ ]] && break
+        (( SECONDS < deadline )) || { printf '%s\n' 'Restarted reader did not become healthy.' >&2; return 2; }
+        sleep 0.1
+    done
     inference_native 'inspect restarted reader scratch' 10 stdio "${engine[@]}" exec "$identifier" \
         /opt/rdkit/environment/bin/python -I -B -c \
         'import os; assert not os.listdir("/scratch"), "Restarted reader retained old scratch"; print("fresh-root")' || return $?
@@ -192,8 +210,9 @@ compose_witness_notice() {
     local identifier=$1 event=$2 since=$3 logs deadline=$((SECONDS + 30))
     local needle="\"event\":\"$event\""
     while (( SECONDS < deadline )); do
-        logs=$(inference_native 'read bounded qualification recovery notices' 10 stdio \
-            "${engine[@]}" logs --since "$since" --tail 80 "$identifier" 2>&1) || return $?
+        compose_witness_capture 'read bounded qualification recovery notices' 10 bash -c \
+            'exec "$@" 2>&1' bash "${engine[@]}" logs --since "$since" --tail 80 "$identifier" || return $?
+        logs=$qualification_observation
         if [[ $logs == *"$needle"* ]]; then
             printf '%s\n' "$logs"
             return 0
@@ -206,28 +225,32 @@ compose_witness_notice() {
 
 compose_witness_relay_restart() {
     local identifier before after queue_before queue_after since
-    identifier=$(compose_witness_role provider) || return $?
-    before=$(inference_native 'observe idle provider before relay restart' 10 stdio "${engine[@]}" inspect \
-        --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier") || return $?
+    compose_witness_role provider || return $?
+    identifier=$qualification_role
+    compose_witness_capture 'observe idle provider before relay restart' 10 "${engine[@]}" inspect \
+        --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier" || return $?
+    before=$qualification_observation
     qualification_delivery_daemon || return $?
-    queue_before=$(inference_native 'observe private queue file before restart' 10 stdio "${engine[@]}" exec \
-        "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
+    compose_witness_capture 'observe private queue file before restart' 10 "${engine[@]}" exec \
+        "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3 || return $?
+    queue_before=$qualification_observation
     since=$(date -u +'%Y-%m-%dT%H:%M:%S.%NZ')
     qualification_delivery_down || return $?
     qualification_delivery_empty || return $?
     compose_witness_notice "$identifier" api_delivery_retry "$since" || return $?
     qualification_delivery_up || return $?
     compose_witness_notice "$identifier" api_delivery_recovered "$since" || return $?
-    compose_witness_provider up || return $?
-    after=$(inference_native 'observe idle provider after relay restart' 10 stdio "${engine[@]}" inspect \
-        --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier") || return $?
+    compose_witness_capture 'observe idle provider after relay restart' 10 "${engine[@]}" inspect \
+        --format '{{.Id}}|{{.State.Pid}}|{{.RestartCount}}|{{.State.Running}}' "$identifier" || return $?
+    after=$qualification_observation
     [[ $before == "$after" && $after == *'|0|true' ]] || {
         printf '%s\n' 'The private provider restarted during idle relay recovery.' >&2
         return 2
     }
     qualification_delivery_daemon || return $?
-    queue_after=$(inference_native 'observe private queue file after restart' 10 stdio "${engine[@]}" exec \
-        "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3) || return $?
+    compose_witness_capture 'observe private queue file after restart' 10 "${engine[@]}" exec \
+        "$qualification_delivery_daemon_id" stat -c '%d:%i' /state/delivery.sqlite3 || return $?
+    queue_after=$qualification_observation
     [[ $queue_before == "$queue_after" ]] || {
         printf '%s\n' 'The private queue file identity changed across delivery restart.' >&2
         return 2
@@ -404,14 +427,22 @@ compose_witness_main() {
     if [[ $scientific_case == successive ]]; then
         # Restart only the producer: this case explicitly measures warm native reuse.
         compose_witness_native_events before-restart || return $?
+        compose_witness_role provider || return $?
+        local restarted_provider=$qualification_role deadline
         compose_witness_provider_compose 120 restart --timeout 60 provider || return $?
-        compose_witness_provider up || return $?
+        deadline=$((SECONDS + 60))
+        while :; do
+            compose_witness_capture 'observe restarted provider health' 10 "${engine[@]}" inspect \
+                --format '{{.State.Running}}|{{.State.Health.Status}}' "$restarted_provider" || return $?
+            [[ $qualification_observation == 'true|healthy' ]] && break
+            (( SECONDS < deadline )) || { printf '%s\n' 'Restarted provider did not become healthy.' >&2; return 2; }
+            sleep 0.1
+        done
         compose_witness_native_events after-restart || return $?
     else
         compose_witness_provider down || return $?
         compose_witness_provider up || return $?
     fi
-    compose_witness_provider up || return $?
     compose_witness_provider down || return $?
     deployment_installed=false
     : > "$peer_data/done"
