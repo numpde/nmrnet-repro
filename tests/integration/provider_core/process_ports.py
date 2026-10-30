@@ -105,6 +105,7 @@ class ProcessPeers:
         relay_root = self.root / "relay-state"
         relay_root.mkdir(mode=0o700)
         self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
+        self.config.delivery.endpoint.socket_path.parent.chmod(0o710)
         endpoint = self.config.delivery.endpoint
         self.relay = SharedDeliveryService(
             relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),

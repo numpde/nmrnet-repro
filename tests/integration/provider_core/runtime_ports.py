@@ -126,6 +126,7 @@ class RuntimePeers:
             relay_root = Path(directory) / "relay-state"
             relay_root.mkdir(mode=0o700)
             self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
+            self.config.delivery.endpoint.socket_path.parent.chmod(0o710)
             policy = ServicePolicy.admit("local", [urlsplit(self.api_peer.origin).netloc], ["127.0.0.1=127.0.0.1"])
             self.proxy = JoinedDeliveryProxy(Path(directory) / "delivery-proxy.sock", "lo", policy, status_directory=Path(directory))
             self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
