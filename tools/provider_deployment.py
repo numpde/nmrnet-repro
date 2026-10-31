@@ -62,6 +62,11 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         observed = directory.lstat()
         if not stat.S_ISDIR(observed.st_mode) or observed.st_uid != os.geteuid() or stat.S_IMODE(observed.st_mode) != 0o700:
             raise ConfigurationRejected("the fresh deployment bundle requires caller-owned mode-0700 config and secret directories.")
+    with os.scandir(bundle / "secrets") as entries:
+        secret_children = list(entries)
+    if len(secret_children) != 1 or secret_children[0].name != "provider" or not secret_children[0].is_dir(follow_symlinks=False):
+        raise ConfigurationRejected("choose a fresh deployment bundle with only its provider secret directory; existing contents were preserved.")
+    for directory in (bundle / "config", bundle / "secrets" / "provider"):
         with os.scandir(directory) as entries:
             if next(entries, None) is not None:
                 raise ConfigurationRejected("choose fresh empty deployment input directories; existing generation contents were preserved.")
