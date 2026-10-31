@@ -51,7 +51,8 @@ source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/user_namespace_map.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
 helper_name= map_probe_name= map_probe_id= map_probe_removal_attempted=false map_query= lifetime_query= stop_query=
-helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false service_host_uid=$caller_uid service_host_gid=$caller_gid
+helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false helper_add_dac_override=false
+service_host_uid=$caller_uid service_host_gid=$caller_gid
 finish() {
     local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
@@ -303,6 +304,7 @@ helper() {
     local image=$1 python=$2; shift 2
     local -a helper_capabilities=(--cap-drop ALL)
     [[ $helper_add_chown != true ]] || helper_capabilities+=(--cap-add CHOWN)
+    [[ $helper_add_dac_override != true ]] || helper_capabilities+=(--cap-add DAC_OVERRIDE)
     IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
     helper_name=nmrnet-config-${helper_uuid//-/}
     run 120 run --rm --pull never --name "$helper_name" --init --network none --read-only \
@@ -376,22 +378,12 @@ if [[ $action == install ]]; then
     for runtime_role in prediction reader smiles route-interpreter route-store; do
         runtime_directory "$root/runtime/$runtime_role"
     done
-    # The runner borrows a stable lock inode across container replacement.
-    # Create it only for a fresh native directory; never truncate or replace it.
-    for runtime_role in prediction reader smiles; do
-        lease=$root/runtime/$runtime_role/.owner-session.lock
-        if [[ ! -e $lease && ! -L $lease ]]; then
-            ( set -o noclobber; : > "$lease" ) \
-                || { refuse 'cannot create the native lifetime lock exclusively.'; exit 2; }
-        fi
-        lease_owner=$(stat -c '%u:%g:%a' -- "$lease" 2>/dev/null || :)
-        [[ -f $lease && ! -L $lease \
-            && ( $lease_owner == "$caller_uid:$caller_gid:600" || $lease_owner == "$service_host_uid:$service_host_gid:600" ) ]] \
-            || { refuse 'native lifetime locks must be private regular files owned by the caller or selected Engine-mapped service user.'; exit 2; }
-    done
-    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime")
+    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime"
+        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
+    helper_add_dac_override=$helper_add_chown
     helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
         --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid"
+    helper_add_dac_override=false
     image_record inference; scientific_image=$selected_image
     image_record preparation; geometry_image=$selected_image
     source "$repository_root/tools/git_metadata.sh"

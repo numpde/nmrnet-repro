@@ -60,6 +60,23 @@ class DeploymentBundleTests(unittest.TestCase):
             chown.assert_not_called()
             self.assertEqual(unexpected.read_text(), "preserve")
 
+    def test_runtime_preparation_rejects_external_hardlinks_before_ownership_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "runtime"
+            runtime.mkdir(mode=0o700)
+            for name in ("prediction", "reader", "smiles", "route-interpreter", "route-store"):
+                (runtime / name).mkdir(mode=0o700)
+            external = root / "external-lock"
+            external.write_text("retained")
+            external.chmod(0o600)
+            (runtime / "prediction/.owner-session.lock").hardlink_to(external)
+            with patch("tools.provider_deployment.os.chown") as chown:
+                with self.assertRaisesRegex(ConfigurationRejected, "standalone"):
+                    prepare_runtime(runtime, os.getuid(), os.getgid())
+            chown.assert_not_called()
+            self.assertEqual(external.read_text(), "retained")
+
     def test_old_api_route_admission_uses_the_retained_recipe(self):
         with tempfile.TemporaryDirectory() as directory:
             arguments, _ = deployment_inputs(Path(directory))

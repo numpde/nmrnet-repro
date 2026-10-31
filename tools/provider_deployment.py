@@ -309,6 +309,7 @@ def prepare_runtime(runtime_root, uid, gid):
         "route-store": {"proxy.sock": stat.S_ISSOCK, "ready": stat.S_ISREG},
     }
     ownership_targets = []
+    missing_locks = []
     for name, leaves in expected.items():
         directory = runtime_root / name
         observed = directory.lstat()
@@ -323,15 +324,26 @@ def prepare_runtime(runtime_root, uid, gid):
         for leaf, is_type in leaves.items():
             entry = actual.get(leaf)
             if entry is None:
+                if leaf == ".owner-session.lock":
+                    missing_locks.append(directory / leaf)
                 continue
             path = directory / leaf
             item = path.lstat()
             if (not is_type(item.st_mode)
                     or item.st_uid not in {os.geteuid(), uid}
+                    or item.st_nlink != 1
                     or stat.S_IMODE(item.st_mode) != 0o600):
-                raise ConfigurationRejected("provider runtime files must be private regular files or sockets owned by the caller or mapped service user.")
+                raise ConfigurationRejected("provider runtime files must be private, standalone regular files or sockets owned by the caller or mapped service user.")
             ownership_targets.append(path)
         ownership_targets.append(directory)
+    for path in missing_locks:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        try:
+            os.fchmod(descriptor, 0o600)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        ownership_targets.append(path)
     for path in ownership_targets:
         os.chown(path, uid, gid, follow_symlinks=False)
 
