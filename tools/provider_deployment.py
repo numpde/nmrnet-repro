@@ -329,9 +329,12 @@ def prepare_runtime(runtime_root, uid, gid):
                 continue
             path = directory / leaf
             item = path.lstat()
-            if (not is_type(item.st_mode)
-                    or item.st_uid not in {os.geteuid(), uid}
-                    or item.st_nlink != 1
+            if item.st_nlink != 1:
+                relative = f"{name}/{leaf}"
+                raise ConfigurationRejected(
+                    f"provider runtime entry {relative} has another hard link; refusing ownership change because it would change that alias too."
+                )
+            if (not is_type(item.st_mode) or item.st_uid not in {os.geteuid(), uid}
                     or stat.S_IMODE(item.st_mode) != 0o600):
                 raise ConfigurationRejected("provider runtime files must be private, standalone regular files or sockets owned by the caller or mapped service user.")
             ownership_targets.append(path)

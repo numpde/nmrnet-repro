@@ -73,7 +73,7 @@ class DeploymentBundleTests(unittest.TestCase):
             original = external.stat()
             (runtime / "prediction/.owner-session.lock").hardlink_to(external)
             with patch("tools.provider_deployment.os.chown") as chown:
-                with self.assertRaisesRegex(ConfigurationRejected, "standalone"):
+                with self.assertRaisesRegex(ConfigurationRejected, "another hard link"):
                     prepare_runtime(runtime, os.getuid(), os.getgid())
             chown.assert_not_called()
             self.assertEqual((external.stat().st_uid, external.stat().st_mode & 0o777), (original.st_uid, 0o600))
