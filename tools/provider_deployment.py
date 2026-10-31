@@ -293,6 +293,49 @@ def initialize_lifetime(uid, gid):
         os.close(descriptor)
 
 
+def prepare_runtime(runtime_root, uid, gid):
+    """Give each mounted runtime leaf the selected container user's mapped identity."""
+    if type(uid) is not int or type(gid) is not int or not 1 <= uid <= 4294967294 or not 1 <= gid <= 4294967294:
+        raise ConfigurationRejected("provider runtime ownership requires nonzero mapped service UID and GID values.")
+    runtime_root = _bind_path(runtime_root)
+    root = runtime_root.lstat()
+    if not stat.S_ISDIR(root.st_mode) or root.st_uid != os.geteuid() or stat.S_IMODE(root.st_mode) != 0o700:
+        raise ConfigurationRejected("provider runtime root must remain caller-owned and private.")
+    expected = {
+        "prediction": {".owner-session.lock": stat.S_ISREG},
+        "reader": {".owner-session.lock": stat.S_ISREG},
+        "smiles": {".owner-session.lock": stat.S_ISREG},
+        "route-interpreter": {"proxy.sock": stat.S_ISSOCK, "ready": stat.S_ISREG},
+        "route-store": {"proxy.sock": stat.S_ISSOCK, "ready": stat.S_ISREG},
+    }
+    ownership_targets = []
+    for name, leaves in expected.items():
+        directory = runtime_root / name
+        observed = directory.lstat()
+        if (not stat.S_ISDIR(observed.st_mode)
+                or observed.st_uid not in {os.geteuid(), uid}
+                or stat.S_IMODE(observed.st_mode) != 0o700):
+            raise ConfigurationRejected("provider runtime directories must be private directories owned by the caller or mapped service user.")
+        with os.scandir(directory) as entries:
+            actual = {entry.name: entry for entry in entries}
+        if set(actual) - set(leaves):
+            raise ConfigurationRejected("provider runtime directory contains an unowned entry; existing contents were preserved.")
+        for leaf, is_type in leaves.items():
+            entry = actual.get(leaf)
+            if entry is None:
+                continue
+            path = directory / leaf
+            item = path.lstat()
+            if (not is_type(item.st_mode)
+                    or item.st_uid not in {os.geteuid(), uid}
+                    or stat.S_IMODE(item.st_mode) != 0o600):
+                raise ConfigurationRejected("provider runtime files must be private regular files or sockets owned by the caller or mapped service user.")
+            ownership_targets.append(path)
+        ownership_targets.append(directory)
+    for path in ownership_targets:
+        os.chown(path, uid, gid, follow_symlinks=False)
+
+
 def client_inputs(*, bundle, prediction_image_id, client_root):
     """Export nonsecret client expectations from the admitted running generation.
 
@@ -352,6 +395,10 @@ def main(arguments=None):
     initialize = operations.add_parser("initialize-lifetime", help="Initialize a fresh mounted provider lifetime volume.")
     initialize.add_argument("--uid", type=int, required=True)
     initialize.add_argument("--gid", type=int, required=True)
+    runtime = operations.add_parser("prepare-runtime", help="Grant private runtime leaves to the mapped container service user.")
+    runtime.add_argument("--runtime-root", type=Path, required=True)
+    runtime.add_argument("--uid", type=int, required=True)
+    runtime.add_argument("--gid", type=int, required=True)
     options = parser.parse_args(arguments)
     values = vars(options)
     operation = values.pop("operation")
@@ -370,6 +417,9 @@ def main(arguments=None):
         elif operation == "initialize-lifetime":
             initialize_lifetime(**values)
             sys.stdout.write("Provider lifetime volume ready.\n")
+            return 0
+        elif operation == "prepare-runtime":
+            prepare_runtime(**values)
             return 0
     except (ConfigurationRejected, OSError) as failure:
         # Protected Docker-stderr projection for this finite receiving boundary:

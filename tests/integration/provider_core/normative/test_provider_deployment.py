@@ -3,18 +3,63 @@
 import hashlib
 import io
 import json
+import os
+import socket
+import stat
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from tests.integration.nmrnet.compose_ports import deployment_inputs
-from tools.provider_deployment import client_inputs, freeze_deployment, main, require_old_api_route
+from tools.provider_deployment import client_inputs, freeze_deployment, main, prepare_runtime, require_old_api_route
 from nmrnet_provider.config import ConfigurationRejected
 from tests.integration.nmrnet.compose_ports import ComposeFixture
 
 
 class DeploymentBundleTests(unittest.TestCase):
+    def test_runtime_preparation_admits_only_owned_private_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / "runtime"
+            runtime.mkdir(mode=0o700)
+            for name in ("prediction", "reader", "smiles"):
+                leaf = runtime / name
+                leaf.mkdir(mode=0o700)
+                (leaf / ".owner-session.lock").write_text("")
+                (leaf / ".owner-session.lock").chmod(0o600)
+            for name in ("route-interpreter", "route-store"):
+                leaf = runtime / name
+                leaf.mkdir(mode=0o700)
+                ready = leaf / "ready"
+                ready.write_text("")
+                ready.chmod(0o600)
+                listener = socket.socket(socket.AF_UNIX)
+                try:
+                    listener.bind(str(leaf / "proxy.sock"))
+                finally:
+                    listener.close()
+                (leaf / "proxy.sock").chmod(0o600)
+            prepare_runtime(runtime, os.getuid(), os.getgid())
+            for leaf in runtime.iterdir():
+                self.assertEqual((leaf.stat().st_uid, stat.S_IMODE(leaf.stat().st_mode)), (os.getuid(), 0o700))
+                for entry in leaf.iterdir():
+                    self.assertEqual((entry.stat().st_uid, stat.S_IMODE(entry.stat().st_mode)), (os.getuid(), 0o600))
+
+    def test_runtime_preparation_rejects_unknown_entries_before_ownership_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / "runtime"
+            runtime.mkdir(mode=0o700)
+            for name in ("prediction", "reader", "smiles", "route-interpreter", "route-store"):
+                (runtime / name).mkdir(mode=0o700)
+            unexpected = runtime / "route-store" / "other"
+            unexpected.write_text("preserve")
+            with patch("tools.provider_deployment.os.chown") as chown:
+                with self.assertRaisesRegex(ConfigurationRejected, "unowned entry"):
+                    prepare_runtime(runtime, os.getuid(), os.getgid())
+            chown.assert_not_called()
+            self.assertEqual(unexpected.read_text(), "preserve")
+
     def test_old_api_route_admission_uses_the_retained_recipe(self):
         with tempfile.TemporaryDirectory() as directory:
             arguments, _ = deployment_inputs(Path(directory))
@@ -89,6 +134,9 @@ class DeploymentBundleTests(unittest.TestCase):
             arguments["definition"].write_text(arguments["definition"].read_text().replace("max_turns = 6", "max_turns = 5"))
             second = first.parent / "generation-second"
             second.mkdir(mode=0o700)
+            (second / "config").mkdir(mode=0o700)
+            (second / "secrets").mkdir(mode=0o700)
+            (second / "secrets/provider").mkdir(mode=0o700)
             arguments["bundle"] = second
             freeze_deployment(**arguments)
             self.assertEqual(previous, {path.relative_to(first): path.read_bytes() for path in first.rglob("*") if path.is_file()})

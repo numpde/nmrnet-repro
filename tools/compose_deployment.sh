@@ -18,6 +18,14 @@ private_directory() {
     [[ -d $1 && $(stat -c '%u:%a' -- "$1") == "$caller_uid:700" ]] \
         || { refuse 'configuration roots must be caller-owned mode 0700 directories.'; return 2; }
 }
+runtime_directory() {
+    path "$1"
+    [[ -e $1 ]] || mkdir -m 700 -- "$1"
+    local ownership
+    ownership=$(stat -c '%u:%g:%a' -- "$1")
+    [[ -d $1 && ( $ownership == "$caller_uid:$caller_gid:700" || $ownership == "$service_host_uid:$service_host_gid:700" ) ]] \
+        || { refuse 'runtime leaves must be private directories owned by the caller or selected Engine-mapped service user.'; return 2; }
+}
 deployment_name=${NMRNET_DEPLOYMENT_INPUT-}
 [[ $deployment_name =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || { refuse 'supply an explicit DEPLOYMENT name.'; exit 2; }
 root=$repository_root/secrets/deployments/$deployment_name
@@ -43,7 +51,7 @@ source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/user_namespace_map.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
 helper_name= map_probe_name= map_probe_id= map_probe_removal_attempted=false map_query= lifetime_query= stop_query=
-helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false
+helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false service_host_uid=$caller_uid service_host_gid=$caller_gid
 finish() {
     local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
@@ -127,6 +135,8 @@ map_helper_identity() {
         || { refuse 'the selected Engine does not map the provider UID into the helper namespace.'; return 2; }
     mapped_service_gid=$(host_id_for_container_id "/proc/$pid/gid_map" "$caller_gid") \
         || { refuse 'the selected Engine does not map the provider GID into the helper namespace.'; return 2; }
+    service_host_uid=$mapped_service_uid service_host_gid=$mapped_service_gid
+    service_host_uid=$mapped_service_uid service_host_gid=$mapped_service_gid
     mapped_root_uid=$(host_id_for_container_id "/proc/$pid/uid_map" 0) \
         || { refuse 'the selected Engine does not map container root into the helper namespace.'; return 2; }
     mapped_root_gid=$(host_id_for_container_id "/proc/$pid/gid_map" 0) \
@@ -364,7 +374,7 @@ if [[ $action == install ]]; then
     map_helper_identity "$controller_image" /opt/provider/environment/bin/python
     private_directory "$root/runtime"
     for runtime_role in prediction reader smiles route-interpreter route-store; do
-        private_directory "$root/runtime/$runtime_role"
+        runtime_directory "$root/runtime/$runtime_role"
     done
     # The runner borrows a stable lock inode across container replacement.
     # Create it only for a fresh native directory; never truncate or replace it.
@@ -374,9 +384,14 @@ if [[ $action == install ]]; then
             ( set -o noclobber; : > "$lease" ) \
                 || { refuse 'cannot create the native lifetime lock exclusively.'; exit 2; }
         fi
-        [[ -f $lease && ! -L $lease && $(stat -c '%u:%a' -- "$lease") == "$caller_uid:600" ]] \
-            || { refuse 'native lifetime locks must be caller-owned mode 0600 regular files.'; exit 2; }
+        lease_owner=$(stat -c '%u:%g:%a' -- "$lease" 2>/dev/null || :)
+        [[ -f $lease && ! -L $lease \
+            && ( $lease_owner == "$caller_uid:$caller_gid:600" || $lease_owner == "$service_host_uid:$service_host_gid:600" ) ]] \
+            || { refuse 'native lifetime locks must be private regular files owned by the caller or selected Engine-mapped service user.'; exit 2; }
     done
+    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime")
+    helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
+        --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid"
     image_record inference; scientific_image=$selected_image
     image_record preparation; geometry_image=$selected_image
     source "$repository_root/tools/git_metadata.sh"
