@@ -93,8 +93,12 @@ inference_cancellation_status=0
 caller_cancellation=0
 
 map_pool_owner() {
-    local host_uid=$1 host_gid=$2 create_status pid running extra mapped_uid mapped_gid
+    local host_uid=$1 host_gid=$2 create_status pid running extra mapped_uid mapped_gid probe_starttime probe_uuid probe_token
     local receipt=$scratch/pool-map.cid output=$scratch/pool-map.stdout diagnostic=$scratch/pool-map.stderr
+    require_initial_user_and_pid_namespaces \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: host UID/GID mapping requires the initial user and PID namespaces.'; return 2; }
+    IFS= read -r probe_uuid < /proc/sys/kernel/random/uuid
+    probe_token=nmrnet-pool-map-token-${probe_uuid//-/}
     if inference_native 'wheelhouse owner mapping probe creation' "$metadata_timeout" stdio bash -eu -c '
         output=$1; diagnostic=$2; receipt=$3; shift 3
         umask 077
@@ -103,7 +107,7 @@ map_pool_owner() {
     ' bash "$output" "$diagnostic" "$receipt" "${engine[@]}" create --cidfile "$receipt" --network none \
         --read-only --user 0:0 --cap-drop ALL --security-opt no-new-privileges:true \
         --memory 64m --memory-swap 64m --pids-limit 8 --entrypoint /opt/provider-core/environment/bin/python \
-        "$proxy_image" -I -B -c 'import time; time.sleep(60)'; then create_status=0; else create_status=$?; fi
+        "$proxy_image" -I -B -c 'import time; time.sleep(60)' "$probe_token"; then create_status=0; else create_status=$?; fi
     if [[ $inference_retirement_confirmed != true ]]; then return "$create_status"; fi
     local created=
     if private_receipt_below_limit "$output" && IFS= read -r -N 64 created < "$output" \
@@ -121,13 +125,23 @@ map_pool_owner() {
     [[ $pid =~ ^[1-9][0-9]*$ && $running == true && -z $extra ]] \
         && cmp -s -- "$scratch/pool-map-inspect" <(printf '%s %s\n' "$pid" "$running") \
         || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the selected Engine probe is not observably running.'; return 2; }
+    probe_starttime=$(probe_process_starttime "$pid") && probe_process_has_token "$pid" "$probe_token" \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the selected Engine PID is not the exact mapping probe.'; return 2; }
     mapped_uid=$(container_id_for_host_id "/proc/$pid/uid_map" "$host_uid") \
         || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner UID through the selected Engine namespace.'; return 2; }
     mapped_gid=$(container_id_for_host_id "/proc/$pid/gid_map" "$host_gid") \
         || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner GID through the selected Engine namespace.'; return 2; }
+    probe_process_is_same "$pid" "$probe_token" "$probe_starttime" \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the selected Engine probe changed while its UID/GID maps were read.'; return 2; }
     map_probe_removal_attempted=true
     inference_native 'wheelhouse owner mapping probe retirement' "$metadata_timeout" discard \
         "${engine[@]}" rm --force "$map_probe_id"
+    wait_for_probe_process_retirement "$pid" "$probe_starttime" \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the selected Engine probe process retirement is unconfirmed.'; return 2; }
+    inference_native 'wheelhouse owner mapping probe retirement confirmation' "$metadata_timeout" stdio \
+        "${engine[@]}" ps --all --no-trunc --filter "id=$map_probe_id" --format '{{.ID}}' > "$scratch/pool-map-retired"
+    [[ $inference_retirement_confirmed == true && ! -s $scratch/pool-map-retired ]] \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the selected Engine probe retirement is unconfirmed.'; return 2; }
     map_probe_id=
     mapped_pool_uid=$mapped_uid mapped_pool_gid=$mapped_gid
 }

@@ -37,6 +37,57 @@ class UserNamespaceMapTests(unittest.TestCase):
         self.assertNotEqual(self.resolve("0 100000 65536\ninvalid\n", 100001).returncode, 0)
         self.assertNotEqual(self.resolve("00 100000 65536\n", 100001).returncode, 0)
 
+    def test_initial_namespace_identity_requires_nsfs_and_linux_initial_inode(self):
+        script = (
+            'source "$1"; '
+            'linux_namespace_is_initial 6e736673 4026531837 4026531837 && '
+            '! linux_namespace_is_initial 6e736673 4026531838 4026531837 && '
+            '! linux_namespace_is_initial 65786563 4026531837 4026531837 && '
+            'linux_namespace_is_initial 6e736673 4026531836 4026531836'
+        )
+        result = subprocess.run(
+            ["bash", "-c", script, "bash", str(ROOT / "tools/user_namespace_map.sh")],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_probe_identity_requires_exact_token_and_stable_starttime(self):
+        token = "nmrnet-probe-test-token"
+        process = subprocess.Popen(["bash", "-c", f"exec -a {token} sleep 30"])
+        try:
+            script = (
+                'source "$1"; '
+                'start=$(probe_process_starttime "$2") && '
+                'probe_process_has_token "$2" "$3" && '
+                'probe_process_is_same "$2" "$3" "$start" && '
+                '! probe_process_has_token "$2" wrong-token'
+            )
+            result = subprocess.run(
+                ["bash", "-c", script, "bash", str(ROOT / "tools/user_namespace_map.sh"), str(process.pid), token],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            starttime = subprocess.run(
+                ["bash", "-c", 'source "$1"; probe_process_starttime "$2"',
+                 "bash", str(ROOT / "tools/user_namespace_map.sh"), str(process.pid)],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            still_running = subprocess.run(
+                ["bash", "-c", 'source "$1"; probe_process_is_retired "$2" "$3"',
+                 "bash", str(ROOT / "tools/user_namespace_map.sh"), str(process.pid), starttime],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(still_running.returncode, 1)
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+        retired = subprocess.run(
+            ["bash", "-c", 'source "$1"; probe_process_is_retired "$2" "$3"',
+             "bash", str(ROOT / "tools/user_namespace_map.sh"), str(process.pid), starttime],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(retired.returncode, 0, retired.stderr)
+
     def test_maps_container_service_and_root_ids_to_the_host_namespace(self):
         with tempfile.TemporaryDirectory() as directory:
             mapping = Path(directory) / "uid_map"
