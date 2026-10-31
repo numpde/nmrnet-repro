@@ -17,6 +17,7 @@ class PreparationFixture:
         self.root = Path(self.temporary.name) / "repository"
         (self.root / "tools").mkdir(parents=True)
         shutil.copyfile("Makefile", self.root / "Makefile")
+        shutil.copyfile("tools/docker_client.sh", self.root / "tools/docker_client.sh")
         for name in (
             "provider_prepare.sh",
             "wheelhouse_path.sh",
@@ -27,6 +28,15 @@ class PreparationFixture:
             shutil.copyfile(Path("tools") / name, self.root / "tools" / name)
         self.journal = self.root / "calls"
         self.environment = os.environ | {"TEST_PREPARE_ROOT": str(self.root), "TEST_PREPARE_JOURNAL": str(self.journal)}
+        binary = self.root / "bin"
+        binary.mkdir()
+        (binary / "docker").symlink_to(Path(__file__).resolve().parents[1] / "test_docker_context_selection.py")
+        self.environment.update(
+            PATH=str(binary) + ":" + os.environ["PATH"],
+            PYTHONPATH=str(Path.cwd()) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+            FAKE_LOCAL_ENDPOINT="unix:///var/run/docker.sock",
+        )
+        self.environment["FAKE_CONTEXT_CALLS"] = str(self.root / "context-calls")
         for owner in ("wheelhouse.sh", "inference_image.sh", "container.sh"):
             (self.root / "tools" / owner).write_text(r"""#!/bin/bash
 set -eu
@@ -57,6 +67,7 @@ report_next_actions 'NEXT_FROM_CHILD'
             "--no-print-directory",
             "-C",
             str(self.root),
+            "DOCKER_CONTEXT=fixture-local",
             "provider/prepare",
             f"WHEELHOUSE={selection}",
             "NETWORK_INTERFACE=lo",

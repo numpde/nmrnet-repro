@@ -90,8 +90,11 @@ class BaselineLauncherTests(unittest.TestCase):
             ["bash", str(self.root / "tools/baseline.sh"), "--print", action],
             env={
                 **os.environ,
+                "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                 "DOCKER_HOST": "tcp://ambient.invalid:2375",
-                "DOCKER_CONTEXT": "ambient",
+                "DOCKER_CONTEXT": "default",
                 "ARCHIVE": "ignored.zip",
                 "NMRNET_QUALIFICATION_IMAGE_ID": "ambient-image",
                 "NMRNET_QUALIFICATION_REPOSITORY_REVISION": "ambient-revision",
@@ -400,6 +403,9 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.revision = "b" * 40
         self.environment = {
             **os.environ,
+            "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
             "NMRNET_LABEL_ATOL_INPUT": "0.001",
             "NMRNET_ATOL_INPUT": "1e-6",
             "NMRNET_RTOL_INPUT": "0",

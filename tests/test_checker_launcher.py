@@ -61,6 +61,9 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         # still supply raw malformed or mismatched responses deliberately.
         self.environment = {
             **os.environ,
+            "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
             "PYTHONPATH": str(ROOT),
             "PATH": str(self.root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
             "CHECKER_FIXTURE_STATE": str(self.root / "state"),
@@ -75,7 +78,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             **self.environment,
             "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
             "DOCKER_HOST": "ambient-sentinel",
-            "DOCKER_CONTEXT": "ambient-sentinel",
+            "DOCKER_CONTEXT": "default",
             "BUILDX_BUILDER": "ambient-sentinel",
             "BUILDX_CONFIG": "ambient-sentinel",
             "DOCKER_BUILDKIT": "0",

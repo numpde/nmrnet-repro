@@ -204,7 +204,7 @@ if [[ "$action" != prepare ]]; then
         exit 2
     fi
 fi
-if "$print_command"; then docker_client_prepare print
+if "$print_command"; then docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
 elif docker_client_prepare run; then :
 else
     preparation_status=$?

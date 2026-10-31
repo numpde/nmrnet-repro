@@ -34,16 +34,40 @@ trap 'caller_cancellation=143; exit 143' TERM
 
 prepare_step() {
     local purpose=$1
-    shift
-    # Each child Make runs independently and serially, without an inherited
-    # jobserver or override list. The selected values remain literal arguments.
-    local -a command=(env -u MAKEFLAGS -u MFLAGS -u MAKEOVERRIDES NMRNET_SUPPRESS_NEXT_ACTIONS=1 make --no-print-directory -C "$repository_root"
-        "$@" "WHEELHOUSE=$wheelhouse_directory" "NETWORK_INTERFACE=$interface" "SHARED_RUNTIME_IMAGE=$shared_runtime_image")
+    local target=$2 owner action archive=
+    shift 2
+    case $target in
+        packages/wheelhouse) owner=wheelhouse.sh; action=download ;;
+        packages/image) owner=inference_image.sh; action=build ;;
+        packages/import) owner=inference_image.sh; action=import ;;
+        geometry/image/build|provider/image/build) owner=container.sh; action=$target ;;
+        weights/download) owner=container.sh; action=download ;;
+        weights/extract) owner=container.sh; action=extract ;;
+        *) printf 'Cannot prepare provider: unsupported owned step %q.\n' "$target" >&2; return 2 ;;
+    esac
+    local selection
+    for selection in "$@"; do
+        case $selection in ARCHIVE=*) archive=${selection#ARCHIVE=} ;; esac
+    done
+    # Invoke each established owner directly so this Make operation's selected
+    # endpoint remains in-process and no child Make can inherit ambient grants.
+    local -a command=(env
+        NMRNET_SUPPRESS_NEXT_ACTIONS=1
+        "NMRNET_WHEELHOUSE_INPUT=$wheelhouse_directory" NMRNET_WHEELHOUSE_INPUT_ORIGIN='command line'
+        "NMRNET_NETWORK_INTERFACE_INPUT=$interface" NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN='command line'
+        "NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$shared_runtime_image"
+        "NMRNET_ARCHIVE_INPUT=$archive"
+        "NMRNET_DOCKER_CONTEXT_INPUT=${NMRNET_DOCKER_CONTEXT_INPUT-}"
+        NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN='command line'
+        "NMRNET_DOCKER_ENDPOINT_INPUT=${NMRNET_DOCKER_ENDPOINT_INPUT-}"
+        bash "$repository_root/tools/$owner")
+    command+=("$action")
     if "$print_command"; then
+        command=("${command[@]:0:${#command[@]}-1}" --print "${command[@]: -1}")
         printf '%q ' "${command[@]}"; printf '\n'
     else
         printf '\n%s\n' "$purpose" >&2
-        controller_native "provider preparation: $1" untimed stdio "${command[@]}"
+        controller_native "provider preparation: $target" untimed stdio "${command[@]}"
     fi
 }
 

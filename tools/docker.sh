@@ -288,7 +288,7 @@ cleanup() {
 }
 
 if "$print_command"; then
-    docker_client_prepare print
+    docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
 else
     trap cleanup EXIT
     trap 'caller_cancellation=129; exit 129' HUP

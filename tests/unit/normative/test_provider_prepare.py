@@ -18,6 +18,11 @@ class ProviderPreparationTests(unittest.TestCase):
         expected = str((fixture.root / selection).resolve())
         first = fixture.run(selection)
         self.assertEqual(0, first.returncode, first.stderr)
+        self.assertEqual(9, len(fixture.calls()), fixture.calls())
+        self.assertEqual(
+            ['context inspect --format {{.Endpoints.docker.Host}} fixture-local'],
+            (fixture.root / 'context-calls').read_text().splitlines(),
+        )
         self.assertFalse(sentinel.exists())
         self.assertNotIn("NEXT_FROM_CHILD", first.stdout + first.stderr)
         calls = fixture.calls()

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prepare one operation-owned Docker CLI, independent of ambient client state.
-# Docker reads endpoint/TLS settings from environment and auth/proxies from its
+# Prepare an operation-owned Docker CLI using the explicitly selected local context.
+# Other Docker endpoint/TLS settings are ignored; auth/proxies from a client
 # config directory; config proxies can inject container env and build arguments.
 # https://docs.docker.com/reference/cli/docker/#environment-variables
 # https://docs.docker.com/reference/cli/docker/#change-the-docker-directory
@@ -27,7 +27,70 @@ docker_client_prepare() {
         printf -v docker_client_diagnostic '%s\n' 'Docker client preparation requires the explicit print or run mode.'
         return 2
     fi
-    local mode=$1 preparation_status config receipt
+    local mode=$1 preparation_status config receipt context endpoint context_origin
+    context=${NMRNET_DOCKER_CONTEXT_INPUT-}
+    context_origin=${NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN-}
+    endpoint=${NMRNET_DOCKER_ENDPOINT_INPUT-}
+    if [[ -z $endpoint ]]; then
+        if [[ $context_origin == 'command line' ]]; then
+            if [[ -z $context || $context =~ [[:cntrl:]] ]]; then
+                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: command-line DOCKER_CONTEXT must name a context.'
+                return 2
+            fi
+        else
+            local -a contexts=() endpoints=()
+            local candidate candidate_endpoint selection
+            if [[ ! -t 0 ]]; then
+                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: pass DOCKER_CONTEXT=<local-context> on the make command line, or run this command in a terminal to choose a local Unix-socket context.'
+                return 2
+            fi
+            local context_names
+            if ! context_names=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+                -u DOCKER_CONTEXT docker context ls --format '{{.Name}}' 2>/dev/null); then
+                printf -v docker_client_diagnostic '%s\n' 'Cannot list Docker contexts from the caller Docker configuration.'
+                return 2
+            fi
+            while IFS= read -r candidate; do
+                [[ -n $candidate && ! $candidate =~ [[:space:]\|] ]] || continue
+                if candidate_endpoint=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+                    -u DOCKER_CONTEXT docker context inspect --format '{{.Endpoints.docker.Host}}' "$candidate" 2>/dev/null) \
+                    && [[ $candidate_endpoint == unix:///* && ! $candidate_endpoint =~ [[:space:]\|] ]]; then
+                    contexts+=("$candidate")
+                    endpoints+=("$candidate_endpoint")
+                fi
+            done <<< "$context_names"
+            if (( ${#contexts[@]} == 0 )); then
+                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: the caller Docker configuration has no contexts with local Unix-socket endpoints.'
+                return 2
+            fi
+            printf '%s\n' 'Choose a local Docker context:' >&2
+            local index
+            for index in "${!contexts[@]}"; do printf '  %s) %s\n' "$((index + 1))" "${contexts[index]}" >&2; done
+            printf 'Context number: ' >&2
+            if ! IFS= read -r selection || [[ ! $selection =~ ^[1-9][0-9]*$ ]] \
+                || (( selection > ${#contexts[@]} )); then
+                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: enter one of the listed local context numbers.'
+                return 2
+            fi
+            index=$((selection - 1))
+            context=${contexts[index]}
+            endpoint=${endpoints[index]}
+        fi
+        if [[ -z $endpoint ]]; then
+            if ! endpoint=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+                -u DOCKER_CONTEXT docker context inspect --format '{{.Endpoints.docker.Host}}' "$context" 2>/dev/null); then
+                printf -v docker_client_diagnostic 'Cannot select Docker context %q: inspect the caller Docker configuration.\n' "$context"
+                return 2
+            fi
+        fi
+    fi
+    if [[ -z $context || $context =~ [[:space:]\|] || $endpoint != unix:///* || $endpoint =~ [[:space:]\|] ]]; then
+        printf -v docker_client_diagnostic 'Cannot select Docker context %q: this workflow requires a named local Unix-socket context.\n' "$context"
+        return 2
+    fi
+    # Nested launchers inherit this immutable endpoint snapshot. They must not
+    # re-read mutable context metadata during the same Make operation.
+    export NMRNET_DOCKER_CONTEXT_INPUT=$context NMRNET_DOCKER_ENDPOINT_INPUT=$endpoint
     case "$mode" in
         print)
             docker_client_directory=
@@ -72,12 +135,13 @@ docker_client_prepare() {
     for compose_variable in "${!COMPOSE_@}"; do
         engine+=(-u "$compose_variable")
     done
-    engine+=(-u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
+    engine+=(-u NMRNET_DOCKER_CONTEXT_INPUT -u NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN -u NMRNET_DOCKER_ENDPOINT_INPUT
+        -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
         -u DOCKER_CONFIG -u DOCKER_AUTH_CONFIG -u DOCKER_CUSTOM_HEADERS -u DOCKER_API_VERSION -u DOCKER_DEFAULT_PLATFORM
         -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT
         -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY
         -u http_proxy -u https_proxy -u all_proxy -u no_proxy
-        DOCKER_BUILDKIT=1 docker --config "$config" --host unix:///var/run/docker.sock)
+        DOCKER_BUILDKIT=1 docker --config "$config" --host "$endpoint")
 }
 
 # Remove the prepared directory; failure does not establish what remains there.

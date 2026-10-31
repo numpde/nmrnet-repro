@@ -52,6 +52,9 @@ class DockerClientTests(unittest.TestCase):
             "NMRNET_WHEELHOUSE_INPUT": str(self.root / "wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+            "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
         }
 
     def caller(self, *arguments, environment=None):
@@ -291,6 +294,7 @@ mktemp() {
             "private-environment-canary",
         )
         original = config.read_bytes()
+        poisoned["DOCKER_CONTEXT"] = "default"
         result = self.caller("test", environment=self.environment | poisoned | {"DOCKER_CONFIG": str(inherited)})
         self.assertEqual(0, result.returncode, msg=result.stderr)
         observed = json.loads(self.observation.read_text())

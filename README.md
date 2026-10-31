@@ -12,4 +12,8 @@ hydrogens, conformers, worked results, numerical evidence, limitations and sourc
 [Design records](https://numpde.github.io/nmrnet-repro/notes/)
 
 Documentation is maintained directly as HTML in `docs/` and published by GitHub
-Pages. Run `make help` for maintained commands.
+Pages. Every maintained command that uses Docker accepts `DOCKER_CONTEXT=<name>`
+on the Make command line. When omitted in a terminal, it offers a menu of
+configured local Unix-socket contexts; unattended commands fail without a
+selection. The selected socket stays fixed for the whole operation. Run
+`make help` for maintained commands.

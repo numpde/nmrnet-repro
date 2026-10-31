@@ -22,6 +22,12 @@ from repository_checks.fixtures.containers.fixture import read_engine_calls, rec
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
 arguments = sys.argv[1:]
+if arguments[:2] == ["context", "inspect"]:
+    if arguments[2:4] != ["--format", "{{.Endpoints.docker.Host}}"] or arguments[4:] != ["fixture-local"]:
+        sys.stderr.write("unexpected fake docker context inspection\n")
+        raise SystemExit(97)
+    sys.stdout.write("unix:///var/run/docker.sock\n")
+    raise SystemExit(0)
 configuration = None
 global_options = set()
 while arguments and arguments[0] in {"--host", "--config"}:

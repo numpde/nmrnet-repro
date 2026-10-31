@@ -60,6 +60,11 @@ class LauncherTests(unittest.TestCase):
 
     def command(self, lane, archive=None):
         environment = dict(os.environ)
+        environment.update(
+            NMRNET_DOCKER_CONTEXT_INPUT="test-local",
+            NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN="command line",
+            NMRNET_DOCKER_ENDPOINT_INPUT="unix:///var/run/docker.sock",
+        )
         # silent-defaults: allow-pop-default -- Remove the ambient archive before testing explicit archive selection; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads
         environment.pop("ARCHIVE", None)
         # silent-defaults: allow-pop-default -- Revoke inherited forwarded selection before omission and explicit archive cases; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads
@@ -121,6 +126,9 @@ class LauncherTests(unittest.TestCase):
         docker.symlink_to(Path(__file__).resolve())
         environment = {
             **os.environ,
+            "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
             "NMRNET_WHEELHOUSE_INPUT": str(checkout / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "PATH": f"{checkout / 'bin'}:{os.environ['PATH']}",

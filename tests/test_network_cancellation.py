@@ -111,6 +111,9 @@ class NetworkCancellationTests(unittest.TestCase):
                 (binary / "docker").symlink_to(Path(__file__).resolve())
                 environment = {
                     **os.environ,
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "ENGINE_STATE": str(state),
                     "PATH": str(binary) + ":" + os.environ["PATH"],
@@ -172,6 +175,9 @@ class NetworkCancellationTests(unittest.TestCase):
                 (binary / "docker").symlink_to(Path(__file__).resolve())
                 environment = {
                     **os.environ,
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "ENGINE_STATE": str(state),
                     "DELAY_IDENTITY": phase,
@@ -248,6 +254,9 @@ class ContainerIdentityTests(unittest.TestCase):
             (binary / "docker").symlink_to(Path(__file__).resolve())
             environment = {
                 **os.environ,
+                "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                 "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                 "ENGINE_STATE": str(state),
                 "PATH": str(binary) + ":" + os.environ["PATH"],

@@ -20,7 +20,11 @@ class ConsumerLauncherTests(unittest.TestCase):
                 with self.subTest(selection=name):
                     result = subprocess.run(
                         ["bash", "tools/container.sh", "--print", "test/integration/provider-core/" + name],
-                        env={**os.environ, "NMRNET_WHEELHOUSE_INPUT": pool,
+                        env={**os.environ,
+                             "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                             "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                             "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                             "NMRNET_WHEELHOUSE_INPUT": pool,
                              "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line"},
                         capture_output=True, text=True, check=False,
                     )

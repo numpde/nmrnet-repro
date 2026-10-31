@@ -152,6 +152,9 @@ class LauncherFixture:
             "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+            "NMRNET_DOCKER_CONTEXT_INPUT": "fixture-local",
+            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
             "PATH": str(root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
             "PYTHONPATH": str(ROOT),
             "NMRNET_FAKE_ENGINE_LOG": str(self.log),
@@ -323,7 +326,8 @@ class LauncherFixture:
             if name in environment:
                 del environment[name]
         return subprocess.run(
-            ["make", "--no-print-directory", "-C", str(self.root), f"WHEELHOUSE={self.root / '.work/wheelhouse'}", *arguments],
+            ["make", "--no-print-directory", "-C", str(self.root), "DOCKER_CONTEXT=fixture-local",
+             f"WHEELHOUSE={self.root / '.work/wheelhouse'}", *arguments],
             env=environment,
             text=True,
             capture_output=True,

@@ -146,6 +146,9 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "git-bin").mkdir()
         (self.root / "git-bin/git").symlink_to(Path(__file__).resolve().parent / "fixtures/git_metadata.sh")
         self.git_environment = {
+            "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
             "NMRNET_WHEELHOUSE_INPUT": str(self.root / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "PATH": str(self.root / "git-bin") + ":" + os.environ["PATH"],

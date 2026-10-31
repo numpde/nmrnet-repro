@@ -234,7 +234,7 @@ case "$1" in
             printf -v pending_diagnostic 'Cannot capture %s build inputs: .work/%s must belong to the caller.\n' "$build_kind" "$build_kind"
             exit 2
         fi
-        if "$print_command"; then docker_client_prepare print
+        if "$print_command"; then docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
         elif docker_client_prepare run; then :
         else
             preparation_status=$?; pending_diagnostic+=$docker_client_diagnostic; exit "$preparation_status"
@@ -261,7 +261,7 @@ case "$1" in
             printf -v pending_diagnostic '%s\n' 'Cannot capture RDKit build inputs: .work/preparation must belong to the caller.'
             exit 2
         fi
-        if "$print_command"; then docker_client_prepare print
+        if "$print_command"; then docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
         elif docker_client_prepare run; then :
         else
             preparation_status=$?; pending_diagnostic+=$docker_client_diagnostic; exit "$preparation_status"
@@ -276,7 +276,7 @@ case "$1" in
         # https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
         # https://docs.docker.com/engine/daemon/proxy/
         if "$print_command"; then
-            docker_client_prepare print
+            docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
             printf '%q ' "${engine[@]}" image pull "$image"; printf '\n'
             exit
         fi
@@ -360,7 +360,7 @@ case "$1" in
             if "$print_command"; then command+=(--print); fi
             command+=(--success-note "$next_actions" run)
         else
-            if "$print_command"; then docker_client_prepare print
+            if "$print_command"; then docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
             elif docker_client_prepare run; then :
             else
                 preparation_status=$?
@@ -804,7 +804,8 @@ case "$1" in
                 if [[ "$1" == test/repository/operator-inputs ]]; then
                     repository_tests=(-v repository_checks.test_acquisition_inputs repository_checks.test_operator_inputs_port.OperatorInputTests
                         repository_checks.test_operator_inputs_port.EngineEnvironmentTests tests.unit.normative.test_operator_guidance
-                        tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare)
+                        tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare
+                        tests.test_docker_context_selection)
                 fi
                 if [[ "$1" == test/repository/provider ]]; then
                     repository_tests=(-v repository_checks.test_conventions

@@ -111,6 +111,9 @@ class ProviderImageCommandTests(unittest.TestCase):
                 env={
                     **os.environ,
                     "NMRNET_IN_CONTAINER": "0",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                     "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
                     "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
                 },

@@ -131,6 +131,7 @@ class AcquisitionInputTests(unittest.TestCase):
                 "--no-print-directory",
                 "-C",
                 str(self.root),
+                "DOCKER_CONTEXT=fixture-local",
                 "packages/wheelhouse",
                 "SHARED_RUNTIME_IMAGE=sha256:" + "a" * 64,
             ],

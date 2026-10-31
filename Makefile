@@ -198,6 +198,21 @@ unexport WHEELHOUSE
 override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin WHEELHOUSE)),$(value WHEELHOUSE))
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
 unexport LOG_LEVEL
+unexport DOCKER_CONTEXT NMRNET_DOCKER_CONTEXT_INPUT NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN NMRNET_DOCKER_ENDPOINT_INPUT
+override export NMRNET_DOCKER_CONTEXT_INPUT := $(if $(filter command line,$(origin DOCKER_CONTEXT)),$(value DOCKER_CONTEXT))
+override export NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN := $(origin DOCKER_CONTEXT)
+ifneq ($(filter-out help,$(MAKECMDGOALS)),)
+# Resolve once in the Make process so every recipe, nested launcher and cleanup
+# in this invocation inherits the same context endpoint snapshot.
+make_shell_quote = '$(subst ','\'',$(1))'
+docker_context_selection_command = bash -c 'source tools/docker_client.sh; if docker_client_prepare print; then printf "%s|%s\n" "$$NMRNET_DOCKER_CONTEXT_INPUT" "$$NMRNET_DOCKER_ENDPOINT_INPUT"; else printf "%s\n" "$$docker_client_diagnostic" >&2; exit 2; fi'
+NMRNET_DOCKER_SELECTION := $(shell NMRNET_DOCKER_CONTEXT_INPUT=$(call make_shell_quote,$(NMRNET_DOCKER_CONTEXT_INPUT)) NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN=$(call make_shell_quote,$(NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN)) NMRNET_DOCKER_ENDPOINT_INPUT='' $(docker_context_selection_command))
+ifeq ($(NMRNET_DOCKER_SELECTION),)
+$(error Docker context selection failed; pass DOCKER_CONTEXT=<local-context> or choose a local Unix-socket context interactively)
+endif
+override export NMRNET_DOCKER_CONTEXT_INPUT := $(word 1,$(subst |, ,$(NMRNET_DOCKER_SELECTION)))
+override export NMRNET_DOCKER_ENDPOINT_INPUT := $(word 2,$(subst |, ,$(NMRNET_DOCKER_SELECTION)))
+endif
 unexport DEPLOYMENT
 unexport SHARED_SETTINGS SHARED_RUNTIME_IMAGE PROVIDER_TOOLS
 override export NMRNET_PROVIDER_TOOLS_INPUT := $(if $(filter command line,$(origin PROVIDER_TOOLS)),$(value PROVIDER_TOOLS))
@@ -245,6 +260,8 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 help:
 	@printf '%s\n' \
 		'make help                              List maintained commands; also the default goal.' \
+		'Every Docker-using command needs DOCKER_CONTEXT=<name> on the make command line, or an interactive local Unix-socket context selection.' \
+		'Without a command-line context, unattended Docker commands fail; no current/default context is assumed.' \
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/provider                Run only the contained provider-input tests.' \
@@ -318,7 +335,7 @@ help:
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/native-images     Check scientific image source/wheel capture and exact metadata admission offline.' \
 		'make test/integration/provider-core/compose WHEELHOUSE=<path> Check fixed Compose deployment grants and role profiles offline.' \
-		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
+		'make test/repository/operator-inputs   Check literal selectors, Docker context selection and image inspection admission offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
