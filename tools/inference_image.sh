@@ -69,7 +69,6 @@ caller_cancellation=0
 # Its unconfirmed retirement returns nonzero, so the bare calls below stop under
 # errexit before another invocation can overwrite it. No native child exists yet.
 inference_retirement_confirmed=true
-wheel_capture_retirement_confirmed=true
 cleanup() {
     local status=$? record_status=0 client_status=0 capture_status=0 cancelled=0
     local native_cancellation=$inference_cancellation_status
@@ -80,7 +79,7 @@ cleanup() {
     trap 'cancelled=129' HUP
     trap 'cancelled=130' INT
     trap 'cancelled=143' TERM
-    if "$inference_retirement_confirmed" && "$wheel_capture_retirement_confirmed"; then
+    if "$inference_retirement_confirmed"; then
         if [[ -n "$temporary_record" ]]; then
             if rm -f -- "$temporary_record" 2>/dev/null; then temporary_record=; else
                 record_status=$?
@@ -110,7 +109,7 @@ cleanup() {
         # PRINT owns no runtime client/config/capture. Keep its presentation
         # inert; blocking here cannot postpone removal of those resources.
         printf '%s' "$inference_diagnostic" >&2
-    elif ! "$inference_retirement_confirmed" || ! "$wheel_capture_retirement_confirmed"; then
+    elif ! "$inference_retirement_confirmed"; then
         # Never replace an unconfirmed owner's fact with another native call.
         # These reports share that owner's possible blocked-stderr limitation.
         printf '%s' "$inference_diagnostic" >&2
@@ -184,6 +183,7 @@ if [[ "$1" == build ]]; then
         fi
     done
     require_wheelhouse_pool
+    if [[ $print_command == false ]]; then lock_wheelhouse shared; fi
     if "$print_command"; then
         gitlink=$(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
         read -r mode revision stage path <<< "$gitlink"
@@ -199,7 +199,7 @@ if [[ "$1" == build ]]; then
             exit 2
         fi
         frozen_context="$repository_root/.work/inference/.build.PRINT/context"
-        frozen_wheelhouse="$repository_root/.work/inference/.build.PRINT/wheelhouse"
+        frozen_wheelhouse="$wheelhouse_directory"
         inputs_digest=CAPTURED_INPUTS_SHA256
     else
         # The parent must learn the path it owns. Quiet setup diagnostics until
@@ -242,21 +242,9 @@ if [[ "$1" == build ]]; then
             exit 2
         fi
         frozen_context="$capture_directory/context"
-        frozen_wheelhouse="$capture_directory/wheelhouse"
+        frozen_wheelhouse="$wheelhouse_directory"
         inputs_digest=$(sha256sum -- "$capture_directory/authored")
         inputs_digest="sha256:${inputs_digest%% *}"
-    fi
-    source "$repository_root/tools/wheelhouse_inputs.sh"
-    core_capture_root=${frozen_wheelhouse%/*}
-    if "$print_command"; then
-        print_wheel_capture_plan "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image"
-    else
-        execute_wheel_capture "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image" "$native_timeout"
-    fi
-    if "$print_command"; then
-        print_wheel_capture_plan "$frozen_context" provider-core provider-core-native-install.lock "$core_capture_root/runtime-wheels" "$python_image"
-    else
-        execute_wheel_capture "$frozen_context" provider-core provider-core-native-install.lock "$core_capture_root/runtime-wheels" "$python_image" "$native_timeout"
     fi
     if ! "$print_command"; then
         inference_native 'base image admission' "$image_admission_timeout" image-id \
@@ -266,7 +254,7 @@ if [[ "$1" == build ]]; then
         --build-arg "PYTHON_BASE=$python_image" --build-arg "NMRNET_REVISION=$revision"
         --build-arg "INFERENCE_INPUTS=$inputs_digest"
         --build-context "wheelhouse=$frozen_wheelhouse"
-        --build-context "runtime-wheels=$core_capture_root/runtime-wheels"
+        --build-context "runtime-wheels=$wheelhouse_directory"
         --file "$frozen_context/containers/inference/Dockerfile" "$frozen_context")
     if "$print_command"; then
         run "${build[@]}"

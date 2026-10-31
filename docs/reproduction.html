@@ -102,30 +102,28 @@ Without a terminal, pass the path on the Make command line; piped input and
 environment variables do not select it. Wheel files live directly in this one
 root. Different projects, versions and platforms can share it: each consumer
 uses its own hash-locked requirements and pip's compatibility selection.
-Builds copy only their selected files
-into private captures and verify the copied bytes before installation.</p>
+Image builds mount this directory as their wheelhouse context and install from
+the shared files in place; they do not make a wheel copy.</p>
 <p>The pinned Uni-Core source is also stored here, as
 <code>Uni-Core-&lt;commit&gt;.tar.gz</code>. It is verified separately against
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/unicore-source.json">its source declaration</a>,
 including its byte size and SHA-256; it is not treated as a wheel.</p>
 <p>The <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L66">terminal prompt follows the established operator-input pattern</a>:
 command-line values are passed literally, and environment variables cannot
-choose a cache. Acquisition grants only the selected root writable. Each complete
-verified file is published without replacing an existing file: identical bytes
-reuse the winner; a conflict preserves the existing file and reports the failure.
-Temporary download staging is removed after its I/O completes. No other project's
-files are cleared.</p>
-<p>A complete cached lock needs no index query. With a partly populated cache,
-temporary links make existing wheels available in pip's download destination,
-so adding another dependency does not download those wheels again. Pip still
-owns platform compatibility and hash checks; only newly acquired files are
-published into the pool.</p>
-<p>Networked acquisition uses pip's <a href="https://pip.pypa.io/en/stable/topics/caching/">HTTP cache</a>
-at <code>WHEELHOUSE/.pip-cache</code> to reuse completed responses after a failed
-whole-lock download. This can use additional disk space alongside published
-wheels. Pip owns the cache layout. Acquisition may still contact package indexes;
-checks and builds select locally with <code>--no-index</code> and install nothing
-from the network. See <a href="https://pip.pypa.io/en/stable/cli/pip_download/">pip download</a>
+choose a cache. Acquisition downloads directly into the selected shared pool.
+The host holds an exclusive lock while it downloads and verifies artifacts;
+managed checks and builds hold a shared lock while they select or copy them.
+This keeps those consumers from reading a wheel while pip is writing it. The
+pool is not replaced or cleared, and existing complete artifacts remain in the
+same location for later acquisitions.</p>
+<p>A complete cached lock needs no index query. With a partly populated pool,
+pip can resolve existing wheels from that same directory while acquiring only
+missing locked dependencies. Pip owns platform compatibility and hash checks.
+If an acquisition is interrupted, completed files remain in the pool for a
+retry; no second HTTP cache or wheel staging directory is created. Acquisition
+may still contact package indexes; checks and builds select locally with
+<code>--no-index</code> and install nothing from the network. See
+<a href="https://pip.pypa.io/en/stable/cli/pip_download/">pip download</a>
 and <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip installation reports</a>.</p>
 <p>For the provider, acquire the two model archives and extract their declared
 members:</p>

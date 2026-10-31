@@ -22,6 +22,15 @@ if [[ $# -gt 0 && $1 == --success-note ]]; then
     next_actions=$2
     shift 2
 fi
+pool_owner=
+if [[ $# -gt 0 && $1 == --pool-owner ]]; then
+    if [[ $# -lt 2 || ! $2 =~ ^([0-9]+):([0-9]+)$ ]]; then
+        printf '%s\n' 'Supply --pool-owner with the shared wheelhouse host UID:GID.' >&2
+        exit 2
+    fi
+    pool_owner=$2
+    shift 2
+fi
 
 require_interface() {
     source "$repository_root/tools/acquisition_interface.sh"
@@ -29,7 +38,7 @@ require_interface() {
 }
 
 if [[ $# == 0 ]]; then
-    printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
+    printf '%s\n' 'Usage: tools/docker.sh [--print] [--pool-owner UID:GID] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
     exit 2
 fi
 operation=$1
@@ -52,6 +61,7 @@ if [[ "$operation" == run ]]; then
         printf '%s\n' 'Acquisition requires a nonzero host UID and GID.' >&2
         exit 2
     fi
+    proxy_uid=$caller_uid proxy_gid=$caller_gid
     # Grant the same configured upstream file used by the host proxy precedent.
     # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L141
     resolver_mount=()
@@ -66,16 +76,61 @@ fi
 
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
+source "$repository_root/tools/user_namespace_map.sh"
 docker_client_directory=
 scratch=
 proxy_id=
 worker_id=
+map_probe_id=
+map_probe_removal_attempted=false
+mapped_pool_uid=
+mapped_pool_gid=
 pending_diagnostic=
 retain_preflight_receipts=false
 inference_diagnostic=
 inference_retirement_confirmed=true
 inference_cancellation_status=0
 caller_cancellation=0
+
+map_pool_owner() {
+    local host_uid=$1 host_gid=$2 create_status pid running extra mapped_uid mapped_gid
+    local receipt=$scratch/pool-map.cid output=$scratch/pool-map.stdout diagnostic=$scratch/pool-map.stderr
+    if inference_native 'wheelhouse owner mapping probe creation' "$metadata_timeout" stdio bash -eu -c '
+        output=$1; diagnostic=$2; receipt=$3; shift 3
+        umask 077
+        ulimit -f 4
+        exec "$@" > "$output" 2> "$diagnostic"
+    ' bash "$output" "$diagnostic" "$receipt" "${engine[@]}" create --cidfile "$receipt" --network none \
+        --read-only --user 0:0 --cap-drop ALL --security-opt no-new-privileges:true \
+        --memory 64m --memory-swap 64m --pids-limit 8 --entrypoint /opt/provider-core/environment/bin/python \
+        "$proxy_image" -I -B -c 'import time; time.sleep(60)'; then create_status=0; else create_status=$?; fi
+    if [[ $inference_retirement_confirmed != true ]]; then return "$create_status"; fi
+    local created=
+    if private_receipt_below_limit "$output" && IFS= read -r -N 64 created < "$output" \
+        && container_id_matches_receipt "$created" "$output" && container_id_matches_receipt "$created" "$receipt"; then
+        map_probe_id=$created
+    else
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the probe did not return one exact container ID in stdout and its CID receipt.'
+        return 2
+    fi
+    [[ $create_status == 0 ]] || return "$create_status"
+    inference_native 'wheelhouse owner mapping probe start' "$metadata_timeout" stdio "${engine[@]}" start "$map_probe_id"
+    inference_native 'wheelhouse owner mapping probe inspect' "$metadata_timeout" stdio "${engine[@]}" inspect \
+        --format '{{.State.Pid}} {{.State.Running}}' "$map_probe_id" > "$scratch/pool-map-inspect"
+    IFS=' ' read -r pid running extra < "$scratch/pool-map-inspect" || return 2
+    [[ $pid =~ ^[1-9][0-9]*$ && $running == true && -z $extra ]] \
+        && cmp -s -- "$scratch/pool-map-inspect" <(printf '%s %s\n' "$pid" "$running") \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner: the selected Engine probe is not observably running.'; return 2; }
+    mapped_uid=$(container_id_for_host_id "/proc/$pid/uid_map" "$host_uid") \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner UID through the selected Engine namespace.'; return 2; }
+    mapped_gid=$(container_id_for_host_id "/proc/$pid/gid_map" "$host_gid") \
+        || { printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot map wheelhouse owner GID through the selected Engine namespace.'; return 2; }
+    map_probe_removal_attempted=true
+    inference_native 'wheelhouse owner mapping probe retirement' "$metadata_timeout" discard \
+        "${engine[@]}" rm --force "$map_probe_id"
+    map_probe_id=
+    mapped_pool_uid=$mapped_uid mapped_pool_gid=$mapped_gid
+}
 
 container_id_matches_receipt() {
     local identifier=$1 receipt=$2
@@ -199,6 +254,31 @@ cleanup() {
                     proxy_id=$candidate
                 fi
             fi
+            if [[ -z "$map_probe_id" && -f "$scratch/pool-map.cid" && ! -L "$scratch/pool-map.cid" ]]; then
+                candidate=
+                if IFS= read -r -N 64 candidate < "$scratch/pool-map.cid" \
+                    && container_id_matches_receipt "$candidate" "$scratch/pool-map.cid" \
+                    && cancellation_stdout_allows_identity "$candidate" "$scratch/pool-map.stdout"; then
+                    map_probe_id=$candidate
+                fi
+            fi
+        fi
+        if [[ -n "$map_probe_id" ]]; then
+            if ! container_id_matches_receipt "$map_probe_id" "$scratch/pool-map.cid"; then
+                printf -v pending_diagnostic '%sCannot confirm wheelhouse owner probe removal: its identity was not admitted; evidence remains in %s.\n' "$pending_diagnostic" "$scratch"
+                cleanup_failed=true
+            elif [[ $map_probe_removal_attempted == false ]]; then
+                map_probe_removal_attempted=true
+                if inference_native 'wheelhouse owner mapping probe cleanup' "$metadata_timeout" discard "${engine[@]}" rm --force "$map_probe_id"; then
+                    [[ $inference_retirement_confirmed == true ]] && map_probe_id=
+                else
+                    cleanup_failed=true
+                    printf -v pending_diagnostic '%sCannot confirm wheelhouse owner probe removal; container ID is recorded in %s/pool-map.cid.\n' "$pending_diagnostic" "$scratch"
+                fi
+            else
+                cleanup_failed=true
+                printf -v pending_diagnostic '%sCannot confirm wheelhouse owner probe removal; container ID is recorded in %s/pool-map.cid.\n' "$pending_diagnostic" "$scratch"
+            fi
         fi
         if [[ -n "$scratch" && ( -e "$scratch/worker.cid" || -L "$scratch/worker.cid" || -n "$worker_id" ) ]]; then
             if ! container_id_matches_receipt "$worker_id" "$scratch/worker.cid"; then
@@ -305,6 +385,11 @@ if [[ "$operation" == require-images ]]; then require_images "$@"; exit; fi
 if "$print_command"; then scratch=/tmp/nmrnet-proxy.PRINT; else
     require_images "$proxy_image"
     mkdir -m 700 -- "$scratch/ready"
+    if [[ -n $pool_owner ]]; then
+        IFS=: read -r pool_owner_uid pool_owner_gid <<< "$pool_owner"
+        map_pool_owner "$pool_owner_uid" "$pool_owner_gid"
+        proxy_uid=$mapped_pool_uid proxy_gid=$mapped_pool_gid
+    fi
 fi
 # The installed proxy implementation comes only from the selected shared image.
 proxy=("${engine[@]}" create --cidfile "$scratch/proxy.cid" --pull never --network host --read-only
@@ -312,7 +397,7 @@ proxy=("${engine[@]}" create --cidfile "$scratch/proxy.cid" --pull never --netwo
     --entrypoint /opt/provider-core/environment/bin/python
     --log-driver json-file --log-opt max-size=10m --log-opt max-file=3
     --log-opt mode=non-blocking --log-opt max-buffer-size=1m
-    --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
+    --user "$proxy_uid:$proxy_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 1 --memory 128m --memory-swap 128m --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m
     "${resolver_mount[@]}"
@@ -439,10 +524,22 @@ else
     fi
 fi
 proxy_url="http://127.0.0.1:$proxy_port"
+worker_run_args=("$@")
+if [[ -n $pool_owner && $print_command == false ]]; then
+    user_arguments=0
+    for ((argument_index = 0; argument_index < ${#worker_run_args[@]}; argument_index++)); do
+        if [[ ${worker_run_args[argument_index]} == --user ]]; then
+            (( argument_index + 1 < ${#worker_run_args[@]} )) || { printf '%s\n' 'Acquisition worker --user has no value.' >&2; exit 2; }
+            worker_run_args[argument_index+1]="$mapped_pool_uid:$mapped_pool_gid"
+            user_arguments=$((user_arguments + 1))
+        fi
+    done
+    [[ $user_arguments == 1 ]] || { printf '%s\n' 'Wheelhouse acquisition requires one explicit worker --user to map to the pool owner.' >&2; exit 2; }
+fi
 worker=("${engine[@]}" create --cidfile "$scratch/worker.cid" --network host
     --env "HTTP_PROXY=$proxy_url" --env "HTTPS_PROXY=$proxy_url"
     --env "http_proxy=$proxy_url" --env "https_proxy=$proxy_url"
-    --env NO_PROXY= --env no_proxy= --env ALL_PROXY= --env all_proxy= "$@")
+    --env NO_PROXY= --env no_proxy= --env ALL_PROXY= --env all_proxy= "${worker_run_args[@]}")
 if "$print_command"; then
     printf '%q ' "${worker[@]}"; printf '\n'
     printf '%q ' "${engine[@]}" start --attach WORKER_ID; printf '\n'

@@ -1,4 +1,4 @@
-"""Offline checks for pinned source bytes, capture identity and publication durability."""
+"""Offline checks for pinned source bytes and publication durability."""
 
 import hashlib
 import io
@@ -38,8 +38,6 @@ class WheelhouseTests(unittest.TestCase):
         self.pool.mkdir()
         self.lock = self.root / "inference.lock"
         self.source = self.root / "unicore-source.json"
-        self.capture = self.root / "private capture"
-        self.capture.mkdir()
         self.wheel_name = "fixture-1.0-py3-none-any.whl"
         self.wheel_bytes = b"locked wheel bytes"
         self.source_bytes = b"pinned source bytes"
@@ -66,10 +64,6 @@ class WheelhouseTests(unittest.TestCase):
             "files": {self.wheel_name: wheelhouse.digest(self.wheel)},
         }
 
-    def capture_selected(self, source_path=None):
-        with patch.object(wheelhouse, "select_wheels", return_value=self.selected_wheels()):
-            return wheelhouse.capture(self.lock, source_path, self.pool, self.capture)
-
     def test_source_identity_retains_every_declared_field(self):
         self.assertEqual(json.loads(self.source.read_text()), wheelhouse.source_identity(self.source))
 
@@ -91,7 +85,7 @@ class WheelhouseTests(unittest.TestCase):
         ):
             wheelhouse.prepare_source(self.source, self.pool)
         network.assert_not_called()
-        self.assertEqual([], list(self.pool.glob(".unicore-source-*")))
+        self.assertEqual([], list(self.pool.glob(".unicore-source.*")))
 
     def test_non_object_source_declaration_rejects_cleanly(self):
         for document in (None, []):
@@ -108,7 +102,7 @@ class WheelhouseTests(unittest.TestCase):
         source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
         self.assertEqual(self.source_bytes, source.read_bytes())
         self.assertFalse(source.is_symlink())
-        self.assertEqual([], list(self.pool.glob(".unicore-source-*")))
+        self.assertEqual([], list(self.pool.glob(".unicore-source.*")))
 
     def test_wrong_or_excess_source_bytes_are_rejected_without_retaining_staging(self):
         for body in (b"X" * len(self.source_bytes), self.source_bytes + b"extra"):
@@ -120,7 +114,7 @@ class WheelhouseTests(unittest.TestCase):
                     wheelhouse.prepare_source(self.source, self.pool)
                 source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
                 self.assertFalse(source.exists())
-                self.assertEqual([], list(self.pool.glob(".unicore-source-*")))
+                self.assertEqual([], list(self.pool.glob(".unicore-source.*")))
 
     def test_conflicting_cached_source_is_preserved_without_network(self):
         source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
@@ -132,53 +126,6 @@ class WheelhouseTests(unittest.TestCase):
             wheelhouse.prepare_source(self.source, self.pool)
         network.assert_not_called()
         self.assertEqual(b"different source", source.read_bytes())
-
-    def test_capture_returns_identity_for_the_copied_selected_bytes(self):
-        before = {path.name: path.read_bytes() for path in self.pool.iterdir()}
-        identity = self.capture_selected()
-        self.assertEqual({self.wheel_name}, {path.name for path in self.capture.iterdir()})
-        self.assertEqual(self.wheel_bytes, (self.capture / self.wheel_name).read_bytes())
-        self.assertEqual(0o644, (self.capture / self.wheel_name).stat().st_mode & 0o777)
-        self.assertEqual(
-            {
-                "lock_sha256": wheelhouse.digest(self.lock),
-                "source_declaration_sha256": None,
-                "files": {self.wheel_name: hashlib.sha256(self.wheel_bytes).hexdigest()},
-            },
-            identity,
-        )
-        self.assertEqual(before, {path.name: path.read_bytes() for path in self.pool.iterdir()})
-
-    def test_source_bearing_capture_returns_source_declaration_and_archive_hashes(self):
-        source_identity = wheelhouse.source_identity(self.source)
-        archive = wheelhouse.source_cache_file(self.pool, source_identity)
-        archive.write_bytes(self.source_bytes)
-        identity = self.capture_selected(self.source)
-        self.assertEqual(
-            {self.wheel_name, wheelhouse.SOURCE_NAME},
-            {path.name for path in self.capture.iterdir()},
-        )
-        self.assertEqual(self.source_bytes, (self.capture / wheelhouse.SOURCE_NAME).read_bytes())
-        self.assertEqual(wheelhouse.digest(self.source), identity["source_declaration_sha256"])
-        self.assertEqual(hashlib.sha256(self.source_bytes).hexdigest(), identity["files"][wheelhouse.SOURCE_NAME])
-
-    def test_capture_refuses_copied_bytes_that_differ_from_pip_selection(self):
-        selected = self.selected_wheels()
-
-        copyfileobj = wheelhouse.shutil.copyfileobj
-
-        def changed_copy(source, destination, length=0):
-            copyfileobj(source, destination, length)
-            destination.seek(0)
-            destination.write(b"changed copied bytes")
-
-        with (
-            patch.object(wheelhouse, "select_wheels", return_value=selected),
-            patch.object(wheelhouse.shutil, "copyfileobj", side_effect=changed_copy) as copying,
-            self.assertRaises(ValueError),
-        ):
-            wheelhouse.capture(self.lock, None, self.pool, self.capture)
-        copying.assert_called_once()
 
     def test_per_file_publication_syncs_bytes_before_link_then_pool_directory(self):
         staged = self.root / self.wheel_name
@@ -298,32 +245,6 @@ class WheelhouseTests(unittest.TestCase):
         prepare.assert_called_once_with(assets, self.pool, download=True)
         verify.assert_called_once()
 
-    def test_cli_requires_one_lock_for_private_capture(self):
-        build_lock = self.root / "second.lock"
-        build_lock.write_text(self.lock.read_text())
-        arguments = [
-            "wheelhouse",
-            "capture",
-            "--profile",
-            "preparation",
-            "--pool",
-            str(self.pool),
-            "--output",
-            str(self.capture),
-            "--lock",
-            str(self.lock),
-            "--lock",
-            str(build_lock),
-        ]
-        with (
-            patch.object(wheelhouse.sys, "argv", arguments),
-            patch.object(wheelhouse.sys, "stderr", io.StringIO()),
-            patch.object(wheelhouse, "capture") as capture,
-            self.assertRaises(SystemExit) as caught,
-        ):
-            wheelhouse.main()
-        self.assertEqual(2, caught.exception.code)
-        capture.assert_not_called()
 
 
 if __name__ == "__main__":

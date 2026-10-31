@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 
 from tools.provider_environment import install_provider
-from tools.wheelhouse import capture
 
 
 def run_suite(suite, arguments):
@@ -21,10 +20,7 @@ def run_suite(suite, arguments):
         root = Path(temporary)
         lock = root / "install.lock"
         shutil.copyfile("/input/provider-core-install.lock", lock)
-        wheels = root / "wheels"
-        wheels.mkdir()
-        capture(lock, None, Path("/wheelhouse"), wheels)
-        python = install_provider(root / "provider", Path("/consumer"), lock, wheels)
+        python = install_provider(root / "provider", Path("/consumer"), lock, Path("/wheelhouse"))
         if suite == "integration":
             command = [str(python), "-I", "-B", "/workspace/tools/provider_consumer_tests.py", "run",
                        "--release", "/input/provider-core-release.json", "--pool", "/wheelhouse"]

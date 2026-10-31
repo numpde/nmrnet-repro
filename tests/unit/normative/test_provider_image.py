@@ -16,7 +16,7 @@ from tests.unit.provider_image_ports import ImageSource
 
 
 class ProviderImageCommandTests(unittest.TestCase):
-    def test_capture_uses_external_sets_without_old_local_dependency_directories(self):
+    def test_source_capture_keeps_wheels_in_the_shared_pool(self):
         with ImageSource() as fixture:
             shared = fixture.root / "shared wheels"
             shutil.move(str(fixture.wheelhouse), shared)
@@ -27,17 +27,9 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             runtime = capture / "runtime-wheels"
             self.assertFalse((capture / "build-wheels").exists())
-            self.assertEqual({path.name for path in runtime.iterdir()}, {fixture.pool_wheels["runtime"].name})
-            self.assertEqual(
-                (runtime / fixture.pool_wheels["runtime"].name).read_bytes(),
-                fixture.pool_wheels["runtime"].read_bytes(),
-            )
-            runtime_names = {path.name for path in runtime.iterdir()}
-            self.assertNotIn(fixture.pool_wheels["alternate_runtime"].name, runtime_names)
-            self.assertNotIn(fixture.pool_wheels["unrelated"].name, runtime_names)
-            original = (runtime / fixture.pool_wheels["runtime"].name).read_bytes()
-            fixture.pool_wheels["runtime"].write_bytes(b"later shared-pool mutation")
-            self.assertEqual((runtime / fixture.pool_wheels["runtime"].name).read_bytes(), original)
+            self.assertFalse(runtime.exists())
+            self.assertFalse((capture / "wheelhouse").exists())
+            self.assertTrue(fixture.pool_wheels["runtime"].is_file())
             self.assertFalse((shared / ".complete").exists())
 
     def test_progress_is_not_identity_and_both_complete_id_forms_publish(self):
@@ -78,11 +70,8 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual((before / "inputs").read_bytes(), (after / "inputs").read_bytes())
 
     def test_build_target_uses_existing_offline_launcher(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "--no-print-directory", "provider/image/build"], capture_output=True, text=True, check=False
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "bash tools/container.sh provider/image/build")
+        makefile = Path("Makefile").read_text()
+        self.assertRegex(makefile, r"(?m)^provider/image/build:\n\tbash tools/container\.sh \$@$")
 
     def test_build_receives_only_frozen_contexts_and_never_pulls(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -103,7 +92,6 @@ class ProviderImageCommandTests(unittest.TestCase):
                 "provider_image.sh",
                 "core_image.sh",
                 "wheelhouse_path.sh",
-                "wheelhouse_inputs.sh",
             ):
                 shutil.copyfile(Path("tools") / name, root / "tools" / name)
             result = subprocess.run(
@@ -124,26 +112,9 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
             captures = [command for command in commands if "tools.wheelhouse" in command]
-            self.assertEqual(len(captures), 1, result.stdout)
+            self.assertEqual(captures, [], result.stdout)
             (build_command,) = [command for command in commands if "--build-context" in command]
             capture = root / ".work/provider/.build.PRINT"
-            for capture_command in captures:
-                mounts = [
-                    capture_command[index + 1] for index, argument in enumerate(capture_command[:-1]) if argument == "--mount"
-                ]
-                self.assertIn(f"type=bind,src={root}/.work/wheelhouse,dst=/wheelhouse,readonly", mounts)
-            self.assertEqual({command[command.index("--profile") + 1] for command in captures}, {"provider-core"})
-            self.assertEqual(
-                {
-                    argument
-                    for command in captures
-                    for argument in command
-                    if argument.endswith(",dst=/input/requirements.lock,readonly")
-                },
-                {
-                    f"type=bind,src={capture}/context/requirements/provider-core-install.lock,dst=/input/requirements.lock,readonly",
-                },
-            )
             command = build_command
             self.assertEqual(command[command.index("--network") + 1], "none")
             self.assertIn("--pull=false", command)
@@ -153,7 +124,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--iidfile") + 1], str(capture / "built-image-id"))
             self.assertEqual(command[-1], str(capture / "context"))
             contexts = {command[index + 1] for index, word in enumerate(command) if word == "--build-context"}
-            self.assertEqual(contexts, {f"runtime-wheels={capture}/runtime-wheels"})
+            self.assertEqual(contexts, {f"runtime-wheels={root}/.work/wheelhouse"})
             self.assertFalse(capture.exists())
             self.assertFalse((root / ".work/provider").exists())
             self.assertNotIn("--secret", command)

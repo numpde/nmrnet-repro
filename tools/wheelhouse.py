@@ -19,9 +19,9 @@ from pathlib import Path
 
 from tools.artifacts import fsync_directory, open_url, regular_file
 
-# Private image captures use this stable name; shared source files are commit-keyed.
+# Prefix for one-file source-download temporaries in the shared pool.
 # repo-check: allow-module-constant
-SOURCE_NAME = "unicore-source.tar.gz"
+SOURCE_TEMP_PREFIX = ".unicore-source."
 # A fixed 1 MiB read buffer bounds streaming memory for hashes and downloads.
 # repo-check: allow-module-constant
 CHUNK_BYTES = 1024 * 1024
@@ -99,12 +99,11 @@ def source_identity(path):
     return source
 
 
-def acquire_source(source, stage):
-    """Fetch the admitted Uni-Core archive with its declared byte and hash bounds."""
-    partial = stage / (SOURCE_NAME + ".part")
+def acquire_source(source, partial):
+    """Fetch the admitted Uni-Core archive to one private file in its pool."""
     checksum = hashlib.sha256()
     size = 0
-    with open_url(urllib.request.Request(source["url"]), timeout=60) as response, partial.open("xb") as stream:
+    with open_url(urllib.request.Request(source["url"]), timeout=60) as response, partial.open("wb") as stream:
         while chunk := response.read(CHUNK_BYTES):
             size += len(chunk)
             if not (size <= source["size"]):
@@ -113,7 +112,8 @@ def acquire_source(source, stage):
             checksum.update(chunk)
     if size != source["size"] or checksum.hexdigest() != source["sha256"]:
         raise ValueError("Cannot acquire Uni-Core source: response size or hash differs from declaration")
-    partial.rename(stage / SOURCE_NAME)
+    with regular_file(partial, os.O_RDONLY) as stream:
+        os.fsync(stream.fileno())
 
 
 def select_wheels(lock, pool):
@@ -173,8 +173,8 @@ def wheel_inputs_from_report(lock, pool, report):
             or candidate.suffix != ".whl"
         ):
             raise ValueError("Cannot select wheels: pip selected a file outside the supplied flat pool.")
-        # Pip owns lock resolution and source-file hash admission. Capture later
-        # compares its copied bytes with these hashes and the original lock.
+        # Pip owns lock resolution and source-file hash admission; callers use
+        # this report to record the exact shared-pool inputs.
         files[candidate.name] = item["download_info"]["archive_info"]["hashes"]["sha256"]
     return {"lock_sha256": digest(lock), "source_declaration_sha256": None, "files": files}
 
@@ -193,30 +193,6 @@ def verified_source(path, source):
             checksum.update(chunk)
     if checksum.hexdigest() != source["sha256"]:
         raise ValueError("Cannot verify Uni-Core source: cached SHA-256 differs from its pinned declaration.")
-
-
-def capture(lock, source_path, pool, destination):
-    """Freeze only the selected files; the shared pool has no whole-pool receipt."""
-    if not destination.is_dir() or destination.is_symlink() or any(destination.iterdir()):
-        raise ValueError("Cannot capture wheels: destination must be a private empty directory.")
-    selected = select_wheels(lock, pool)
-    for name in selected["files"]:
-        with regular_file(pool / name, os.O_RDONLY) as source, (destination / name).open("xb") as target:
-            shutil.copyfileobj(source, target, CHUNK_BYTES)
-            os.fchmod(target.fileno(), 0o644)
-    if source_path is not None:
-        source = source_identity(source_path)
-        archive = source_cache_file(pool, source)
-        verified_source(archive, source)
-        with regular_file(archive, os.O_RDONLY) as stream, (destination / SOURCE_NAME).open("xb") as target:
-            shutil.copyfileobj(stream, target, CHUNK_BYTES)
-            os.fchmod(target.fileno(), 0o644)
-        selected["source_declaration_sha256"] = digest(source_path)
-        selected["files"][SOURCE_NAME] = source["sha256"]
-    copied = {name: digest(destination / name) for name in selected["files"]}
-    if copied != selected["files"]:
-        raise ValueError("Cannot capture wheels: selected bytes or lock inputs changed while copying.")
-    return selected
 
 
 def publish_file(path, destination, checksum):
@@ -239,18 +215,16 @@ def publish_file(path, destination, checksum):
 
 
 def populate_pool(lock, pool, *, inference):
-    """Download a lock privately and publish individual verified wheels additively.
+    """Download hash-verified wheels directly into the locked shared pool.
 
     SECS supplies the pip invocation, not its replace-whole-directory policy:
     https://github.com/numpde/secs-repro/blob/7632f35f22ac20c70ff7c112531f4f32b6d2bd7b/make/packages.mk#L91-L104
     https://pip.pypa.io/en/stable/cli/pip_download/
 
-    pip 24.2 resolves the complete requirements input before it saves any linked
-    requirements. Its public HTTP cache can retain successful responses across a
-    failed whole-lock download, so keep that cache in the caller-selected pool
-    and let pip reuse it on retry:
-    https://github.com/pypa/pip/blob/24.2/src/pip/_internal/commands/download.py#L132-L141
-    https://pip.pypa.io/en/stable/topics/caching/
+    pip 25.0.1 resolves requirements and verifies hashes before saving linked
+    requirements to --dest. The caller holds an exclusive flock on the pool
+    directory until this operation and its final verification finish. Existing
+    complete files in the pool are discoverable through --find-links.
     """
     requirements(lock)
     if not pool.is_dir():
@@ -264,47 +238,40 @@ def populate_pool(lock, pool, *, inference):
     else:
         sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
         return selected
-    # Pip reuses files in --dest even when an index link outranks find-links.
-    # Aliases avoid copying large cached wheels; a rejected alias can be
-    # unlinked without changing the original. Only new bytes are published.
-    with tempfile.TemporaryDirectory(prefix=".nmrnet-wheel-download-", dir=pool) as temporary:
-        stage = Path(temporary)
-        for cached in pool.glob("*.whl"):
-            if cached.is_file() and not cached.is_symlink():
-                (stage / cached.name).symlink_to(cached.absolute())
-        print("Acquiring missing locked wheels using temporary staging in WHEELHOUSE.", flush=True)
-        indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
-        subprocess.run(
-            [
-                sys.executable,
-                "-I",
-                "-m",
-                "pip",
-                "--isolated",
-                "download",
-                "--require-hashes",
-                "--only-binary=:all:",
-                "--no-deps",
-                "--cache-dir",
-                str(pool / ".pip-cache"),
-                "--disable-pip-version-check",
-                "--index-url",
-                "https://pypi.org/simple",
-                "--find-links",
-                str(pool),
-                *indexes,
-                "--dest",
-                str(stage),
-                "-r",
-                str(lock),
-            ],
-            check=True,
-        )
-        selected = select_wheels(lock, stage)
-        for name, checksum in selected["files"].items():
-            if not (stage / name).is_symlink():
-                publish_file(stage / name, pool / name, checksum)
-    return selected
+    print("Acquiring missing locked wheels directly in WHEELHOUSE.", flush=True)
+    indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-m",
+            "pip",
+            "--isolated",
+            "download",
+            "--require-hashes",
+            "--only-binary=:all:",
+            "--no-deps",
+            "--no-cache-dir",
+            "--disable-pip-version-check",
+            "--index-url",
+            "https://pypi.org/simple",
+            "--find-links",
+            str(pool),
+            *indexes,
+            "--dest",
+            str(pool),
+            "-r",
+            str(lock),
+        ],
+        check=True,
+    )
+    selected = select_wheels(lock, pool)
+    for name in selected["files"]:
+        with regular_file(pool / name, os.O_RDONLY) as stream:
+            os.fchmod(stream.fileno(), 0o644)
+            os.fsync(stream.fileno())
+    fsync_directory(pool)
+    return select_wheels(lock, pool)
 
 
 def prepare_source(source_path, directory):
@@ -314,12 +281,16 @@ def prepare_source(source_path, directory):
     if destination.exists() or destination.is_symlink():
         verified_source(destination, source)
         return
-    with tempfile.TemporaryDirectory(prefix=".unicore-source-", dir=directory) as temporary:
-        stage = Path(temporary)
-        print("Acquiring Uni-Core source using temporary staging in WHEELHOUSE.", flush=True)
-        acquire_source(source, stage)
-        verified_source(stage / SOURCE_NAME, source)
-        publish_file(stage / SOURCE_NAME, destination, source["sha256"])
+    descriptor, temporary = tempfile.mkstemp(prefix=SOURCE_TEMP_PREFIX, suffix=".part", dir=directory)
+    os.close(descriptor)
+    partial = Path(temporary)
+    try:
+        print("Acquiring Uni-Core source directly into WHEELHOUSE.", flush=True)
+        acquire_source(source, partial)
+        verified_source(partial, source)
+        publish_file(partial, destination, source["sha256"])
+    finally:
+        partial.unlink(missing_ok=True)
 
 
 def prepare_core_assets(inputs, pool, *, download):
@@ -343,14 +314,20 @@ def prepare_core_assets(inputs, pool, *, download):
             continue
         if not download:
             raise ValueError(f"Cannot verify shared release artifact {name}: missing from the selected wheelhouse; acquire provider-core artifacts first.")
-        with tempfile.TemporaryDirectory(prefix=".nmrnet-core-download-", dir=pool) as temporary:
-            staged = Path(temporary) / name
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".part", dir=pool)
+        os.close(descriptor)
+        staged = Path(temporary)
+        try:
             print(f"Downloading shared release artifact: {name}", flush=True)
-            with open_url(urllib.request.Request(url), timeout=60) as response, staged.open("xb") as target:
+            with open_url(urllib.request.Request(url), timeout=60) as response, staged.open("wb") as target:
                 shutil.copyfileobj(response, target, CHUNK_BYTES)
+                target.flush()
+                os.fsync(target.fileno())
             if digest(staged) != checksum:
                 raise ValueError(f"Cannot publish {name}: downloaded bytes differ from their GitHub release pin.")
             publish_file(staged, destination, checksum)
+        finally:
+            staged.unlink(missing_ok=True)
 
 
 def core_dependencies(lock, destination):
@@ -367,13 +344,12 @@ def core_dependencies(lock, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("download", "check", "capture"))
+    parser.add_argument("action", choices=("download", "check"))
     parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"), required=True)
     parser.add_argument("--lock", type=Path, action="append", required=True)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--assets", type=Path)
     parser.add_argument("--pool", type=Path)
-    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.profile == "inference" and args.source is None:
         parser.error("inference requires --source for its pinned Uni-Core archive")
@@ -381,10 +357,6 @@ def main():
         parser.error(f"{args.profile} accepts only locked wheels; omit --source")
     if args.pool is None:
         parser.error(f"{args.action} requires --pool for the selected shared directory")
-    if args.action == "capture" and args.output is None:
-        parser.error(f"{args.action} requires --output for its private capture")
-    if args.action == "capture" and len(args.lock) != 1:
-        parser.error(f"{args.action} requires one lock for its private dependency capture")
     # A readonly bind does not prevent the host editing its source. Capture each
     # declaration once so pip, source verification and reported hashes consume
     # the same bytes throughout this operation.
@@ -420,8 +392,6 @@ def main():
                     populate_pool(lock, args.pool, inference=args.profile == "inference")
             if source_path is not None:
                 prepare_source(source_path, args.pool)
-        elif args.action == "capture":
-            capture(locks[0], source_path, args.pool, args.output)
         else:
             if args.assets is not None:
                 prepare_core_assets(args.assets, args.pool, download=False)

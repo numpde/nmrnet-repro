@@ -57,8 +57,14 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     definition, settings, secrets, bundle, source_root, models = map(
         _bind_path, (definition, settings, secrets, bundle, source_root, models)
     )
-    if any(bundle.iterdir()):
-        raise ConfigurationRejected("choose a fresh empty deployment bundle; existing generations were preserved.")
+    expected_directories = (bundle / "config", bundle / "secrets", bundle / "secrets" / "provider")
+    for directory in expected_directories:
+        observed = directory.lstat()
+        if not stat.S_ISDIR(observed.st_mode) or observed.st_uid != os.geteuid() or stat.S_IMODE(observed.st_mode) != 0o700:
+            raise ConfigurationRejected("the fresh deployment bundle requires caller-owned mode-0700 config and secret directories.")
+        with os.scandir(directory) as entries:
+            if next(entries, None) is not None:
+                raise ConfigurationRejected("choose fresh empty deployment input directories; existing generation contents were preserved.")
     raw = read_startup_file(definition, maximum_bytes=65536, label="public deployment definition")
     local_raw = read_startup_file(settings, maximum_bytes=65536, label="private deployment settings", secret=True)
     try:
@@ -97,9 +103,6 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     if type(local["routes"]) is not dict or set(local["routes"]) != {"interpreter", "store"}:
         raise ConfigurationRejected("deployment.toml owns only interpreter/store routes; the host owns the API route.")
     routes = dict(local["routes"])
-    (bundle / "config").mkdir(mode=0o700)
-    (bundle / "secrets").mkdir(mode=0o700)
-    (bundle / "secrets" / "provider").mkdir(mode=0o700)
     consumed, retained_provider = {}, {}
 
     def retain_input(actual, leaf, **limits):
@@ -184,17 +187,61 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     elif "resolvers" in local:
         raise ConfigurationRejected("resolvers are unused by local/mapped routes; remove that grant.")
     _write(bundle / "compose.json", compose_bytes(plan))
+    seal_deployment_bundle(bundle, uid, gid)
     return bundle
 
 
 def creation_plan(bundle):
-    """Decode the recipe owner's literal-dollar encoding without evaluating it."""
+    """Decode the public Compose recipe's literal-dollar encoding."""
     try:
         encoded = read_startup_file(_bind_path(Path(bundle) / "compose.json"), maximum_bytes=1024 * 1024,
-                                    label="original Compose creation plan", secret=True)
+                                    label="original Compose creation plan")
         return read_document(encoded.replace(b"$$", b"$"), 1024 * 1024)
     except ResponseRejected as cause:
         raise ConfigurationRejected("original Compose plan requires strict retained JSON.", cause=cause) from None
+
+
+def seal_deployment_bundle(bundle, uid, gid):
+    """Seal public recipe files and stage secrets as the provider's container identity."""
+    bundle = _bind_path(bundle)
+    if type(uid) is not int or type(gid) is not int or not 1 <= uid <= 4294967294 or not 1 <= gid <= 4294967294:
+        raise ConfigurationRejected("deployment bundle sealing requires the admitted nonroot provider UID and GID.")
+    root = bundle.lstat()
+    if not stat.S_ISDIR(root.st_mode) or root.st_uid != os.geteuid() or stat.S_IMODE(root.st_mode) != 0o700:
+        raise ConfigurationRejected("deployment bundle sealing requires a caller-owned mode-0700 generation root.")
+    rootless = os.geteuid() == 0
+    if not rootless and os.geteuid() != uid:
+        raise ConfigurationRejected("deployment helper must own its nonroot provider inputs before sealing.")
+    directories, files = [], []
+    for parent, names, leaves in os.walk(bundle, topdown=True, followlinks=False):
+        directory = Path(parent)
+        directories.append(directory)
+        for name in names:
+            path = directory / name
+            if not stat.S_ISDIR(path.lstat().st_mode):
+                raise ConfigurationRejected("deployment bundle directories must not contain links or non-directory entries.")
+        for name in leaves:
+            path = directory / name
+            if not stat.S_ISREG(path.lstat().st_mode):
+                raise ConfigurationRejected("deployment bundle files must be regular files without symlinks.")
+            files.append(path)
+    if not any(path.relative_to(bundle).as_posix() == "compose.json" for path in files):
+        raise ConfigurationRejected("deployment bundle has no retained Compose recipe to seal.")
+    for path in files:
+        mode = 0o400 if path.is_relative_to(bundle / "secrets") else 0o444
+        os.chmod(path, mode, follow_symlinks=False)
+        if rootless:
+            os.chown(path, uid, gid, follow_symlinks=False)
+        elif path.stat().st_uid != uid:
+            raise ConfigurationRejected("deployment helper did not create provider-owned frozen inputs.")
+    for directory in reversed(directories):
+        if rootless:
+            # Container root maps to the installing host user. Keeping directory
+            # ownership there lets the host retire generations after service stop.
+            os.chown(directory, 0, 0, follow_symlinks=False)
+        elif directory.stat().st_uid != uid:
+            raise ConfigurationRejected("deployment helper did not create provider-owned input directories.")
+        os.chmod(directory, 0o555, follow_symlinks=False)
 
 
 def lifetime_owner(bundle):

@@ -24,7 +24,9 @@ class SourceTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.archive = self.root / "source.tar.gz"
+        self.pool = self.root / "wheelhouse"
+        self.pool.mkdir()
+        self.archive = self.pool / ("Uni-Core-" + "a" * 40 + ".tar.gz")
         self.declaration = self.root / "source.json"
         self.prefix = "Uni-Core-" + "a" * 40
 
@@ -53,7 +55,7 @@ class SourceTests(unittest.TestCase):
         )
 
     def build(self):
-        build_unicore.build(self.archive, self.declaration)
+        build_unicore.build(self.pool, self.declaration)
 
     def test_verified_source_builds_without_network_or_isolated_dependencies(self):
         self.write_archive([(self.prefix + "/setup.py", tarfile.REGTYPE, b"pinned setup")])
@@ -133,7 +135,6 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/inference_inputs.sh").write_bytes(Path("tools/inference_inputs.sh").read_bytes())
         (self.root / "tools/wheelhouse_path.sh").write_bytes(Path("tools/wheelhouse_path.sh").read_bytes())
-        (self.root / "tools/wheelhouse_inputs.sh").write_bytes(Path("tools/wheelhouse_inputs.sh").read_bytes())
         (self.root / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
         (self.root / "tools/git_inputs.sh").write_bytes(Path("tools/git_inputs.sh").read_bytes())
         (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
@@ -171,22 +172,14 @@ class ImageLauncherTests(unittest.TestCase):
         result = self.command("build")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
-        capture = next(command for command in commands if "tools.wheelhouse" in command)
+        self.assertFalse(any("tools.wheelhouse" in command for command in commands))
         args = next(command for command in commands if "--build-context" in command)
         self.assertIn("build", args)
-        self.assertIn("--pool", capture)
-        self.assertEqual("/wheelhouse", capture[capture.index("--pool") + 1])
-        self.assertIn("--output", capture)
-        self.assertEqual("/capture", capture[capture.index("--output") + 1])
-        mounts = [capture[index + 1] for index, value in enumerate(capture) if value == "--mount"]
-        self.assertIn(
-            f"type=bind,src={self.root}/.work/inference/.build.PRINT/wheelhouse,dst=/capture",
-            mounts,
-        )
         self.assertEqual("none", args[args.index("--network") + 1])
         self.assertEqual("default", args[args.index("--builder") + 1])
         self.assertIn("--pull=false", args)
-        self.assertIn("wheelhouse=" + str(self.root / ".work/inference/.build.PRINT/wheelhouse"), args)
+        self.assertIn("wheelhouse=" + str(self.root / ".work/wheelhouse"), args)
+        self.assertIn("runtime-wheels=" + str(self.root / ".work/wheelhouse"), args)
         self.assertNotIn("--ssh", args)
         self.assertNotIn("--secret", args)
         self.assertFalse((self.root / ".work/inference").exists())

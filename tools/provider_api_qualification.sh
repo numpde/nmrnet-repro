@@ -459,6 +459,7 @@ api_witness_main() {
     qualification_shared_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
     source "$repository_root/tools/wheelhouse_path.sh"
     select_wheelhouse && require_wheelhouse_pool || return $?
+    if [[ $print_command == false ]]; then lock_wheelhouse shared || return $?; fi
     local -a support_argv=(/opt/provider/environment/bin/python -I -B /fixture/support.py fixture
         --release /fixture/core-release.json --pool /wheelhouse --target /fixture)
     local -a support_grants=(--env NMRNET_IN_CONTAINER=1 --env PROVIDER_CORE_IN_CONTAINER=1

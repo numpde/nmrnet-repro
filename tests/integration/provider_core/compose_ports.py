@@ -83,6 +83,8 @@ def deployment_inputs(root):
     sources["prediction-models.json"] = models.read_bytes()
     bundle = private / "bundles/generation-first"
     bundle.mkdir(mode=0o700)
+    for directory in (bundle / "config", bundle / "secrets", bundle / "secrets" / "provider"):
+        directory.mkdir(mode=0o700)
     return dict(definition=definition, settings=settings, secrets=files.root, bundle=bundle,
                 source_root=source_root, source_names=tuple(sources), models=models, deployment="web", checkout=root / "checkout", uid=1000, gid=1001,
                 prepared=root / "prepared", shared_image_id="sha256:" + "9" * 64,

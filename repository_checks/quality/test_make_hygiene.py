@@ -56,6 +56,10 @@ class RepositoryHygieneTest(unittest.TestCase):
             root = Path(directory)
             (root / "Makefile").write_text(read_text(repo_path("Makefile")))
             (root / "tools").mkdir()
+            (root / "tools/docker_client.sh").write_text(
+                'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
+                'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
+            )
             (root / "tools/provider_deployment.sh").write_text('exit "${TEST_UP_STATUS}"\n')
             (root / "tools/image_retirement.sh").write_text('touch "$(dirname "$0")/cleanup-called"\nexit 7\n')
             for up_status in (7, 0):

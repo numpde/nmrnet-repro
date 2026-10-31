@@ -315,6 +315,7 @@ compose_witness_main() {
     local scientific_case=${1-pasted}
     case $scientific_case in pasted|smiles|references|capacity|successive|recovery) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+    print_command=false
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     source "$repository_root/tools/worker_retirement.sh"
@@ -323,9 +324,10 @@ compose_witness_main() {
     qualification_shared_tools || return $?
     source "$repository_root/tools/wheelhouse_path.sh"
     select_wheelhouse && require_wheelhouse_pool || return $?
+    if [[ $print_command == false ]]; then lock_wheelhouse shared || return $?; fi
     docker_client_directory= pending_diagnostic= inference_diagnostic= worker_retirement_diagnostic=
     inference_retirement_confirmed=true inference_cancellation_status=0
-    peer_id= deployment_installed=false peer_creation_attempted=false print_command=false
+    peer_id= deployment_installed=false peer_creation_attempted=false
     qualification_delivery_selected=false qualification_delivery_up_attempted=false
     scratch=$(mktemp -d /tmp/nmrnet-compose-XXXXXXXX)
     deployment=qualification-${scratch##*-}

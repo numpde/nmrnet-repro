@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Acquisition stages and publishes individual files; checks select locally offline.
+# Acquisition updates the shared pool under an exclusive directory lock; checks
+# and consumers hold shared locks while selecting or copying its artifacts.
 # SECS package lanes separate networked wheel acquisition from offline image builds:
 # https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk
 # This lane keeps that boundary with the NMRNet lock and pinned Uni-Core source.
@@ -39,8 +40,7 @@ select_wheelhouse
 source "$repository_root/tools/operator_guidance.sh"
 parent_directory=$wheelhouse_directory
 container_parent=/wheelhouse
-# Private staging and per-file atomic publication share this one mount. The
-# pool is never replaced, cleared or assigned a whole-directory receipt.
+# The pool itself is the only persistent artifact location.
 if [[ "$1" == download ]]; then
     if [[ $repository_root == "$parent_directory" || $repository_root == "$parent_directory/"* ]]; then
         printf '%s\n' 'Wheel acquisition cannot mount the repository or its ancestors writable; select a cache directory.' >&2
@@ -68,10 +68,22 @@ for input in "${inputs[@]}"; do
     fi
 done
 if [[ "$1" == download ]]; then
-    if ! "$print_command"; then mkdir -p -- "$parent_directory"; fi
+    if ! "$print_command"; then
+        mkdir -p -- "$parent_directory"
+        pool_owner=$(stat -c '%u:%g' -- "$parent_directory")
+        if [[ $pool_owner != "$caller_uid:$caller_gid" ]]; then
+            printf 'Wheel acquisition requires the shared pool owner to match this launcher (%s); observed %s.\n' \
+                "$caller_uid:$caller_gid" "$pool_owner" >&2
+            exit 2
+        fi
+    else
+        pool_owner=$caller_uid:$caller_gid
+    fi
+    if ! "$print_command"; then lock_wheelhouse exclusive; fi
     command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then command+=(--print); fi
-    command+=(--success-note "$next_actions" run)
+    command+=(--success-note "$next_actions")
+    command+=(--pool-owner "$pool_owner" run)
     output_mount="type=bind,src=$parent_directory,dst=$container_parent"
     memory=2g
     scratch=1g
@@ -80,6 +92,7 @@ else
         printf 'Cannot check wheelhouse: %s is missing.\n' "$parent_directory" >&2
         exit 2
     fi
+    if ! "$print_command"; then lock_wheelhouse shared; fi
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     docker_client_directory=

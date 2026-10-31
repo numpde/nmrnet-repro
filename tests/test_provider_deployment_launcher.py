@@ -31,8 +31,11 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / 'tools'
         tools.mkdir()
-        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'image_lifecycle.sh'):
+        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
+        # The recording Engine models an identity-preserving mapping. The map
+        # parser itself is exercised against synthetic maps by its own tests.
+        (tools / 'user_namespace_map.sh').write_text('container_id_for_host_id() { printf "%s\\n" "$2"; }\nhost_id_for_container_id() { printf "%s\\n" "$2"; }\n')
         (tools / 'docker_client.sh').write_text('''docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
 ''')
@@ -49,6 +52,14 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
         inference_retirement_confirmed=${TEST_GENERATION_INSPECT_RETIRED-${TEST_RETIRED-true}}
     elif [[ $operation == 'provider stop inspection' && " $* " == *' ps --quiet '* ]]; then
         inference_retirement_confirmed=${TEST_PROJECT_RETIRED-${TEST_RETIRED-true}}
+    elif [[ $operation == 'retire deployment identity probe' ]]; then
+        inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
+    elif [[ $operation == 'retire deployment configuration helper' ]]; then
+        inference_retirement_confirmed=${TEST_RETIRED-true}
+    elif [[ " $* " == *' nmrnet-map-'* || " $* " == *' 0000000000000000000000000000000000000000000000000000000000000006 '* ]]; then
+        inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
+    elif [[ " $* " == *' run --rm --pull never --name nmrnet-config-'* ]]; then
+        inference_retirement_confirmed=${TEST_RETIRED-true}
     else
         inference_retirement_confirmed=${TEST_RETIRED-true}
     fi
@@ -77,6 +88,8 @@ count=0
 count=$((count + 1)); printf '%s\n' "$count" > "$root/count"
 printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
+ create) [[ ${TEST_CREATE_STATUS-0} == 0 ]] || exit "$TEST_CREATE_STATUS"; printf '%064d\n' 6 ;;
+ start) ;;
  ps)
     [[ ${TEST_PS_STATUS-0} == 0 ]] || exit "$TEST_PS_STATUS"
     if [[ " $* " == *' --filter volume='* ]]; then
@@ -96,13 +109,19 @@ case $1 in
     arguments=("$@")
     for ((i=0;i<${#arguments[@]};i++)); do
       case ${arguments[i]} in
-        --bundle|--output) destination=${arguments[i+1]}; mkdir -p "$destination/bindings"; printf '{}\n' > "$destination/compose.json"; printf '[delivery]\n' > "$destination/daemon.toml" ;;
+        --bundle)
+          destination=${arguments[i+1]}; mkdir -p "$destination/bindings"
+          printf '{}\n' > "$destination/compose.json"; printf '[delivery]\n' > "$destination/daemon.toml"
+          chmod 444 "$destination/compose.json"; chmod 555 "$destination"
+          ;;
+        --output) destination=${arguments[i+1]}; mkdir -p "$destination/bindings"; printf '{}\n' > "$destination/compose.json"; printf '[delivery]\n' > "$destination/daemon.toml" ;;
       esac
     done
     ;;
  inspect)
     [[ ${TEST_INSPECT_STATUS-0} == 0 ]] || exit "$TEST_INSPECT_STATUS"
-    if [[ " $* " == *'.State.Status'* ]]; then
+    if [[ " $* " == *'.State.Pid'* ]]; then printf '1 true\n'
+    elif [[ " $* " == *'.State.Status'* ]]; then
         if [[ -f $root/provider-stopped ]]; then printf '%s\n' "${TEST_PROVIDER_STOPPED_STATE-exited 0 false}";
         else printf '%s\n' "${TEST_PROVIDER_STATE-running 0 false}"; fi
     elif [[ " $* " == *'.Mounts'* ]]; then
@@ -134,7 +153,10 @@ case $1 in
     [[ ${TEST_STOP_STATUS-0} == 0 ]] || exit "$TEST_STOP_STATUS"
     : > "$root/provider-stopped"
     ;;
- rm) [[ ${TEST_RM_STATUS-0} == 0 ]] || exit "$TEST_RM_STATUS" ;;
+ rm)
+    if [[ ${3-} =~ ^0{63}6$ ]]; then [[ ${TEST_MAP_RM_STATUS-0} == 0 ]] || exit "$TEST_MAP_RM_STATUS"
+    else [[ ${TEST_RM_STATUS-0} == 0 ]] || exit "$TEST_RM_STATUS"; fi
+    ;;
  *) exit 91 ;;
 esac
 ''')
@@ -171,6 +193,12 @@ esac
         environment.update(changes or {})
         return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
                               env=environment, capture_output=True, text=True, timeout=5)
+
+    def remove_retained_identity_metadata(self, result):
+        prefix = 'Identity inspection metadata retained at '
+        for line in result.stderr.splitlines():
+            if line.startswith(prefix):
+                Path(line.removeprefix(prefix)).unlink(missing_ok=True)
 
     def calls(self):
         count = int((self.root / 'count').read_text()) if (self.root / 'count').exists() else 0
@@ -361,6 +389,22 @@ esac
         self.assertIn('stop this deployment', result.stderr)
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
 
+    def test_identity_probe_create_failure_does_not_remove_an_unadmitted_name(self):
+        result = self.run_command('install', changes={'TEST_CREATE_STATUS': '7'})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertFalse(any(call[0] == 'rm' for call in self.calls()))
+        self.assertIn('Identity probe, if still present:', result.stderr)
+        self.remove_retained_identity_metadata(result)
+
+    def test_identity_probe_removal_is_not_retried_after_an_uncertain_attempt(self):
+        result = self.run_command('install', changes={'TEST_MAP_RM_STATUS': '9'})
+        self.assertEqual(result.returncode, 9, result.stderr)
+        removals = [call for call in self.calls() if call[0] == 'rm']
+        self.assertEqual(len(removals), 1)
+        self.assertRegex(removals[0][2], r'^[0-9a-f]{64}$')
+        self.assertIn('Identity probe ID:', result.stderr)
+        self.remove_retained_identity_metadata(result)
+
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command('install')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -380,10 +424,20 @@ esac
         self.assertIn('/opt/provider/environment/bin/python', call)
         selected = self.provider / os.readlink(self.provider / 'current')
         self.assertNotEqual(selected, self.bundle)
-        self.assertEqual(selected.stat().st_mode & 0o777, 0o500)
-        self.assertEqual((selected / 'compose.json').stat().st_mode & 0o777, 0o400)
+        self.assertEqual(selected.stat().st_mode & 0o777, 0o555)
+        self.assertEqual((selected / 'compose.json').stat().st_mode & 0o777, 0o444)
         self.assertFalse(self.bundle.exists())
-        self.assertFalse(any(call[0] in ('create', 'start') for call in self.calls()))
+        probes = [call for call in self.calls() if call[0] in ('create', 'start')]
+        self.assertEqual([call[0] for call in probes], ['create', 'start'])
+        admitted_id = f'{6:064d}'
+        self.assertEqual(probes[1][1], admitted_id)
+        inspected = next(call for call in self.calls() if call[0] == 'inspect'
+                         and any('.State.Pid' in argument for argument in call))
+        self.assertEqual(inspected[-1], admitted_id)
+        removed = next(call for call in self.calls() if call[0] == 'rm')
+        self.assertEqual(removed[-1], admitted_id)
+        freeze_user = next(call[call.index('--user') + 1] for call in self.calls() if 'freeze' in call)
+        self.assertEqual(freeze_user, f'{os.getuid()}:{os.getgid()}')
 
     def test_retirement_preserves_current_stopped_borrowers_and_original_inputs(self):
         bundles = self.provider / 'bundles'
@@ -581,7 +635,7 @@ esac
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false',
                                                      'TEST_INVENTORY_RETIRED': 'true', 'TEST_PROJECT_RETIRED': 'true'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'run'])
+        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'create', 'start', 'inspect', 'rm', 'run'])
         self.assertFalse((self.root / 'cleanup').exists())
         self.assertIn('Configuration helper, if still present:', result.stderr)
 
@@ -617,7 +671,7 @@ esac
         calls = self.calls()
         self.assertEqual(calls[0][-4:], ['ps', '--all', '--quiet', 'prediction'])
         self.assertEqual(calls[1][0:3], ['inspect', '--type', 'container'])
-        call = calls[2]
+        call = next(call for call in calls if 'client-inputs' in call)
         self.assertIn(f'type=bind,src={self.bundle},dst={self.bundle},readonly', call)
         self.assertEqual(call[call.index('client-inputs')+1:], ['--bundle', str(self.bundle),
             '--prediction-image-id', 'sha256:' + f'{9:064d}', '--client-root', str(output)])

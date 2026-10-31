@@ -48,7 +48,7 @@ inference_capture_inputs() {
     [[ -z "$changes" ]] \
         || { git_input_failure 'inference build inputs' 'the complete pinned source closure changed.'; return 2; }
 
-    mkdir -- "$capture_directory/context" "$capture_directory/wheelhouse" "$capture_directory/runtime-wheels"
+    mkdir -- "$capture_directory/context"
     copy_git_blobs 'inference build inputs' "$repository_root" "$parent_head" "$capture_directory/context" "$capture_directory/authored" "${authored[@]}"
     cmp -s -- "$capture_directory/context/artifacts/nmrnet-source.paths" \
         <(printf 'source_revision %s\nLICENSE\nuninmr\n' "$revision") \

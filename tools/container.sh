@@ -50,7 +50,6 @@ docker_client_directory=
 pending_diagnostic=
 inference_diagnostic=
 inference_retirement_confirmed=true
-wheel_capture_retirement_confirmed=true
 inference_cancellation_status=0
 caller_cancellation=0
 network=none
@@ -131,9 +130,7 @@ cleanup_launcher() {
     trap 'cancelled=129' HUP
     trap 'cancelled=130' INT
     trap 'cancelled=143' TERM
-    # A joined engine client alone cannot release a directory still writable by
-    # a capture container. Both existing lifetime owners must confirm retirement.
-    if "$inference_retirement_confirmed" && "$wheel_capture_retirement_confirmed"; then
+    if "$inference_retirement_confirmed"; then
         if [[ -n "$image_input_directory" ]]; then
             if rm -rf -- "$image_input_directory" 2>/dev/null; then image_input_directory=; else
                 removal_status=$?
@@ -175,7 +172,7 @@ cleanup_launcher() {
     if "$print_command" || [[ $network == host ]]; then
         # Preview and pre-dispatch download validation own no runtime client.
         printf '%s' "$pending_diagnostic" >&2
-    elif ! "$inference_retirement_confirmed" || ! "$wheel_capture_retirement_confirmed"; then
+    elif ! "$inference_retirement_confirmed"; then
         # Unknown retirement forbids another owner. Direct reporting keeps its
         # separate blocked-stderr limit; all owned resources remain untouched.
         printf '%s' "$pending_diagnostic" >&2
@@ -207,6 +204,7 @@ case "$1" in
         source "$repository_root/tools/wheelhouse_path.sh"
         select_wheelhouse
         require_wheelhouse_pool
+        if [[ $print_command == false ]]; then lock_wheelhouse shared; fi
         ;;
 esac
 
@@ -652,7 +650,8 @@ case "$1" in
                     unit_tests=(-v tests.test_prediction_input tests.test_provider_input)
                 fi
                 if [[ "$1" == test/unit/provider/deployment ]]; then
-                    unit_tests=(-v tests.test_provider_deployment_launcher tests.test_compose_fixture_shared
+                    unit_tests=(-v tests.test_provider_bundle_sealing tests.test_provider_deployment_launcher
+                        tests.test_compose_fixture_shared tests.test_user_namespace_map
                         test_api_qualification_normative
                         tests.test_docker_client.DockerClientTests.test_actual_client_sees_empty_private_config_and_fixed_environment)
                     command+=(--mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_qualification.py,dst=/workspace/test_api_qualification_normative.py,readonly"

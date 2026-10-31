@@ -40,8 +40,10 @@ exec {deployment_lock}< "$root"
 flock --nonblock "$deployment_lock" || { refuse 'another command is active; nothing was queued.'; exit 2; }
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
+source "$repository_root/tools/user_namespace_map.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
-helper_name= lifetime_query= stop_query=
+helper_name= map_probe_name= map_probe_id= map_probe_removal_attempted=false map_query= lifetime_query= stop_query=
+helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false
 finish() {
     local status=$? cleanup=0 primary_diagnostic=$inference_diagnostic cleanup_diagnostic=
     trap - EXIT
@@ -52,6 +54,20 @@ finish() {
             cleanup=$?
         fi
         cleanup_diagnostic=$inference_diagnostic
+    fi
+    if [[ -n $map_probe_id && $map_probe_removal_attempted == false && $inference_retirement_confirmed == true ]]; then
+        map_probe_removal_attempted=true
+        if inference_native 'retire deployment identity probe' 15 stdio "${engine[@]}" rm --force "$map_probe_id"; then
+            if [[ $inference_retirement_confirmed == true ]]; then
+                map_probe_name= map_probe_id=
+            fi
+        else
+            cleanup=$?
+            cleanup_diagnostic=$inference_diagnostic
+        fi
+    fi
+    if [[ -n $map_query && -z $map_probe_name && $inference_retirement_confirmed == true ]]; then
+        rm -f -- "$map_query" || cleanup=$?
     fi
     if [[ $inference_retirement_confirmed == true && -n ${lifetime_query-} ]]; then
         rm -f -- "$lifetime_query" || cleanup=$?
@@ -70,6 +86,9 @@ finish() {
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Inspect Docker Compose status/logs and retain the selected configuration; an interrupted client does not prove Engine-side rollback. No automatic retry was sent.\n' >&2
         [[ -z $helper_name ]] || printf 'Configuration helper, if still present: %s\n' "$helper_name" >&2
+        [[ -z $map_probe_name ]] || printf 'Identity probe, if still present: %s\n' "$map_probe_name" >&2
+        [[ -z $map_probe_id ]] || printf 'Identity probe ID: %s\n' "$map_probe_id" >&2
+        [[ -z $map_query ]] || printf 'Identity inspection metadata retained at %q.\n' "$map_query" >&2
     fi
     exit "$status"
 }
@@ -78,6 +97,56 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; exit 2; }
 run() { local seconds=$1; shift; inference_native "$role Compose $action" "$seconds" stdio "${engine[@]}" "$@"; }
+map_helper_identity() {
+    local image=$1 python=$2 pid running extra created mapped_service_uid mapped_service_gid mapped_root_uid mapped_root_gid
+    IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
+    map_query=$(umask 077; mktemp /tmp/nmrnet-helper-map.XXXXXXXX)
+    map_probe_name=nmrnet-map-${helper_uuid//-/}
+    # The probe and freezer share the selected Engine's default user namespace.
+    run 30 create --name "$map_probe_name" --init --network none --read-only --user 0:0 \
+        --cap-drop ALL --security-opt no-new-privileges:true --cpus 0.25 --memory 64m \
+        --memory-swap 64m --pids-limit 8 --entrypoint "$python" "$image" -I -B -c 'import time; time.sleep(60)' \
+        > "$map_query"
+    [[ $inference_retirement_confirmed == true ]] \
+        || { refuse 'selected Engine identity probe creation has not settled.'; return 2; }
+    IFS= read -r created < "$map_query" || { refuse 'selected Engine identity probe creation returned no container ID.'; return 2; }
+    [[ $created =~ ^[0-9a-f]{64}$ ]] && cmp -s -- "$map_query" <(printf '%s\n' "$created") \
+        || { refuse 'selected Engine identity probe creation returned a malformed container ID.'; return 2; }
+    map_probe_id=$created
+    run 20 start "$map_probe_id" >/dev/null
+    [[ $inference_retirement_confirmed == true ]] \
+        || { refuse 'selected Engine identity probe start has not settled.'; return 2; }
+    run 20 inspect --format '{{.State.Pid}} {{.State.Running}}' "$map_probe_id" > "$map_query"
+    [[ $inference_retirement_confirmed == true ]] \
+        || { refuse 'selected Engine identity inspection has not settled.'; return 2; }
+    IFS=' ' read -r pid running extra < "$map_query" || return 2
+    [[ $pid =~ ^[1-9][0-9]*$ && $running == true && -z $extra ]] \
+        && cmp -s -- "$map_query" <(printf '%s %s\n' "$pid" "$running") \
+        || { refuse 'cannot establish the selected Engine helper identity.'; return 2; }
+    mapped_service_uid=$(host_id_for_container_id "/proc/$pid/uid_map" "$caller_uid") \
+        || { refuse 'the selected Engine does not map the provider UID into the helper namespace.'; return 2; }
+    mapped_service_gid=$(host_id_for_container_id "/proc/$pid/gid_map" "$caller_gid") \
+        || { refuse 'the selected Engine does not map the provider GID into the helper namespace.'; return 2; }
+    mapped_root_uid=$(host_id_for_container_id "/proc/$pid/uid_map" 0) \
+        || { refuse 'the selected Engine does not map container root into the helper namespace.'; return 2; }
+    mapped_root_gid=$(host_id_for_container_id "/proc/$pid/gid_map" 0) \
+        || { refuse 'the selected Engine does not map container root group into the helper namespace.'; return 2; }
+    if [[ $mapped_service_uid == "$caller_uid" && $mapped_service_gid == "$caller_gid" ]]; then
+        helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false
+    elif [[ $mapped_root_uid == "$caller_uid" && $mapped_root_gid == "$caller_gid" ]]; then
+        helper_uid=0 helper_gid=0 helper_add_chown=true
+    else
+        refuse 'the selected Engine maps neither the provider identity nor container root to the installing host user.'
+        return 2
+    fi
+    map_probe_removal_attempted=true
+    inference_native 'retire deployment identity probe' 20 stdio "${engine[@]}" rm --force "$map_probe_id"
+    [[ $inference_retirement_confirmed == true ]] \
+        || { refuse 'selected Engine identity probe retirement has not settled.'; return 2; }
+    map_probe_name= map_probe_id=
+    rm -- "$map_query"
+    map_query=
+}
 capture_stop_metadata() {
     # Preserve the native owner's facts in this shell; only bounded Engine
     # metadata goes to the private file. A timed-out writer keeps that file.
@@ -222,12 +291,14 @@ retire_generations() {
 }
 helper() {
     local image=$1 python=$2; shift 2
+    local -a helper_capabilities=(--cap-drop ALL)
+    [[ $helper_add_chown != true ]] || helper_capabilities+=(--cap-add CHOWN)
     IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
     helper_name=nmrnet-config-${helper_uuid//-/}
     run 120 run --rm --pull never --name "$helper_name" --init --network none --read-only \
-        --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true \
+        --user "$helper_uid:$helper_gid" "${helper_capabilities[@]}" --security-opt no-new-privileges:true \
         --cpus 1 --memory 512m --memory-swap 512m --pids-limit 64 \
-        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=0700,uid=$caller_uid,gid=$caller_gid" \
+        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=32m,mode=0700,uid=$helper_uid,gid=$helper_gid" \
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
         --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
         "${helper_grants[@]}" --entrypoint "$python" "$image" -I -B "$@"
@@ -288,7 +359,9 @@ if [[ $action == install ]]; then
     require_no_old_route_borrowers
     image_record provider; controller_image=$selected_image
     bundle=$(mktemp -d "$root/bundles/generation-XXXXXXXX")
+    mkdir -m 700 -- "$bundle/config" "$bundle/secrets" "$bundle/secrets/provider"
     select_shared_runtime
+    map_helper_identity "$controller_image" /opt/provider/environment/bin/python
     private_directory "$root/runtime"
     for runtime_role in prediction reader smiles route-interpreter route-store; do
         private_directory "$root/runtime/$runtime_role"
@@ -347,9 +420,7 @@ if [[ $action == install ]]; then
         --prepared "$repository_root/.work/prepared" --image-id "$scientific_image" --geometry-image-id "$geometry_image" \
         --controller-image-id "$controller_image" --repository-revision "$revision" --upstream-revision "$upstream_revision"
     [[ -f $bundle/compose.json && ! -L $bundle/compose.json ]] || exit 2
-    find "$bundle" -type f -exec chmod 400 -- {} +
-    find "$bundle" -mindepth 1 -type d -exec chmod 500 -- {} +
-    chmod 500 "$bundle"
+    chmod 555 "$bundle"
     # No completion/inspection manifest: selecting the actual recipe is enough.
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"

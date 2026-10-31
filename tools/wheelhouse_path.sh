@@ -56,3 +56,25 @@ require_wheelhouse_pool() {
         return 2
     fi
 }
+
+# Lock the directory inode itself so the shared pool needs no lock file. All
+# managed readers hold shared locks; acquisition holds an exclusive lock until
+# download and hash verification finish. This relies on local Linux flock
+# semantics for the selected wheelhouse filesystem.
+lock_wheelhouse() {
+    local mode=${1-}
+    [[ $mode == shared || $mode == exclusive ]] || return 2
+    [[ -d $wheelhouse_directory ]] || {
+        printf 'Cannot lock WHEELHOUSE=%q: the shared pool directory is missing.\n' "$wheelhouse_directory" >&2
+        return 2
+    }
+    exec {wheelhouse_lock_fd}<"$wheelhouse_directory" || {
+        printf 'Cannot open WHEELHOUSE=%q for coordination.\n' "$wheelhouse_directory" >&2
+        return 2
+    }
+    if [[ $mode == shared ]]; then
+        flock --shared "$wheelhouse_lock_fd"
+    else
+        flock --exclusive "$wheelhouse_lock_fd"
+    fi
+}

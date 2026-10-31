@@ -25,9 +25,10 @@ MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_MEMBERS = 2048
 
 
-def build(archive_path: Path, declaration_path: Path) -> None:
+def build(pool: Path, declaration_path: Path) -> None:
     """Install declared source only after byte identity and bounded member admission."""
     source = source_identity(declaration_path)
+    archive_path = pool / f"Uni-Core-{source['commit']}.tar.gz"
     if archive_path.stat().st_size != source["size"] or digest(archive_path) != source["sha256"]:
         raise ValueError("Cannot build Uni-Core: source archive size or hash differs from its declaration")
     root_name = "Uni-Core-" + source["commit"]
@@ -99,10 +100,10 @@ def build(archive_path: Path, declaration_path: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("archive", type=Path)
+    parser.add_argument("pool", type=Path)
     parser.add_argument("declaration", type=Path)
     args = parser.parse_args()
-    build(args.archive, args.declaration)
+    build(args.pool, args.declaration)
 
 
 if __name__ == "__main__":

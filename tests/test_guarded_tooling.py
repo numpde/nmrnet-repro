@@ -114,7 +114,6 @@ class ToolingLauncherTests(unittest.TestCase):
             "git_metadata",
             "wheelhouse",
             "wheelhouse_path",
-            "wheelhouse_inputs",
             "operator_guidance",
             "acquisition_interface",
         ):

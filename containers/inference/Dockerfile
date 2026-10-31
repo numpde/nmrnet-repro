@@ -19,7 +19,7 @@ RUN --mount=type=bind,from=wheelhouse,target=/wheelhouse \
         --find-links /wheelhouse --no-cache-dir --disable-pip-version-check \
         -r /opt/inference/inference.lock \
     && python3 -B -m tools.build_unicore \
-        /wheelhouse/unicore-source.tar.gz /opt/inference/unicore-source.json \
+        /wheelhouse /opt/inference/unicore-source.json \
     && python3 -m pip check
 
 COPY tools/provider_environment.py tools/baseline_prepare.py tools/container_resources.py ./tools/

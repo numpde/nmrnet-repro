@@ -4,7 +4,6 @@ from tools.container_guard import require_container
 
 require_container()
 
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -116,20 +115,6 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 if failure == "base":
                     self.assertEqual(result.returncode, 42)
                     self.assertEqual(result.stdout, "local-base-inspection-only\n")
-
-    def test_linked_locked_wheel_is_refused_during_frozen_capture(self):
-        with ImageSource() as fixture:
-            outside = fixture.root / "outside-wheel"
-            original = fixture.pool_wheels["runtime"].read_bytes()
-            shutil.move(fixture.pool_wheels["runtime"], outside)
-            fixture.pool_wheels["runtime"].symlink_to(outside)
-            result, capture = fixture.capture()
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Frozen wheel capture failed", result.stderr)
-            self.assertEqual(outside.read_bytes(), original)
-            self.assertTrue(fixture.pool_wheels["runtime"].is_symlink())
-            self.assertFalse((capture / "runtime-wheels" / outside.name).exists())
-            self.assertFalse((fixture.repository / ".work/provider/image-id").exists())
 
     def test_changed_missing_linked_mode_or_untracked_module_refuses_committed_capture(self):
         for change in ("bytes", "missing", "linked", "mode", "untracked", "ignored"):

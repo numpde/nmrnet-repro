@@ -7,7 +7,7 @@ repository_root=$1 build_case=$2
 wheelhouse_directory=$repository_root/.work/wheelhouse
 image_input_directory= image=PINNED_BASE print_command=false
 pending_diagnostic= inference_diagnostic= inference_retirement_confirmed=true
-inference_cancellation_status=0 wheel_capture_retirement_confirmed=true
+inference_cancellation_status=0
 engine=(fixture)
 caller_uid=$(id -u)
 caller_gid=$(id -g)
@@ -23,7 +23,6 @@ container_native() {
     case "$operation" in
         'controller base image admission') inference_result=$identity ;;
         'controller image input capture') "$@" ;;
-        'controller wheel selection and capture') : ;;
         'controller image build')
             printf 'Progress contains misleading ID %s\n' "$other"
             case "$build_case" in
@@ -54,16 +53,14 @@ container_native() {
     esac
 }
 
-# This fixture models finite engine receipts, while exercising the real capture
-# owner's CID admission and retirement. Wheel selection has its own real-pip
-# witness in ImageSource.capture; this port only supplies engine lifecycle facts.
+# This fixture models finite engine receipts while exercising the committed
+# source capture owner's admission and cleanup behavior.
 inference_native() {
     local operation=$1
     shift 3
     inference_retirement_confirmed=true
     inference_cancellation_status=0
     inference_diagnostic=
-    if [[ $operation == 'wheelhouse capture' ]]; then return 0; fi
     if [[ $operation == 'stopped container diagnostics' ]]; then
         [[ $# == 5 && $1 == fixture && $2 == logs && $3 == --tail && $4 == 80 \
             && $5 == dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd ]]

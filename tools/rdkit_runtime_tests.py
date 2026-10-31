@@ -13,16 +13,12 @@ import tempfile
 from pathlib import Path
 
 from tools.rdkit_environment import install_runtime
-from tools.wheelhouse import capture
 
 
-def capture_inputs(root):
-    """Freeze the wheels before verification so pip consumes the verified copies."""
+def prepare_inputs(root):
+    """Prepare test inputs while runtime installation reads the shared wheelhouse."""
     tests, lock = capture_tests(root)
-    wheels = root / "wheels"
-    wheels.mkdir()
-    capture(lock, None, Path("/runtime-deps"), wheels)
-    return wheels, tests, lock
+    return Path("/runtime-deps"), tests, lock
 
 
 def capture_tests(root, *, native_lock=None):
@@ -70,7 +66,7 @@ def run_tests():
     # this container-local tmpfs, retaining noexec on ordinary /tmp scratch.
     with tempfile.TemporaryDirectory(prefix="rdkit-", dir="/runtime") as temporary:
         root = Path(temporary)
-        wheels, tests, lock = capture_inputs(root)
+        wheels, tests, lock = prepare_inputs(root)
         python = install_runtime(root, wheels, lock)
         run_suite(python, root, tests, "runtime")
 
