@@ -70,11 +70,13 @@ class DeploymentBundleTests(unittest.TestCase):
             external = root / "external-lock"
             external.write_text("retained")
             external.chmod(0o600)
+            original = external.stat()
             (runtime / "prediction/.owner-session.lock").hardlink_to(external)
             with patch("tools.provider_deployment.os.chown") as chown:
                 with self.assertRaisesRegex(ConfigurationRejected, "standalone"):
                     prepare_runtime(runtime, os.getuid(), os.getgid())
             chown.assert_not_called()
+            self.assertEqual((external.stat().st_uid, external.stat().st_mode & 0o777), (original.st_uid, 0o600))
             self.assertEqual(external.read_text(), "retained")
 
     def test_old_api_route_admission_uses_the_retained_recipe(self):
