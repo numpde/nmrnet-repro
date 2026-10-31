@@ -384,7 +384,7 @@ if [[ $action == install ]]; then
     helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
         --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid"
     helper_add_dac_override=false
-    helper_grants=()
+    helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
     image_record inference; scientific_image=$selected_image
     image_record preparation; geometry_image=$selected_image
     source "$repository_root/tools/git_metadata.sh"
