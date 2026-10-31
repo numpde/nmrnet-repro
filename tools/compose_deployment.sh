@@ -115,7 +115,7 @@ map_helper_identity() {
     map_query=$(umask 077; mktemp /tmp/nmrnet-helper-map.XXXXXXXX)
     map_probe_name=nmrnet-map-${helper_uuid//-/}
     map_probe_token=nmrnet-map-token-${helper_uuid//-/}
-    # Keep the mapped PID equal to Python so its command line carries the token.
+    # The host caller verifies the exact command line through its selected /proc.
     run 30 create --name "$map_probe_name" --network none --read-only --user 0:0 \
         --cap-drop ALL --security-opt no-new-privileges:true --cpus 0.25 --memory 64m \
         --memory-swap 64m --pids-limit 8 --entrypoint "$python" "$image" -I -B -c 'import time; time.sleep(60)' "$map_probe_token" \

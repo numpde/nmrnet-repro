@@ -2,6 +2,7 @@
 
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -87,6 +88,33 @@ class UserNamespaceMapTests(unittest.TestCase):
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(retired.returncode, 0, retired.stderr)
+
+    def test_zombie_probe_process_counts_as_retired(self):
+        process = subprocess.Popen(["bash", "-c", "exit 0"])
+        try:
+            starttime = subprocess.run(
+                ["bash", "-c", 'source "$1"; probe_process_starttime "$2"',
+                 "bash", str(ROOT / "tools/user_namespace_map.sh"), str(process.pid)],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            process_state = ""
+            for _ in range(100):
+                stat_file = Path(f"/proc/{process.pid}/stat")
+                if not stat_file.exists():
+                    break
+                process_state = stat_file.read_text().rpartition(") ")[2].split()[0]
+                if process_state == "Z":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(process_state, "Z")
+            result = subprocess.run(
+                ["bash", "-c", 'source "$1"; probe_process_is_retired "$2" "$3"',
+                 "bash", str(ROOT / "tools/user_namespace_map.sh"), str(process.pid), starttime],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+        finally:
+            process.wait(timeout=5)
 
     def test_maps_container_service_and_root_ids_to_the_host_namespace(self):
         with tempfile.TemporaryDirectory() as directory:

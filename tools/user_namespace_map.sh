@@ -17,10 +17,11 @@ require_initial_user_and_pid_namespaces() {
 }
 
 probe_process_starttime() {
-    local pid=$1 starttime
+    local pid=$1 state_starttime state starttime
     [[ $pid =~ ^[1-9][0-9]*$ ]] || return 1
-    starttime=$(awk '{ sub(/^.*\) /, ""); print $20 }' "/proc/$pid/stat" 2>/dev/null) || return 1
-    [[ $starttime =~ ^[0-9]+$ ]] || return 1
+    state_starttime=$(awk '{ sub(/^.*\) /, ""); print $1, $20 }' "/proc/$pid/stat" 2>/dev/null) || return 1
+    read -r state starttime <<< "$state_starttime"
+    [[ $state =~ ^[[:alpha:]]$ && $starttime =~ ^[0-9]+$ ]] || return 1
     printf '%s\n' "$starttime"
 }
 
@@ -38,11 +39,13 @@ probe_process_is_same() {
 }
 
 probe_process_is_retired() {
-    local pid=$1 starttime=$2 current_starttime
+    local pid=$1 starttime=$2 state_starttime state current_starttime
     [[ $pid =~ ^[1-9][0-9]*$ && $starttime =~ ^[0-9]+$ ]] || return 2
     [[ -e /proc/$pid/stat ]] || return 0
-    current_starttime=$(probe_process_starttime "$pid") || return 2
-    [[ $current_starttime != "$starttime" ]]
+    state_starttime=$(awk '{ sub(/^.*\) /, ""); print $1, $20 }' "/proc/$pid/stat" 2>/dev/null) || return 2
+    read -r state current_starttime <<< "$state_starttime"
+    [[ $state =~ ^[[:alpha:]]$ && $current_starttime =~ ^[0-9]+$ ]] || return 2
+    [[ $current_starttime != "$starttime" || $state == Z || $state == X ]]
 }
 
 wait_for_probe_process_retirement() {
