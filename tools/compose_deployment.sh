@@ -171,6 +171,7 @@ map_helper_identity() {
     map_probe_name= map_probe_id=
     rm -- "$map_query"
     map_query=
+    service_host_uid=$mapped_service_uid service_host_gid=$mapped_service_gid
 }
 capture_stop_metadata() {
     # Preserve the native owner's facts in this shell; only bounded Engine
