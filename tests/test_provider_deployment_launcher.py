@@ -33,9 +33,21 @@ class DeploymentLauncherTests(unittest.TestCase):
         tools.mkdir()
         for name in ('compose_deployment.sh', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
-        # The recording Engine models an identity-preserving mapping. The map
-        # parser itself is exercised against synthetic maps by its own tests.
-        (tools / 'user_namespace_map.sh').write_text('container_id_for_host_id() { printf "%s\\n" "$2"; }\nhost_id_for_container_id() { printf "%s\\n" "$2"; }\n')
+        # Tests can opt into a rootless host mapping. The map parser itself is
+        # exercised against synthetic maps by its own tests.
+        (tools / 'user_namespace_map.sh').write_text('''
+require_initial_user_and_pid_namespaces() { return 0; }
+probe_process_starttime() { printf '123\\n'; }
+probe_process_has_token() { return 0; }
+probe_process_is_same() { return 0; }
+wait_for_probe_process_retirement() { return 0; }
+container_id_for_host_id() { printf '%s\\n' "$2"; }
+host_id_for_container_id() {
+    if [[ ${TEST_MAPPED_IDENTITIES-false} != true ]]; then printf '%s\\n' "$2";
+    elif [[ $2 == 0 ]]; then printf '%s\\n' "$TEST_CALLER_UID";
+    else printf '%s\\n' "$((100000 + $2))"; fi
+}
+''')
         (tools / 'docker_client.sh').write_text('''docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
 ''')
@@ -53,6 +65,8 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
     elif [[ $operation == 'provider stop inspection' && " $* " == *' ps --quiet '* ]]; then
         inference_retirement_confirmed=${TEST_PROJECT_RETIRED-${TEST_RETIRED-true}}
     elif [[ $operation == 'retire deployment identity probe' ]]; then
+        inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
+    elif [[ " $* " == *' ps --all --no-trunc --filter id='* ]]; then
         inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
     elif [[ $operation == 'retire deployment configuration helper' ]]; then
         inference_retirement_confirmed=${TEST_RETIRED-true}
@@ -189,7 +203,8 @@ esac
 
     def run_command(self, action, role='provider', *, changes=None, extra=()):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
-                           NMRNET_SHARED_RUNTIME_IMAGE_INPUT='sha256:' + format(9, '064d'))
+                           NMRNET_SHARED_RUNTIME_IMAGE_INPUT='sha256:' + format(9, '064d'),
+                           TEST_CALLER_UID=str(os.getuid()), TEST_CALLER_GID=str(os.getgid()))
         environment.update(changes or {})
         return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
                               env=environment, capture_output=True, text=True, timeout=5)
@@ -439,6 +454,34 @@ esac
         freeze_user = next(call[call.index('--user') + 1] for call in self.calls() if 'freeze' in call)
         self.assertEqual(freeze_user, f'{os.getuid()}:{os.getgid()}')
 
+    def test_install_accepts_existing_runtime_leaves_owned_by_mapped_identity(self):
+        runtime_root = self.provider / 'runtime'
+        runtime_root.mkdir(mode=0o700)
+        for role in ('prediction', 'reader', 'smiles', 'route-interpreter', 'route-store'):
+            (runtime_root / role).mkdir(mode=0o700)
+        mapped_uid = os.getuid() + 100000
+        mapped_gid = os.getgid() + 100000
+        fake_bin = self.root / 'fake-bin'
+        fake_bin.mkdir()
+        fake_stat = fake_bin / 'stat'
+        fake_stat.write_text('''#!/usr/bin/env bash
+if [[ ${1-} == -c && ${2-} == '%u:%g:%a' && ${4-} == "$TEST_RUNTIME_ROOT/"* ]]; then
+    printf '%s:%s:700\\n' "$TEST_MAPPED_UID" "$TEST_MAPPED_GID"
+else
+    exec /usr/bin/stat "$@"
+fi
+''')
+        fake_stat.chmod(0o755)
+        result = self.run_command('install', changes={
+            'PATH': f'{fake_bin}:{os.environ["PATH"]}',
+            'TEST_MAPPED_IDENTITIES': 'true',
+            'TEST_RUNTIME_ROOT': str(runtime_root),
+            'TEST_MAPPED_UID': str(mapped_uid),
+            'TEST_MAPPED_GID': str(mapped_gid),
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Installed provider configuration.', result.stdout)
+
     def test_retirement_preserves_current_stopped_borrowers_and_original_inputs(self):
         bundles = self.provider / 'bundles'
         obsolete = bundles / 'generation-obsolete'
@@ -635,7 +678,7 @@ esac
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false',
                                                      'TEST_INVENTORY_RETIRED': 'true', 'TEST_PROJECT_RETIRED': 'true'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'create', 'start', 'inspect', 'rm', 'run'])
+        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'create', 'start', 'inspect', 'rm', 'ps', 'run'])
         self.assertFalse((self.root / 'cleanup').exists())
         self.assertIn('Configuration helper, if still present:', result.stderr)
 
