@@ -302,9 +302,9 @@ def prepare_runtime(runtime_root, uid, gid, *, check_only=False):
     if not stat.S_ISDIR(root.st_mode) or root.st_uid != os.geteuid() or stat.S_IMODE(root.st_mode) != 0o700:
         raise ConfigurationRejected("provider runtime root must remain caller-owned and private.")
     expected = {
-        "prediction": {".owner-session.lock": stat.S_ISREG},
-        "reader": {".owner-session.lock": stat.S_ISREG},
-        "smiles": {".owner-session.lock": stat.S_ISREG},
+        "prediction": {".owner-session.lock": stat.S_ISREG, "runner.sock": stat.S_ISSOCK},
+        "reader": {".owner-session.lock": stat.S_ISREG, "runner.sock": stat.S_ISSOCK},
+        "smiles": {".owner-session.lock": stat.S_ISREG, "runner.sock": stat.S_ISSOCK},
         "route-interpreter": {"proxy.sock": stat.S_ISSOCK, "ready": stat.S_ISREG},
         "route-store": {"proxy.sock": stat.S_ISSOCK, "ready": stat.S_ISREG},
     }

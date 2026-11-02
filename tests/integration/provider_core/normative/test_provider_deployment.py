@@ -24,7 +24,14 @@ class DeploymentBundleTests(unittest.TestCase):
             runtime = Path(directory) / "runtime"
             runtime.mkdir(mode=0o700)
             for name in ("prediction", "reader", "smiles"):
-                (runtime / name).mkdir(mode=0o700)
+                leaf = runtime / name
+                leaf.mkdir(mode=0o700)
+                listener = socket.socket(socket.AF_UNIX)
+                try:
+                    listener.bind(str(leaf / "runner.sock"))
+                finally:
+                    listener.close()
+                (leaf / "runner.sock").chmod(0o600)
             for name in ("route-interpreter", "route-store"):
                 leaf = runtime / name
                 leaf.mkdir(mode=0o700)
@@ -40,11 +47,16 @@ class DeploymentBundleTests(unittest.TestCase):
             with patch("tools.provider_deployment.os.chown") as chown:
                 prepare_runtime(runtime, os.getuid(), os.getgid(), check_only=True)
             chown.assert_not_called()
-            self.assertEqual([list((runtime / name).iterdir()) for name in ("prediction", "reader", "smiles")],
-                             [[], [], []])
+            socket_inodes = [(runtime / name / "runner.sock").stat().st_ino
+                             for name in ("prediction", "reader", "smiles")]
+            self.assertEqual([sorted(path.name for path in (runtime / name).iterdir())
+                              for name in ("prediction", "reader", "smiles")],
+                             [["runner.sock"], ["runner.sock"], ["runner.sock"]])
             prepare_runtime(runtime, os.getuid(), os.getgid())
             self.assertTrue(all((runtime / name / ".owner-session.lock").is_file()
                                 for name in ("prediction", "reader", "smiles")))
+            self.assertEqual([(runtime / name / "runner.sock").stat().st_ino for name in
+                              ("prediction", "reader", "smiles")], socket_inodes)
 
     def test_runtime_preparation_admits_only_owned_private_entries(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -55,6 +67,12 @@ class DeploymentBundleTests(unittest.TestCase):
                 leaf.mkdir(mode=0o700)
                 (leaf / ".owner-session.lock").write_text("")
                 (leaf / ".owner-session.lock").chmod(0o600)
+                listener = socket.socket(socket.AF_UNIX)
+                try:
+                    listener.bind(str(leaf / "runner.sock"))
+                finally:
+                    listener.close()
+                (leaf / "runner.sock").chmod(0o600)
             for name in ("route-interpreter", "route-store"):
                 leaf = runtime / name
                 leaf.mkdir(mode=0o700)
