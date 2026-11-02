@@ -27,7 +27,7 @@ capture_geometry_inputs() {
 }
 
 build_geometry_image() {
-    local status image_id inputs_digest build_timeout=900 tool_line tool_url tool_name tool_hash observed lock lock_hash role
+    local status image_id inputs_digest selection_digest build_timeout=900 tool_line tool_url tool_name tool_hash observed lock lock_hash role
     local record="$repository_root/.work/preparation/image-id"
     if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
         printf -v pending_diagnostic '%s\n' 'Cannot record RDKit image: image-id must be a regular file without a symlink.'
@@ -94,6 +94,11 @@ build_geometry_image() {
     done
     python3 -I -c 'import json,sys; print(json.dumps(sum((json.load(open(p)) for p in sys.argv[1:]), [])))' \
         "$image_input_directory/preparation.manifest.json" "$image_input_directory/runtime.manifest.json" > "$image_input_directory/manifest.json"
+    selection_digest=$(python3 -I -S "$wheelhouse_directory/$tool_name" identity --manifest "$image_input_directory/manifest.json")
+    selection_digest="sha256:$selection_digest"
+    build=("${engine[@]}" build --builder default --quiet --network none --pull=false
+        --build-arg "GEOMETRY_INPUTS=$inputs_digest" --build-arg "GEOMETRY_WHEELS=$selection_digest"
+        --file containers/geometry/Dockerfile -)
     if container_native 'RDKit image build' "$build_timeout" image-id bash -o pipefail -c '
         tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
         python3 -I -S "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
@@ -110,6 +115,14 @@ build_geometry_image() {
         exit 2
     fi
     require_geometry_inputs "$image_id" "$inputs_digest"
+    if container_native 'RDKit wheel-input admission' 30 image-id "${engine[@]}" image inspect \
+        --format '{{index .Config.Labels "io.nmrnet-repro.geometry-wheels"}}' "$image_id"; then :; else
+        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+    fi
+    if [[ "$inference_result" != "$selection_digest" ]]; then
+        printf -v pending_diagnostic '%s\n' 'Cannot record RDKit image: its wheel-selection label differs from the streamed manifest.'
+        exit 2
+    fi
     printf '%s\n' "$image_id" > "$image_input_directory/image-id"
     mv -T -- "$image_input_directory/image-id" "$record"
     if container_native 'RDKit build reporting' untimed stdio bash -eu -c \
