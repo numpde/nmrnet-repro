@@ -69,6 +69,24 @@ class WheelPoolTests(unittest.TestCase):
             wheelhouse.select_wheels(self.lock, self.pool)
         self.assertEqual(self.alpha.read_bytes(), b"corrupt cached wheel")
 
+    def test_acquisition_preserves_conflicting_compatible_wheel_without_network(self):
+        self.alpha.write_bytes(b"other project's conflicting wheel")
+        with patch.object(wheelhouse, "select_wheels", side_effect=subprocess.CalledProcessError(1, "pip")):
+            with patch.object(wheelhouse.subprocess, "run") as run:
+                with self.assertRaisesRegex(ValueError, "existing file is preserved"):
+                    wheelhouse.populate_pool(self.lock, self.pool, inference=True)
+            run.assert_not_called()
+        self.assertEqual(self.alpha.read_bytes(), b"other project's conflicting wheel")
+
+    def test_complete_selection_does_not_reject_an_unused_conflicting_wheel(self):
+        conflicting = wheel(self.pool, "pool-alpha", "1.0", "py2.py3-none-any", b"other project's wheel")
+        selection = {"files": {self.alpha.name: hashlib.sha256(self.alpha.read_bytes()).hexdigest()}}
+        with patch.object(wheelhouse, "select_wheels", return_value=selection):
+            with patch.object(wheelhouse.subprocess, "run") as run:
+                self.assertEqual(wheelhouse.populate_pool(self.lock, self.pool, inference=True), selection)
+            run.assert_not_called()
+        self.assertTrue(conflicting.exists())
+
     def test_identical_filename_winner_is_reused_without_replacing_its_inode(self):
         staged = self.root / self.alpha.name
         shutil.copyfile(self.alpha, staged)
@@ -142,8 +160,10 @@ class WheelPoolTests(unittest.TestCase):
             self.assertEqual((self.pool / incoming.name).stat().st_ino, inode)
             self.assertEqual((self.pool / incoming.name).read_bytes(), incoming.read_bytes())
             (self.pool / incoming.name).write_bytes(b"conflicting pooled bytes")
-            wheelhouse.populate_pool(lock, self.pool, inference=False)
-            self.assertEqual((self.pool / incoming.name).read_bytes(), incoming.read_bytes())
+            with self.assertRaisesRegex(ValueError, "existing file is preserved"):
+                wheelhouse.populate_pool(lock, self.pool, inference=False)
+            self.assertEqual((self.pool / incoming.name).read_bytes(), b"conflicting pooled bytes")
+            self.assertEqual(sum("download" in call.args[0] for call in calls.call_args_list), 1)
         for name, content in before.items():
             self.assertEqual((self.pool / name).read_bytes(), content)
         self.assertEqual([], list(self.pool.glob(".nmrnet-wheel-download-*")))

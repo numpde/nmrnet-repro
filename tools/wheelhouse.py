@@ -17,6 +17,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from pip._vendor.packaging.tags import sys_tags
+from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
+from pip._vendor.packaging.version import Version
+
 from tools.artifacts import fsync_directory, open_url, regular_file
 
 # Prefix for one-file source-download temporaries in the shared pool.
@@ -226,7 +230,7 @@ def populate_pool(lock, pool, *, inference):
     directory until this operation and its final verification finish. Existing
     complete files in the pool are discoverable through --find-links.
     """
-    requirements(lock)
+    locked = {(name, Version(version)): hashes for (name, version), hashes in requirements(lock).items()}
     if not pool.is_dir():
         raise ValueError("Cannot populate wheels: shared pool must already be a directory.")
     try:
@@ -238,6 +242,15 @@ def populate_pool(lock, pool, *, inference):
     else:
         sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
         return selected
+    target_tags = set(sys_tags())
+    for path in pool.glob("*.whl"):
+        try:
+            name, version, _build, tags = parse_wheel_filename(path.name)
+        except InvalidWheelFilename:
+            continue
+        hashes = locked.get((name, version))
+        if hashes and tags.intersection(target_tags) and digest(path) not in hashes:
+            raise ValueError(f"Cannot acquire {path.name}: cached bytes differ from the lock; the existing file is preserved.")
     print("Acquiring missing locked wheels directly in WHEELHOUSE.", flush=True)
     indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
     subprocess.run(
