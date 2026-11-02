@@ -1,3 +1,7 @@
+FROM scratch AS preparation_wheels
+COPY wheelhouse/preparation/ /wheels/
+FROM scratch AS runtime_wheels
+COPY wheelhouse/runtime/ /wheels/
 FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
 ARG GEOMETRY_INPUTS
@@ -12,8 +16,8 @@ COPY tools/provider_environment.py tools/baseline_prepare.py tools/container_res
 COPY requirements/provider-core-native-install.lock ./requirements/
 COPY nmrnet_provider/ ./nmrnet_provider/
 COPY nmrnet_inference/ ./nmrnet_inference/
-RUN --mount=type=bind,from=wheelhouse,target=/wheels \
-    --mount=type=bind,from=runtime-wheels,target=/runtime-wheels \
+RUN --mount=type=bind,from=preparation_wheels,source=/wheels,target=/wheels \
+    --mount=type=bind,from=runtime_wheels,source=/wheels,target=/runtime-wheels \
     python3 -B -m tools.rdkit_environment --root /opt/rdkit \
         --wheels /wheels --lock /opt/rdkit/preparation.lock \
     && python3 -B -m tools.provider_environment --root /opt/rdkit --source /opt/build \

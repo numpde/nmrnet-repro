@@ -5,7 +5,7 @@
 geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Dockerfile.dockerignore
     requirements/preparation.lock tools/artifacts.py tools/container_guard.py
     tools/rdkit_environment.py tools/wheelhouse.py
-    requirements/provider-core-native-install.lock
+    requirements/provider-core-native-install.lock requirements/wheelhouse-tool-assets.in
     nmrnet_provider nmrnet_inference tools/provider_environment.py
     tools/baseline_prepare.py tools/container_resources.py)
 
@@ -27,7 +27,7 @@ capture_geometry_inputs() {
 }
 
 build_geometry_image() {
-    local status image_id inputs_digest build_timeout=900
+    local status image_id inputs_digest build_timeout=900 tool_line tool_url tool_name tool_hash observed lock lock_hash role
     local record="$repository_root/.work/preparation/image-id"
     if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
         printf -v pending_diagnostic '%s\n' 'Cannot record RDKit image: image-id must be a regular file without a symlink.'
@@ -55,12 +55,50 @@ build_geometry_image() {
         inputs_digest="sha256:${inputs_digest%% *}"
     fi
     local -a build=("${engine[@]}" build --builder default --quiet --network none --pull=false
-        --build-arg "GEOMETRY_INPUTS=$inputs_digest"
-        --build-context "wheelhouse=$wheelhouse_directory"
-        --build-context "runtime-wheels=$wheelhouse_directory"
-        --file "$image_input_directory/context/containers/geometry/Dockerfile" "$image_input_directory/context")
+        --build-arg "GEOMETRY_INPUTS=$inputs_digest" --file containers/geometry/Dockerfile -)
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
-    if container_native 'RDKit image build' "$build_timeout" image-id "${build[@]}"; then :; else
+    tool_line=$(grep '^https://github.com/numpde/nmr-provider-tools/releases/download/' "$image_input_directory/context/requirements/wheelhouse-tool-assets.in")
+    tool_url=${tool_line%%#sha256=*}
+    tool_hash=${tool_line##*#sha256=}
+    tool_name=${tool_url##*/}
+    if [[ ! $tool_name =~ ^wheelhouse-tool-[0-9]+\.[0-9]+\.[0-9]+\.pyz$ || ! $tool_hash =~ ^[0-9a-f]{64}$ ]]; then
+        printf -v pending_diagnostic '%s\n' 'Cannot build RDKit image: the shared wheelhouse tool pin is invalid.'; exit 2
+    fi
+    observed=$(sha256sum -- "$wheelhouse_directory/$tool_name")
+    if [[ ${observed%% *} != "$tool_hash" ]]; then
+        printf -v pending_diagnostic '%s\n' 'Cannot build RDKit image: acquire the pinned shared tool with make packages/shared-tool/wheelhouse.'; exit 2
+    fi
+    python3 -I "$repository_root/tools/git_stream_sources.py" "$image_input_directory/context" \
+        "$image_input_directory/inputs" . "$inputs_digest" > "$image_input_directory/sources.json"
+    for role in preparation runtime; do
+        if [[ $role == preparation ]]; then lock=preparation.lock; else lock=provider-core-native-install.lock; fi
+        lock_hash=$(sha256sum -- "$image_input_directory/context/requirements/$lock")
+        lock_hash=${lock_hash%% *}
+        if container_native "RDKit $role wheel selection" 120 stdio bash -eu -c '
+            output=$1; shift
+            exec "$@" > "$output"
+        ' bash "$image_input_directory/$role.report.json" "${engine[@]}" run --rm --pull never --network none --read-only \
+            --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges:true \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m --workdir /workspace --env NMRNET_IN_CONTAINER=1 \
+            --mount "type=bind,src=$image_input_directory/context/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly" \
+            --mount "type=bind,src=$image_input_directory/context/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly" \
+            --mount "type=bind,src=$image_input_directory/context/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly" \
+            --mount "type=bind,src=$image_input_directory/context/requirements/$lock,dst=/input/requirements.lock,readonly" \
+            --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly" \
+            'docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c' \
+            python3 -B -m tools.wheelhouse report --lock /input/requirements.lock --lock-sha256 "$lock_hash" --pool /wheelhouse; then :; else
+            status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+        fi
+        python3 -I -S "$wheelhouse_directory/$tool_name" report --report "$image_input_directory/$role.report.json" \
+            --pool /wheelhouse --directory "wheelhouse/$role" > "$image_input_directory/$role.manifest.json"
+    done
+    python3 -I -c 'import json,sys; print(json.dumps(sum((json.load(open(p)) for p in sys.argv[1:]), [])))' \
+        "$image_input_directory/preparation.manifest.json" "$image_input_directory/runtime.manifest.json" > "$image_input_directory/manifest.json"
+    if container_native 'RDKit image build' "$build_timeout" image-id bash -o pipefail -c '
+        tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
+        python3 -I -S "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
+    ' bash "$wheelhouse_directory/$tool_name" "$wheelhouse_directory" "$image_input_directory/sources.json" \
+        "$image_input_directory/manifest.json" "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     image_id=$inference_result
