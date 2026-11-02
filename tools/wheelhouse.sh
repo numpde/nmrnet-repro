@@ -13,7 +13,7 @@ readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(download|check)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation|provider-core]' >&2
+    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation|provider-core|shared-tool]' >&2
     exit 2
 fi
 if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
@@ -33,7 +33,11 @@ case "$profile" in
         build_target=provider/image/build
         worker_arguments=(--profile provider-core --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
         ;;
-    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
+    shared-tool)
+        inputs=(wheelhouse-tool-assets.in)
+        worker_arguments=(--profile shared-tool --assets /input/wheelhouse-tool-assets.in --pool /wheelhouse)
+        ;;
+    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation, provider-core or shared-tool.' >&2; exit 2 ;;
 esac
 source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
@@ -56,7 +60,10 @@ if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     printf '%s\n' 'Wheelhouse lanes require a nonzero host UID and GID.' >&2
     exit 2
 fi
-next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
+next_actions=
+if [[ $profile != shared-tool ]]; then
+    next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
+fi
 if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
     printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2
     exit 2

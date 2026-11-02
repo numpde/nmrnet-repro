@@ -13,6 +13,21 @@ from tools import wheelhouse
 
 
 class WheelhouseTests(unittest.TestCase):
+    def test_shared_tool_profile_checks_only_its_release_assets(self):
+        assets = self.root / "tool-assets.in"
+        assets.write_text("pinned release input")
+        for action in ("download", "check"):
+            arguments = ["wheelhouse", action, "--profile", "shared-tool", "--assets", str(assets),
+                         "--pool", str(self.pool)]
+            with (patch.object(wheelhouse.sys, "argv", arguments),
+                  patch.object(wheelhouse, "prepare_core_assets") as prepare,
+                  patch.object(wheelhouse, "select_wheels") as select,
+                  patch.object(wheelhouse, "populate_pool") as populate):
+                wheelhouse.main()
+            prepare.assert_called_once_with(assets, self.pool, download=action == "download")
+            select.assert_not_called()
+            populate.assert_not_called()
+
     def test_report_uses_captured_lock_even_if_original_changes(self):
         expected = self.lock.read_bytes()
         output = io.StringIO()

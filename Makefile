@@ -82,6 +82,7 @@ test/integration/rdkit-runtime:
 .PHONY: test/repository/operator-inputs test/repository/documentation
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
+.PHONY: packages/shared-tool/wheelhouse packages/shared-tool/wheelhouse/check
 .PHONY: packages/images/retire test/unit/packages/images
 
 packages/images/retire:
@@ -95,6 +96,12 @@ packages/provider-core/wheelhouse:
 
 packages/provider-core/wheelhouse/check:
 	bash tools/wheelhouse.sh check provider-core
+
+packages/shared-tool/wheelhouse:
+	bash tools/wheelhouse.sh download shared-tool
+
+packages/shared-tool/wheelhouse/check:
+	bash tools/wheelhouse.sh check shared-tool
 
 test/unit/packages:
 	bash tools/container.sh $@
@@ -346,6 +353,8 @@ help:
 		'Acquisition prompts for an omitted NETWORK_INTERFACE; automation must set it explicitly. No interface is selected by default.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \
 		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
+		'make packages/shared-tool/wheelhouse Acquire the pinned shared wheelhouse tool.' \
+		'make packages/shared-tool/wheelhouse/check Verify the shared tool offline.' \
 		'make test/unit/prediction-input        Check source coordinate conversion and strict prediction-input admission.' \
 		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \

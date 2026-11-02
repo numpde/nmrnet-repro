@@ -321,7 +321,7 @@ def prepare_core_assets(inputs, pool, *, download):
         if (parsed.scheme != "https" or parsed.netloc != "github.com"
                 or not parsed.path.startswith("/numpde/nmr-provider-tools/releases/download/")
                 or re.fullmatch(r"[0-9a-f]{64}", checksum) is None):
-            raise ValueError("Cannot acquire provider-core: require a pinned shared-owner GitHub release URL and SHA-256.")
+            raise ValueError("Cannot acquire shared release artifact: require a pinned shared-owner GitHub release URL and SHA-256.")
         name = parsed.path.rsplit("/", 1)[1]
         destination = pool / name
         if destination.exists() or destination.is_symlink():
@@ -329,7 +329,7 @@ def prepare_core_assets(inputs, pool, *, download):
                 raise ValueError(f"Cannot reuse {name}: cached bytes differ from their GitHub release pin; existing file preserved.")
             continue
         if not download:
-            raise ValueError(f"Cannot verify shared release artifact {name}: missing from the selected wheelhouse; acquire provider-core artifacts first.")
+            raise ValueError(f"Cannot verify shared release artifact {name}: missing from the selected wheelhouse; run the matching acquisition target first.")
         descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".part", dir=pool)
         os.close(descriptor)
         staged = Path(temporary)
@@ -361,8 +361,8 @@ def core_dependencies(lock, destination):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("download", "check", "report"))
-    parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"))
-    parser.add_argument("--lock", type=Path, action="append", required=True)
+    parser.add_argument("--profile", choices=("inference", "preparation", "provider-core", "shared-tool"))
+    parser.add_argument("--lock", type=Path, action="append", default=[])
     parser.add_argument("--lock-sha256")
     parser.add_argument("--source", type=Path)
     parser.add_argument("--assets", type=Path)
@@ -377,6 +377,11 @@ def main():
         parser.error(f"{args.action} requires --profile")
     elif args.lock_sha256 is not None:
         parser.error(f"{args.action} does not accept --lock-sha256")
+    if args.profile == "shared-tool":
+        if args.assets is None or args.lock or args.source is not None:
+            parser.error("shared-tool requires only --assets and --pool")
+    elif not args.lock:
+        parser.error(f"{args.action} requires at least one --lock")
     if args.profile == "inference" and args.source is None:
         parser.error("inference requires --source for its pinned Uni-Core archive")
     if args.profile in {"preparation", "provider-core"} and args.source is not None:
@@ -431,7 +436,10 @@ def main():
             if source_path is not None:
                 source = source_identity(source_path)
                 verified_source(source_cache_file(args.pool, source), source)
-            sys.stdout.write(f"Verified {len(files)} locked wheels from {args.pool}\n")
+            if args.profile == "shared-tool":
+                sys.stdout.write(f"Verified shared wheelhouse tool from {args.pool}\n")
+            else:
+                sys.stdout.write(f"Verified {len(files)} locked wheels from {args.pool}\n")
 
 
 if __name__ == "__main__":
