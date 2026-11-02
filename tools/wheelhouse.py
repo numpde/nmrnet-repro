@@ -17,10 +17,6 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from pip._vendor.packaging.tags import sys_tags
-from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
-from pip._vendor.packaging.version import Version
-
 from tools.artifacts import fsync_directory, open_url, regular_file
 
 # Prefix for one-file source-download temporaries in the shared pool.
@@ -233,6 +229,10 @@ def populate_pool(lock, pool, *, inference):
     directory until this operation and its final verification finish. Existing
     complete files in the pool are discoverable through --find-links.
     """
+    from pip._vendor.packaging.tags import sys_tags
+    from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
+    from pip._vendor.packaging.version import Version
+
     locked = {(name, Version(version)): hashes for (name, version), hashes in requirements(lock).items()}
     if not pool.is_dir():
         raise ValueError("Cannot populate wheels: shared pool must already be a directory.")
