@@ -356,20 +356,22 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             on_operator_notice=report_operator_notice,
             policy=config.service.native,
             observation_recovery=ObservationRecovery(
-                config.lifecycle.observation_gap_seconds,
-                config.service.policy.api_backoff_max_seconds,
-                lambda attempt, failure, seconds: report_attempt_notice(
+                gap_seconds=config.lifecycle.observation_gap_seconds,
+                backoff_max_seconds=config.service.policy.api_backoff_max_seconds,
+                on_retry=lambda attempt, failure, seconds: report_attempt_notice(
                     attempt, failure, {"event": "api_observation_retry", "retry_seconds": seconds}
                 ),
-                lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_observation_recovered"}),
+                on_recovered=lambda attempt, failure: report_attempt_notice(
+                    attempt, failure, {"event": "api_observation_recovered"}
+                ),
             ),
             # One daemon owns progress for this Attempt. Use the configured API
             # outage envelope, but retain the separate matching-receipt gate:
             # a recovered lifecycle read cannot acknowledge a condition PUT.
             condition_recovery=ConditionRecovery(
-                config.lifecycle.observation_gap_seconds,
-                config.service.policy.api_backoff_max_seconds,
-                lambda attempt, phase, code, failure, seconds: report_attempt_notice(
+                window_seconds=config.lifecycle.observation_gap_seconds,
+                backoff_max_seconds=config.service.policy.api_backoff_max_seconds,
+                on_retry=lambda attempt, phase, code, failure, seconds: report_attempt_notice(
                     attempt,
                     failure,
                     {
@@ -380,7 +382,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                         "retry_seconds": seconds,
                     },
                 ),
-                lambda attempt, phase, code, failure: report_attempt_notice(
+                on_recovered=lambda attempt, phase, code, failure: report_attempt_notice(
                     attempt,
                     failure,
                     {
