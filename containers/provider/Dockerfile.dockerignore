@@ -22,3 +22,5 @@ nmrnet_provider/smiles_worker.py
 !tools/provider_environment.py
 !tools/baseline_prepare.py
 !tools/container_resources.py
+!wheelhouse/
+!wheelhouse/**

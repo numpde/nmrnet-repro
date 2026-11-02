@@ -58,12 +58,14 @@ build_core_image() {
     fi
     local -a build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
         --iidfile "$image_input_directory/built-image-id" --build-arg "${kind^^}_INPUTS=$inputs_digest"
-        --build-context "runtime-wheels=$wheelhouse_directory"
-        --file "$image_input_directory/context/containers/$kind/Dockerfile" "$image_input_directory/context")
+        --file "containers/$kind/Dockerfile" -)
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
-    # Only committed public source and locked wheels enter this build. Inherit
-    # its progress/failure streams; the immutable ID still comes from its file.
-    if container_native "$description image build" "$build_timeout" stdio "${build[@]}"; then :; else
+    source "$image_input_directory/context/tools/streamed_build.sh"
+    prepare_streamed_inputs "$description" "$inputs_digest" runtime:provider-core-install.lock
+    build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
+        --iidfile "$image_input_directory/built-image-id" --build-arg "${kind^^}_INPUTS=$inputs_digest"
+        --build-arg "${kind^^}_WHEELS=$stream_selection" --file "containers/$kind/Dockerfile" -)
+    if build_streamed_context "$description image build" "$build_timeout" stdio "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     if [[ -f "$image_input_directory/built-image-id" && ! -L "$image_input_directory/built-image-id" ]] \
@@ -83,6 +85,14 @@ build_core_image() {
         exit 2
     fi
     require_core_inputs "$kind" "$description" "$image_id" "$inputs_digest"
+    if container_native "$description wheel-input admission" 30 image-id "${engine[@]}" image inspect \
+        --format "{{index .Config.Labels \"io.nmrnet-repro.$kind-wheels\"}}" "$image_id"; then :; else
+        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+    fi
+    if [[ $inference_result != "$stream_selection" ]]; then
+        printf -v pending_diagnostic 'Cannot record %s image: its wheel-selection label differs from the streamed manifest.\n' "$description"
+        exit 2
+    fi
     printf '%s\n' "$image_id" > "$image_input_directory/image-id"
     mv -T -- "$image_input_directory/image-id" "$record"
     if container_native "$description build reporting" untimed stdio bash -eu -c \
