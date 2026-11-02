@@ -13,6 +13,41 @@ from tools import wheelhouse
 
 
 class WheelhouseTests(unittest.TestCase):
+    def test_report_uses_captured_lock_even_if_original_changes(self):
+        expected = self.lock.read_bytes()
+        output = io.StringIO()
+
+        def select(lock, pool, report_output):
+            self.lock.write_bytes(b"later lock")
+            self.assertEqual(lock.read_bytes(), expected)
+            self.assertEqual(pool, self.pool)
+            report_output.write('{"version":"1"}')
+
+        with (patch.object(wheelhouse.sys, "argv", ["wheelhouse", "report", "--lock", str(self.lock),
+                                                    "--lock-sha256", hashlib.sha256(expected).hexdigest(),
+                                                    "--pool", str(self.pool)]),
+              patch.object(wheelhouse.sys, "stdout", output),
+              patch.object(wheelhouse, "select_wheels", side_effect=select)):
+            wheelhouse.main()
+        self.assertEqual(json.loads(output.getvalue()), {"version": "1"})
+
+    def test_report_rejects_other_input_authorities(self):
+        common = ["wheelhouse", "report", "--lock", str(self.lock), "--lock-sha256", wheelhouse.digest(self.lock),
+                  "--pool", str(self.pool)]
+        for extra in (["--lock", str(self.lock)], ["--profile", "preparation"],
+                      ["--source", str(self.source)], ["--assets", str(self.source)]):
+            with self.subTest(extra=extra), patch.object(wheelhouse.sys, "argv", common + extra):
+                with patch.object(wheelhouse.sys, "stderr", io.StringIO()), self.assertRaises(SystemExit):
+                    wheelhouse.main()
+
+    def test_report_refuses_lock_identity_drift_before_selection(self):
+        arguments = ["wheelhouse", "report", "--lock", str(self.lock), "--lock-sha256", "0" * 64,
+                     "--pool", str(self.pool)]
+        with (patch.object(wheelhouse.sys, "argv", arguments), patch.object(wheelhouse, "select_wheels") as select,
+              self.assertRaisesRegex(ValueError, "captured lock bytes differ")):
+            wheelhouse.main()
+        select.assert_not_called()
+
     def test_native_core_lock_needs_no_third_party_download(self):
         self.lock.write_text("provider-core==0.5.0 \\\n" + "    --hash=sha256:" + "a" * 64 + "\n")
         assets = self.root / "core-assets.in"

@@ -9,6 +9,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -43,6 +44,31 @@ class WheelPoolTests(unittest.TestCase):
         self.assertEqual(before, {path.name: path.read_bytes() for path in self.pool.iterdir()})
         second = locked(self.root / "beta.lock", [("pool-beta", "2.0", [self.beta])])
         self.assertEqual(set(wheelhouse.select_wheels(second, self.pool)["files"]), {self.beta.name})
+
+    def test_report_exposes_only_a_successful_offline_selection(self):
+        report = io.StringIO()
+        identity = wheelhouse.select_wheels(self.lock, self.pool, report_output=report)
+        selected = json.loads(report.getvalue())
+        self.assertEqual(selected["version"], "1")
+        self.assertEqual(len(selected["install"]), 1)
+        self.assertEqual(selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"],
+                         identity["files"][self.alpha.name])
+        self.alpha.write_bytes(b"invalid wheel")
+        report = io.StringIO()
+        with self.assertRaises(subprocess.CalledProcessError):
+            wheelhouse.select_wheels(self.lock, self.pool, report_output=report)
+        self.assertEqual(report.getvalue(), "")
+
+    def test_report_command_emits_pip_json_for_the_captured_lock(self):
+        result = subprocess.run(
+            [sys.executable, "-B", "-m", "tools.wheelhouse", "report", "--lock", str(self.lock),
+             "--lock-sha256", hashlib.sha256(self.lock.read_bytes()).hexdigest(), "--pool", str(self.pool)],
+            check=True, capture_output=True, text=True,
+        )
+        selected = json.loads(result.stdout)
+        self.assertEqual(selected["version"], "1")
+        self.assertEqual(selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"],
+                         hashlib.sha256(self.alpha.read_bytes()).hexdigest())
 
     def test_complete_pool_skips_acquisition_and_preserves_all_cached_files(self):
         before = {path.name: path.read_bytes() for path in self.pool.iterdir()}

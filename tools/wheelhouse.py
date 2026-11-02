@@ -120,7 +120,7 @@ def acquire_source(source, partial):
         os.fsync(stream.fileno())
 
 
-def select_wheels(lock, pool):
+def select_wheels(lock, pool, report_output=None):
     """Let pip select compatible, hash-locked files from an unrelated shared pool.
 
     A dry-run report avoids copying large wheels into the checker's small /tmp.
@@ -158,7 +158,10 @@ def select_wheels(lock, pool):
             ],
             check=True,
         )
-        return wheel_inputs_from_report(lock, pool, report)
+        identity = wheel_inputs_from_report(lock, pool, report)
+        if report_output is not None:
+            report_output.write(report.read_text())
+        return identity
 
 
 def wheel_inputs_from_report(lock, pool, report):
@@ -357,13 +360,23 @@ def core_dependencies(lock, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("download", "check"))
-    parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"), required=True)
+    parser.add_argument("action", choices=("download", "check", "report"))
+    parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"))
     parser.add_argument("--lock", type=Path, action="append", required=True)
+    parser.add_argument("--lock-sha256")
     parser.add_argument("--source", type=Path)
     parser.add_argument("--assets", type=Path)
     parser.add_argument("--pool", type=Path)
     args = parser.parse_args()
+    if args.action == "report":
+        if args.profile is not None or args.source is not None or args.assets is not None or len(args.lock) != 1:
+            parser.error("report requires one lock and no profile, source or assets")
+        if args.lock_sha256 is None or not re.fullmatch(r"[0-9a-f]{64}", args.lock_sha256):
+            parser.error("report requires the captured lock SHA-256")
+    elif args.profile is None:
+        parser.error(f"{args.action} requires --profile")
+    elif args.lock_sha256 is not None:
+        parser.error(f"{args.action} does not accept --lock-sha256")
     if args.profile == "inference" and args.source is None:
         parser.error("inference requires --source for its pinned Uni-Core archive")
     if args.profile in {"preparation", "provider-core"} and args.source is not None:
@@ -387,7 +400,11 @@ def main():
             with regular_file(args.source, os.O_RDONLY) as stream, source_path.open("xb") as target:
                 shutil.copyfileobj(stream, target, CHUNK_BYTES)
             source_identity(source_path)
-        if args.action == "download":
+        if args.action == "report":
+            if digest(locks[0]) != args.lock_sha256:
+                raise ValueError("Cannot select wheels: captured lock bytes differ from the expected SHA-256.")
+            select_wheels(locks[0], args.pool, report_output=sys.stdout)
+        elif args.action == "download":
             if args.profile == "provider-core":
                 if args.assets is None or len(locks) != 1:
                     parser.error("provider-core acquisition requires --assets and one released installation lock")
