@@ -261,6 +261,7 @@ Install admits those image records and captures the model selection from
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up SHARED_SETTINGS=/path/to/nmr-provider-tools/config/deployments/localhost/settings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 
 make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make provider/deployment/update DEPLOYMENT=&lt;name&gt; WHEELHOUSE=/path/to/shared-wheelhouse DOCKER_CONTEXT=&lt;local-context&gt;
 make provider/deployment/up DEPLOYMENT=&lt;name&gt;
 make provider/deployment/status DEPLOYMENT=&lt;name&gt;
 make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
@@ -271,8 +272,19 @@ deployment may require inspection before down can safely remove its dependencies
 Up initializes the provider's lifetime-lock volume, starts the
 proxies and serial native runners, then waits for provider readiness, including
 an accepted API Hello. This establishes readiness, not scientific accuracy or
-successful model interpretation. Down requests provider shutdown and removes its
+successful model interpretation. It also checks each running service's immutable
+image ID against the selected frozen Compose plan. Plain up never builds or pulls.
+Down requests provider shutdown and removes its
 dependencies only after confirming that the provider exited successfully.</p>
+<p>Use <code>provider/deployment/update</code> for an explicit provider-image
+update. It builds from committed host-local inputs and the selected shared
+wheelhouse before downtime, then holds one deployment lock while it drains,
+installs the new provider image while retaining the selected prediction,
+geometry and shared runtime image IDs, starts the selected generation and
+verifies every running image ID. It preserves
+the durable volumes and leaves the independently managed shared proxy and outbox
+running. If a phase fails after drain, inspect status and logs; the command does
+not claim rollback.</p>
 <p>This down command requests provider stop <a href="https://docs.docker.com/reference/cli/docker/container/stop/#stop-container-with-timeout--t---timeout">without an Engine kill deadline</a>.
 The command waits up to 120 seconds for its stop request. If that wait expires,
 is interrupted, or cannot confirm a successful exit, down returns nonzero and
@@ -319,12 +331,10 @@ git submodule update --init --recursive
 <p>Prepare NMRNet's three images and model files using the selected shared image
 for setup transport. Wheelhouse and setup interface are chosen once:</p>
 <pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
-<p>For a provider-only update, stop NMRNet, install its new generation from the
-existing local <code>deployment.toml</code>, and start it. Shared delivery can continue publishing
-acknowledged results throughout:</p>
-<pre><code class="language-sh">make provider/deployment/down DEPLOYMENT=&lt;name&gt;
-make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
-make provider/deployment/up DEPLOYMENT=&lt;name&gt;</code></pre>
+<p>For a provider-only update, use the maintained update command. Select the
+local Docker context and shared wheelhouse explicitly; the saved generation
+supplies the shared runtime image ID, so no image digest needs to be copied:</p>
+<pre><code class="language-sh">make provider/deployment/update DEPLOYMENT=&lt;name&gt; DOCKER_CONTEXT=&lt;local-context&gt; WHEELHOUSE=/path/to/shared-wheelhouse</code></pre>
 <p>For a shared-service replacement, coordinate all producers using it, inspect
 outstanding work, stop the incumbent owner, then start the shared owner
 with the shared settings and existing queue identity. Leave the shared proxy running.

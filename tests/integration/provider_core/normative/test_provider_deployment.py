@@ -19,6 +19,33 @@ from tests.integration.nmrnet.compose_ports import ComposeFixture
 
 
 class DeploymentBundleTests(unittest.TestCase):
+    def test_runtime_check_only_validates_without_creating_locks_or_changing_ownership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / "runtime"
+            runtime.mkdir(mode=0o700)
+            for name in ("prediction", "reader", "smiles"):
+                (runtime / name).mkdir(mode=0o700)
+            for name in ("route-interpreter", "route-store"):
+                leaf = runtime / name
+                leaf.mkdir(mode=0o700)
+                ready = leaf / "ready"
+                ready.write_text("")
+                ready.chmod(0o600)
+                listener = socket.socket(socket.AF_UNIX)
+                try:
+                    listener.bind(str(leaf / "proxy.sock"))
+                finally:
+                    listener.close()
+                (leaf / "proxy.sock").chmod(0o600)
+            with patch("tools.provider_deployment.os.chown") as chown:
+                prepare_runtime(runtime, os.getuid(), os.getgid(), check_only=True)
+            chown.assert_not_called()
+            self.assertEqual([list((runtime / name).iterdir()) for name in ("prediction", "reader", "smiles")],
+                             [[], [], []])
+            prepare_runtime(runtime, os.getuid(), os.getgid())
+            self.assertTrue(all((runtime / name / ".owner-session.lock").is_file()
+                                for name in ("prediction", "reader", "smiles")))
+
     def test_runtime_preparation_admits_only_owned_private_entries(self):
         with tempfile.TemporaryDirectory() as directory:
             runtime = Path(directory) / "runtime"

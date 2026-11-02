@@ -651,6 +651,7 @@ case "$1" in
                 fi
                 if [[ "$1" == test/unit/provider/deployment ]]; then
                     unit_tests=(-v tests.test_provider_bundle_sealing tests.test_provider_deployment_launcher
+                        tests.test_compose_image_ids tests.test_provider_update
                         tests.test_compose_fixture_shared tests.test_user_namespace_map
                         test_api_qualification_normative
                         tests.test_docker_client.DockerClientTests.test_actual_client_sees_empty_private_config_and_fixed_environment)

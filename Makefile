@@ -41,6 +41,7 @@ test/integration/provider/prediction-crash:
 .PHONY: geometry/image/build
 .PHONY: provider/image/build
 .PHONY: test/unit/provider/image test/integration/provider-runtime
+.PHONY: provider/deployment/update
 .PHONY: test/integration/rdkit-worker
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
@@ -280,7 +281,8 @@ help:
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
 		'make provider/prepare SHARED_RUNTIME_IMAGE=sha256:<id> Acquire dependencies/models and build images; choose cache and interface once.' \
-		'make provider/deployment/install DEPLOYMENT=<name> SHARED_RUNTIME_IMAGE=sha256:<id> Read local deployment.toml; require provider stopped; freeze/select, retire only unborrowed generations.' \
+		'make provider/deployment/install DEPLOYMENT=<name> [SHARED_RUNTIME_IMAGE=sha256:<id>] Read local deployment.toml; require provider stopped; freeze/select, retire only unborrowed generations.' \
+		'make provider/deployment/update DEPLOYMENT=<name> DOCKER_CONTEXT=<local-context> WHEELHOUSE=<shared-pool> Build provider image, drain, install it, and start with the selected context.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
@@ -400,7 +402,7 @@ provider/prepare:
 	bash tools/provider_prepare.sh
 
 .PHONY: provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
-.PHONY: provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
+.PHONY: provider/deployment/install provider/deployment/update provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
 .PHONY: provider/deployment/retire-generations provider/deployment/retire-api-route
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
@@ -412,6 +414,10 @@ test/integration/provider/deployment/smiles test/integration/provider/deployment
 
 provider/deployment/install provider/deployment/status provider/deployment/logs provider/deployment/down provider/deployment/retire-generations provider/deployment/retire-api-route:
 	bash tools/provider_deployment.sh $(notdir $@)
+
+provider/deployment/update:
+	@test "$(origin DEPLOYMENT)" = command\ line || { printf '%s\n' 'DEPLOYMENT must be set on the command line.' >&2; exit 2; }
+	bash tools/provider_update.sh
 
 provider/deployment/up:
 	bash tools/provider_deployment.sh up

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Apply one explicit provider image update through the existing lifecycle owners.
+set -euo pipefail
+umask 077
+
+repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+deployment=${NMRNET_DEPLOYMENT_INPUT-}
+[[ $deployment =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || {
+    printf '%s\n' 'Provider update requires an explicit named deployment.' >&2
+    exit 2
+}
+
+run_phase() {
+    local phase=$1 status
+    shift
+    printf 'Provider update: %s.\n' "$phase"
+    if "$@"; then
+        return 0
+    else
+        status=$?
+    fi
+    printf 'Provider update stopped during %s (status %s). Earlier effects may remain; inspect deployment status and logs before retrying.\n' \
+        "$phase" "$status" >&2
+    return "$status"
+}
+
+run_phase 'build the host-local provider image' bash "$repository_root/tools/container.sh" provider/image/build
+run_phase 'drain, install and verify the selected deployment under one lifecycle lock' \
+    bash "$repository_root/tools/provider_deployment.sh" update
+
+if bash "$repository_root/tools/image_retirement.sh"; then
+    :
+else
+    status=$?
+    printf 'Deployment is healthy; image retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$status" >&2
+fi

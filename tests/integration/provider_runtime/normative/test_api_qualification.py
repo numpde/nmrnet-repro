@@ -59,7 +59,10 @@ provider_host_create() {
     printf '%s\0' "${captured_command[@]}" > "$TEST_RECORDS/$role.argv"
     provider_host_ids[$role]=$(printf '%064d' 1)
     case "$role" in
-        grants) printf 'shared fixture\n' > "$provider_host_root/shared/settings.toml" ;;
+        grants)
+            mkdir -p "$provider_host_root/shared"
+            printf 'shared fixture\n' > "$provider_host_root/shared/settings.toml"
+            ;;
         peer) printf '{}\n' > "$provider_host_root/peer/ready.json" ;;
         selection)
             printf '%s\n' "$TEST_KEY" > "$provider_host_root/selection/key_file.txt"
@@ -523,7 +526,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 (shared / "record.sh").write_text(SHARED_OWNER)
                 (shared / "Makefile").write_text("delivery/deployment/%:\n\t@bash record.sh $*\n")
                 (repository / "tools/wheelhouse_path.sh").write_text(
-                    'select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }\n'
+                    'select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }; lock_wheelhouse() { :; }\n'
                 )
                 (repository / "config/deployments").mkdir(parents=True)
                 (repository / "tools/docker_client.sh").write_text(
@@ -533,6 +536,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 for name in (
                     "Makefile",
                     "config/provider.toml.example",
+                    "config/deployment.toml.example",
                     "tools/inference_native.sh",
                     "tools/worker_retirement.sh",
                     "tools/compose_deployment.sh",

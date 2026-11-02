@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
-[[ $# == 2 && $role == provider && $action =~ ^(install|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
+[[ $# == 2 && $role == provider && $action =~ ^(install|update|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
 caller_uid=$(id -u) caller_gid=$(id -g)
 [[ $caller_uid != 0 && $caller_gid != 0 ]] || { printf '%s\n' 'Run Compose deployment as its nonroot owner.' >&2; exit 2; }
 refuse() { printf 'Cannot %s %s deployment: %s\n' "$action" "$role" "$1" >&2; return 2; }
@@ -19,9 +19,12 @@ private_directory() {
         || { refuse 'configuration roots must be caller-owned mode 0700 directories.'; return 2; }
 }
 runtime_directory() {
+    local create=${2-true} ownership
     path "$1"
-    [[ -e $1 ]] || mkdir -m 700 -- "$1"
-    local ownership
+    if [[ ! -e $1 ]]; then
+        [[ $create == true ]] || { refuse 'an active deployment runtime directory is missing; inspect it before updating.'; return 2; }
+        mkdir -m 700 -- "$1"
+    fi
     ownership=$(stat -c '%u:%g:%a' -- "$1")
     [[ -d $1 && ( $ownership == "$caller_uid:$caller_gid:700" || $ownership == "$service_host_uid:$service_host_gid:700" ) ]] \
         || { refuse 'runtime leaves must be private directories owned by the caller or selected Engine-mapped service user.'; return 2; }
@@ -33,7 +36,7 @@ digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum)
 project=nmrnet-${digest:0:20}
 project_directory=$repository_root
 path "$root"
-if [[ $action == install || $action == up ]]; then
+if [[ $action == install || $action == update || $action == up ]]; then
     source "$repository_root/tools/image_lifecycle.sh"
     image_lifecycle_lock shared
 fi
@@ -43,6 +46,10 @@ if [[ $action == install ]]; then
     private_directory "$root/bundles"
 else
     [[ -d $root && ! -L $root ]] || { refuse 'install the configuration first.'; exit 2; }
+    if [[ $action == update ]]; then
+        private_directory "$root"
+        private_directory "$root/bundles"
+    fi
 fi
 exec {deployment_lock}< "$root"
 flock --nonblock "$deployment_lock" || { refuse 'another command is active; nothing was queued.'; exit 2; }
@@ -116,7 +123,7 @@ map_helper_identity() {
     map_probe_name=nmrnet-map-${helper_uuid//-/}
     map_probe_token=nmrnet-map-token-${helper_uuid//-/}
     # The host caller verifies the exact command line through its selected /proc.
-    run 30 create --name "$map_probe_name" --network none --read-only --user 0:0 \
+    run 30 create --pull never --name "$map_probe_name" --network none --read-only --user 0:0 \
         --cap-drop ALL --security-opt no-new-privileges:true --cpus 0.25 --memory 64m \
         --memory-swap 64m --pids-limit 8 --entrypoint "$python" "$image" -I -B -c 'import time; time.sleep(60)' "$map_probe_token" \
         > "$map_query"
@@ -176,11 +183,17 @@ map_helper_identity() {
 capture_stop_metadata() {
     # Preserve the native owner's facts in this shell; only bounded Engine
     # metadata goes to the private file. A timed-out writer keeps that file.
-    inference_native 'provider stop inspection' 15 stdio bash -eu -c '
+    local native_status
+    if inference_native 'provider stop inspection' 15 stdio bash -eu -c '
         output=$1; shift
         ulimit -f 4
         exec "$@" > "$output"
-    ' bash "$stop_query" "${engine[@]}" "$@"
+    ' bash "$stop_query" "${engine[@]}" "$@"; then
+        native_status=0
+    else
+        native_status=$?
+    fi
+    [[ $native_status == 0 ]] || return "$native_status"
     [[ $inference_retirement_confirmed == true ]] \
         || { refuse 'provider inspection has not settled; no dependencies were stopped.'; return 2; }
     [[ $(stat -c '%s' -- "$stop_query") -lt 4096 ]] \
@@ -188,11 +201,17 @@ capture_stop_metadata() {
 }
 capture_inventory() {
     local operation=$1; shift
-    inference_native "$operation" 30 stdio bash -eu -c '
+    local native_status
+    if inference_native "$operation" 30 stdio bash -eu -c '
         output=$1; shift
         ulimit -f 1024
         exec "$@" > "$output"
-    ' bash "$stop_query" "${engine[@]}" "$@"
+    ' bash "$stop_query" "${engine[@]}" "$@"; then
+        native_status=0
+    else
+        native_status=$?
+    fi
+    [[ $native_status == 0 ]] || return "$native_status"
     [[ $inference_retirement_confirmed == true ]] \
         || { refuse 'deployment inventory has not settled; no owned resources were removed.'; return 2; }
     [[ $(stat -c '%s' -- "$stop_query") -lt 1048576 ]] \
@@ -266,6 +285,12 @@ image_record() {
     IFS= read -r selected_image < "$record"
     [[ $selected_image =~ ^sha256:[0-9a-f]{64}$ ]] && cmp -s "$record" <(printf '%s\n' "$selected_image") || return 2
 }
+admit_recorded_image() {
+    local description=$1 image=$2
+    inference_native "$description image admission" 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$image"
+    [[ $inference_result == "$image" ]] \
+        || { refuse "the selected $description image is unavailable or has another identity."; return 2; }
+}
 select_bundle() {
     local target
     [[ -L $root/current ]] || { refuse 'install the deployment configuration first.'; return 2; }
@@ -333,8 +358,26 @@ helper() {
 }
 select_shared_runtime() {
     shared_runtime_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
+    if [[ -z $shared_runtime_image && ( -e $root/current || -L $root/current ) ]]; then
+        local current_target current_bundle
+        [[ -L $root/current ]] \
+            || { refuse 'the selected deployment is not a generation link; supply SHARED_RUNTIME_IMAGE explicitly to replace it.'; return 2; }
+        current_target=$(readlink -- "$root/current")
+        [[ $current_target =~ ^bundles/generation-[A-Za-z0-9_-]{1,64}$ ]] \
+            || { refuse 'the selected generation link is malformed; supply SHARED_RUNTIME_IMAGE explicitly to replace it.'; return 2; }
+        current_bundle=$root/$current_target
+        [[ -d $current_bundle && ! -L $current_bundle ]] \
+            || { refuse 'the selected generation is absent; supply SHARED_RUNTIME_IMAGE explicitly to replace it.'; return 2; }
+        path "$current_bundle/compose.json"
+        if shared_runtime_image=$(python3 "$repository_root/tools/compose_image_ids.py" shared-runtime "$current_bundle/compose.json"); then
+            :
+        else
+            refuse 'the selected generation does not identify one shared runtime image; supply SHARED_RUNTIME_IMAGE explicitly.'
+            return 2
+        fi
+    fi
     [[ $shared_runtime_image =~ ^sha256:[0-9a-f]{64}$ ]] \
-        || { refuse 'supply SHARED_RUNTIME_IMAGE=<immutable image ID> from nmr-provider-tools.'; return 2; }
+        || { refuse 'first install requires SHARED_RUNTIME_IMAGE=<immutable image ID> from nmr-provider-tools.'; return 2; }
     inference_native 'shared runtime image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$shared_runtime_image"
     [[ $inference_result == "$shared_runtime_image" ]] || { refuse 'the shared runtime image identity differs from the selection.'; return 2; }
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
@@ -374,34 +417,58 @@ initialize_lifetime() {
         /input/provider_deployment.py initialize-lifetime --uid "$uid" --gid "$gid"
     helper_name=
 }
-if [[ $action == install ]]; then
-    # Reconfiguration is explicit; stop the existing deployment before install.
-    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
-    capture_stop_metadata ps --quiet --filter "label=com.docker.compose.project=$project"
-    [[ ! -s $stop_query ]] || { refuse 'stop this deployment before replacing its configuration.'; exit 2; }
-    rm -- "$stop_query"
-    stop_query=
+if [[ $action == install || $action == update ]]; then
+    if [[ $action == update ]]; then
+        select_bundle
+        current_image_map=$(python3 "$repository_root/tools/compose_image_ids.py" services "$bundle/compose.json") \
+            || { refuse 'the selected generation has no complete immutable image plan.'; exit 2; }
+        declare -A current_image_ids=()
+        while IFS=$'\t' read -r current_role current_image; do
+            current_image_ids[$current_role]=$current_image
+        done <<< "$current_image_map"
+        current_scientific_image=${current_image_ids[prediction]}
+        current_geometry_image=${current_image_ids[reader]}
+        compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
+    else
+        stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+        capture_stop_metadata ps --quiet --filter "label=com.docker.compose.project=$project"
+        [[ ! -s $stop_query ]] || { refuse 'stop this deployment before replacing its configuration.'; exit 2; }
+        rm -- "$stop_query"
+        stop_query=
+    fi
     [[ ! -e $root/runtime/route-api && ! -L $root/runtime/route-api ]] \
         || { refuse 'retire the old API route with the selected old recipe before installing.'; exit 2; }
     require_no_old_route_borrowers
     image_record provider; controller_image=$selected_image
+    admit_recorded_image provider "$controller_image"
     bundle=$(mktemp -d "$root/bundles/generation-XXXXXXXX")
     mkdir -m 700 -- "$bundle/config" "$bundle/secrets" "$bundle/secrets/provider"
     select_shared_runtime
     map_helper_identity "$controller_image" /opt/provider/environment/bin/python
+    if [[ $action == update ]]; then
+        [[ -d $root/runtime && ! -L $root/runtime ]] \
+            || { refuse 'the active deployment runtime root is absent; inspect it before updating.'; exit 2; }
+    fi
     private_directory "$root/runtime"
+    runtime_create=true
+    [[ $action != update ]] || runtime_create=false
     for runtime_role in prediction reader smiles route-interpreter route-store; do
-        runtime_directory "$root/runtime/$runtime_role"
+        runtime_directory "$root/runtime/$runtime_role" "$runtime_create"
     done
-    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime"
+    runtime_helper_add_chown=$helper_add_chown
+    helper_add_chown=false helper_add_dac_override=true
+    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime,readonly"
         --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
-    helper_add_dac_override=$helper_add_chown
     helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
-        --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid"
-    helper_add_dac_override=false
+        --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid" --check-only
+    helper_add_chown=$runtime_helper_add_chown helper_add_dac_override=false
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
-    image_record inference; scientific_image=$selected_image
-    image_record preparation; geometry_image=$selected_image
+    if [[ $action == update ]]; then scientific_image=$current_scientific_image
+    else image_record inference; scientific_image=$selected_image; fi
+    admit_recorded_image inference "$scientific_image"
+    if [[ $action == update ]]; then geometry_image=$current_geometry_image
+    else image_record preparation; geometry_image=$selected_image; fi
+    admit_recorded_image geometry "$geometry_image"
     source "$repository_root/tools/git_metadata.sh"
     source "$repository_root/tools/provider_image.sh"
     source "$repository_root/tools/geometry_image.sh"
@@ -444,14 +511,27 @@ if [[ $action == install ]]; then
         --controller-image-id "$controller_image" --repository-revision "$revision" --upstream-revision "$upstream_revision"
     [[ -f $bundle/compose.json && ! -L $bundle/compose.json ]] || exit 2
     chmod 555 "$bundle"
+    if [[ $action == update ]]; then
+        drain_provider
+        run 120 "${compose[@]}" down --timeout 60
+    fi
+    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime"
+        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
+    helper_add_dac_override=$runtime_helper_add_chown
+    helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
+        --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid"
+    helper_add_dac_override=false
+    helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
     # No completion/inspection manifest: selecting the actual recipe is enough.
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
     retire_generations
     printf 'Ensure the shared proxy and outbox are running through nmr-provider-tools.\n'
-    printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
-    exit 0
+    if [[ $action == install ]]; then
+        printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
+        exit 0
+    fi
 fi
 select_bundle
 if [[ $action == retire-generations ]]; then
@@ -477,14 +557,44 @@ if [[ $action == retire-api-route ]]; then
     exit 0
 fi
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
+verify_running_images() {
+    local expected_images role expected container_id observed observed_role observed_image count=0
+    expected_images=$(python3 "$repository_root/tools/compose_image_ids.py" services "$bundle/compose.json") \
+        || { refuse 'the installed Compose plan has no complete immutable image selection.'; return 2; }
+    stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
+    while IFS=$'\t' read -r role expected; do
+        capture_stop_metadata "${compose[@]}" ps --all --quiet --no-trunc "$role" \
+            || { refuse "cannot inspect the started $role container."; return 2; }
+        IFS= read -r container_id < "$stop_query" || container_id=
+        [[ $container_id =~ ^[0-9a-f]{64}$ ]] \
+            || { refuse "the started $role service did not resolve to exactly one container."; return 2; }
+        cmp -s -- "$stop_query" <(printf '%s\n' "$container_id") \
+            || { refuse "the started $role service resolved to multiple containers."; return 2; }
+        capture_stop_metadata inspect --type container --format '{{index .Config.Labels "com.docker.compose.service"}} {{.Image}}' "$container_id" \
+            || { refuse "cannot inspect the started $role container image."; return 2; }
+        IFS= read -r observed < "$stop_query" || observed=
+        [[ $observed =~ ^([a-z]+)\ (sha256:[0-9a-f]{64})$ ]] \
+            || { refuse "the started $role container returned malformed image identity."; return 2; }
+        cmp -s -- "$stop_query" <(printf '%s\n' "$observed") \
+            || { refuse "the started $role container returned multiple image records."; return 2; }
+        observed_role=${BASH_REMATCH[1]}
+        observed_image=${BASH_REMATCH[2]}
+        [[ $observed_role == "$role" && $observed_image == "$expected" ]] \
+            || { refuse "the started $role container does not use its installed immutable image."; return 2; }
+        count=$((count + 1))
+    done <<< "$expected_images"
+    [[ $count == 6 ]] || { refuse 'the installed image verification did not cover every service.'; return 2; }
+    printf 'Verified running image IDs for all %s provider services.\n' "$count"
+}
 case $action in
-    up)
+    up|update)
         stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
         capture_stop_metadata ps --all --quiet --filter "label=com.docker.compose.project=$project"
         [[ ! -s $stop_query ]] \
             || { refuse 'this deployment still has containers; inspect its status and use down before starting it again.'; exit 2; }
         initialize_lifetime
         run 180 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120
+        verify_running_images
         ;;
     down)
         drain_provider
@@ -508,6 +618,11 @@ case $action in
 esac
 case $action in
     up)
+        printf 'Next: make provider/deployment/status DEPLOYMENT=%q\n' "$deployment_name"
+        printf 'Logs: make provider/deployment/logs DEPLOYMENT=%q\n' "$deployment_name"
+        ;;
+    update)
+        printf 'Provider image update completed for deployment %q.\n' "$deployment_name"
         printf 'Next: make provider/deployment/status DEPLOYMENT=%q\n' "$deployment_name"
         printf 'Logs: make provider/deployment/logs DEPLOYMENT=%q\n' "$deployment_name"
         ;;

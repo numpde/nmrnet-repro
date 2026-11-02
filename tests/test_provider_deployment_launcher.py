@@ -7,6 +7,7 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import json
 import os
 import signal
 import shutil
@@ -31,7 +32,7 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / 'tools'
         tools.mkdir()
-        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
+        for name in ('compose_deployment.sh', 'compose_image_ids.py', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
         # Tests can opt into a rootless host mapping. The map parser itself is
         # exercised against synthetic maps by its own tests.
@@ -119,13 +120,28 @@ case $1 in
     elif [[ " $* " == *' lifetime-owner '* ]]; then
         printf 'sha256:%064d nmr-api-delivery-control-%064d %s %s\n' 9 1 "$(id -u)" "$(id -g)"
     fi
+    if [[ " $* " == *' prepare-runtime '* && " $* " != *' --check-only '* ]]; then
+        for role in prediction reader smiles route-interpreter route-store; do
+            mkdir -p "$root/secrets/deployments/fixture/runtime/$role"
+            touch "$root/secrets/deployments/fixture/runtime/$role/.owner-session.lock"
+            chmod 600 "$root/secrets/deployments/fixture/runtime/$role/.owner-session.lock"
+        done
+    fi
+    if [[ " $* " == *' prepare-runtime '* && " $* " == *' --check-only '* ]]; then
+        for role in prediction reader smiles route-interpreter route-store; do
+            lock="$root/secrets/deployments/fixture/runtime/$role/.owner-session.lock"
+            [[ ! -L $lock ]] || { printf 'Cannot prepare provider runtime: native lifetime locks must be standalone regular files.\n' >&2; exit 2; }
+        done
+    fi
     [[ " $* " != *' old-api-route '* ]] || exit "${TEST_ROUTE_ADMISSION_STATUS-0}"
     arguments=("$@")
     for ((i=0;i<${#arguments[@]};i++)); do
       case ${arguments[i]} in
         --bundle)
           destination=${arguments[i+1]}; mkdir -p "$destination/bindings"
-          printf '{}\n' > "$destination/compose.json"; printf '[delivery]\n' > "$destination/daemon.toml"
+          source="$root/secrets/deployments/fixture/current/compose.json"
+          [[ $source -ef $destination/compose.json ]] || cp "$source" "$destination/compose.json"
+          printf '[delivery]\n' > "$destination/daemon.toml"
           chmod 444 "$destination/compose.json"; chmod 555 "$destination"
           ;;
         --output) destination=${arguments[i+1]}; mkdir -p "$destination/bindings"; printf '{}\n' > "$destination/compose.json"; printf '[delivery]\n' > "$destination/daemon.toml" ;;
@@ -134,7 +150,27 @@ case $1 in
     ;;
  inspect)
     [[ ${TEST_INSPECT_STATUS-0} == 0 ]] || exit "$TEST_INSPECT_STATUS"
-    if [[ " $* " == *'.State.Pid'* ]]; then printf '1 true\n'
+    if [[ " $* " == *'.Config.Labels'* && " $* " == *'.Image'* ]]; then
+        case ${6-} in
+            *7) service=provider ;;
+            *8) service=prediction ;;
+            *9) service=reader ;;
+            *10) service=smiles ;;
+            *11) service=interpreter ;;
+            *12) service=store ;;
+            *) exit 91 ;;
+        esac
+        if [[ -v TEST_RUNNING_IMAGE ]]; then
+            image=$TEST_RUNNING_IMAGE
+        else
+            case $service in
+                prediction) image=${TEST_PREDICTION_IMAGE-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa} ;;
+                reader|smiles) image=${TEST_GEOMETRY_IMAGE-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa} ;;
+                *) image=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;;
+            esac
+        fi
+        printf '%s %s\n' "$service" "$image"
+    elif [[ " $* " == *'.State.Pid'* ]]; then printf '1 true\n'
     elif [[ " $* " == *'.State.Status'* ]]; then
         if [[ -f $root/provider-stopped ]]; then printf '%s\n' "${TEST_PROVIDER_STOPPED_STATE-exited 0 false}";
         else printf '%s\n' "${TEST_PROVIDER_STATE-running 0 false}"; fi
@@ -143,13 +179,26 @@ case $1 in
         else printf '%s' "${TEST_MOUNTS-}"; fi
     else printf 'sha256:%064d\n' 9; fi
     ;;
- image) printf 'sha256:%064d\n' 9 ;;
+ image)
+    if [[ ${2-} == inspect && ${4-} == '{{.Id}}' ]]; then
+        printf '%s\n' "${5-}"
+        [[ ${5-} != ${TEST_IMAGE_INSPECT_FAILURE-} ]] || exit 7
+    else printf 'sha256:%064d\n' 9; fi
+    ;;
  compose)
     if [[ ${TEST_PAUSE-false} == true ]]; then
       : > "$root/ready"
       until [[ -f $root/release ]]; do sleep 0.01; done
     fi
-    if [[ " $* " == *' ps --all --quiet provider '* ]]; then
+    if [[ " $* " == *' --no-trunc provider '* ]]; then
+        printf '%064d\n' 7
+        [[ ${TEST_COMPOSE_VERIFICATION_STATUS-0} == 0 ]] || exit "$TEST_COMPOSE_VERIFICATION_STATUS"
+    elif [[ " $* " == *' --no-trunc prediction '* ]]; then printf '%064d\n' 8
+    elif [[ " $* " == *' --no-trunc reader '* ]]; then printf '%064d\n' 9
+    elif [[ " $* " == *' --no-trunc smiles '* ]]; then printf '%064d\n' 10
+    elif [[ " $* " == *' --no-trunc interpreter '* ]]; then printf '%064d\n' 11
+    elif [[ " $* " == *' --no-trunc store '* ]]; then printf '%064d\n' 12
+    elif [[ " $* " == *' ps --all --quiet provider '* ]]; then
         if [[ ! -f $root/provider-removed ]]; then
             provider=${TEST_PROVIDER_ID-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
             [[ -z $provider ]] || printf '%s\n' "$provider"
@@ -196,10 +245,22 @@ esac
         bundles.mkdir(mode=0o700)
         bundle = bundles / 'generation-original'
         bundle.mkdir(mode=0o700)
-        (bundle / 'compose.json').write_text('{}\n')
+        roles = ('provider', 'prediction', 'reader', 'smiles', 'interpreter', 'store')
+        (bundle / 'compose.json').write_text(json.dumps({
+            'services': {role: {'image': IMAGE} for role in roles}
+        }) + '\n')
         (bundle / 'daemon.toml').write_text('[delivery]\n')
         (root / 'current').symlink_to('bundles/generation-original')
         return bundle
+
+    def existing_runtime(self):
+        runtime = self.provider / 'runtime'
+        runtime.mkdir(mode=0o700)
+        for role in ('prediction', 'reader', 'smiles', 'route-interpreter', 'route-store'):
+            directory = runtime / role
+            directory.mkdir(mode=0o700)
+            (directory / '.owner-session.lock').write_text('')
+            (directory / '.owner-session.lock').chmod(0o600)
 
     def run_command(self, action, role='provider', *, changes=None, extra=()):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
@@ -239,16 +300,110 @@ esac
                 with self.subTest(role=role, action=action):
                     result = self.run_command(action, role)
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    call = self.calls()[-1]
+                    calls = self.calls()
+                    call = next((item for item in calls if item[0] == 'compose' and 'up' in item), calls[-1]) \
+                        if action == 'up' else calls[-1]
                     project = 'nmrnet-' + hashlib.sha256(
                         (str(self.root) + '\0fixture').encode()).hexdigest()[:20]
                     bundle = self.bundle
                     directory = self.root
                     self.assertEqual(call, ['compose', '--env-file', '/dev/null', '--project-name', project,
                                             '--project-directory', str(directory), '--file', str(bundle / 'compose.json'), *suffix])
+                    if action == 'up':
+                        self.assertIn('Verified running image IDs for all 6 provider services.', result.stdout)
+                        self.assertEqual(len([item for item in calls if item[0] == 'inspect' and '.Config.Labels' in ' '.join(item)]), 6)
                     self.assertTrue((bundle / 'compose.json').exists())
         self.assertFalse(any('--volumes' in call or '-v' in call for call in self.calls()))
         self.assertTrue((self.root / 'cleanup').exists())
+
+    def test_update_preflights_the_generation_then_drains_applies_and_verifies_under_one_lock(self):
+        self.existing_runtime()
+        scientific_image = 'sha256:' + 'b' * 64
+        geometry_image = 'sha256:' + 'c' * 64
+        (self.root / '.work/inference/image-id').write_text('sha256:' + 'd' * 64 + '\n')
+        (self.root / '.work/preparation/image-id').write_text('sha256:' + 'e' * 64 + '\n')
+        plan = json.loads((self.bundle / 'compose.json').read_text())
+        plan['services']['prediction']['image'] = scientific_image
+        plan['services']['reader']['image'] = geometry_image
+        plan['services']['smiles']['image'] = geometry_image
+        (self.bundle / 'compose.json').write_text(json.dumps(plan) + '\n')
+        result = self.run_command('update', changes={
+            'TEST_PREDICTION_IMAGE': scientific_image,
+            'TEST_GEOMETRY_IMAGE': geometry_image,
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Verified running image IDs for all 6 provider services.', result.stdout)
+        self.assertIn('Provider image update completed', result.stdout)
+        calls = self.calls()
+        check = next(index for index, call in enumerate(calls)
+                    if call[0] == 'run' and 'prepare-runtime' in call and '--check-only' in call)
+        check_call = calls[check]
+        freeze = next(index for index, call in enumerate(calls) if call[0] == 'run' and ' freeze ' in f' {" ".join(call)} ')
+        stop = next(index for index, call in enumerate(calls) if call[0] == 'stop')
+        down = next(index for index, call in enumerate(calls) if call[0] == 'compose' and 'down' in call)
+        apply = next(index for index, call in enumerate(calls)
+                     if call[0] == 'run' and 'prepare-runtime' in call and '--check-only' not in call)
+        start = next(index for index, call in enumerate(calls) if call[0] == 'compose' and 'up' in call)
+        freeze_call = calls[freeze]
+        probe_create = next(call for call in calls if call[0] == 'create')
+        self.assertLess(check, freeze)
+        self.assertLess(freeze, stop)
+        self.assertLess(stop, down)
+        self.assertLess(down, apply)
+        self.assertLess(apply, start)
+        self.assertIn('type=bind,src=' + str(self.provider / 'runtime') + ',dst=/runtime,readonly', check_call)
+        self.assertIn('DAC_OVERRIDE', check_call)
+        self.assertNotIn('CHOWN', check_call)
+        self.assertEqual(freeze_call[freeze_call.index('--image-id') + 1], scientific_image)
+        self.assertEqual(freeze_call[freeze_call.index('--geometry-image-id') + 1], geometry_image)
+        self.assertEqual(probe_create[probe_create.index('--pull') + 1], 'never')
+        self.assertNotEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_update_admits_every_recorded_scientific_image_before_draining(self):
+        self.existing_runtime()
+        inference_image = 'sha256:' + 'b' * 64
+        plan = json.loads((self.bundle / 'compose.json').read_text())
+        plan['services']['prediction']['image'] = inference_image
+        (self.bundle / 'compose.json').write_text(json.dumps(plan) + '\n')
+        result = self.run_command('update', changes={'TEST_IMAGE_INSPECT_FAILURE': inference_image})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(call[0] == 'stop' for call in self.calls()))
+        self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+        self.assertTrue(any(call[0:5] == ['image', 'inspect', '--format', '{{.Id}}', inference_image]
+                            for call in self.calls()))
+
+    def test_running_image_verification_rejects_partial_stdout_from_failed_engine_client(self):
+        result = self.run_command('up', changes={'TEST_COMPOSE_VERIFICATION_STATUS': '7'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(call[0] == 'inspect' and '.Config.Labels' in ' '.join(call)
+                             for call in self.calls()))
+
+    def test_update_holds_deployment_lock_across_drain_and_start(self):
+        self.existing_runtime()
+        environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
+                           TEST_CALLER_UID=str(os.getuid()), TEST_CALLER_GID=str(os.getgid()),
+                           TEST_STOP_PAUSE='true')
+        process = subprocess.Popen(['bash', str(self.root / 'tools/provider_deployment.sh'), 'update'],
+                                   env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 3
+            while not (self.root / 'stop-entered').exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue((self.root / 'stop-entered').exists())
+            before = len(self.calls())
+            competing = self.run_command('status')
+            self.assertEqual(competing.returncode, 2)
+            self.assertIn('another command is active', competing.stderr)
+            self.assertEqual(len(self.calls()), before)
+            (self.root / 'stop-release').touch()
+            stdout, stderr = process.communicate(timeout=5)
+            self.assertEqual(process.returncode, 0, stderr)
+            self.assertIn('Provider image update completed', stdout)
+        finally:
+            (self.root / 'stop-release').touch()
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=2)
 
     def test_down_confirms_exact_provider_exit_before_stopping_dependencies(self):
         result = self.run_command('down')
@@ -347,6 +502,13 @@ esac
         self.assertIn('No automatic retry', result.stderr)
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
 
+    def test_up_rejects_a_running_service_with_an_image_other_than_its_frozen_plan(self):
+        result = self.run_command('up', changes={'TEST_RUNNING_IMAGE': 'sha256:' + 'b' * 64})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('started provider container does not use its installed immutable image', result.stderr)
+        self.assertIn('Inspect Docker Compose status/logs', result.stderr)
+        self.assertFalse(any('down' in call for call in self.calls()))
+
     def test_up_refuses_existing_project_before_initialization_or_compose(self):
         result = self.run_command('up', changes={'TEST_CONTAINERS': CID + '\n'})
         self.assertEqual(result.returncode, 2, result.stderr)
@@ -403,6 +565,13 @@ esac
         self.assertEqual(len(self.calls()), 1)
         self.assertIn('stop this deployment', result.stderr)
         self.assertEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
+
+    def test_install_reuses_the_current_generation_shared_runtime_image(self):
+        result = self.run_command('install', changes={'NMRNET_SHARED_RUNTIME_IMAGE_INPUT': ''})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls()
+        self.assertTrue(any(call[0:5] == ['image', 'inspect', '--format', '{{.Id}}', IMAGE] for call in calls))
+        self.assertTrue(any('--shared-image-id' in call and IMAGE in call for call in calls))
 
     def test_identity_probe_create_failure_does_not_remove_an_unadmitted_name(self):
         result = self.run_command('install', changes={'TEST_CREATE_STATUS': '7'})
@@ -678,7 +847,7 @@ fi
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false',
                                                      'TEST_INVENTORY_RETIRED': 'true', 'TEST_PROJECT_RETIRED': 'true'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'create', 'start', 'inspect', 'rm', 'ps', 'run'])
+        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'image', 'create', 'start', 'inspect', 'rm', 'ps', 'run'])
         self.assertFalse((self.root / 'cleanup').exists())
         self.assertIn('Configuration helper, if still present:', result.stderr)
 

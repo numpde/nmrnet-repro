@@ -344,7 +344,7 @@ api_witness_main() {
     if [[ -n $upload_receipt && $mode != real-sdf-zip ]]; then
         printf '%s\n' 'UPLOAD_RECEIPT resumes only the SDF ZIP reservation after explicit storage reconciliation.' >&2; return 2
     fi
-    local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_address= external_interface= resolvers=
+    local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_address= external_interface= resolvers= print_command=false
     local -a provider_host_argv=()
     local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF PROVIDER_CREDENTIAL CA_FILE ADDRESS INTERFACE OUTPUT RETAINED_RESULT
         USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE DEPLOYMENT SHARED_RUNTIME_IMAGE)

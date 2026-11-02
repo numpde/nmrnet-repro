@@ -293,8 +293,8 @@ def initialize_lifetime(uid, gid):
         os.close(descriptor)
 
 
-def prepare_runtime(runtime_root, uid, gid):
-    """Give each mounted runtime leaf the selected container user's mapped identity."""
+def prepare_runtime(runtime_root, uid, gid, *, check_only=False):
+    """Validate or give each mounted runtime leaf its mapped service identity."""
     if type(uid) is not int or type(gid) is not int or not 1 <= uid <= 4294967294 or not 1 <= gid <= 4294967294:
         raise ConfigurationRejected("provider runtime ownership requires nonzero mapped service UID and GID values.")
     runtime_root = _bind_path(runtime_root)
@@ -339,6 +339,8 @@ def prepare_runtime(runtime_root, uid, gid):
                 raise ConfigurationRejected("provider runtime files must be private, standalone regular files or sockets owned by the caller or mapped service user.")
             ownership_targets.append(path)
         ownership_targets.append(directory)
+    if check_only:
+        return
     for path in missing_locks:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
@@ -414,6 +416,7 @@ def main(arguments=None):
     runtime.add_argument("--runtime-root", type=Path, required=True)
     runtime.add_argument("--uid", type=int, required=True)
     runtime.add_argument("--gid", type=int, required=True)
+    runtime.add_argument("--check-only", action="store_true")
     options = parser.parse_args(arguments)
     values = vars(options)
     operation = values.pop("operation")
