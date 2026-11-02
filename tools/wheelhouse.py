@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -116,7 +117,7 @@ def acquire_source(source, partial):
         os.fsync(stream.fileno())
 
 
-def select_wheels(lock, pool, report_output=None):
+def select_wheels(lock, pool, report_output=None, lock_fd=None):
     """Let pip select compatible, hash-locked files from an unrelated shared pool.
 
     A dry-run report avoids copying large wheels into the checker's small /tmp.
@@ -153,6 +154,7 @@ def select_wheels(lock, pool, report_output=None):
                 str(lock),
             ],
             check=True,
+            pass_fds=() if lock_fd is None else (lock_fd,),
         )
         identity = wheel_inputs_from_report(lock, pool, report)
         if report_output is not None:
@@ -408,7 +410,12 @@ def main():
         if args.action == "report":
             if digest(locks[0]) != args.lock_sha256:
                 raise ValueError("Cannot select wheels: captured lock bytes differ from the expected SHA-256.")
-            select_wheels(locks[0], args.pool, report_output=sys.stdout)
+            descriptor = os.open(args.pool, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_SH)
+                select_wheels(locks[0], args.pool, report_output=sys.stdout, lock_fd=descriptor)
+            finally:
+                os.close(descriptor)
         elif args.action == "download":
             if args.profile == "provider-core":
                 if args.assets is None or len(locks) != 1:

@@ -32,10 +32,11 @@ class WheelhouseTests(unittest.TestCase):
         expected = self.lock.read_bytes()
         output = io.StringIO()
 
-        def select(lock, pool, report_output):
+        def select(lock, pool, report_output, lock_fd):
             self.lock.write_bytes(b"later lock")
             self.assertEqual(lock.read_bytes(), expected)
             self.assertEqual(pool, self.pool)
+            self.assertGreaterEqual(lock_fd, 0)
             report_output.write('{"version":"1"}')
 
         with (patch.object(wheelhouse.sys, "argv", ["wheelhouse", "report", "--lock", str(self.lock),
