@@ -233,10 +233,12 @@ def seal_deployment_bundle(bundle, uid, gid):
     if not any(path.relative_to(bundle).as_posix() == "compose.json" for path in files):
         raise ConfigurationRejected("deployment bundle has no retained Compose recipe to seal.")
     for path in files:
-        mode = 0o400 if path.is_relative_to(bundle / "secrets") else 0o444
+        secret = path.is_relative_to(bundle / "secrets")
+        mode = 0o400 if secret else 0o444
         os.chmod(path, mode, follow_symlinks=False)
         if rootless:
-            os.chown(path, uid, gid, follow_symlinks=False)
+            owner_uid, owner_gid = (uid, gid) if secret else (0, 0)
+            os.chown(path, owner_uid, owner_gid, follow_symlinks=False)
         elif path.stat().st_uid != uid:
             raise ConfigurationRejected("deployment helper did not create provider-owned frozen inputs.")
     for directory in reversed(directories):
