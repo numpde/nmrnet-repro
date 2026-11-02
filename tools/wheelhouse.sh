@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Acquisition updates the shared pool under an exclusive directory lock; checks
-# and consumers hold shared locks while selecting or copying its artifacts.
+# The acquisition worker and shared publisher lock the pool while writing;
+# checks and consumers hold shared locks while selecting its artifacts.
 # SECS package lanes separate networked wheel acquisition from offline image builds:
 # https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk
 # This lane keeps that boundary with the NMRNet lock and pinned Uni-Core source.
@@ -13,35 +13,52 @@ readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(download|check)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation|provider-core|shared-tool]' >&2
+    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation|provider-core|provider-support|shared-tool]' >&2
     exit 2
 fi
 if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
 case "$profile" in
     inference)
-        inputs=(inference.lock preparation.lock unicore-source.json provider-core-native-install.lock provider-core-assets.in)
+        inputs=(inference.lock preparation.lock unicore-source.json provider-core-native-install.lock provider-core-install.lock wheelhouse-tool-assets.in)
         build_target=packages/image
-        worker_arguments=(--profile inference --lock /input/inference.lock --lock /input/preparation.lock --lock /input/provider-core-native-install.lock --assets /input/provider-core-assets.in --source /input/unicore-source.json --pool /wheelhouse)
+        worker_arguments=(--lock /input/inference.lock --lock /input/preparation.lock --lock /input/provider-core-native-install.lock --lock /input/provider-core-install.lock --source /input/unicore-source.json --stream-assets /input/wheelhouse-tool-assets.in --pool /wheelhouse)
         ;;
     preparation)
-        inputs=(preparation.lock provider-core-native-install.lock provider-core-assets.in)
+        inputs=(preparation.lock provider-core-native-install.lock wheelhouse-tool-assets.in)
         build_target=geometry/image/build
-        worker_arguments=(--profile preparation --lock /input/preparation.lock --lock /input/provider-core-native-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
+        worker_arguments=(--lock /input/preparation.lock --lock /input/provider-core-native-install.lock --stream-assets /input/wheelhouse-tool-assets.in --pool /wheelhouse)
         ;;
     provider-core)
-        inputs=(provider-core-install.lock provider-core-assets.in)
+        inputs=(provider-core-install.lock wheelhouse-tool-assets.in)
         build_target=provider/image/build
-        worker_arguments=(--profile provider-core --lock /input/provider-core-install.lock --assets /input/provider-core-assets.in --pool /wheelhouse)
+        worker_arguments=(--lock /input/provider-core-install.lock --stream-assets /input/wheelhouse-tool-assets.in --pool /wheelhouse)
         ;;
     shared-tool)
         inputs=(wheelhouse-tool-assets.in)
         worker_arguments=(--profile shared-tool --assets /input/wheelhouse-tool-assets.in --pool /wheelhouse)
         ;;
-    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation, provider-core or shared-tool.' >&2; exit 2 ;;
+    provider-support)
+        inputs=(provider-core-assets.in)
+        worker_arguments=(--support --assets /input/provider-core-assets.in --pool /wheelhouse)
+        ;;
+    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation, provider-core, provider-support or shared-tool.' >&2; exit 2 ;;
 esac
 source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
 source "$repository_root/tools/operator_guidance.sh"
+shared_acquisition=true
+if [[ $profile == shared-tool ]]; then
+    shared_acquisition=false
+elif [[ $1 == check ]]; then
+    worker_arguments+=(--check)
+elif [[ $profile != provider-support ]]; then
+    inputs+=(provider-core-assets.in wheelhouse-acquirer-assets.in)
+    worker_arguments+=(--assets /input/provider-core-assets.in --tool-assets /input/wheelhouse-acquirer-assets.in)
+    if [[ $profile == inference ]]; then
+        inputs+=(inference.in)
+        worker_arguments+=(--declaration /input/inference.in)
+    fi
+fi
 parent_directory=$wheelhouse_directory
 container_parent=/wheelhouse
 # The pool itself is the only persistent artifact location.
@@ -61,7 +78,7 @@ if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     exit 2
 fi
 next_actions=
-if [[ $profile != shared-tool ]]; then
+if [[ $profile != shared-tool && $profile != provider-support ]]; then
     next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
 fi
 if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
@@ -86,7 +103,7 @@ if [[ "$1" == download ]]; then
     else
         pool_owner=$caller_uid:$caller_gid
     fi
-    if ! "$print_command"; then lock_wheelhouse exclusive; fi
+    if ! "$print_command" && ! "$shared_acquisition"; then lock_wheelhouse exclusive; fi
     command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then command+=(--print); fi
     command+=(--success-note "$next_actions")
@@ -179,10 +196,17 @@ command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1 --user "$caller_u
     --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
     --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
+if "$shared_acquisition"; then
+    command+=(--mount "type=bind,src=$repository_root/tools/wheelhouse_acquire.py,dst=/workspace/tools/wheelhouse_acquire.py,readonly")
+fi
 for input in "${inputs[@]}"; do
     command+=(--mount "type=bind,src=$repository_root/requirements/$input,dst=/input/$input,readonly")
 done
-command+=(--mount "$output_mount" "$image" python3 -B -m tools.wheelhouse "$1" "${worker_arguments[@]}")
+if "$shared_acquisition"; then
+    command+=(--mount "$output_mount" "$image" python3 -B -m tools.wheelhouse_acquire "${worker_arguments[@]}")
+else
+    command+=(--mount "$output_mount" "$image" python3 -B -m tools.wheelhouse "$1" "${worker_arguments[@]}")
+fi
 if [[ "$1" == download ]]; then
     exec "${command[@]}"
 elif "$print_command"; then

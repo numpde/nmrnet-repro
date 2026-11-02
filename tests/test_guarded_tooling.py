@@ -19,6 +19,7 @@ MODULES = (
     "rdkit_environment",
     "rdkit_runtime_tests",
     "wheelhouse",
+    "wheelhouse_acquire",
 )
 
 
@@ -107,6 +108,7 @@ class ToolingLauncherTests(unittest.TestCase):
             "container",
             "docker",
             "docker_client",
+            "user_namespace_map",
             "inference_native",
             "packages",
             "package_inputs",
@@ -120,7 +122,8 @@ class ToolingLauncherTests(unittest.TestCase):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock",
-                     "preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in"):
+                     "preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in",
+                     "wheelhouse-acquirer-assets.in", "wheelhouse-tool-assets.in"):
             (self.root / f"requirements/{name}").write_text("fixture")
         (self.root / ".work/wheelhouse").mkdir(parents=True)
         (self.root / ".work/packages-stage/lock.TEST").mkdir(parents=True)
@@ -173,18 +176,14 @@ class ToolingLauncherTests(unittest.TestCase):
         (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
         (self.root / "requirements/preparation.lock").write_text("fixture\n")
         commands = self.commands("container", "geometry/image/build")
-        capture = next(command for command in commands if "tools.wheelhouse" in command)
-        command = next(command for command in commands if "--build-context" in command)
+        command = next(command for command in commands if "build" in command)
         self.assertIn("build", command)
-        self.assertIn(f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse,readonly", capture)
-        self.assertIn("--pool", capture)
-        self.assertEqual("/wheelhouse", capture[capture.index("--pool") + 1])
         self.assertIn("--pull=false", command)
         self.assertEqual("none", command[command.index("--network") + 1])
         self.assertEqual("default", command[command.index("--builder") + 1])
         capture = self.root / ".work/preparation/.build.PRINT"
-        self.assertEqual(str(capture / "context"), command[-1])
-        self.assertEqual(f"wheelhouse={capture}/wheelhouse", command[command.index("--build-context") + 1])
+        self.assertEqual("-", command[-1])
+        self.assertNotIn("--build-context", command)
         self.assertFalse(capture.exists())
 
     def test_rdkit_worker_checks_use_recorded_image_without_wheels_or_installation(self):
@@ -311,10 +310,17 @@ class ToolingLauncherTests(unittest.TestCase):
     def test_wheelhouse_lanes_read_guard_and_keep_their_write_boundary(self):
         for lane in ("check", "download"):
             with self.subTest(lane=lane):
-                command = next(command for command in self.commands("wheelhouse", lane) if "tools.wheelhouse" in command)
+                module = "wheelhouse_acquire"
+                command = next(command for command in self.commands("wheelhouse", lane) if f"tools.{module}" in command)
                 # silent-defaults: allow-contract -- Check has no writable mounts; download grants only the wheelhouse output mount in the rendered command; proof=tests/test_guarded_tooling.py::ToolingLauncherTests.test_wheelhouse_lanes_read_guard_and_keep_their_write_boundary
                 writable = [] if lane == "check" else [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]
-                self.assert_guarded_module(command, "wheelhouse", writable, self.root)
+                self.assert_guarded_module(command, module, writable, self.root)
+                self.assertEqual(
+                    [command[index + 1] for index, value in enumerate(command) if value == "--lock"],
+                    ["/input/inference.lock", "/input/preparation.lock", "/input/provider-core-native-install.lock",
+                     "/input/provider-core-install.lock"],
+                )
+                self.assertEqual(command[command.index("--stream-assets") + 1], "/input/wheelhouse-tool-assets.in")
 
     def test_preparation_acquisition_grants_only_the_selected_shared_root(self):
         self.assert_wheel_profile("preparation")
@@ -331,11 +337,12 @@ class ToolingLauncherTests(unittest.TestCase):
             ("download", [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]),
             ("check", []),
         ):
-            command = next(command for command in self.commands("wheelhouse", lane, profile) if "tools.wheelhouse" in command)
-            self.assert_guarded_module(command, "wheelhouse", writable, self.root)
+            module = "wheelhouse_acquire"
+            command = next(command for command in self.commands("wheelhouse", lane, profile) if f"tools.{module}" in command)
+            self.assert_guarded_module(command, module, writable, self.root)
             self.assertNotIn("/input/unicore-source.json", command)
             self.assertEqual(command[command.index("--pool") + 1], "/wheelhouse")
-            self.assertEqual(command[command.index("--profile") + 1], profile)
+            self.assertEqual("--check" in command, lane == "check")
             self.assertNotIn(f"/wheelhouse/{profile}", command)
             if profile == "provider-core":
                 self.assertEqual(

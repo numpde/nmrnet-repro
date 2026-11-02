@@ -168,18 +168,18 @@ class ImageLauncherTests(unittest.TestCase):
             check=False,
         )
 
-    def test_build_is_offline_with_explicit_wheelhouse_context(self):
+    def test_build_is_offline_with_streamed_context(self):
         result = self.command("build")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
         self.assertFalse(any("tools.wheelhouse" in command for command in commands))
-        args = next(command for command in commands if "--build-context" in command)
+        args = next(command for command in commands if "build" in command)
         self.assertIn("build", args)
         self.assertEqual("none", args[args.index("--network") + 1])
         self.assertEqual("default", args[args.index("--builder") + 1])
         self.assertIn("--pull=false", args)
-        self.assertIn("wheelhouse=" + str(self.root / ".work/wheelhouse"), args)
-        self.assertIn("runtime-wheels=" + str(self.root / ".work/wheelhouse"), args)
+        self.assertNotIn("--build-context", args)
+        self.assertEqual("-", args[-1])
         self.assertNotIn("--ssh", args)
         self.assertNotIn("--secret", args)
         self.assertFalse((self.root / ".work/inference").exists())

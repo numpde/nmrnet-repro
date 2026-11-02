@@ -83,6 +83,7 @@ test/integration/rdkit-runtime:
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
 .PHONY: packages/shared-tool/wheelhouse packages/shared-tool/wheelhouse/check
+.PHONY: packages/provider-core/test-support packages/provider-core/test-support/check
 .PHONY: packages/images/retire test/unit/packages/images
 
 packages/images/retire:
@@ -102,6 +103,12 @@ packages/shared-tool/wheelhouse:
 
 packages/shared-tool/wheelhouse/check:
 	bash tools/wheelhouse.sh check shared-tool
+
+packages/provider-core/test-support:
+	bash tools/wheelhouse.sh download provider-support
+
+packages/provider-core/test-support/check:
+	bash tools/wheelhouse.sh check provider-support
 
 test/unit/packages:
 	bash tools/container.sh $@
@@ -181,6 +188,9 @@ test/integration/provider-core:
 .PHONY: packages/preparation/lock/stage packages/preparation/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
 .PHONY: test/unit/packages/wheelhouse
+.PHONY: test/integration/wheelhouse/acquisition
+test/integration/wheelhouse/acquisition:
+	bash tools/container.sh $@
 test/unit/packages/wheelhouse:
 	bash tools/container.sh $@
 .PHONY: test/repository/wheelhouse
@@ -350,6 +360,7 @@ help:
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
+		'make test/integration/wheelhouse/acquisition Verify the released shared publisher against cached inputs offline.' \
 		'make test/repository/wheelhouse        Test selected cache paths, Make inputs and frozen build capture offline.' \
 		'WHEELHOUSE accepts absolute or relative paths (from Make working directory); omitted paths prompt, with no default.' \
 		'Acquisition prompts for an omitted NETWORK_INTERFACE; automation must set it explicitly. No interface is selected by default.' \
@@ -357,6 +368,7 @@ help:
 		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
 		'make packages/shared-tool/wheelhouse Acquire the pinned shared wheelhouse tool.' \
 		'make packages/shared-tool/wheelhouse/check Verify the shared tool offline.' \
+		'make packages/provider-core/test-support Acquire the SDK source archive used by consumer tests.' \
 		'make test/unit/prediction-input        Check source coordinate conversion and strict prediction-input admission.' \
 		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \

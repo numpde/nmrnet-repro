@@ -1,0 +1,16 @@
+Shared wheelhouse follow-ups
+
+The deployed image builds pin wheelhouse-tool 0.5.7 for streaming selected
+artifacts. Acquisition pins 0.5.9 for cache-aware selection and source-lock
+verification. Keep both pins until a coordinated image rebuild and admission
+can verify a single release across the deployed consumers. Do not introduce a
+wheel staging copy or redownload cached artifacts as part of that unification.
+
+The abnormal Docker client-disconnection boundary still needs owner-native
+proof of target worker retirement. Preserve resources and evidence when that
+retirement is uncertain.
+
+The broader repository wheelhouse and operator-input lanes have stale fake-Docker capture-worker
+fixtures, including an import of the removed tests.unit.wheel_capture_ports.
+Repair that lane separately; the focused package and acquisition lanes provide
+the verification for the current publisher change.

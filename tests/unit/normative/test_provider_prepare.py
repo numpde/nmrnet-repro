@@ -30,6 +30,7 @@ class ProviderPreparationTests(unittest.TestCase):
         owners = [call[0] for call in calls]
         self.assertLess(owners.index("wheelhouse.sh:download"), owners.index("inference_image.sh:build"))
         self.assertLess(owners.index("wheelhouse.sh:download"), owners.index("container.sh:geometry/image/build"))
+        self.assertLess(owners.index("wheelhouse.sh:download"), owners.index("container.sh:provider/image/build"))
         self.assertNotIn("wheelhouse.sh:download provider-core", owners)
         self.assertNotIn("wheelhouse.sh:download preparation", owners)
         self.assertNotIn("container.sh:delivery/image/build", owners)
