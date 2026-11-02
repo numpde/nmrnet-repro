@@ -573,6 +573,16 @@ esac
         self.assertTrue(any(call[0:5] == ['image', 'inspect', '--format', '{{.Id}}', IMAGE] for call in calls))
         self.assertTrue(any('--shared-image-id' in call and IMAGE in call for call in calls))
 
+    def test_install_can_retain_previous_generations(self):
+        original = self.provider / 'bundles/generation-original'
+        obsolete = self.provider / 'bundles/generation-obsolete'
+        obsolete.mkdir()
+        result = self.run_command('install', changes={'NMRNET_RETAIN_PRIOR_INPUT': '1'})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(original.is_dir())
+        self.assertTrue(obsolete.is_dir())
+        self.assertIn('Retained previous configuration generations.', result.stdout)
+
     def test_identity_probe_create_failure_does_not_remove_an_unadmitted_name(self):
         result = self.run_command('install', changes={'TEST_CREATE_STATUS': '7'})
         self.assertEqual(result.returncode, 7, result.stderr)

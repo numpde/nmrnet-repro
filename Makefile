@@ -222,6 +222,8 @@ override export NMRNET_DOCKER_CONTEXT_INPUT := $(word 1,$(subst |, ,$(NMRNET_DOC
 override export NMRNET_DOCKER_ENDPOINT_INPUT := $(word 2,$(subst |, ,$(NMRNET_DOCKER_SELECTION)))
 endif
 unexport DEPLOYMENT
+unexport RETAIN_PRIOR
+override export NMRNET_RETAIN_PRIOR_INPUT := $(if $(filter command line,$(origin RETAIN_PRIOR)),$(value RETAIN_PRIOR))
 unexport SHARED_SETTINGS SHARED_RUNTIME_IMAGE PROVIDER_TOOLS
 override export NMRNET_PROVIDER_TOOLS_INPUT := $(if $(filter command line,$(origin PROVIDER_TOOLS)),$(value PROVIDER_TOOLS))
 override export NMRNET_SHARED_RUNTIME_IMAGE_INPUT := $(if $(filter command line,$(origin SHARED_RUNTIME_IMAGE)),$(value SHARED_RUNTIME_IMAGE))
@@ -288,8 +290,8 @@ help:
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
 		'make provider/prepare SHARED_RUNTIME_IMAGE=sha256:<id> Acquire dependencies/models and build images; choose cache and interface once.' \
-		'make provider/deployment/install DEPLOYMENT=<name> [SHARED_RUNTIME_IMAGE=sha256:<id>] Read local deployment.toml; require provider stopped; freeze/select, retire only unborrowed generations.' \
-		'make provider/deployment/update DEPLOYMENT=<name> DOCKER_CONTEXT=<local-context> WHEELHOUSE=<shared-pool> Build provider image, drain, install it, and start with the selected context.' \
+		'make provider/deployment/install DEPLOYMENT=<name> [SHARED_RUNTIME_IMAGE=sha256:<id>] [RETAIN_PRIOR=1] Freeze and select inputs while stopped.' \
+		'make provider/deployment/update DEPLOYMENT=<name> DOCKER_CONTEXT=<local-context> WHEELHOUSE=<shared-pool> [RETAIN_PRIOR=1] Build, drain, install and start the provider.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
 		'make provider/deployment/status DEPLOYMENT=<name> Show this provider Docker Compose status.' \
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
@@ -429,8 +431,12 @@ provider/deployment/update:
 	bash tools/provider_update.sh
 
 provider/deployment/up:
+	@if [ -n "$$NMRNET_RETAIN_PRIOR_INPUT" ] && [ "$$NMRNET_RETAIN_PRIOR_INPUT" != 1 ]; then \
+		printf '%s\n' 'Provider start accepts RETAIN_PRIOR=1 to preserve previous images and configuration generations.' >&2; exit 2; fi
 	bash tools/provider_deployment.sh up
-	@if bash tools/image_retirement.sh; then :; else \
+	@if [ "$$NMRNET_RETAIN_PRIOR_INPUT" = 1 ]; then \
+		printf '%s\n' 'Provider start retained previous images and configuration generations.'; \
+	elif bash tools/image_retirement.sh; then :; else \
 		status=$$?; printf 'Deployment is healthy; image retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$$status" >&2; \
 	fi
 

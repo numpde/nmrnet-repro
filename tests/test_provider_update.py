@@ -51,6 +51,19 @@ class ProviderUpdateTests(unittest.TestCase):
         ])
         self.assertIn("Earlier effects may remain", result.stderr)
 
+    def test_update_can_retain_existing_images(self):
+        result = self.run_update(NMRNET_RETAIN_PRIOR_INPUT="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.record.read_text().splitlines(), [
+            "container.sh|provider/image/build|unix:///selected.sock",
+            "provider_deployment.sh|update|unix:///selected.sock",
+        ])
+
+    def test_update_refuses_invalid_retention_before_effects(self):
+        result = self.run_update(NMRNET_RETAIN_PRIOR_INPUT="yes")
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(self.record.exists())
+
     def test_update_requires_an_explicit_safe_deployment_name(self):
         result = self.run_update(NMRNET_DEPLOYMENT_INPUT="../other")
         self.assertEqual(result.returncode, 2)

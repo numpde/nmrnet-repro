@@ -5,6 +5,11 @@ umask 077
 
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 deployment=${NMRNET_DEPLOYMENT_INPUT-}
+retain_prior=${NMRNET_RETAIN_PRIOR_INPUT-}
+[[ -z $retain_prior || $retain_prior == 1 ]] || {
+    printf '%s\n' 'Provider update accepts RETAIN_PRIOR=1 to preserve previous images and configuration generations.' >&2
+    exit 2
+}
 [[ $deployment =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || {
     printf '%s\n' 'Provider update requires an explicit named deployment.' >&2
     exit 2
@@ -28,7 +33,9 @@ run_phase 'build the host-local provider image' bash "$repository_root/tools/con
 run_phase 'drain, install and verify the selected deployment under one lifecycle lock' \
     bash "$repository_root/tools/provider_deployment.sh" update
 
-if bash "$repository_root/tools/image_retirement.sh"; then
+if [[ $retain_prior == 1 ]]; then
+    printf '%s\n' 'Provider update retained previous images and configuration generations.'
+elif bash "$repository_root/tools/image_retirement.sh"; then
     :
 else
     status=$?

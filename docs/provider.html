@@ -285,6 +285,8 @@ verifies every running image ID. It preserves
 the durable volumes and leaves the independently managed shared proxy and outbox
 running. If a phase fails after drain, inspect status and logs; the command does
 not claim rollback.</p>
+<p>Pass <code>RETAIN_PRIOR=1</code> to install, update or up to preserve previous images and configuration generations for a
+separate retirement decision.</p>
 <p>This down command requests provider stop <a href="https://docs.docker.com/reference/cli/docker/container/stop/#stop-container-with-timeout--t---timeout">without an Engine kill deadline</a>.
 The command waits up to 120 seconds for its stop request. If that wait expires,
 is interrupted, or cannot confirm a successful exit, down returns nonzero and

@@ -5,6 +5,9 @@ umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 role=${1-} action=${2-}
 [[ $# == 2 && $role == provider && $action =~ ^(install|update|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
+[[ -z ${NMRNET_RETAIN_PRIOR_INPUT-} || ${NMRNET_RETAIN_PRIOR_INPUT} == 1 ]] || {
+    printf '%s\n' 'Provider deployment accepts RETAIN_PRIOR=1 to preserve previous images and configuration generations.' >&2; exit 2;
+}
 caller_uid=$(id -u) caller_gid=$(id -g)
 [[ $caller_uid != 0 && $caller_gid != 0 ]] || { printf '%s\n' 'Run Compose deployment as its nonroot owner.' >&2; exit 2; }
 refuse() { printf 'Cannot %s %s deployment: %s\n' "$action" "$role" "$1" >&2; return 2; }
@@ -526,7 +529,11 @@ if [[ $action == install || $action == update ]]; then
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
-    retire_generations
+    if [[ ${NMRNET_RETAIN_PRIOR_INPUT-} == 1 ]]; then
+        printf '%s\n' 'Retained previous configuration generations.'
+    else
+        retire_generations
+    fi
     printf 'Ensure the shared proxy and outbox are running through nmr-provider-tools.\n'
     if [[ $action == install ]]; then
         printf 'Then: make provider/deployment/up DEPLOYMENT=%q\n' "$deployment_name"
