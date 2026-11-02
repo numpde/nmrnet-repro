@@ -1,9 +1,15 @@
+FROM scratch AS science_inputs
+COPY wheelhouse/science/ /wheels/
+FROM scratch AS runtime_wheels
+COPY wheelhouse/runtime/ /wheels/
 FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
 ARG NMRNET_REVISION
 ARG INFERENCE_INPUTS
+ARG INFERENCE_WHEELS
 LABEL io.nmrnet-repro.upstream-revision="${NMRNET_REVISION}"
 LABEL io.nmrnet-repro.inference-inputs="${INFERENCE_INPUTS}"
+LABEL io.nmrnet-repro.inference-wheels="${INFERENCE_WHEELS}"
 # Build-time repository tools use the same admission marker as contained runtime lanes.
 ENV NMRNET_IN_CONTAINER=1 \
     PROVIDER_CORE_IN_CONTAINER=1 \
@@ -14,7 +20,7 @@ ENV NMRNET_IN_CONTAINER=1 \
 WORKDIR /opt/build
 COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/build_unicore.py ./tools/
 COPY requirements/inference.lock requirements/unicore-source.json /opt/inference/
-RUN --mount=type=bind,from=wheelhouse,target=/wheelhouse \
+RUN --mount=type=bind,from=science_inputs,source=/wheels,target=/wheelhouse \
     python3 -m pip install --no-index --require-hashes --only-binary=:all: \
         --find-links /wheelhouse --no-cache-dir --disable-pip-version-check \
         -r /opt/inference/inference.lock \
@@ -26,7 +32,7 @@ COPY tools/provider_environment.py tools/baseline_prepare.py tools/container_res
 COPY requirements/provider-core-native-install.lock ./requirements/
 COPY nmrnet_provider/ ./nmrnet_provider/
 COPY nmrnet_inference/ ./nmrnet_inference/
-RUN --mount=type=bind,from=runtime-wheels,target=/runtime-wheels \
+RUN --mount=type=bind,from=runtime_wheels,source=/wheels,target=/runtime-wheels \
     python3 -B -m tools.provider_environment --root /opt/inference --source /opt/build \
         --python /usr/local/bin/python --install-lock /opt/build/requirements/provider-core-native-install.lock --runtime-wheels /runtime-wheels \
     && python3 -I -B -m nmrnet_provider.worker_main --help \

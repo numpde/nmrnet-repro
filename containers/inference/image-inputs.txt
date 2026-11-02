@@ -7,10 +7,13 @@ nmrnet_provider
 requirements/inference.lock
 requirements/provider-core-native-install.lock
 requirements/unicore-source.json
+requirements/wheelhouse-tool-assets.in
 tools/artifacts.py
 tools/baseline_prepare.py
 tools/build_unicore.py
 tools/container_guard.py
 tools/container_resources.py
+tools/git_stream_sources.py
 tools/provider_environment.py
+tools/streamed_build.sh
 tools/wheelhouse.py

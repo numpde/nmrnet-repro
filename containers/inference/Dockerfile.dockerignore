@@ -24,3 +24,5 @@
 !nmrnet_provider/**
 !nmrnet_inference/
 !nmrnet_inference/**
+!wheelhouse/
+!wheelhouse/**

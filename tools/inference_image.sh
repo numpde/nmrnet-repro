@@ -62,6 +62,7 @@ capture_directory=
 temporary_record=
 # Presentation only: EXIT publishes caller-owned failures after quiet cleanup.
 inference_diagnostic=
+pending_diagnostic=
 inference_cancellation_status=0
 caller_cancellation=0
 # As in baseline.sh at d5684a5841d7c8df06a614ab38a8053e5252abad,
@@ -199,7 +200,6 @@ if [[ "$1" == build ]]; then
             exit 2
         fi
         frozen_context="$repository_root/.work/inference/.build.PRINT/context"
-        frozen_wheelhouse="$wheelhouse_directory"
         inputs_digest=CAPTURED_INPUTS_SHA256
     else
         # The parent must learn the path it owns. Quiet setup diagnostics until
@@ -242,7 +242,6 @@ if [[ "$1" == build ]]; then
             exit 2
         fi
         frozen_context="$capture_directory/context"
-        frozen_wheelhouse="$wheelhouse_directory"
         inputs_digest=$(sha256sum -- "$capture_directory/authored")
         inputs_digest="sha256:${inputs_digest%% *}"
     fi
@@ -251,15 +250,35 @@ if [[ "$1" == build ]]; then
             "${engine[@]}" image inspect --format '{{.Id}}' "$python_image"
     fi
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
-        --build-arg "PYTHON_BASE=$python_image" --build-arg "NMRNET_REVISION=$revision"
-        --build-arg "INFERENCE_INPUTS=$inputs_digest"
-        --build-context "wheelhouse=$frozen_wheelhouse"
-        --build-context "runtime-wheels=$wheelhouse_directory"
-        --file "$frozen_context/containers/inference/Dockerfile" "$frozen_context")
+        --build-arg "NMRNET_REVISION=$revision"
+        --build-arg "INFERENCE_INPUTS=$inputs_digest" --file containers/inference/Dockerfile -)
     if "$print_command"; then
         run "${build[@]}"
     else
-        inference_native build "$native_timeout" image-id "${build[@]}"
+        image_input_directory=$capture_directory
+        image=$python_image
+        stream_native=inference_native
+        stream_inventory="$capture_directory/authored"
+        stream_submodule_inventory="$capture_directory/source"
+        stream_submodule_digest=$(sha256sum -- "$stream_submodule_inventory")
+        stream_submodule_digest="sha256:${stream_submodule_digest%% *}"
+        source "$capture_directory/context/tools/streamed_build.sh"
+        prepare_streamed_inputs inference "$inputs_digest" science:inference.lock runtime:provider-core-native-install.lock
+        python3 -I -c '
+import json,sys
+manifest, declaration = sys.argv[1:]
+with open(manifest) as source: entries = json.load(source)
+with open(declaration) as source: pinned = json.load(source)
+entries.append({"directory": "wheelhouse/science", "filename": "Uni-Core-" + pinned["commit"] + ".tar.gz", "sha256": pinned["sha256"]})
+with open(manifest, "w") as target: json.dump(entries, target)
+' "$stream_manifest" "$frozen_context/requirements/unicore-source.json"
+        stream_selection=$(python3 -I -S "$stream_tool" identity --manifest "$stream_manifest")
+        stream_selection="sha256:$stream_selection"
+        build=("${engine[@]}" build --builder default --quiet --network none --pull=false
+            --build-arg "NMRNET_REVISION=$revision"
+            --build-arg "INFERENCE_INPUTS=$inputs_digest" --build-arg "INFERENCE_WHEELS=$stream_selection"
+            --file containers/inference/Dockerfile -)
+        build_streamed_context build "$native_timeout" image-id "${build[@]}"
         image_id=$inference_result
         inference_native 'built image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"
@@ -271,6 +290,12 @@ if [[ "$1" == build ]]; then
             "${engine[@]}" image inspect --format '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}' "$image_id"
         if [[ $inference_result != "$inputs_digest" ]]; then
             printf -v inference_diagnostic '%s\n' 'Cannot record inference image: installed binding/core source identity differs from captured inputs.'
+            exit 2
+        fi
+        inference_native 'inference wheel-input admission' "$image_admission_timeout" image-id \
+            "${engine[@]}" image inspect --format '{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}' "$image_id"
+        if [[ $inference_result != "$stream_selection" ]]; then
+            printf -v inference_diagnostic '%s\n' 'Cannot record inference image: its wheel-selection label differs from the streamed manifest.'
             exit 2
         fi
         temporary_record="$(mktemp "$repository_root/.work/inference/image-id.XXXXXXXX")"
