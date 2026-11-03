@@ -169,7 +169,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             "message": reason, "code": "unsupported_parameter", "param": "tool_choice",
             "request": "PRIVATE_RESPONSE_DUMP",
         }}).encode())
-        transport = SimpleNamespace(exchange=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True)
+        transport = SimpleNamespace(exchange_decoded=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True)
         endpoint = ChatEndpoint(
             ChatEndpointSpec(configuration_id="fixture", model="fixture", url="https://example.invalid/chat",
                              api_key=key, reasoning_effort=None),
