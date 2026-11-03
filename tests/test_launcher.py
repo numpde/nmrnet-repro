@@ -3,9 +3,11 @@
 
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -222,6 +224,7 @@ class LauncherTests(unittest.TestCase):
     def test_repository_print_has_no_record_scaffold_or_engine_effects(self):
         with tempfile.TemporaryDirectory() as temporary:
             checkout, environment = self.checker_checkout(temporary)
+            before = set((checkout / ".work").iterdir())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "test/repository"],
                 env=environment,
@@ -232,7 +235,40 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertIn("CHECKER_IMAGE_ID_FROM_RECORD", shlex.split(result.stdout))
             self.assertFalse((checkout / "engine-log").exists())
-            self.assertEqual([checkout / ".work/checker"], list((checkout / ".work").iterdir()))
+            self.assertEqual(before, set((checkout / ".work").iterdir()))
+
+    def test_repository_mapping_cancellation_waits_for_owner_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout, environment = self.checker_checkout(temporary)
+            (checkout / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
+            ready = checkout / "mapping-ready"
+            settled = checkout / "mapping-settled"
+            (checkout / "tools/docker.sh").write_text('''#!/bin/bash
+trap 'sleep 3; : > "$MAPPING_SETTLED"; exit 143' TERM
+: > "$MAPPING_READY"
+while :; do sleep 0.1; done
+''')
+            environment.update(MAPPING_READY=str(ready), MAPPING_SETTLED=str(settled))
+            process = subprocess.Popen(["bash", str(checkout / "tools/container.sh"), "test/repository/documentation"],
+                                       env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True, start_new_session=True)
+            try:
+                deadline = time.monotonic() + 8
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(ready.exists())
+                process.send_signal(signal.SIGTERM)
+                time.sleep(2.3)
+                self.assertIsNone(process.poll(), "mapping owner was not allowed to finish cleanup")
+                self.assertTrue(list((checkout / ".work").glob("repository-check-inputs.*")))
+                _stdout, stderr = process.communicate(timeout=8)
+                self.assertEqual(143, process.returncode, stderr)
+                self.assertTrue(settled.exists())
+                self.assertFalse(list((checkout / ".work").glob("repository-check-inputs.*")))
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.communicate()
 
     def test_repository_rejects_nonexact_image_records_before_engine_access(self):
         image = b"sha256:" + b"a" * 64

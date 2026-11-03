@@ -114,7 +114,7 @@ class LauncherFixture:
         for directory in ("tests", "repository_checks"):
             (root / directory).mkdir()
         (root / "bin").mkdir()
-        for name, source in (("docker", "docker.py"), ("git", "git.sh")):
+        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh")):
             (root / "bin" / name).symlink_to(FIXTURES / source)
         shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
         (root / ".work/wheelhouse").mkdir(parents=True)

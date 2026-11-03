@@ -1,9 +1,7 @@
 Shared wheelhouse follow-ups
 
-Future image builds and acquisition pin wheelhouse-tool 0.5.14. The currently
-deployed images were built using the earlier 0.5.7 stream tool; their input
-labels remain tied to those actual builds. Rebuild and admit images through the
-normal lifecycle when a deployment update is needed.
+Image builds and acquisition pin wheelhouse-tool 0.5.14. Image input labels
+remain tied to the bytes actually admitted at build time.
 When a cold wheel selection fails, the conflict check hashes compatible cached
 candidates again, including during the exclusive peer-winner recheck. Large
 partial pools can therefore delay readers during local verification, though the
@@ -19,10 +17,15 @@ The abnormal Docker client-disconnection boundary still needs owner-native
 proof of target worker retirement. Preserve resources and evidence when that
 retirement is uncertain.
 
-The broader repository wheelhouse and operator-input lanes have stale fake-Docker capture-worker
-fixtures, including an import of the removed tests.unit.wheel_capture_ports.
-Repair that lane separately; the focused package and acquisition lanes provide
-the verification for the current publisher change.
+The operator-input lane remains incomplete after removing its retired fake
+wheel-capture branch. A focused run has three failing cases and one error:
+two wheelhouse cases lack the acquirer input in the fixture; the checker case
+models host UID 1000 but its temporary directories are owned by mapped UID 0;
+the interactive case exits before the interface prompt and its PTY reports
+EIO, with the earlier cause not yet established. Do not fake filesystem
+ownership or relax the production owner check to make these fixtures pass.
+Other older tests still expect removed wheel-capture receipts or invoke the
+retired private docker.sh run operation; reconcile them with the shared owner.
 
 The older full checker launcher fixture predates streamed contexts and mapped
 identities. Its complete cancellation and cleanup suite needs reconciliation;

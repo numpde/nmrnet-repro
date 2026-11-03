@@ -91,3 +91,22 @@ printf '%s\n' "$module_head" > "$destination/modules/nmrnet/HEAD"
 printf '%s\n' '[core]' 'repositoryformatversion = 0' 'bare = false' 'worktree = ../../../NMRNetplusplus' \
     > "$destination/modules/nmrnet/config"
 chmod 600 -- "$destination/HEAD" "$destination/config" "$destination/modules/nmrnet/HEAD" "$destination/modules/nmrnet/config"
+# Project only index entries, never the caller's Git configuration or index extensions.
+read_git "$parent_git" --work-tree="$repository" ls-files --stage -z > "$destination/index-stage" \
+    || fail 'tracked index entries could not be read.'
+env -i PATH=/usr/bin:/bin HOME=/nonexistent LC_ALL=C \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_ALLOW_PROTOCOL='' GIT_TERMINAL_PROMPT=0 GIT_INDEX_FILE="$destination/index" \
+    "$git_binary" --git-dir="$parent_git" --work-tree="$repository" \
+    -c core.hooksPath=/dev/null -c core.fsmonitor=false update-index -z --index-info \
+    < "$destination/index-stage" 2>/dev/null || fail 'tracked index entries could not be projected.'
+env -i PATH=/usr/bin:/bin HOME=/nonexistent LC_ALL=C \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_ALLOW_PROTOCOL='' GIT_TERMINAL_PROMPT=0 GIT_INDEX_FILE="$destination/index" \
+    "$git_binary" --git-dir="$parent_git" --work-tree="$repository" \
+    -c core.hooksPath=/dev/null -c core.fsmonitor=false ls-files --stage -z \
+    > "$destination/index-check" 2>/dev/null || fail 'projected index could not be checked.'
+cmp -s -- "$destination/index-stage" "$destination/index-check" \
+    || fail 'projected index differs from the tracked entries.'
+rm -- "$destination/index-stage" "$destination/index-check"
+chmod 600 -- "$destination/index"

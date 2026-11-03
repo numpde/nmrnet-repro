@@ -94,7 +94,7 @@ class GitInputTests(unittest.TestCase):
         result = self.prepare()
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("", result.stdout)
-        self.assertEqual({path.name for path in self.destination.iterdir()}, {"HEAD", "config", "objects", "refs", "modules"})
+        self.assertEqual({path.name for path in self.destination.iterdir()}, {"HEAD", "config", "index", "objects", "refs", "modules"})
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o700)
         self.assertNotIn("private-config-marker", (self.destination / "config").read_text())
         self.assertEqual([], list((self.destination / "refs").iterdir()))
@@ -114,6 +114,7 @@ class GitInputTests(unittest.TestCase):
         parent_head = self.git(self.repository, "rev-parse", "HEAD").strip()
         upstream_head = self.git(self.upstream, "rev-parse", "HEAD").strip()
         self.assertEqual(self.git(workspace, "rev-parse", "HEAD").strip(), parent_head)
+        self.assertEqual(self.git(workspace, "ls-files", "--stage"), self.git(self.repository, "ls-files", "--stage"))
         self.assertEqual(self.git(projected_upstream, "rev-parse", "HEAD").strip(), upstream_head)
         self.assertEqual(
             self.git(workspace, "ls-tree", "HEAD", "--", "NMRNetplusplus").strip(),
@@ -123,6 +124,22 @@ class GitInputTests(unittest.TestCase):
             "VALUE = 'original producer'\n", self.git(workspace, "cat-file", "blob", f"{self.prior}:tools/producer.py")
         )
         self.assertEqual("VALUE = 1\n", self.git(projected_upstream, "cat-file", "blob", "HEAD:uninmr/worker.py"))
+
+    def test_projection_keeps_staged_entries_including_ignored_paths(self):
+        (self.repository / ".gitignore").write_text("*.md\n")
+        (self.repository / "tracked.md").write_text("tracked\n")
+        (self.repository / "staged.txt").write_text("staged\n")
+        self.git(self.repository, "add", "-f", "tracked.md", "staged.txt", ".gitignore")
+        self.git(self.repository, "rm", "--cached", "tools/producer.py")
+        result = self.prepare()
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        environment = self.environment | {"GIT_INDEX_FILE": str(self.destination / "index")}
+        projected = subprocess.run([self.git_binary, "-C", str(self.repository), "ls-files", "--stage"],
+                                   env=environment, text=True, capture_output=True, check=True).stdout
+        self.assertEqual(self.git(self.repository, "ls-files", "--stage"), projected)
+        self.assertIn("tracked.md", projected)
+        self.assertIn("staged.txt", projected)
+        self.assertNotIn("tools/producer.py", projected)
 
     def test_wrong_gitlink_rejects_before_metadata_creation(self):
         (self.upstream / "uninmr/worker.py").write_text("VALUE = 2\n")

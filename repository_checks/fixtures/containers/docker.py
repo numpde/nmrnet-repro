@@ -15,8 +15,6 @@ import stat
 import sys
 from pathlib import Path
 
-from tests.unit.wheel_capture_ports import run_wheel_capture, wheel_capture_mounts
-
 from repository_checks.fixtures.containers.fixture import read_engine_calls, record_engine_call
 
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
@@ -221,31 +219,6 @@ elif command == "create":
     # silent-defaults: allow-contract -- A ready bind selects the modeled proxy role; the supported request without it is a worker; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_owned_empty_registry_preserves_two_container_lifetimes_and_native_statuses
     role = "proxy" if proxy else "worker"
     identifier = os.environ[f"NMRNET_FAKE_{role.upper()}_CID"]
-    python_index = arguments.index("python3") if "python3" in arguments else len(arguments)
-    capture_argv = arguments[python_index:]
-    wheel_capture = capture_argv[:5] == ["python3", "-B", "-m", "tools.wheelhouse", "capture"]
-    capture_path = log.parent / "worker-capture-arguments.json"
-    capture_payload = None
-    if wheel_capture:
-        mounts = wheel_capture_mounts(arguments)
-        if not {"/workspace/tools/wheelhouse.py", "/input/requirements.lock", "/wheelhouse", "/capture"} <= set(mounts):
-            sys.stderr.write("unexpected fake docker invocation: wheel capture mounts are incomplete\n")
-            raise SystemExit(97)
-        if (
-            role != "worker"
-            or re.fullmatch(r"[0-9a-f]{64}", identifier) is None
-            or identifier in identities
-            or capture_path.exists()
-            or capture_path.is_symlink()
-        ):
-            sys.stderr.write("unexpected fake docker invocation: wheel capture identity is not newly owned\n")
-            raise SystemExit(97)
-        # Each fake engine verb is a new process; keep only this exact bounded
-        # create argv so the matching attached start can execute the selector.
-        capture_payload = json.dumps({"container_id": identifier, "arguments": arguments}, separators=(",", ":")).encode() + b"\n"
-        if len(capture_payload) >= 4096:
-            sys.stderr.write("unexpected fake docker invocation: wheel capture argv exceeds its fixture bound\n")
-            raise SystemExit(97)
     receipt = Path(arguments[arguments.index("--cidfile") + 1])
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
         if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {
@@ -272,9 +245,6 @@ elif command == "create":
         receipt.write_bytes(identifier.encode("ascii") + b"\0")
     else:
         receipt.write_text(identifier + "\n")
-    if capture_payload is not None:
-        capture_path.write_bytes(capture_payload)
-        capture_path.chmod(0o600)
     (log.parent / (role + "-cid-path")).write_text(str(receipt))
     if re.fullmatch("[0-9a-f]{64}", identifier):
         # silent-defaults: allow-contract -- Each admitted identity retains its modeled create role for subsequent start matching; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_owned_empty_registry_preserves_two_container_lifetimes_and_native_statuses
@@ -322,22 +292,6 @@ elif command == "start":
         if os.environ.get("NMRNET_FAKE_PROXY_NO_READY") != "1":
             (path / "port").write_text("12345\n")
     else:
-        capture_path = log.parent / "worker-capture-arguments.json"
-        if capture_path.exists() or capture_path.is_symlink():
-            if capture_path.is_symlink() or not capture_path.is_file() or capture_path.stat().st_size >= 4096:
-                sys.stderr.write("unexpected fake docker invocation: wheel capture argv receipt is invalid\n")
-                raise SystemExit(97)
-            capture = json.loads(capture_path.read_bytes())
-            if (
-                set(capture) != {"container_id", "arguments"}
-                or capture["container_id"] != arguments[-1]
-                or not isinstance(capture["arguments"], list)
-            ):
-                sys.stderr.write("unexpected fake docker invocation: wheel capture argv belongs to another worker\n")
-                raise SystemExit(97)
-            if os.environ.get("NMRNET_FAKE_VERIFY_WHEELHOUSE") == "1":
-                raise SystemExit(run_wheel_capture(capture["arguments"]))
-            raise SystemExit(int(os.environ["NMRNET_FAKE_ENGINE_STATUS"]))
         if "NMRNET_FAKE_WORKER_STDOUT" in os.environ:
             sys.stdout.write(os.environ["NMRNET_FAKE_WORKER_STDOUT"])
             sys.stdout.flush()
@@ -400,11 +354,6 @@ elif command == "rm":
     if os.environ["NMRNET_FAKE_REMOVE_STATUS"] == "0":
         identities.pop(arguments[-1])
         state.write_text(json.dumps(identities))
-        capture_path = log.parent / "worker-capture-arguments.json"
-        if capture_path.is_file() and not capture_path.is_symlink():
-            capture = json.loads(capture_path.read_bytes())
-            if capture.get("container_id") == arguments[-1]:
-                capture_path.unlink()
         stopped = log.parent / "worker-stopped-id"
         if stopped.is_file() and stopped.read_text() == arguments[-1] + "\n":
             stopped.unlink()

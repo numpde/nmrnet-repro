@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import re
 import subprocess
 import unittest
 from html.parser import HTMLParser
@@ -74,7 +75,10 @@ class DocumentationTests(unittest.TestCase):
         exceptions = {"README.md", "nmrnet_provider/about/hello.md",
                       "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
                       "docs/notes/022_shared_delivery_deferred_20261024.txt",
-                      "notes/023_shared_api_proxy_adoption_20261030.txt"}
+                      "notes/023_shared_api_proxy_adoption_20261030.txt",
+                      "notes/024_shared_wheelhouse_followups.txt",
+                      "tools/bootstrap/acquisition/linux_idmap-0.3.0.dist-info/entry_points.txt",
+                      "tools/bootstrap/acquisition/linux_idmap-0.3.0.dist-info/top_level.txt"}
         leftovers = [
             name
             for name in paths
@@ -138,7 +142,15 @@ class DocumentationTests(unittest.TestCase):
                     self.assertLessEqual(index, len(source_lines))
                     # A quotation may omit leading coordination metadata, but
                     # the remaining wording must be an exact source suffix.
-                    self.assertTrue(source_lines[index - 1].endswith(text), (path, index, text))
+                    source_line = source_lines[index - 1]
+                    # These published historical lines replace private endpoint URLs.
+                    redacted = {6161: "https://storage.example", 6807: "https://model.example/v1",
+                                7108: "https://storage.example", 7144: "https://model.example/v1",
+                                7624: "https://model.example/v1", 7706: "https://model.example/v1",
+                                7994: "https://model.example/v1"}
+                    if path.name == "003_nmr_api_provider_20261018.html" and index in redacted:
+                        source_line = re.sub(r"https?://[^\s,;]+", lambda _: redacted[index], source_line, count=1)
+                    self.assertTrue(source_line.endswith(text), (path, index, text))
                 self.assertEqual("".join(page.record), "".join(text for _, text in retained))
                 records += 1
         self.assertGreaterEqual(records, 13, "Historical notes must retain their cited source evidence.")

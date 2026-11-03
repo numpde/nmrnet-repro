@@ -146,7 +146,7 @@ cleanup_launcher() {
                 printf -v pending_diagnostic '%sCannot confirm checker Git scaffold removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$check_input_directory/git" "$removal_status"
                 if [[ $status == 0 ]]; then status=$removal_status; fi
             fi
-            if { rm -f -- "$check_input_directory/root-entries" && rmdir -- "$check_input_directory"; } 2>/dev/null; then :; else
+            if { rm -f -- "$check_input_directory/root-entries" "$check_input_directory/mapped-owner" && rmdir -- "$check_input_directory"; } 2>/dev/null; then :; else
                 removal_status=$?
                 printf -v pending_diagnostic '%sCannot confirm checker source inventory removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$check_input_directory" "$removal_status"
                 if [[ $status == 0 ]]; then status=$removal_status; fi
@@ -525,6 +525,7 @@ case "$1" in
                     command+=(tests.test_image_retirement tests.test_provider_deployment_launcher tests.test_provider_update
                         tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare
                         tests.test_launcher.LauncherTests.test_checker_consumer_holds_image_lease_through_engine_run
+                        tests.test_launcher.LauncherTests.test_repository_mapping_cancellation_waits_for_owner_before_cleanup
                         tests.test_acquisition_run
                         tests.test_checker_launcher.CheckerLauncherTests.test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture
                         tests.test_checker_launcher.CheckerLauncherTests.test_build_failure_and_wrong_observed_id_preserve_predecessor_and_retire_capture
@@ -781,6 +782,27 @@ case "$1" in
                         exit "$preparation_status"
                     fi
                 fi
+                if "$print_command"; then
+                    checker_uid=MAPPED_UID checker_gid=MAPPED_GID
+                else
+                    if controller_native 'repository checker owner mapping' untimed stdio \
+                        bash "$repository_root/tools/docker.sh" --pool-owner "$caller_uid:$caller_gid" map-owner "$image" \
+                        > "$check_input_directory/mapped-owner"; then mapping_status=0; else mapping_status=$?; fi
+                    pending_diagnostic+=$inference_diagnostic
+                    if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+                    if ! "$inference_retirement_confirmed" || [[ $mapping_status != 0 ]]; then
+                        [[ $mapping_status != 0 ]] || mapping_status=1
+                        exit "$mapping_status"
+                    fi
+                    IFS=: read -r checker_uid checker_gid < "$check_input_directory/mapped-owner"
+                    [[ $checker_uid =~ ^[0-9]+$ && $checker_gid =~ ^[0-9]+$ ]] \
+                        && cmp -s "$check_input_directory/mapped-owner" <(printf '%s:%s\n' "$checker_uid" "$checker_gid") \
+                        || { printf '%s\n' 'Cannot run repository checks: mapped owner output is invalid.' >&2; exit 2; }
+                    rm -- "$check_input_directory/mapped-owner"
+                fi
+                for index in "${!command[@]}"; do
+                    if [[ ${command[index]} == --user ]]; then command[index+1]="$checker_uid:$checker_gid"; break; fi
+                done
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
                     --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
@@ -788,7 +810,7 @@ case "$1" in
                     --mount "type=bind,src=$check_input_directory/git,dst=/workspace/.git,readonly"
                     --mount "type=bind,src=$repository_root/.git/objects,dst=/workspace/.git/objects,readonly"
                     --mount "type=bind,src=$repository_root/.git/modules/nmrnet/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
-                    --env "NMRNET_EXPECTED_UID=$caller_uid" --env "NMRNET_EXPECTED_GID=$caller_gid")
+                    --env "NMRNET_EXPECTED_UID=$checker_uid" --env "NMRNET_EXPECTED_GID=$checker_gid")
                 for source_input in tests containers requirements artifacts notes docs NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
                         if [[ -L "$repository_root/$source_input" || ( ! -f "$repository_root/$source_input" && ! -d "$repository_root/$source_input" ) ]]; then

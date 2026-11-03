@@ -235,8 +235,8 @@ class ConventionDetectionTests(unittest.TestCase):
                 self.assertEqual("never", arguments[arguments.index("--pull") + 1])
                 self.assertIn("--read-only", arguments)
                 self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
-                self.assertIn(f"NMRNET_EXPECTED_UID={os.getuid()}", arguments)
-                self.assertIn(f"NMRNET_EXPECTED_GID={os.getgid()}", arguments)
+                self.assertIn("NMRNET_EXPECTED_UID=MAPPED_UID", arguments)
+                self.assertIn("NMRNET_EXPECTED_GID=MAPPED_GID", arguments)
                 # Printing grants no writable acquisition/runtime state and
                 # creates no metadata directory. Only its later file is read.
                 self.assertFalse((root / ".work").exists())
