@@ -9,6 +9,12 @@ candidates again, including during the exclusive peer-winner recheck. Large
 partial pools can therefore delay readers during local verification, though the
 exclusive lease is released before the shared publisher downloads artifacts.
 
+The download launcher selects NETWORK_INTERFACE before its worker checks an
+already-complete pool. The separate check target verifies a warm pool offline,
+but its local-client retirement proof alone does not establish that an engine
+worker has retired after a disconnection. A route-free download preflight needs
+an owned worker and confirmed retirement before any network fallback.
+
 The abnormal Docker client-disconnection boundary still needs owner-native
 proof of target worker retirement. Preserve resources and evidence when that
 retirement is uncertain.
