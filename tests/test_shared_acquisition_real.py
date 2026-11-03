@@ -17,7 +17,7 @@ class SharedAcquisitionIntegrationTests(unittest.TestCase):
         def select(*args, **kwargs):
             nonlocal calls
             calls += 1
-            if calls == 1:
+            if calls <= 2:
                 raise subprocess.CalledProcessError(1, "simulate incomplete selection")
             return real_select(*args, **kwargs)
 
@@ -26,7 +26,7 @@ class SharedAcquisitionIntegrationTests(unittest.TestCase):
                 [Path("/input/provider-core-native-install.lock")], pool,
                 Path("/input/provider-core-assets.in"), Path("/input/wheelhouse-acquirer-assets.in"),
             )
-        self.assertEqual(calls, 2)
+        self.assertEqual(calls, 3)
 
 
 if __name__ == "__main__":

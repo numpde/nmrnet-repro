@@ -17,8 +17,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
+from pip._vendor.packaging.tags import sys_tags
+from pip._vendor.packaging.version import Version
 
-from tools.wheelhouse import (prepare_core_assets, prepare_source, requirements, select_wheels,
+from tools.wheelhouse import (digest, prepare_core_assets, prepare_source, requirements, select_wheels,
                               source_cache_file, source_identity, verified_source)
 
 
@@ -59,6 +61,48 @@ def scientific_source_present(declaration, pool):
         return False
     verified_source(source, identity)
     return True
+
+
+def refuse_conflicting_wheels(lock, pool):
+    """Refuse a corrupt compatible cache entry when no valid alternative exists."""
+    expected = {(name, Version(version)): hashes for (name, version), hashes in requirements(lock).items()}
+    tags = set(sys_tags())
+    valid = set()
+    conflicts = {}
+    for path in pool.glob("*.whl"):
+        try:
+            name, version, _, wheel_tags = parse_wheel_filename(path.name)
+        except InvalidWheelFilename:
+            continue
+        identity = (name, version)
+        if identity not in expected or not tags.intersection(wheel_tags):
+            continue
+        try:
+            checksum = digest(path)
+        except (OSError, ValueError):
+            conflicts[identity] = path.name
+            continue
+        if checksum in expected[identity]:
+            valid.add(identity)
+        else:
+            conflicts[identity] = path.name
+    for identity, name in conflicts.items():
+        if identity not in valid:
+            raise ValueError(f"Cannot acquire wheels: cached wheel {name!r} is unreadable or differs from its lock; existing file preserved.")
+
+
+def missing_wheel_locks(locks, pool, descriptor):
+    missing = []
+    for lock in locks:
+        try:
+            select_wheels(lock, pool, lock_fd=descriptor)
+        except subprocess.CalledProcessError as error:
+            # Pip reports a caught KeyboardInterrupt as status 2.
+            if error.returncode < 0 or error.returncode in (2, 130, 137, 143):
+                raise SystemExit(128 - error.returncode if error.returncode < 0 else error.returncode) from error
+            refuse_conflicting_wheels(lock, pool)
+            missing.append(lock)
+    return missing
 
 
 def direct_wheels(paths, packages):
@@ -112,34 +156,31 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
             source = snapshots[2 + len(declarations)]
         if stream_assets is not None:
             stream_assets = snapshots[-1]
+        with pool_lock(pool, exclusive=False) as descriptor:
+            missing = missing_wheel_locks(frozen, pool, descriptor)
         if source is not None or stream_assets is not None:
             with pool_lock(pool, exclusive=False):
                 source_ready = source is None or scientific_source_present(source, pool)
                 stream_ready = stream_assets is None or shared_asset_present(stream_assets, pool)
             if not source_ready or not stream_ready:
-                with pool_lock(pool, exclusive=True):
+                with pool_lock(pool, exclusive=True) as descriptor:
+                    missing = missing_wheel_locks(missing, pool, descriptor)
                     source_ready = source is None or scientific_source_present(source, pool)
                     stream_ready = stream_assets is None or shared_asset_present(stream_assets, pool)
                     if not stream_ready:
                         prepare_core_assets(stream_assets, pool, download=True)
                     if not source_ready:
                         prepare_source(source, pool)
-        missing = []
-        with pool_lock(pool, exclusive=False) as descriptor:
-            for lock in frozen:
-                try:
-                    select_wheels(lock, pool, lock_fd=descriptor)
-                except subprocess.CalledProcessError as error:
-                    # Pip reports a caught KeyboardInterrupt as status 2.
-                    if error.returncode < 0 or error.returncode in (2, 130, 137, 143):
-                        raise SystemExit(128 - error.returncode if error.returncode < 0 else error.returncode) from error
-                    missing.append(lock)
         if not missing:
             print("All locked wheels are already available in WHEELHOUSE; no download is needed.", flush=True)
             return
-        jobs = [(lock, direct_wheels([assets, *declarations], {name for name, _version in requirements(lock)}))
-                for lock in missing]
-        with pool_lock(pool, exclusive=True):
+        with pool_lock(pool, exclusive=True) as descriptor:
+            still_missing = missing_wheel_locks(missing, pool, descriptor)
+            if not still_missing:
+                print("All locked wheels are already available in WHEELHOUSE; no download is needed.", flush=True)
+                return
+            jobs = [(lock, direct_wheels([assets, *declarations], {name for name, _version in requirements(lock)}))
+                    for lock in still_missing]
             prepare_core_assets(tool_assets, pool, download=True)
         urls = [line.strip() for line in tool_assets.read_text().splitlines() if line.strip() and not line.startswith("#")]
         if len(urls) != 1:

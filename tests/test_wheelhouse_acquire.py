@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tools import wheelhouse_acquire
+from tests.unit.wheel_pool_fixtures import locked, wheel
 
 
 class SharedAcquisitionTests(unittest.TestCase):
@@ -113,7 +114,8 @@ class SharedAcquisitionTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         with (patch.object(wheelhouse_acquire, "prepare_core_assets"),
-              patch.object(wheelhouse_acquire, "select_wheels", side_effect=[subprocess.CalledProcessError(1, "pip"), {}]),
+              patch.object(wheelhouse_acquire, "select_wheels", side_effect=[subprocess.CalledProcessError(1, "pip"),
+                                                                            subprocess.CalledProcessError(1, "pip"), {}]),
               patch.object(wheelhouse_acquire.subprocess, "run", side_effect=run)):
             wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
                                        declarations=[self.declaration])
@@ -124,6 +126,61 @@ class SharedAcquisitionTests(unittest.TestCase):
         self.assertIn("acquire", calls[1])
         self.assertIn("--source-lock", calls[1])
         self.assertEqual(calls[1][-2:], ["--pool", str(self.pool)])
+
+    def test_peer_winner_is_rechecked_before_tool_bootstrap(self):
+        with (patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
+              patch.object(wheelhouse_acquire, "select_wheels", side_effect=[subprocess.CalledProcessError(1, "pip"), {}]),
+              patch.object(wheelhouse_acquire.subprocess, "run") as run):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
+                                       declarations=[self.declaration])
+        assets.assert_not_called()
+        run.assert_not_called()
+
+    def test_conflicting_cached_wheel_stops_before_network(self):
+        cached = wheel(self.pool, "pool-alpha", "1.0")
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
+        cached.write_bytes(b"conflicting cached bytes")
+        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare:
+            with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
+                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets,
+                                           stream_assets=self.tool_assets)
+        prepare.assert_not_called()
+        self.assertEqual(b"conflicting cached bytes", cached.read_bytes())
+
+    def test_new_conflict_is_rechecked_before_missing_stream_download(self):
+        cached = wheel(self.pool, "pool-alpha", "1.0")
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
+        cached.unlink()
+        calls = 0
+        def select(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                cached.write_bytes(b"conflicting cached bytes")
+            raise subprocess.CalledProcessError(1, "pip")
+        with (patch.object(wheelhouse_acquire, "select_wheels", side_effect=select),
+              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
+            with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
+                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets,
+                                           stream_assets=self.tool_assets)
+        prepare.assert_not_called()
+        self.assertEqual(2, calls)
+
+    def test_unused_conflicting_wheel_does_not_reject_valid_alternative(self):
+        good = wheel(self.pool, "pool-alpha", "1.0")
+        alternate = self.pool / "pool_alpha-1.0-py2.py3-none-any.whl"
+        alternate.symlink_to(good)
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [good])])
+        wheelhouse_acquire.refuse_conflicting_wheels(lock, self.pool)
+
+    def test_interrupted_recheck_does_not_bootstrap_tool(self):
+        with (patch.object(wheelhouse_acquire, "select_wheels", side_effect=[
+                subprocess.CalledProcessError(1, "pip"), subprocess.CalledProcessError(2, "pip")]),
+              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
+            with self.assertRaises(SystemExit) as interrupted:
+                wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets)
+        self.assertEqual(2, interrupted.exception.code)
+        prepare.assert_not_called()
 
     def test_invalid_direct_source_does_not_fall_back_to_index(self):
         self.declaration.write_text("torch @ https://example.invalid/torch.whl\n")
