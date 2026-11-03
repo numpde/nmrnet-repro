@@ -135,7 +135,6 @@ if [[ "$1" == download ]]; then
         if [[ -z ${interface-} ]]; then select_acquisition_interface; fi
         bash "$repository_root/tools/docker.sh" require-images "$image"
     fi
-    if ! "$print_command" && ! "$shared_acquisition"; then lock_wheelhouse exclusive; fi
     command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then command+=(--print); fi
     if "$print_command"; then command+=(--success-note "$next_actions"); else command+=(--success-note ''); fi
@@ -248,7 +247,6 @@ if [[ "$1" == download ]]; then
         exit 1
     fi
     if [[ $acquisition_status != 0 ]]; then exit "$acquisition_status"; fi
-    if ! "$shared_acquisition"; then exec {wheelhouse_lock_fd}<&-; fi
     if controller_native 'wheelhouse offline recheck' untimed stdio "${probe[@]}"; then probe_status=0; else probe_status=$?; fi
     if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || -n $inference_diagnostic ]]; then
         printf '%s' "$inference_diagnostic" >&2

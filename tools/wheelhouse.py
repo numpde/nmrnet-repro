@@ -466,7 +466,15 @@ def main():
                 if args.assets is None or len(locks) != 1:
                     parser.error("provider-core acquisition requires --assets and one released installation lock")
             if args.assets is not None:
-                prepare_core_assets(args.assets, args.pool, download=True)
+                if args.profile == "shared-tool":
+                    descriptor = os.open(args.pool, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        fcntl.flock(descriptor, fcntl.LOCK_EX)
+                        prepare_core_assets(args.assets, args.pool, download=True)
+                    finally:
+                        os.close(descriptor)
+                else:
+                    prepare_core_assets(args.assets, args.pool, download=True)
             for index, lock in enumerate(locks):
                 if any(name == "provider-core" for name, _version in requirements(lock)):
                     if args.assets is None:
@@ -481,7 +489,15 @@ def main():
                 prepare_source(source_path, args.pool)
         else:
             if args.assets is not None:
-                prepare_core_assets(args.assets, args.pool, download=False)
+                if args.profile == "shared-tool":
+                    descriptor = os.open(args.pool, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        fcntl.flock(descriptor, fcntl.LOCK_SH)
+                        prepare_core_assets(args.assets, args.pool, download=False)
+                    finally:
+                        os.close(descriptor)
+                else:
+                    prepare_core_assets(args.assets, args.pool, download=False)
             files = set()
             for lock in locks:
                 files.update(select_wheels(lock, args.pool)["files"])

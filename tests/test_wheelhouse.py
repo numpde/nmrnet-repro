@@ -1,5 +1,6 @@
 """Offline checks for pinned source bytes and publication durability."""
 
+import fcntl
 import hashlib
 import io
 import json
@@ -17,6 +18,44 @@ from tools import wheelhouse
 
 
 class WheelhouseTests(unittest.TestCase):
+    def test_shared_tool_writer_holds_pool_lock(self):
+        assets = self.root / "tool-assets.in"
+        assets.write_text("pinned release input")
+        arguments = ["wheelhouse", "download", "--profile", "shared-tool", "--assets", str(assets),
+                     "--pool", str(self.pool)]
+
+        def assert_pool_locked(*_args, **_kwargs):
+            descriptor = os.open(self.pool, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(descriptor)
+
+        with (patch.object(wheelhouse.sys, "argv", arguments),
+              patch.object(wheelhouse, "prepare_core_assets", side_effect=assert_pool_locked)):
+            wheelhouse.main()
+
+    def test_shared_tool_reader_holds_shared_pool_lock(self):
+        assets = self.root / "tool-assets.in"
+        assets.write_text("pinned release input")
+        arguments = ["wheelhouse", "check", "--profile", "shared-tool", "--assets", str(assets),
+                     "--pool", str(self.pool)]
+
+        def assert_pool_read_locked(*_args, **_kwargs):
+            descriptor = os.open(self.pool, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(descriptor)
+
+        with (patch.object(wheelhouse.sys, "argv", arguments),
+              patch.object(wheelhouse, "prepare_core_assets", side_effect=assert_pool_read_locked)):
+            wheelhouse.main()
+
     def test_shared_tool_profile_checks_only_its_release_assets(self):
         assets = self.root / "tool-assets.in"
         assets.write_text("pinned release input")
