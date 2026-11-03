@@ -1,6 +1,6 @@
 Shared wheelhouse follow-ups
 
-Future image builds and acquisition pin wheelhouse-tool 0.5.11. The currently
+Future image builds and acquisition pin wheelhouse-tool 0.5.12. The currently
 deployed images were built using the earlier 0.5.7 stream tool; their input
 labels remain tied to those actual builds. Rebuild and admit images through the
 normal lifecycle when a deployment update is needed.
