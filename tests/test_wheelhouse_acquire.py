@@ -2,10 +2,13 @@
 
 import fcntl
 import hashlib
+import multiprocessing
+import os
 import subprocess
 import tempfile
 import threading
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -135,6 +138,48 @@ class SharedAcquisitionTests(unittest.TestCase):
                                        declarations=[self.declaration])
         assets.assert_not_called()
         run.assert_not_called()
+
+    def test_real_peer_publishes_before_locked_recheck_without_network(self):
+        source = self.root / "source"
+        source.mkdir()
+        candidate = wheel(source, "pool-alpha", "1.0")
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [candidate])])
+        context = multiprocessing.get_context("fork")
+        start, published = context.Event(), context.Event()
+
+        def publish():
+            if not start.wait(10):
+                raise RuntimeError("peer was not released")
+            with wheelhouse_acquire.pool_lock(self.pool, exclusive=True):
+                os.link(candidate, self.pool / candidate.name)
+            published.set()
+        peer = context.Process(target=publish)
+        peer.start()
+        real_lock = wheelhouse_acquire.pool_lock
+        first = True
+
+        @contextmanager
+        def coordinated(pool, exclusive):
+            nonlocal first
+            with real_lock(pool, exclusive) as descriptor:
+                yield descriptor
+            if not exclusive and first:
+                first = False
+                start.set()
+                if not published.wait(10):
+                    raise RuntimeError("peer did not publish")
+        try:
+            with (patch.object(wheelhouse_acquire, "pool_lock", coordinated),
+                  patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
+                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
+            prepare.assert_not_called()
+            peer.join(timeout=10)
+            self.assertEqual(0, peer.exitcode)
+            self.assertEqual(candidate.stat().st_ino, (self.pool / candidate.name).stat().st_ino)
+        finally:
+            if peer.is_alive():
+                peer.terminate()
+            peer.join(timeout=5)
 
     def test_conflicting_cached_wheel_stops_before_network(self):
         cached = wheel(self.pool, "pool-alpha", "1.0")
