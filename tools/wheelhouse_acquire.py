@@ -94,7 +94,10 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
             for lock in frozen:
                 try:
                     select_wheels(lock, pool, lock_fd=descriptor)
-                except subprocess.CalledProcessError:
+                except subprocess.CalledProcessError as error:
+                    # Pip reports a caught KeyboardInterrupt as status 2.
+                    if error.returncode < 0 or error.returncode in (2, 130, 137, 143):
+                        raise SystemExit(128 - error.returncode if error.returncode < 0 else error.returncode) from error
                     missing.append(lock)
         if not missing:
             print("All locked wheels are already available in WHEELHOUSE; no download is needed.", flush=True)

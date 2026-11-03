@@ -36,6 +36,19 @@ class SharedAcquisitionTests(unittest.TestCase):
         assets.assert_not_called()
         run.assert_not_called()
 
+    def test_interrupted_offline_selection_does_not_start_acquisition(self):
+        for status in (-9, 2, 130, 137, 143):
+            with self.subTest(status=status):
+                failure = subprocess.CalledProcessError(status, "pip")
+                with (patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
+                      patch.object(wheelhouse_acquire, "select_wheels", side_effect=failure),
+                      patch.object(wheelhouse_acquire.subprocess, "run") as run,
+                      self.assertRaises(SystemExit) as interrupted):
+                    wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets)
+                self.assertEqual(interrupted.exception.code, 128 - status if status < 0 else status)
+                assets.assert_not_called()
+                run.assert_not_called()
+
     def test_warm_pool_still_ensures_the_stream_tool_needed_for_builds(self):
         captured = []
 
