@@ -330,9 +330,9 @@ Their socket volumes and the outbox queue belong to the host deployment.</p>
 git pull --ff-only
 git submodule update --init --recursive
 </code></pre>
-<p>Prepare NMRNet's three images and model files using the selected shared image
-for setup transport. Wheelhouse and setup interface are chosen once:</p>
-<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE</code></pre>
+<p>Prepare NMRNet's three images and model files. The wheelhouse and setup
+interface are chosen once:</p>
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-wheelhouse NETWORK_INTERFACE=YOUR_SETUP_INTERFACE</code></pre>
 <p>For a provider-only update, use the maintained update command. Select the
 local Docker context and shared wheelhouse explicitly; the saved generation
 supplies the shared runtime image ID, so no image digest needs to be copied:</p>
@@ -591,7 +591,7 @@ affected work; they do not establish dispatch or acceptance of a result.</p>
 <h2 id="images-and-network-isolation">Images and network isolation</h2>
 <p>To acquire the provider dependencies and model files and build its three images
 in one invocation:</p>
-<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool NETWORK_INTERFACE=YOUR_SETUP_INTERFACE
 </code></pre>
 <p>Omit either selection to choose it once on the terminal. The command runs the
 existing owners in sequence and stops on failure. It reuses cached downloads and
