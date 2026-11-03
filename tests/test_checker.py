@@ -5,12 +5,15 @@ from tools.container_guard import require_container
 require_container()
 
 import copy
+import fcntl
 import hashlib
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -103,11 +106,55 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
     def test_private_only_wheel_is_preserved_without_redownload(self):
         pool = self.root / "pool"
         pool.mkdir()
+        pins = self.root / "pins.in"
+        pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/tool.pyz#sha256=" + "a" * 64 + "\n")
         with patch.object(checker.subprocess, "run") as run:
             with self.assertRaisesRegex(ValueError, "private cached wheel exists"):
-                checker.acquire_ruff(self.document, pool, None, None, self.directory)
+                checker.acquire_ruff(self.document, pool, pins, pins, self.directory)
         run.assert_not_called()
         self.assertEqual([], list(pool.iterdir()))
+
+    def test_warm_checker_assets_do_not_wait_for_another_shared_pool_reader(self):
+        from tools.wheelhouse_acquire import pool_lock
+        wheel = self.document["packages"][-1]
+        pool = self.root / "pool"
+        pool.mkdir()
+        shutil.copyfile(self.directory / wheel["file"], pool / wheel["file"])
+        tool = pool / "wheelhouse-tool-1.0.0.pyz"
+        tool.write_bytes(b"cached tool")
+        pins = self.root / "pins.in"
+        pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/" + tool.name
+                        + "#sha256=" + hashlib.sha256(tool.read_bytes()).hexdigest() + "\n")
+        failures = []
+        def run():
+            try:
+                checker.acquire_ruff(self.document, pool, pins, pins, self.directory)
+            except Exception as error:
+                failures.append(error)
+        with pool_lock(pool, exclusive=False):
+            worker = threading.Thread(target=run)
+            worker.start()
+            worker.join(timeout=2)
+            completed = not worker.is_alive()
+        worker.join(timeout=5)
+        self.assertTrue(completed, "warm checker assets waited for an exclusive pool lease")
+        self.assertFalse(worker.is_alive())
+        self.assertEqual([], failures)
+
+    def test_corrupt_acquirer_refuses_before_missing_stream_download(self):
+        pool = self.root / "pool"
+        pool.mkdir()
+        (pool / "acquirer.pyz").write_bytes(b"corrupt")
+        acquirer = self.root / "acquirer.in"
+        stream = self.root / "stream.in"
+        prefix = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+        acquirer.write_text(prefix + "acquirer.pyz#sha256=" + "a" * 64 + "\n")
+        stream.write_text(prefix + "stream.pyz#sha256=" + "b" * 64 + "\n")
+        empty_legacy = self.root / "no-legacy"
+        with patch.object(checker, "checker_proxy") as proxy:
+            with self.assertRaisesRegex(ValueError, "cached bytes differ"):
+                checker.acquire_ruff(self.document, pool, acquirer, stream, empty_legacy)
+        proxy.assert_not_called()
 
     def test_unknown_missing_and_wrong_container_fields_are_rejected(self):
         for field in self.document:
@@ -241,6 +288,69 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         output = self.acquire()
         self.assertEqual(checker.check(self.path, output, self.document["base"]), checker.check(self.path, self.directory, self.document["base"]))
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
+
+    def test_resume_reuses_verified_files_and_fetches_only_missing_debian_inputs(self):
+        stage = self.root / ".dependencies.pending-example"
+        stage.mkdir(mode=0o700)
+        first, second, wheel = self.document["packages"]
+        shutil.copyfile(self.directory / first["file"], stage / first["file"])
+        pool = self.root / "pool"
+        pool.mkdir()
+        shutil.copyfile(self.directory / wheel["file"], pool / wheel["file"])
+        requested = []
+        def response(request, **kwargs):
+            name = request.full_url.rsplit("/", 1)[-1]
+            requested.append(name)
+            return io.BytesIO((self.directory / name).read_bytes())
+        with (patch.dict(os.environ, self.proxy, clear=True), patch.object(checker, "acquire_ruff"),
+              patch.object(checker, "open_url", side_effect=response)):
+            checker.download(self.path, self.root / "acquired", self.document["base"], pool, None, None, stage)
+        self.assertEqual([second["file"]], requested)
+        checker.check(self.path, self.root / "acquired", self.document["base"], pool)
+
+    def test_resume_refuses_changed_evidence_before_any_acquisition(self):
+        stage = self.root / ".dependencies.pending-example"
+        stage.mkdir(mode=0o700)
+        (stage / self.document["packages"][0]["file"]).write_bytes(b"changed")
+        with (patch.object(checker, "acquire_ruff") as acquire, patch.object(checker, "open_url") as network):
+            with self.assertRaisesRegex(ValueError, "existing evidence preserved"):
+                checker.download(self.path, self.root / "acquired", self.document["base"], self.root, None, None, stage)
+        acquire.assert_not_called()
+        network.assert_not_called()
+        self.assertTrue(stage.is_dir())
+
+    def test_resume_publishes_complete_valid_stage_without_network(self):
+        stage = self.root / ".dependencies.pending-example"
+        stage.mkdir(mode=0o700)
+        for package in self.document["packages"]:
+            if package["name"] != "ruff":
+                shutil.copyfile(self.directory / package["file"], stage / package["file"])
+        shutil.copyfile(self.directory / ".complete", stage / ".complete")
+        pool = self.root / "pool"
+        pool.mkdir()
+        wheel = self.document["packages"][-1]["file"]
+        shutil.copyfile(self.directory / wheel, pool / wheel)
+        with (patch.dict(os.environ, self.proxy, clear=True), patch.object(checker, "acquire_ruff"),
+              patch.object(checker, "open_url") as network):
+            checker.download(self.path, self.root / "acquired", self.document["base"], pool, None, None, stage)
+        network.assert_not_called()
+        checker.check(self.path, self.root / "acquired", self.document["base"], pool)
+
+    def test_new_stage_is_locked_while_downloading(self):
+        observed = []
+        def response(request, **kwargs):
+            stage = next(self.root.glob(".dependencies.pending-*"))
+            descriptor = os.open(stage, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                observed.append(request.full_url)
+            finally:
+                os.close(descriptor)
+            name = request.full_url.rsplit("/", 1)[-1]
+            return io.BytesIO((self.directory / name).read_bytes())
+        self.acquire(opener=response)
+        self.assertEqual(len(self.document["packages"]), len(observed))
 
     def test_invalid_declaration_and_proxy_fail_before_staging_or_network(self):
         with patch.object(checker, "open_url") as network:

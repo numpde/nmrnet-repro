@@ -52,6 +52,11 @@ capture. Existing private checker dependencies are preserved.</p>
 <p>If an older private checker cache contains Ruff but the selected shared pool
 does not, preparation stops and preserves the private wheel. Resolve that cache
 migration before retrying; it will not silently download a duplicate.</p>
+<p>After an interrupted Debian acquisition, the reported retained
+<code>.dependencies.pending-...</code> directory can be resumed by passing its
+basename as <code>RESUME_STAGE</code> to <code>make checks/dependencies/download</code>.
+The command checks every retained file before acquiring missing files. A partial
+or mismatched file is preserved and must be investigated before retrying.</p>
 <p><code>checker-advisories.json</code> records the exact-version advisory lookup at
 2026-10-14T10:17:32Z, including every declared Debian binary's source package and
 source version. Debian's source advisory records were compared with those exact

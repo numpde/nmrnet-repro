@@ -45,6 +45,20 @@ if [[ ! -f "$declaration" || -L "$declaration" ]]; then
     exit 2
 fi
 readonly dependencies="$repository_root/.work/checker/dependencies"
+resume_arguments=()
+if [[ ${NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN-} == 'command line' ]]; then
+    resume_stage=${NMRNET_CHECKER_RESUME_STAGE_INPUT-}
+    if [[ $1 != download || ! $resume_stage =~ ^\.dependencies\.pending-[[:alnum:]_]+$ ]]; then
+        printf '%s\n' 'RESUME_STAGE must name one retained .dependencies.pending-... directory for checker download.' >&2
+        exit 2
+    fi
+    resume_path="$repository_root/.work/checker/$resume_stage"
+    if ! "$print_command" && [[ ! -d $resume_path || -L $resume_path || $(stat -c %u -- "$resume_path") != "$caller_uid" ]]; then
+        printf '%s\n' 'Cannot resume checker dependencies: select a retained caller-owned directory without a symlink.' >&2
+        exit 2
+    fi
+    resume_arguments=(--resume-stage "/output/$resume_stage")
+fi
 source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
 if [[ "$1" == download ]]; then
@@ -69,6 +83,7 @@ worker=(--pull never --read-only --user "$caller_uid:$caller_gid" --cap-drop ALL
 tool_mounts=(--mount "type=bind,src=$repository_root/tools/checker.py,dst=/workspace/tools/checker.py,readonly"
     --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
     --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
+    --mount "type=bind,src=$repository_root/tools/wheelhouse_acquire.py,dst=/workspace/tools/wheelhouse_acquire.py,readonly"
     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$declaration,dst=/input/dependencies.json,readonly"
     --mount "type=bind,src=$repository_root/requirements/wheelhouse-acquirer-assets.in,dst=/input/tool-assets.in,readonly"
@@ -83,7 +98,7 @@ if [[ "$1" == download ]]; then
         --mount "type=bind,src=$repository_root/.work/checker,dst=/output"
         --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse"
         "$base" python3 -B -m tools.checker download --declaration /input/dependencies.json
-        --directory /output/dependencies --base "$base" --wheelhouse /wheelhouse --tool-assets /input/tool-assets.in --stream-assets /input/stream-assets.in)
+        --directory /output/dependencies --base "$base" --wheelhouse /wheelhouse --tool-assets /input/tool-assets.in --stream-assets /input/stream-assets.in "${resume_arguments[@]}")
     # No checker client exists yet. Transfer the supported PID so a directed
     # signal reaches the acquisition owner and its cleanup, without a wrapper.
     exec "${download_command[@]}"

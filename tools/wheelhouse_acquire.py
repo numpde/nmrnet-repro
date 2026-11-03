@@ -32,6 +32,35 @@ def pool_lock(pool, exclusive):
         os.close(descriptor)
 
 
+def shared_asset_present(declaration, pool):
+    """Check a single pinned release asset under the caller's pool lock."""
+    lines = [line.strip() for line in Path(declaration).read_text().splitlines()
+             if line.strip() and not line.lstrip().startswith("#")]
+    if len(lines) != 1:
+        raise ValueError("Cannot check shared release asset: expected one pinned URL.")
+    url = lines[0].partition("#sha256=")[0]
+    name = Path(urllib.parse.urlsplit(url).path).name
+    if name in ("", ".", ".."):
+        raise ValueError("Cannot check shared release asset: URL has no filename.")
+    try:
+        (pool / name).lstat()
+    except FileNotFoundError:
+        return False
+    prepare_core_assets(declaration, pool, download=False)
+    return True
+
+
+def scientific_source_present(declaration, pool):
+    identity = source_identity(declaration)
+    source = source_cache_file(pool, identity)
+    try:
+        source.lstat()
+    except FileNotFoundError:
+        return False
+    verified_source(source, identity)
+    return True
+
+
 def direct_wheels(paths, packages):
     """Use only wheel URLs already pinned in the input declarations."""
     result = []
@@ -84,11 +113,17 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
         if stream_assets is not None:
             stream_assets = snapshots[-1]
         if source is not None or stream_assets is not None:
-            with pool_lock(pool, exclusive=True):
-                if source is not None:
-                    prepare_source(source, pool)
-                if stream_assets is not None:
-                    prepare_core_assets(stream_assets, pool, download=True)
+            with pool_lock(pool, exclusive=False):
+                source_ready = source is None or scientific_source_present(source, pool)
+                stream_ready = stream_assets is None or shared_asset_present(stream_assets, pool)
+            if not source_ready or not stream_ready:
+                with pool_lock(pool, exclusive=True):
+                    source_ready = source is None or scientific_source_present(source, pool)
+                    stream_ready = stream_assets is None or shared_asset_present(stream_assets, pool)
+                    if not stream_ready:
+                        prepare_core_assets(stream_assets, pool, download=True)
+                    if not source_ready:
+                        prepare_source(source, pool)
         missing = []
         with pool_lock(pool, exclusive=False) as descriptor:
             for lock in frozen:
@@ -152,8 +187,15 @@ def test_support(assets, pool, download):
     with tempfile.TemporaryDirectory(prefix="nmrnet-test-source-") as temporary:
         declaration = Path(temporary) / "source.in"
         declaration.write_text(sources[0] + "\n")
-        with pool_lock(pool, exclusive=download):
-            prepare_core_assets(declaration, pool, download=download)
+        with pool_lock(pool, exclusive=False):
+            present = shared_asset_present(declaration, pool)
+        if not present:
+            if not download:
+                with pool_lock(pool, exclusive=False):
+                    prepare_core_assets(declaration, pool, download=False)
+            else:
+                with pool_lock(pool, exclusive=True):
+                    prepare_core_assets(declaration, pool, download=True)
     if not download:
         print(f"Verified provider test support from {pool}")
 

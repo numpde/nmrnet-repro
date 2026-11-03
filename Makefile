@@ -213,6 +213,9 @@ test/repository/provider:
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
 unexport ARCHIVE STAGE NETWORK_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport WHEELHOUSE
+unexport RESUME_STAGE
+override export NMRNET_CHECKER_RESUME_STAGE_INPUT := $(if $(filter command line,$(origin RESUME_STAGE)),$(value RESUME_STAGE))
+override export NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN := $(origin RESUME_STAGE)
 override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin WHEELHOUSE)),$(value WHEELHOUSE))
 override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
 unexport LOG_LEVEL

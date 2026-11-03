@@ -1,8 +1,10 @@
 """Exercise the shared publisher handoff without downloading artifacts."""
 
 import fcntl
+import hashlib
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -35,6 +37,38 @@ class SharedAcquisitionTests(unittest.TestCase):
                                        declarations=[self.declaration])
         assets.assert_not_called()
         run.assert_not_called()
+
+    def test_warm_stream_asset_remains_readable_during_another_shared_lease(self):
+        content = b"cached release tool"
+        name = "wheelhouse-tool-1.0.0.pyz"
+        (self.pool / name).write_bytes(content)
+        self.tool_assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/" + name
+                                    + "#sha256=" + hashlib.sha256(content).hexdigest() + "\n")
+        failures = []
+        def acquire():
+            try:
+                wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
+                                           stream_assets=self.tool_assets)
+            except Exception as error:
+                failures.append(error)
+        with patch.object(wheelhouse_acquire, "select_wheels", return_value={}):
+            with wheelhouse_acquire.pool_lock(self.pool, exclusive=False):
+                worker = threading.Thread(target=acquire)
+                worker.start()
+                worker.join(timeout=2)
+                completed_while_shared = not worker.is_alive()
+            worker.join(timeout=5)
+        self.assertTrue(completed_while_shared, "a warm acquisition waited for an exclusive pool lease")
+        self.assertFalse(worker.is_alive())
+        self.assertEqual([], failures)
+
+    def test_stream_asset_is_rechecked_after_another_publisher_wins(self):
+        with (patch.object(wheelhouse_acquire, "shared_asset_present", side_effect=[False, True]),
+              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+              patch.object(wheelhouse_acquire, "select_wheels", return_value={})):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
+                                       stream_assets=self.tool_assets)
+        prepare.assert_not_called()
 
     def test_interrupted_offline_selection_does_not_start_acquisition(self):
         for status in (-9, 2, 130, 137, 143):
@@ -112,6 +146,15 @@ class SharedAcquisitionTests(unittest.TestCase):
         with patch.object(wheelhouse_acquire, "prepare_core_assets", side_effect=prepare):
             wheelhouse_acquire.test_support(self.assets, self.pool, download=True)
         self.assertEqual(captured, [source_url + "\n"])
+
+    def test_support_check_does_not_download_when_peer_publishes_after_first_check(self):
+        source_url = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        self.assets.write_text(source_url + "\n")
+        with (patch.object(wheelhouse_acquire, "shared_asset_present", return_value=False),
+              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
+            wheelhouse_acquire.test_support(self.assets, self.pool, download=False)
+        self.assertEqual(1, prepare.call_count)
+        self.assertIs(prepare.call_args.kwargs["download"], False)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "container_guard.py",
             "docker.sh",
             "wheelhouse.py",
+            "wheelhouse_acquire.py",
             "wheelhouse_path.sh",
             "user_namespace_map.sh",
             "acquisition_interface.sh",
