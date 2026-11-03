@@ -25,7 +25,7 @@ prepare_streamed_inputs() {
     if [[ -n ${stream_submodule_inventory-} ]]; then
         inventories+=("$stream_submodule_inventory" NMRNetplusplus "$stream_submodule_digest")
     fi
-    python3 -I "$image_input_directory/context/tools/git_stream_sources.py" "$image_input_directory/context" \
+    python3 -I -B "$image_input_directory/context/tools/git_stream_sources.py" "$image_input_directory/context" \
         "${inventories[@]}" > "$stream_sources"
     for item in "$@"; do
         role=${item%%:*}; lock=${item#*:}
@@ -45,13 +45,13 @@ prepare_streamed_inputs() {
             python3 -B -m tools.wheelhouse report --lock /input/requirements.lock --lock-sha256 "$lock_hash" --pool /wheelhouse; then :; else
             status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
         fi
-        python3 -I -S "$stream_tool" report --report "$image_input_directory/$role.report.json" \
+        python3 -I -S -B "$stream_tool" report --report "$image_input_directory/$role.report.json" \
             --pool /wheelhouse --directory "wheelhouse/$role" > "$image_input_directory/$role.manifest.json"
         manifests+=("$image_input_directory/$role.manifest.json")
     done
     python3 -I -c 'import json,sys; print(json.dumps(sum((json.load(open(p)) for p in sys.argv[1:]), [])))' \
         "${manifests[@]}" > "$stream_manifest"
-    stream_selection=$(python3 -I -S "$stream_tool" identity --manifest "$stream_manifest")
+    stream_selection=$(python3 -I -S -B "$stream_tool" identity --manifest "$stream_manifest")
     stream_selection="sha256:$stream_selection"
 }
 
@@ -61,6 +61,6 @@ build_streamed_context() {
     shift 3
     "$native" "$description" "$budget" "$disposition" bash -o pipefail -c '
         tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
-        python3 -I -S "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
+        python3 -I -S -B "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
     ' bash "$stream_tool" "$wheelhouse_directory" "$stream_sources" "$stream_manifest" "$@"
 }

@@ -77,7 +77,7 @@ select_acquisition_interface() {
             return 2
         fi
     fi
-    if ! acquisition_interface_available "$interface"; then
+    if [[ $interface != system ]] && ! acquisition_interface_available "$interface"; then
         printf 'Cannot acquire artifacts or packages: NETWORK_INTERFACE=%q is not an available network interface.\n' "$interface" >&2
         return 2
     fi

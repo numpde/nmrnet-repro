@@ -272,7 +272,7 @@ with open(declaration) as source: pinned = json.load(source)
 entries.append({"directory": "wheelhouse/science", "filename": "Uni-Core-" + pinned["commit"] + ".tar.gz", "sha256": pinned["sha256"]})
 with open(manifest, "w") as target: json.dump(entries, target)
 ' "$stream_manifest" "$frozen_context/requirements/unicore-source.json"
-        stream_selection=$(python3 -I -S "$stream_tool" identity --manifest "$stream_manifest")
+        stream_selection=$(python3 -I -S -B "$stream_tool" identity --manifest "$stream_manifest")
         stream_selection="sha256:$stream_selection"
         build=("${engine[@]}" build --builder default --quiet --network none --pull=false
             --build-arg "NMRNET_REVISION=$revision"

@@ -43,15 +43,12 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "wheelhouse_path.sh",
             "user_namespace_map.sh",
             "acquisition_interface.sh",
-            "bootstrap_snapshot.py",
+            "acquisition_run.sh",
             "docker_client.sh",
             "inference_native.sh",
             "image_lifecycle.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
-        shutil.copytree(ROOT / "tools/bootstrap/provider_core", self.root / "tools/bootstrap/provider_core")
-        shutil.copyfile(ROOT / "requirements/provider-core-release.json",
-                        self.root / "requirements/provider-core-release.json")
         (self.root / "tools/docker.sh").rename(self.root / "tools/docker-real.sh")
         (self.root / "tools/docker.sh").write_text('''#!/bin/bash
 if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
@@ -566,7 +563,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         download = self.launch("download", preview=True)
         self.assertEqual(0, download.returncode, msg=download.stderr)
-        worker = shlex.split(download.stdout.splitlines()[-2])
+        worker = shlex.split(download.stdout.splitlines()[-1].split('Online worker: ', 1)[1])
         mounts = [worker[index + 1] for index, value in enumerate(worker) if value == "--mount"]
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
         self.assertEqual([f"type=bind,src={self.root}/.work/checker,dst=/output",

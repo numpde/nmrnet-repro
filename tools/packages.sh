@@ -253,15 +253,16 @@ if [[ "$1" == stage ]]; then
     fi
 fi
 if [[ "$1" == stage ]]; then
-    command=(bash "$repository_root/tools/docker.sh")
+    command=(bash "$repository_root/tools/acquisition_run.sh")
     if "$print_command"; then command+=(--print); fi
-    command+=(run)
+    command+=(--image "$lock_image" --)
 else
     command=("${engine[@]}" run --rm --network none)
 fi
 # Reap orphaned tool children inside the worker, as in the contained test lanes.
-command+=(--init --pull never --read-only --env NMRNET_IN_CONTAINER=1
-    --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
+command+=(--init --pull never --read-only --env NMRNET_IN_CONTAINER=1)
+if [[ "$1" != stage ]]; then command+=(--user "$caller_uid:$caller_gid"); fi
+command+=(--cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory 2g --memory-swap 2g --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=1g
     --env UV_CACHE_DIR=/tmp/uv --env UV_NO_PROGRESS=1
@@ -283,7 +284,7 @@ else
         --mount "type=bind,src=$input_capture/context/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
 fi
 if [[ "$1" == stage ]]; then
-    command+=("$lock_image" stage "$package_profile")
+    command+=(-- stage "$package_profile")
 else
     command+=("$python_image" python3 -B -m tools.package_lock apply "$package_profile")
 fi

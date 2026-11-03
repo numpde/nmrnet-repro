@@ -372,7 +372,7 @@ select_shared_runtime() {
         [[ -d $current_bundle && ! -L $current_bundle ]] \
             || { refuse 'the selected generation is absent; supply SHARED_RUNTIME_IMAGE explicitly to replace it.'; return 2; }
         path "$current_bundle/compose.json"
-        if shared_runtime_image=$(python3 "$repository_root/tools/compose_image_ids.py" shared-runtime "$current_bundle/compose.json"); then
+        if shared_runtime_image=$(python3 -B "$repository_root/tools/compose_image_ids.py" shared-runtime "$current_bundle/compose.json"); then
             :
         else
             refuse 'the selected generation does not identify one shared runtime image; supply SHARED_RUNTIME_IMAGE explicitly.'
@@ -423,7 +423,7 @@ initialize_lifetime() {
 if [[ $action == install || $action == update ]]; then
     if [[ $action == update ]]; then
         select_bundle
-        current_image_map=$(python3 "$repository_root/tools/compose_image_ids.py" services "$bundle/compose.json") \
+        current_image_map=$(python3 -B "$repository_root/tools/compose_image_ids.py" services "$bundle/compose.json") \
             || { refuse 'the selected generation has no complete immutable image plan.'; exit 2; }
         declare -A current_image_ids=()
         while IFS=$'\t' read -r current_role current_image; do
@@ -566,7 +566,7 @@ fi
 compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
 verify_running_images() {
     local expected_images role expected container_id observed observed_role observed_image count=0
-    expected_images=$(python3 "$repository_root/tools/compose_image_ids.py" services "$bundle/compose.json") \
+    expected_images=$(python3 -B "$repository_root/tools/compose_image_ids.py" services "$bundle/compose.json") \
         || { refuse 'the installed Compose plan has no complete immutable image selection.'; return 2; }
     stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
     while IFS=$'\t' read -r role expected; do

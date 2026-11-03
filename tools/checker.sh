@@ -96,12 +96,19 @@ if [[ "$1" == download ]]; then
     source "$repository_root/tools/acquisition_interface.sh"
     select_acquisition_interface
     if ! "$print_command"; then mkdir -p -m 700 -- "$repository_root/.work/checker"; fi
-    proxy_command=(bash "$repository_root/tools/docker.sh")
+    proxy_command=(bash "$repository_root/tools/acquisition_run.sh")
     if "$print_command"; then proxy_command+=(--print); fi
-    download_command=("${proxy_command[@]}" --success-note $'\nNext, verify the checker dependencies offline:\n  make checks/dependencies/check' --pool-owner "$caller_uid:$caller_gid" run "${worker[@]}" "${tool_mounts[@]}"
+    online_worker=("${worker[@]}")
+    for index in "${!online_worker[@]}"; do
+        if [[ ${online_worker[index]} == --user ]]; then
+            unset 'online_worker[index]' 'online_worker[index+1]'
+            break
+        fi
+    done
+    download_command=("${proxy_command[@]}" --success-note $'\nNext, verify the checker dependencies offline:\n  make checks/dependencies/check' --image "$base" -- "${online_worker[@]}" "${tool_mounts[@]}"
         --mount "type=bind,src=$repository_root/.work/checker,dst=/output"
         --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse"
-        "$base" python3 -B -m tools.checker download --declaration /input/dependencies.json
+        -- python3 -B -m tools.checker download --declaration /input/dependencies.json
         --directory /output/dependencies --base "$base" --wheelhouse /wheelhouse --tool-assets /input/tool-assets.in --stream-assets /input/stream-assets.in "${resume_arguments[@]}")
     # No checker client exists yet. Transfer the supported PID so a directed
     # signal reaches the acquisition owner and its cleanup, without a wrapper.
@@ -324,7 +331,7 @@ observed=$(sha256sum -- "$wheelhouse_directory/$tool_name")
 capture_borrowed=true
 if inference_native 'checker image build' "$build_seconds" image-id bash -o pipefail -c '
     tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
-    python3 -I -S "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
+    python3 -I -S -B "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
 ' bash "$wheelhouse_directory/$tool_name" "$wheelhouse_directory" "$capture/sources.json" "$capture/manifest.json" "${build[@]}"; then
     build_status=0
 else

@@ -10,11 +10,6 @@ source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
 source "$repository_root/tools/acquisition_interface.sh"
 select_acquisition_interface
-shared_runtime_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
-if [[ ! $shared_runtime_image =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    printf '%s\n' 'Provider preparation requires SHARED_RUNTIME_IMAGE=<full local image ID>; build the shared runtime in nmr-provider-tools first.' >&2
-    exit 2
-fi
 source "$repository_root/tools/inference_native.sh"
 inference_diagnostic= inference_cancellation_status=0 inference_retirement_confirmed=true caller_cancellation=0
 finish() {
@@ -55,7 +50,6 @@ prepare_step() {
         NMRNET_SUPPRESS_NEXT_ACTIONS=1
         "NMRNET_WHEELHOUSE_INPUT=$wheelhouse_directory" NMRNET_WHEELHOUSE_INPUT_ORIGIN='command line'
         "NMRNET_NETWORK_INTERFACE_INPUT=$interface" NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN='command line'
-        "NMRNET_SHARED_RUNTIME_IMAGE_INPUT=$shared_runtime_image"
         "NMRNET_ARCHIVE_INPUT=$archive"
         "NMRNET_DOCKER_CONTEXT_INPUT=${NMRNET_DOCKER_CONTEXT_INPUT-}"
         NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN='command line'

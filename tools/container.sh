@@ -361,9 +361,9 @@ case "$1" in
             fi
         fi
         if [[ "$network" == host ]]; then
-            command=(bash "$repository_root/tools/docker.sh")
+            command=(bash "$repository_root/tools/acquisition_run.sh")
             if "$print_command"; then command+=(--print); fi
-            command+=(--success-note "$next_actions" run)
+            command+=(--success-note "$next_actions" --image "$image" --)
         else
             if "$print_command"; then docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
             elif docker_client_prepare run; then :
@@ -374,8 +374,9 @@ case "$1" in
             fi
             command=("${engine[@]}" run --rm --network none)
         fi
-        command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1
-            --user "$caller_uid:$caller_gid" --cap-drop ALL
+        command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1)
+        if [[ "$network" != host ]]; then command+=(--user "$caller_uid:$caller_gid"); fi
+        command+=(--cap-drop ALL
             --security-opt no-new-privileges:true
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
@@ -516,9 +517,6 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
                         --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly")
                 fi
-                if [[ "$1" == test/unit/packages/images || "$1" == test/unit/packages/wheelhouse ]]; then
-                    command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/workspace/requirements/provider-core-release.json,readonly")
-                fi
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
@@ -527,7 +525,7 @@ case "$1" in
                     command+=(tests.test_image_retirement tests.test_provider_deployment_launcher tests.test_provider_update
                         tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare
                         tests.test_launcher.LauncherTests.test_checker_consumer_holds_image_lease_through_engine_run
-                        tests.test_network_cancellation.NetworkCancellationTests tests.test_network_cancellation.ContainerIdentityTests
+                        tests.test_acquisition_run
                         tests.test_checker_launcher.CheckerLauncherTests.test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture
                         tests.test_checker_launcher.CheckerLauncherTests.test_build_failure_and_wrong_observed_id_preserve_predecessor_and_retire_capture
                         tests.test_checker_launcher.CheckerLauncherTests.test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture
@@ -535,8 +533,9 @@ case "$1" in
                         repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health
                         repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_build_retirement_follows_success_and_reports_failure)
                 elif [[ "$1" == test/unit/packages/wheelhouse ]]; then
-                    command+=(tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_wheelhouse_launcher
-                        tests.test_network_cancellation.WheelhouseProbeTests tests.test_checker
+                    command+=(tests.test_acquisition_bootstrap tests.test_acquisition_wheelhouse tests.test_acquisition_run
+                        tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_wheelhouse_launcher
+                        tests.test_checker
                         tests.test_checker_launcher.CheckerLauncherTests.test_actual_operation_deadlines_stop_client_before_checker_teardown
                         tests.test_checker_launcher.CheckerLauncherTests.test_checker_uses_mapped_owner_and_refuses_unverified_mapping
                         tests.test_checker_launcher.CheckerLauncherTests.test_failed_captured_verification_retains_borrowed_inputs
@@ -866,7 +865,8 @@ case "$1" in
                     command+=(--mount "type=bind,src=$selection,dst=/inputs/selection.json,readonly"
                         --mount "type=bind,src=$repository_root/.work/prepared,dst=/prepared")
                 fi
-                command+=("$image" python3 -B -m tools.artifacts "$1"
+                if [[ "$network" == host ]]; then command+=(--); else command+=("$image"); fi
+                command+=(python3 -B -m tools.artifacts "$1"
                     --declaration /inputs/release.json --directory /downloads --name "$archive")
                 if [[ "$1" == extract ]]; then
                     command+=(--selection /inputs/selection.json --output "/prepared/${archive%.zip}")

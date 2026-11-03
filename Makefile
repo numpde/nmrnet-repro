@@ -87,17 +87,17 @@ test/integration/rdkit-runtime:
 .PHONY: packages/shared-tool/wheelhouse packages/shared-tool/wheelhouse/check
 .PHONY: packages/provider-core/test-support packages/provider-core/test-support/check
 .PHONY: packages/images/retire test/unit/packages/images
-.PHONY: packages/proxy-bootstrap/check packages/proxy-bootstrap/refresh
+.PHONY: packages/acquisition-bootstrap/check packages/acquisition-bootstrap/refresh
 
-override export NMRNET_BOOTSTRAP_WHEEL_INPUT := $(if $(filter command line,$(origin PROVIDER_CORE_WHEEL)),$(value PROVIDER_CORE_WHEEL))
-unexport PROVIDER_CORE_WHEEL
+override export NMRNET_ACQUISITION_ARCHIVE_INPUT := $(if $(filter command line,$(origin ACQUISITION_ARCHIVE)),$(value ACQUISITION_ARCHIVE))
+unexport ACQUISITION_ARCHIVE
 
-packages/proxy-bootstrap/check:
-	python3 -B tools/bootstrap_snapshot.py
+packages/acquisition-bootstrap/check:
+	python3 -B tools/acquisition_bootstrap.py
 
-packages/proxy-bootstrap/refresh:
-	@test -n "$$NMRNET_BOOTSTRAP_WHEEL_INPUT" || { printf '%s\n' 'Supply PROVIDER_CORE_WHEEL=<pinned-wheel> on the command line.' >&2; exit 2; }
-	python3 -B tools/bootstrap_snapshot.py --wheel "$$NMRNET_BOOTSTRAP_WHEEL_INPUT"
+packages/acquisition-bootstrap/refresh:
+	@test -n "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ARCHIVE=<release archive> on the make command line.' >&2; exit 2; }
+	python3 -B tools/acquisition_bootstrap.py --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT"
 
 packages/images/retire:
 	bash tools/image_retirement.sh
@@ -235,7 +235,7 @@ unexport LOG_LEVEL
 unexport DOCKER_CONTEXT NMRNET_DOCKER_CONTEXT_INPUT NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN NMRNET_DOCKER_ENDPOINT_INPUT
 override export NMRNET_DOCKER_CONTEXT_INPUT := $(if $(filter command line,$(origin DOCKER_CONTEXT)),$(value DOCKER_CONTEXT))
 override export NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN := $(origin DOCKER_CONTEXT)
-ifneq ($(filter-out help packages/proxy-bootstrap/check packages/proxy-bootstrap/refresh,$(MAKECMDGOALS)),)
+ifneq ($(filter-out help packages/acquisition-bootstrap/check packages/acquisition-bootstrap/refresh,$(MAKECMDGOALS)),)
 # Resolve once in the Make process so every recipe, nested launcher and cleanup
 # in this invocation inherits the same context endpoint snapshot.
 make_shell_quote = '$(subst ','\'',$(1))'
@@ -315,7 +315,7 @@ help:
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
-		'make provider/prepare SHARED_RUNTIME_IMAGE=sha256:<id> Acquire dependencies/models and build images; choose cache and interface once.' \
+		'make provider/prepare                   Acquire dependencies/models and build images; choose cache and interface once.' \
 		'make provider/deployment/install DEPLOYMENT=<name> [SHARED_RUNTIME_IMAGE=sha256:<id>] [RETAIN_PRIOR=1] Freeze and select inputs while stopped.' \
 		'make provider/deployment/update DEPLOYMENT=<name> DOCKER_CONTEXT=<local-context> WHEELHOUSE=<shared-pool> [RETAIN_PRIOR=1] Build, drain, install and start the provider.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
