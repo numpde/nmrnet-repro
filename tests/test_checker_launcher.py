@@ -43,11 +43,15 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "wheelhouse_path.sh",
             "user_namespace_map.sh",
             "acquisition_interface.sh",
+            "bootstrap_snapshot.py",
             "docker_client.sh",
             "inference_native.sh",
             "image_lifecycle.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
+        shutil.copytree(ROOT / "tools/bootstrap/provider_core", self.root / "tools/bootstrap/provider_core")
+        shutil.copyfile(ROOT / "requirements/provider-core-release.json",
+                        self.root / "requirements/provider-core-release.json")
         (self.root / "tools/docker.sh").rename(self.root / "tools/docker-real.sh")
         (self.root / "tools/docker.sh").write_text('''#!/bin/bash
 if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
@@ -219,10 +223,14 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self.assertTrue(all(item["client_stopped"] for item in observed))
         self.assertIn(str(client), [item["target"] for item in observed])
         for capture in captures:
-            self.assertNotIn(str(capture), [item["target"] for item in observed])
-            self.assertTrue(capture.is_dir())
-            self.assertIn(str(capture), stderr)
-            shutil.rmtree(capture)
+            if operations[-1] == "build":
+                self.assertIn(str(capture), [item["target"] for item in observed])
+                self.assertFalse(capture.exists())
+            else:
+                self.assertNotIn(str(capture), [item["target"] for item in observed])
+                self.assertTrue(capture.is_dir())
+                self.assertIn(str(capture), stderr)
+                shutil.rmtree(capture)
 
     def test_actual_operation_deadlines_stop_client_before_checker_teardown(self):
         # Port dapp32 39819ec's test_target_deadline_stops_work_before_teardown:

@@ -516,6 +516,9 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
                         --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly")
                 fi
+                if [[ "$1" == test/unit/packages/images || "$1" == test/unit/packages/wheelhouse ]]; then
+                    command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/workspace/requirements/provider-core-release.json,readonly")
+                fi
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
