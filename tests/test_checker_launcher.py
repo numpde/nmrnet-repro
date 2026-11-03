@@ -172,7 +172,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
             path.exists(), msg=f"Checker fixture observation {path.name!r} was not observed within {seconds} seconds."
         )
 
-    def _check_operation_deadline(self, action, operations, *, cleanup_failure=False):
+    def _check_operation_deadline(self, action, operations):
         # Shorten only the copied launcher's policy; the real native owner and
         # timeout executable still decide expiry, TERM grace and child joining.
         launcher = self.root / "tools/checker.sh"
@@ -196,8 +196,6 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
             "CHECKER_FIXTURE_HOLD_CALL": str(before + len(operations)),
             "CHECKER_FIXTURE_CHECK_RETIREMENT": "1",
         }
-        if cleanup_failure:
-            additions["CHECKER_FIXTURE_CAPTURE_CLEANUP_FAIL"] = "1"
         process = self._start(action, additions)
         self._wait_path(ready, seconds=5)
         held = self.calls()[-1]
@@ -220,16 +218,14 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self.assertTrue(all(item["client_stopped"] for item in observed))
         self.assertIn(str(client), [item["target"] for item in observed])
         for capture in captures:
-            self.assertIn(str(capture), [item["target"] for item in observed])
-            self.assertEqual(cleanup_failure, capture.exists())
-        if cleanup_failure:
-            self.assertEqual(1, len(captures))
-            self.assertIn("Cannot confirm checker build capture removal", stderr)
-            self.assertIn(str(captures[0]), stderr)
+            self.assertNotIn(str(capture), [item["target"] for item in observed])
+            self.assertTrue(capture.is_dir())
+            self.assertIn(str(capture), stderr)
+            shutil.rmtree(capture)
 
     def test_actual_operation_deadlines_stop_client_before_checker_teardown(self):
         # Port dapp32 39819ec's test_target_deadline_stops_work_before_teardown:
-        # every actual phase must stop its child before removing its inputs.
+        # stop each client before teardown and retain inputs borrowed by the engine.
         for action, operations in (
             ("check", ["run"]),
             ("build", ["run"]),
@@ -238,9 +234,6 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         ):
             with self.subTest(action=action, operations=operations):
                 self._check_operation_deadline(action, operations)
-
-    def test_actual_build_timeout_preserves_primary_when_capture_cleanup_fails(self):
-        self._check_operation_deadline("build", ["run", "run", "build"], cleanup_failure=True)
 
     def _retire_failed_probe(self, process):
         if process.poll() is None:
