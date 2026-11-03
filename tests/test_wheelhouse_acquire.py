@@ -218,6 +218,24 @@ class SharedAcquisitionTests(unittest.TestCase):
         lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [good])])
         wheelhouse_acquire.refuse_conflicting_wheels(lock, self.pool)
 
+    def test_conflicting_local_version_matching_public_pin_stops_before_network(self):
+        cached = wheel(self.pool, "pool-alpha", "1.0+local")
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
+        cached.write_bytes(b"conflicting cached bytes")
+        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare:
+            with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
+                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
+        prepare.assert_not_called()
+        self.assertEqual(b"conflicting cached bytes", cached.read_bytes())
+
+    def test_invalid_locked_version_is_rejected_without_cached_candidate(self):
+        lock = self.root / "invalid.lock"
+        lock.write_text("pool-alpha==not-a-version \\\n    --hash=sha256:" + "a" * 64 + "\n")
+        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare:
+            with self.assertRaises(ValueError):
+                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
+        prepare.assert_not_called()
+
     def test_interrupted_recheck_does_not_bootstrap_tool(self):
         with (patch.object(wheelhouse_acquire, "select_wheels", side_effect=[
                 subprocess.CalledProcessError(1, "pip"), subprocess.CalledProcessError(2, "pip")]),

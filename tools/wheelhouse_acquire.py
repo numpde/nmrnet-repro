@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from pip._vendor.packaging.tags import sys_tags
+from pip._vendor.packaging.specifiers import Specifier
 from pip._vendor.packaging.version import Version
 
 from tools.wheelhouse import (digest, prepare_core_assets, prepare_source, requirements, select_wheels,
@@ -65,7 +66,8 @@ def scientific_source_present(declaration, pool):
 
 def refuse_conflicting_wheels(lock, pool):
     """Refuse a corrupt compatible cache entry when no valid alternative exists."""
-    expected = {(name, Version(version)): hashes for (name, version), hashes in requirements(lock).items()}
+    expected = requirements(lock)
+    specifiers = {identity: Specifier(f"=={Version(identity[1])}") for identity in expected}
     tags = set(sys_tags())
     valid = set()
     conflicts = {}
@@ -74,18 +76,22 @@ def refuse_conflicting_wheels(lock, pool):
             name, version, _, wheel_tags = parse_wheel_filename(path.name)
         except InvalidWheelFilename:
             continue
-        identity = (name, version)
-        if identity not in expected or not tags.intersection(wheel_tags):
+        if not tags.intersection(wheel_tags):
+            continue
+        identities = [identity for identity, specifier in specifiers.items()
+                      if identity[0] == name and specifier.contains(version, prereleases=True)]
+        if not identities:
             continue
         try:
             checksum = digest(path)
         except (OSError, ValueError):
-            conflicts[identity] = path.name
+            conflicts.update((identity, path.name) for identity in identities)
             continue
-        if checksum in expected[identity]:
-            valid.add(identity)
-        else:
-            conflicts[identity] = path.name
+        for identity in identities:
+            if checksum in expected[identity]:
+                valid.add(identity)
+            else:
+                conflicts[identity] = path.name
     for identity, name in conflicts.items():
         if identity not in valid:
             raise ValueError(f"Cannot acquire wheels: cached wheel {name!r} is unreadable or differs from its lock; existing file preserved.")
