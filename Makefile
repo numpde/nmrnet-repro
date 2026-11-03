@@ -69,9 +69,11 @@ test/integration/rdkit-worker:
 
 geometry/image/build:
 	bash tools/container.sh $@
+	@bash tools/image_retirement.sh || { status=$$?; printf 'Image build succeeded; retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$$status" >&2; }
 
 provider/image/build:
 	bash tools/container.sh $@
+	@bash tools/image_retirement.sh || { status=$$?; printf 'Image build succeeded; retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$$status" >&2; }
 
 test/unit/provider/image test/integration/provider-runtime:
 	bash tools/container.sh $@
@@ -575,6 +577,7 @@ packages/preparation/wheelhouse/check:
 
 packages/image:
 	bash tools/inference_image.sh build
+	@bash tools/image_retirement.sh || { status=$$?; printf 'Image build succeeded; retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$$status" >&2; }
 
 packages/import:
 	bash tools/inference_image.sh import

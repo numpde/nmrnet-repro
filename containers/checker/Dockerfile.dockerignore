@@ -12,3 +12,5 @@
 !requirements/checker-dependencies.json
 !checker-wheels/
 !checker-wheels/*
+!checker-dependencies/
+!checker-dependencies/*

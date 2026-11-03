@@ -18,6 +18,7 @@ class ProviderPreparationTests(unittest.TestCase):
         expected = str((fixture.root / selection).resolve())
         first = fixture.run(selection)
         self.assertEqual(0, first.returncode, first.stderr)
+        self.assertTrue((fixture.root / "retirement-called").exists())
         self.assertEqual(9, len(fixture.calls()), fixture.calls())
         self.assertEqual(
             ['context inspect --format {{.Endpoints.docker.Host}} fixture-local'],
@@ -43,3 +44,11 @@ class ProviderPreparationTests(unittest.TestCase):
         self.assertEqual(0, second.returncode, second.stderr)
         self.assertEqual(5, len(fixture.calls()))
         self.assertEqual(original, [(path.read_bytes(), path.stat().st_ino) for path in receipts])
+
+    def test_retirement_failure_does_not_misreport_preparation(self):
+        fixture = PreparationFixture()
+        self.addCleanup(fixture.close)
+        fixture.environment["TEST_RETIRE_STATUS"] = "7"
+        result = fixture.run("../cache")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Provider preparation succeeded; image retirement is incomplete", result.stderr)

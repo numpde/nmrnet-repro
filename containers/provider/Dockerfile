@@ -2,10 +2,6 @@ FROM scratch AS runtime_wheels
 COPY wheelhouse/runtime/ /wheels/
 FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
-ARG PROVIDER_INPUTS
-ARG PROVIDER_WHEELS
-LABEL io.nmrnet-repro.provider-inputs="${PROVIDER_INPUTS}"
-LABEL io.nmrnet-repro.provider-wheels="${PROVIDER_WHEELS}"
 ENV NMRNET_IN_CONTAINER=1 PROVIDER_CORE_IN_CONTAINER=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /opt/build
 COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/provider_environment.py tools/baseline_prepare.py tools/container_resources.py ./tools/
@@ -22,3 +18,8 @@ RUN --mount=type=bind,from=runtime_wheels,source=/wheels,target=/runtime-wheels 
 WORKDIR /opt/provider
 USER 65532:65532
 ENTRYPOINT ["/opt/provider/environment/bin/python", "-I", "-B", "-m", "nmrnet_provider.process"]
+
+ARG PROVIDER_INPUTS
+ARG PROVIDER_WHEELS
+LABEL io.nmrnet-repro.provider-inputs="${PROVIDER_INPUTS}"
+LABEL io.nmrnet-repro.provider-wheels="${PROVIDER_WHEELS}"

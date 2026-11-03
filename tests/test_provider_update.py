@@ -17,6 +17,7 @@ class ProviderUpdateTests(unittest.TestCase):
         tools = self.root / "tools"
         tools.mkdir(parents=True)
         shutil.copyfile(ROOT / "tools/provider_update.sh", tools / "provider_update.sh")
+        shutil.copyfile(ROOT / "tools/image_lifecycle.sh", tools / "image_lifecycle.sh")
         self.record = Path(self.temporary.name) / "phases.txt"
         for name in ("container.sh", "provider_deployment.sh", "image_retirement.sh"):
             (tools / name).write_text(
@@ -58,6 +59,18 @@ class ProviderUpdateTests(unittest.TestCase):
             "container.sh|provider/image/build|unix:///selected.sock",
             "provider_deployment.sh|update|unix:///selected.sock",
         ])
+
+    def test_image_lease_spans_build_and_install_but_not_retirement(self):
+        tools = self.root / "tools"
+        for name in ("container.sh", "provider_deployment.sh", "image_retirement.sh"):
+            expected = "success" if name == "image_retirement.sh" else "busy"
+            (tools / name).write_text(
+                '#!/usr/bin/env bash\n'
+                'if flock -n -x "$(dirname "$(dirname "$0")")" true; then observed=success; else observed=busy; fi\n'
+                f'[[ $observed == {expected} ]]\n'
+            )
+        result = self.run_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_update_refuses_invalid_retention_before_effects(self):
         result = self.run_update(NMRNET_RETAIN_PRIOR_INPUT="yes")

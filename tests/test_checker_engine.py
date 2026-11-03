@@ -200,13 +200,14 @@ def main():
         fail_build = os.environ.get("CHECKER_FIXTURE_BUILD_FAIL") == "1"
         if not fail_build:
             build_output = os.environ["CHECKER_FIXTURE_BUILD_OUTPUT"]
-        if arguments[-1] != "-":
+        if arguments[-1] != "-" or "--build-context" in arguments:
             raise SystemExit(97)
+        capture = next((state.parent / ".work/checker").glob(".build.*"))
         temporary = tempfile.TemporaryDirectory(prefix="checker-stream-fixture-")
         context = Path(temporary.name)
         with tarfile.open(fileobj=sys.stdin.buffer, mode="r|") as archive:
             archive.extractall(context, filter="data")
-        dependencies = Path(arguments[arguments.index("--build-context") + 1].split("=", 1)[1])
+        dependencies = context / "checker-dependencies"
         declaration = context / "requirements/checker-dependencies.json"
         checker.check(declaration, dependencies, checker.declaration(declaration)["base"], context / "checker-wheels")
         mutation = os.environ.get("CHECKER_FIXTURE_MUTATE")
@@ -218,7 +219,7 @@ def main():
             if path.is_file()
         }
         (state / "build.json").write_text(
-            json.dumps({"context": str(dependencies.parent / "context"), "manifest": manifest, "dependencies": str(dependencies)})
+            json.dumps({"context": str(capture / "context"), "manifest": manifest, "dependencies": str(capture / "dependencies")})
         )
         label = arguments[arguments.index("--label") + 1].split("=", 1)[1]
         (state / "label").write_text(label)

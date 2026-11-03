@@ -107,6 +107,12 @@ prepare_provider() {
     prepare_models weight.zip
     prepare_models checkpoints.zip
     if ! "$print_command"; then
+        if controller_native 'provider preparation: image retirement' untimed stdio \
+            bash "$repository_root/tools/image_retirement.sh"; then :; else
+            status=$?
+            if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 ]]; then return "$status"; fi
+            printf 'Provider preparation succeeded; image retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$status" >&2
+        fi
         printf '\n%s\n' 'Images and models are ready. Next, configure credentials and the named deployment:' \
             '  https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration' >&2
     fi

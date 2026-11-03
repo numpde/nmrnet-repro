@@ -50,7 +50,14 @@ elif args[0]=="inspect": print(state["used"])
 elif args[:2]==["image","ls"]:
     role=args[-1].removeprefix("label=io.nmrnet-repro.").removesuffix("-inputs")
     for identifier in state["images"][role]: print(identifier)
-elif args[:2]==["image","inspect"]: print("1 0" if args[-1]==state["tagged"] else "0 0")
+elif args[:2]==["image","inspect"]:
+    aliases = "1 0" if args[-1]==state["tagged"] else "0 0"
+    calls = [json.loads(line) for line in (root/"calls.jsonl").read_text().splitlines()]
+    inspections = sum(call[:2] == ["image", "inspect"] and call[-1] == args[-1] for call in calls)
+    if "Created" in args[args.index("--format") + 1]:
+        print(aliases, state.get("created", {}).get(args[-1], "2001-01-01T00:00:00Z"))
+    else:
+        print("1 0" if inspections > 1 and args[-1] == state.get("tagged_on_recheck") else aliases)
 elif args[:2]==["image","rm"]:
     assert args[2]=="--no-prune" and len(args)==4
     with (root/"removed").open("a") as stream: stream.write(args[-1]+"\\n")
@@ -105,6 +112,45 @@ else: raise SystemExit(91)
                 result = self.retire()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.removed(), [])
+
+    def test_retained_unselected_generation_protects_its_images(self):
+        retained = self.deployment / "bundles/generation-retained"
+        retained.mkdir()
+        (retained / "compose.json").write_text(json.dumps({"services": {"provider": {"image": image("f")}}}))
+        result = self.retire()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.removed(), [])
+
+    def test_incomplete_retained_generation_blocks_every_removal(self):
+        (self.deployment / "bundles/generation-incomplete").mkdir()
+        result = self.retire()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("provider/deployment/retire-generations", result.stderr)
+        self.assertEqual(self.removed(), [])
+
+    def test_recent_unselected_image_is_preserved(self):
+        from datetime import datetime, timezone
+        self.state["created"] = {image("f"): datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        self.save_state()
+        result = self.retire()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.removed(), [])
+
+    def test_unknown_or_future_creation_time_never_removes_image(self):
+        for created in ("not-a-time", "2999-01-01T00:00:00Z"):
+            with self.subTest(created=created):
+                self.state["created"] = {image("f"): created}
+                self.save_state()
+                result = self.retire()
+                self.assertEqual(result.returncode == 0, created.startswith("2999"))
+                self.assertEqual(self.removed(), [])
+
+    def test_alias_added_after_inventory_is_preserved(self):
+        self.state["tagged_on_recheck"] = image("f")
+        self.save_state()
+        result = self.retire()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.removed(), [])
 
     def test_checkout_lease_protects_the_build_to_record_publication_gap(self):
         publisher = subprocess.Popen([

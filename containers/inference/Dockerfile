@@ -4,12 +4,6 @@ FROM scratch AS runtime_wheels
 COPY wheelhouse/runtime/ /wheels/
 FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
-ARG NMRNET_REVISION
-ARG INFERENCE_INPUTS
-ARG INFERENCE_WHEELS
-LABEL io.nmrnet-repro.upstream-revision="${NMRNET_REVISION}"
-LABEL io.nmrnet-repro.inference-inputs="${INFERENCE_INPUTS}"
-LABEL io.nmrnet-repro.inference-wheels="${INFERENCE_WHEELS}"
 # Build-time repository tools use the same admission marker as contained runtime lanes.
 ENV NMRNET_IN_CONTAINER=1 \
     PROVIDER_CORE_IN_CONTAINER=1 \
@@ -44,3 +38,10 @@ COPY NMRNetplusplus/LICENSE /opt/nmrnet/LICENSE
 WORKDIR /opt/nmrnet
 USER 65532:65532
 CMD ["python3", "-B", "-c", "import torch, unicore, uninmr, uninmr.infer; assert torch.version.cuda is None; assert torch.get_default_dtype() == torch.float32; print('Inference imports passed: CPU float32; torch=' + torch.__version__)"]
+
+ARG NMRNET_REVISION
+ARG INFERENCE_INPUTS
+ARG INFERENCE_WHEELS
+LABEL io.nmrnet-repro.upstream-revision="${NMRNET_REVISION}"
+LABEL io.nmrnet-repro.inference-inputs="${INFERENCE_INPUTS}"
+LABEL io.nmrnet-repro.inference-wheels="${INFERENCE_WHEELS}"

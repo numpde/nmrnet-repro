@@ -285,7 +285,6 @@ else
 fi
 build=("${engine[@]}" build --builder default --quiet --network none --pull=false
     --label "io.nmrnet-repro.checker-inputs=$input_id"
-    --build-context "dependencies=$capture/dependencies"
     --file containers/checker/Dockerfile -)
 if "$print_command"; then run "${build[@]}"; exit; fi
 python3 -I -S - "$capture/context" "$capture" "${inputs[@]}" <<'PY'
@@ -296,8 +295,17 @@ for name in sys.argv[3:]:
     path = context / name
     sources.append({'path': str(path), 'destination': name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                     'executable': bool(path.stat().st_mode & 0o111)})
-(output / 'sources.json').write_text(json.dumps(sources))
 declaration = json.loads((context / 'requirements/checker-dependencies.json').read_text())
+for package in declaration['packages']:
+    if package['name'] == 'ruff':
+        continue
+    path = output / 'dependencies' / package['file']
+    sources.append({'path': str(path), 'destination': 'checker-dependencies/' + path.name,
+                    'sha256': package['sha256'], 'executable': bool(path.stat().st_mode & 0o111)})
+path = output / 'dependencies' / '.complete'
+sources.append({'path': str(path), 'destination': 'checker-dependencies/.complete',
+                'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'executable': bool(path.stat().st_mode & 0o111)})
+(output / 'sources.json').write_text(json.dumps(sources))
 wheel = next(package for package in declaration['packages'] if package['name'] == 'ruff')
 (output / 'manifest.json').write_text(json.dumps([{'directory': 'checker-wheels', 'filename': wheel['file'], 'sha256': wheel['sha256']}]))
 PY
@@ -310,11 +318,18 @@ tool_url=${tool_line%%#sha256=*}; tool_hash=${tool_line##*#sha256=}; tool_name=$
 observed=$(sha256sum -- "$wheelhouse_directory/$tool_name")
 [[ ${observed%% *} == "$tool_hash" ]] || { printf '%s\n' 'Checker stream tool differs from its pin.' >&2; exit 2; }
 capture_borrowed=true
-inference_native 'checker image build' "$build_seconds" image-id bash -o pipefail -c '
+if inference_native 'checker image build' "$build_seconds" image-id bash -o pipefail -c '
     tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
     python3 -I -S "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
-' bash "$wheelhouse_directory/$tool_name" "$wheelhouse_directory" "$capture/sources.json" "$capture/manifest.json" "${build[@]}"
-capture_borrowed=false
+' bash "$wheelhouse_directory/$tool_name" "$wheelhouse_directory" "$capture/sources.json" "$capture/manifest.json" "${build[@]}"; then
+    build_status=0
+else
+    build_status=$?
+fi
+# The streamed sources are read by the joined local pipeline, not by a
+# separate local build context. A failed pre-build bind verification is separate.
+if "$inference_retirement_confirmed"; then capture_borrowed=false; fi
+(( build_status == 0 )) || exit "$build_status"
 image_id=$inference_result
 admission_directory=$(umask 077; mktemp -d /tmp/nmrnet-checker-admission.XXXXXXXX)
 (umask 077; : > "$admission_directory/stdout"; : > "$admission_directory/stderr")

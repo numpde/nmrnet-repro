@@ -14,6 +14,8 @@ retain_prior=${NMRNET_RETAIN_PRIOR_INPUT-}
     printf '%s\n' 'Provider update requires an explicit named deployment.' >&2
     exit 2
 }
+source "$repository_root/tools/image_lifecycle.sh"
+image_lifecycle_lock shared
 
 run_phase() {
     local phase=$1 status
@@ -32,6 +34,8 @@ run_phase() {
 run_phase 'build the host-local provider image' bash "$repository_root/tools/container.sh" provider/image/build
 run_phase 'drain, install and verify the selected deployment under one lifecycle lock' \
     bash "$repository_root/tools/provider_deployment.sh" update
+flock --unlock "$image_lifecycle_fd"
+exec {image_lifecycle_fd}<&-
 
 if [[ $retain_prior == 1 ]]; then
     printf '%s\n' 'Provider update retained previous images and configuration generations.'

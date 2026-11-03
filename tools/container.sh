@@ -519,8 +519,14 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$package_test_image" python3 -B -m unittest -v)
                 if [[ "$1" == test/unit/packages/images ]]; then
-                    command+=(tests.test_image_retirement tests.test_provider_deployment_launcher
-                        repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health)
+                    command+=(tests.test_image_retirement tests.test_provider_deployment_launcher tests.test_provider_update
+                        tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare
+                        tests.test_checker_launcher.CheckerLauncherTests.test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture
+                        tests.test_checker_launcher.CheckerLauncherTests.test_build_failure_and_wrong_observed_id_preserve_predecessor_and_retire_capture
+                        tests.test_checker_launcher.CheckerLauncherTests.test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture
+                        tests.test_checker_launcher.CheckerLauncherTests.test_failed_captured_verification_retains_borrowed_inputs
+                        repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health
+                        repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_build_retirement_follows_success_and_reports_failure)
                 elif [[ "$1" == test/unit/packages/wheelhouse ]]; then
                     command+=(tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_wheelhouse_launcher
                         tests.test_network_cancellation.WheelhouseProbeTests tests.test_checker

@@ -438,6 +438,10 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self.assertEqual(0, result.returncode, msg=result.stderr)
         evidence = json.loads((self.root / "state/build.json").read_text())
         self.assertEqual(expected, evidence["manifest"]["tools/checker.py"])
+        declared = {item["file"] for item in self.document["packages"] if item["name"] != "ruff"}
+        streamed = {name.removeprefix("checker-dependencies/") for name in evidence["manifest"]
+                    if name.startswith("checker-dependencies/")}
+        self.assertEqual(declared | {".complete"}, streamed)
         self.assertNotEqual(Path(evidence["context"]), self.root)
         self.assertFalse(Path(evidence["context"]).exists())
         self.assertFalse(Path(evidence["dependencies"]).exists())
@@ -458,8 +462,8 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual("sha256:" + "c" * 64 + "\n", record.read_text())
                 evidence = json.loads((self.root / "state/build.json").read_text())
-                self.assertEqual("CHECKER_FIXTURE_BUILD_FAIL" in additions, Path(evidence["context"]).exists())
-                self.assertEqual("CHECKER_FIXTURE_BUILD_FAIL" in additions, Path(evidence["dependencies"]).exists())
+                self.assertFalse(Path(evidence["context"]).exists())
+                self.assertFalse(Path(evidence["dependencies"]).exists())
 
     def test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture(self):
         (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
@@ -472,9 +476,12 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         capture = Path(evidence["context"]).parent
         self.assertTrue(Path(evidence["context"]).is_dir())
         self.assertTrue(Path(evidence["dependencies"]).is_dir())
-        self.assertIn("inputs retained", result.stderr)
+        self.assertIn("Cannot confirm checker build capture removal", result.stderr)
         self.assertIn(str(capture), result.stderr)
-        self.assertFalse((self.root / "state/cleanup.jsonl").exists())
+        self.assertEqual(
+            [["-rf", "--", str(capture)]],
+            [json.loads(line) for line in (self.root / "state/cleanup.jsonl").read_text().splitlines()],
+        )
 
     def test_successful_build_with_failed_capture_cleanup_fails_and_keeps_published_record(self):
         (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")

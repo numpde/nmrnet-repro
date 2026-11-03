@@ -24,7 +24,7 @@ finish() {
     printf '%s' "$inference_diagnostic" >&2
     [[ $status != 0 || $cleanup_status == 0 ]] || status=$cleanup_status
     if [[ $status == 0 ]]; then
-        printf 'Retired %s obsolete NMRNet images; selected, container-referenced and tagged images were preserved.\n' "$removed"
+        printf 'Retired %s obsolete NMRNet images; prepared, retained, container-referenced, tagged and recently created images were preserved.\n' "$removed"
     else
         printf 'Image retirement stopped after %s removals (status %s); no force or parent-image pruning was used.\n' "$removed" "$status" >&2
     fi
@@ -95,15 +95,22 @@ for deployment in "$repository_root/secrets/deployments/"*; do
     [[ -d $deployment && ! -L $deployment && -r $deployment && -x $deployment ]] \
         || refuse 'a deployment directory cannot be read and searched; retain existing images.'
     current=$deployment/current
-    [[ -e $current || -L $current ]] || continue
-    [[ -d $deployment && ! -L $deployment && -L $current ]] || refuse 'a selected deployment is not in its original directory.'
-    target=$(readlink -- "$current")
-    [[ $target =~ ^bundles/generation-[A-Za-z0-9_-]{1,64}$ && -d $deployment/$target && ! -L $deployment/$target \
-        && -f $current/compose.json && ! -L $current/compose.json ]] || refuse 'a selected deployment recipe is missing or malformed; retain its images.'
-    capture compose --env-file /dev/null --project-name nmrnet-image-retirement --project-directory "$repository_root" \
-        --file "$current/compose.json" config --no-interpolate --images
-    [[ -s $scratch/output ]] || refuse 'a selected recipe yielded no pinned images; retain existing images.'
-    protect_output
+    if [[ -e $current || -L $current ]]; then
+        [[ -L $current ]] || refuse 'a selected deployment is not in its original directory.'
+        target=$(readlink -- "$current")
+        [[ $target =~ ^bundles/generation-[A-Za-z0-9_-]{1,64}$ && -d $deployment/$target && ! -L $deployment/$target \
+            && -f $current/compose.json && ! -L $current/compose.json ]] || refuse 'a selected deployment recipe is missing or malformed; retain its images.'
+    fi
+    require_inventory_directory "$deployment/bundles"
+    for bundle in "$deployment/bundles/"generation-*; do
+        [[ -e $bundle || -L $bundle ]] || continue
+        [[ -d $bundle && ! -L $bundle && -r $bundle && -x $bundle && -f $bundle/compose.json && ! -L $bundle/compose.json ]] \
+            || refuse "generation $bundle has no readable regular compose.json; inspect it and retire unused generations with make provider/deployment/retire-generations DEPLOYMENT=<name> before retrying."
+        capture compose --env-file /dev/null --project-name nmrnet-image-retirement --project-directory "$repository_root" \
+            --file "$bundle/compose.json" config --no-interpolate --images
+        [[ -s $scratch/output ]] || refuse 'a retained generation yielded no pinned images; retain existing images.'
+        protect_output
+    done
 done
 capture ps --all --quiet --no-trunc
 if [[ -s $scratch/output ]]; then
@@ -126,17 +133,31 @@ done
 # Finish all inventory and alias inspection before any removal. A failed read
 # must not become an empty retention set or a partially applied plan.
 removable=()
+now=$(date -u +%s)
+[[ $now =~ ^[0-9]+$ ]] || refuse 'cannot establish the current time; retain existing images.'
 for identifier in "${!candidates[@]}"; do
-    capture image inspect --format '{{len .RepoTags}} {{len .RepoDigests}}' "$identifier"
+    capture image inspect --format '{{len .RepoTags}} {{len .RepoDigests}} {{.Created}}' "$identifier"
     aliases=$(< "$scratch/output")
-    [[ $aliases =~ ^[0-9]+\ [0-9]+$ ]] || refuse 'image alias inspection was incomplete.'
-    [[ $aliases != '0 0' ]] || removable+=("$identifier")
+    [[ $aliases =~ ^([0-9]+)\ ([0-9]+)\ ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z)$ ]] \
+        || refuse 'image alias or creation-time inspection was incomplete.'
+    tags=${BASH_REMATCH[1]} digests=${BASH_REMATCH[2]} created=${BASH_REMATCH[3]}
+    created_epoch=$(date -u -d "$created" +%s) || refuse 'an image creation time is invalid; retain existing images.'
+    [[ $created_epoch =~ ^[0-9]+$ ]] || refuse 'an image creation time is invalid; retain existing images.'
+    # Created is an extra buffer, not a publication time: cached image IDs may
+    # be older than their latest use. Prepared records and recipes own pins.
+    if [[ $tags == 0 && $digests == 0 ]] && (( now >= created_epoch && now - created_epoch >= 86400 )); then
+        removable+=("$identifier")
+    fi
 done
 for identifier in "${removable[@]}"; do
-    # Other Engine users do not participate in this checkout lease. Recheck
-    # references and let Docker refuse any later conflict; never force it.
+    # Recheck external references before deletion. Other Engine users do not
+    # share this checkout lease, so these checks cannot make their actions atomic.
     capture ps --all --quiet --no-trunc --filter "ancestor=$identifier"
     [[ ! -s $scratch/output ]] || continue
+    capture image inspect --format '{{len .RepoTags}} {{len .RepoDigests}}' "$identifier"
+    aliases=$(< "$scratch/output")
+    [[ $aliases =~ ^[0-9]+\ [0-9]+$ ]] || refuse 'image alias recheck was incomplete; retain remaining images.'
+    [[ $aliases == '0 0' ]] || continue
     inference_native 'retire obsolete NMRNet image' 30 stdio "${engine[@]}" image rm --no-prune "$identifier"
     removed=$((removed + 1))
 done

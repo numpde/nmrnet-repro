@@ -12,6 +12,28 @@ from tests.unit.provider_prepare_fakes import PreparationFixture
 
 
 class ProviderPreparationRefusalTests(unittest.TestCase):
+    def test_signal_waits_for_retirement_child_before_returning(self):
+        fixture = PreparationFixture()
+        self.addCleanup(fixture.close)
+        fixture.environment["TEST_WAIT_RETIRE"] = "1"
+        process = subprocess.Popen(
+            fixture.command("../cache"), env=fixture.environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        try:
+            deadline = time.monotonic() + 10
+            while not (fixture.root / "retirement-ready").exists():
+                self.assertIsNone(process.poll())
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.01)
+            process.terminate()
+            process.communicate(timeout=8)
+            self.assertNotEqual(0, process.returncode)
+            self.assertEqual("settled", (fixture.root / "retirement-settled").read_text())
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=5)
+
     def test_owner_failure_stops_before_later_images_or_model_acquisition(self):
         fixture = PreparationFixture()
         self.addCleanup(fixture.close)
@@ -23,6 +45,7 @@ class ProviderPreparationRefusalTests(unittest.TestCase):
             "inference_image.sh:import", "container.sh:geometry/image/build",
         ])
         self.assertNotIn("Preparation steps finished", result.stderr)
+        self.assertFalse((fixture.root / "retirement-called").exists())
 
     def test_signal_waits_for_current_owners_cleanup_and_stops(self):
         fixture = PreparationFixture()

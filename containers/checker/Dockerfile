@@ -6,13 +6,15 @@
 # Dependency acquisition is a separate explicit lane. This build has no network.
 FROM scratch AS checker_wheels
 COPY checker-wheels/ /wheelhouse/
+FROM scratch AS checker_dependencies
+COPY checker-dependencies/ /dependencies/
 FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
 ENV NMRNET_IN_CONTAINER=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /opt/checker
 COPY tools/checker.py tools/artifacts.py tools/container_guard.py ./tools/
 COPY requirements/checker-dependencies.json ./requirements/checker-dependencies.json
-RUN --mount=type=bind,from=dependencies,target=/dependencies,ro \
+RUN --mount=type=bind,from=checker_dependencies,source=/dependencies,target=/dependencies,ro \
     --mount=type=bind,from=checker_wheels,source=/wheelhouse,target=/wheelhouse,ro \
     python3 -B -m tools.checker install \
         --declaration /opt/checker/requirements/checker-dependencies.json \

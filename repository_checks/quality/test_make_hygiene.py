@@ -51,6 +51,30 @@ SECRET_PATTERNS = [
 
 
 class RepositoryHygieneTest(unittest.TestCase):
+    def test_image_build_retirement_follows_success_and_reports_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Makefile").write_text(read_text(repo_path("Makefile")))
+            (root / "tools").mkdir()
+            (root / "tools/docker_client.sh").write_text(
+                'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
+                'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
+            )
+            for script in ("container.sh", "inference_image.sh"):
+                (root / "tools" / script).write_text('exit "${TEST_BUILD_STATUS}"\n')
+            (root / "tools/image_retirement.sh").write_text('touch "$(dirname "$0")/cleanup-called"\nexit 7\n')
+            for target in ("provider/image/build", "geometry/image/build", "packages/image"):
+                for build_status in (7, 0):
+                    with self.subTest(target=target, build_status=build_status):
+                        (root / "tools/cleanup-called").unlink(missing_ok=True)
+                        result = subprocess.run(["make", "--no-print-directory", "-C", str(root), target],
+                                                env={**os.environ, "TEST_BUILD_STATUS": str(build_status)},
+                                                capture_output=True, text=True, timeout=5)
+                        self.assertEqual(result.returncode == 0, build_status == 0, result.stderr)
+                        self.assertEqual((root / "tools/cleanup-called").exists(), build_status == 0)
+                        if build_status == 0:
+                            self.assertIn("Image build succeeded; retirement is incomplete", result.stderr)
+
     def test_image_retirement_runs_after_success_without_changing_deployment_health(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
