@@ -1,10 +1,9 @@
 Shared wheelhouse follow-ups
 
-The deployed image builds pin wheelhouse-tool 0.5.7 for streaming selected
-artifacts. Acquisition pins 0.5.11 for cache-aware selection and source-lock
-verification. Keep both pins until a coordinated image rebuild and admission
-can verify a single release across the deployed consumers. Do not introduce a
-wheel staging copy or redownload cached artifacts as part of that unification.
+Future image builds and acquisition pin wheelhouse-tool 0.5.11. The currently
+deployed images were built using the earlier 0.5.7 stream tool; their input
+labels remain tied to those actual builds. Rebuild and admit images through the
+normal lifecycle when a deployment update is needed.
 When a cold wheel selection fails, the conflict check hashes compatible cached
 candidates again, including during the exclusive peer-winner recheck. Large
 partial pools can therefore delay readers during local verification, though the
