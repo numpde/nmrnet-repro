@@ -11,11 +11,15 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
+import traceback
 import unittest
+import urllib.error
 from pathlib import Path
+from contextlib import redirect_stderr
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -70,6 +74,57 @@ class CheckerDependencyFixture(unittest.TestCase):
 
 
 class CheckerDeclarationTests(CheckerDependencyFixture):
+    def test_checker_entrypoint_needs_only_the_offline_image_files(self):
+        tools_directory = self.root / "tools"
+        tools_directory.mkdir()
+        for name in ("checker.py", "artifacts.py", "container_guard.py"):
+            shutil.copyfile(Path.cwd() / "tools" / name, tools_directory / name)
+        environment = os.environ | {"PYTHONPATH": str(self.root)}
+        result = subprocess.run([sys.executable, "-B", "-m", "tools.checker", "--help"], cwd=self.root,
+                                env=environment, capture_output=True, text=True, check=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("install", result.stdout)
+
+    def test_offline_install_does_not_import_wheelhouse(self):
+        argv = ["checker", "install", "--declaration", str(self.path), "--directory", str(self.directory),
+                "--base", self.document["base"], "--wheelhouse", str(self.root)]
+        with (patch.object(sys, "argv", argv), patch.dict(sys.modules, {"tools.wheelhouse": None}),
+              patch.object(checker, "install") as install):
+            checker.main()
+        install.assert_called_once()
+
+    def test_checker_download_reports_bounded_network_error(self):
+        from tools.wheelhouse import WheelhouseNetworkError
+
+        argv = ["checker", "download", "--declaration", str(self.path), "--directory", str(self.directory),
+                "--base", self.document["base"], "--wheelhouse", str(self.root),
+                "--tool-assets", str(self.root / "tool"), "--stream-assets", str(self.root / "stream")]
+        output = io.StringIO()
+        with (patch.object(sys, "argv", argv), patch.object(checker, "download", side_effect=WheelhouseNetworkError("Cannot acquire tool: the server returned HTTP 503.")),
+              redirect_stderr(output), self.assertRaises(SystemExit) as stopped):
+            checker.main()
+        self.assertEqual(1, stopped.exception.code)
+        self.assertIn("HTTP 503", output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
+
+    def test_checker_stops_before_debian_download_when_ruff_publisher_fails(self):
+        pool = self.root / "pool"
+        pool.mkdir()
+        tool = pool / "wheelhouse-tool-1.0.0.pyz"
+        tool.write_bytes(b"tool bytes")
+        pins = self.root / "pins.in"
+        pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/" + tool.name
+                        + "#sha256=" + hashlib.sha256(tool.read_bytes()).hexdigest() + "\n")
+        failure = subprocess.CalledProcessError(7, ["tool", "https://secret.invalid/private"])
+        output = io.StringIO()
+        with (patch.object(checker.subprocess, "run", side_effect=failure), patch.object(checker, "open_url") as network,
+              redirect_stderr(output), self.assertRaises(SystemExit) as stopped):
+            checker.download(self.path, self.root / "fresh", self.document["base"], pool, pins, pins)
+        self.assertEqual(7, stopped.exception.code)
+        self.assertIn("checker Ruff wheel", output.getvalue())
+        self.assertNotIn("secret.invalid", output.getvalue())
+        network.assert_not_called()
+
     def test_valid_exact_inputs_and_receipt_are_accepted(self):
         self.assertEqual(checker.check(self.path, self.directory, self.document["base"]), checker.inventory(self.path, self.directory))
 
@@ -288,6 +343,40 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         output = self.acquire()
         self.assertEqual(checker.check(self.path, output, self.document["base"]), checker.check(self.path, self.directory, self.document["base"]))
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
+
+    def test_debian_download_failure_is_bounded_and_retains_stage(self):
+        from tools.wheelhouse import WheelhouseNetworkError
+
+        failure = urllib.error.HTTPError("https://secret.invalid/private", 503, "private response", {}, None)
+        with (patch.dict(os.environ, self.proxy, clear=True),
+              patch.object(checker, "open_url", side_effect=failure) as network,
+              self.assertRaises(WheelhouseNetworkError) as stopped):
+            checker.download(self.path, self.root / "acquired", self.document["base"])
+        network.assert_called_once()
+        rendered = "".join(traceback.format_exception(stopped.exception))
+        self.assertIn("HTTP 503", rendered)
+        self.assertNotIn("secret.invalid", rendered)
+        self.assertNotIn("private", rendered)
+        self.assertEqual(1, len(list(self.root.glob(".dependencies.pending-*"))))
+        self.assertFalse((self.root / "acquired").exists())
+
+    def test_debian_read_timeout_retains_partial_without_publishing(self):
+        from tools.wheelhouse import WheelhouseNetworkError
+
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.side_effect = [b"git", TimeoutError("private endpoint")]
+        with (patch.dict(os.environ, self.proxy, clear=True),
+              patch.object(checker, "open_url", return_value=response) as network,
+              self.assertRaises(WheelhouseNetworkError) as stopped):
+            checker.download(self.path, self.root / "acquired", self.document["base"])
+        network.assert_called_once()
+        self.assertIn("connection timed out", str(stopped.exception))
+        self.assertNotIn("private", "".join(traceback.format_exception(stopped.exception)))
+        stages = list(self.root.glob(".dependencies.pending-*"))
+        self.assertEqual(1, len(stages))
+        self.assertEqual(b"git", (stages[0] / self.document["packages"][0]["file"]).read_bytes())
+        self.assertFalse((self.root / "acquired").exists())
 
     def test_resume_reuses_verified_files_and_fetches_only_missing_debian_inputs(self):
         stage = self.root / ".dependencies.pending-example"

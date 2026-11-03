@@ -21,7 +21,7 @@ from pip._vendor.packaging.tags import sys_tags
 from pip._vendor.packaging.specifiers import Specifier
 from pip._vendor.packaging.version import Version
 
-from tools.wheelhouse import (core_assets, digest, prepare_core_assets, prepare_source, requirements, select_wheels,
+from tools.wheelhouse import (WheelhouseNetworkError, core_assets, digest, prepare_core_assets, prepare_source, requirements, select_wheels,
                               source_cache_file, source_identity, verified_source)
 
 
@@ -136,6 +136,15 @@ def direct_wheels(paths, packages):
     return result
 
 
+def run_shared(command, operation, **kwargs):
+    try:
+        subprocess.run(command, check=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        status = error.returncode if error.returncode > 0 else 128 - error.returncode
+        print(f"Cannot {operation}: the shared wheelhouse tool exited with status {status}.", file=sys.stderr)
+        raise SystemExit(status) from None
+
+
 def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stream_assets=None):
     """Reuse the pool, then project missing locks and publish through the shared tool."""
     with tempfile.TemporaryDirectory(prefix="nmrnet-wheel-inputs-") as temporary:
@@ -194,12 +203,12 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
         for index, (lock, sources) in enumerate(jobs):
             projected = root / f"pylock.{index}.toml"
             with projected.open("xb") as output:
-                subprocess.run([sys.executable, "-I", "-S", str(tool), "locate", "--lock", str(lock),
-                                "--index-url", "https://pypi.org/simple", "--pool", str(pool),
-                                *[argument for url in sources for argument in ("--source", url)]],
-                               stdout=output, check=True)
-            subprocess.run([sys.executable, "-I", "-S", str(tool), "acquire", "--lock", str(projected),
-                            "--source-lock", str(lock), "--pool", str(pool)], check=True)
+                run_shared([sys.executable, "-I", "-S", str(tool), "locate", "--lock", str(lock),
+                            "--index-url", "https://pypi.org/simple", "--pool", str(pool),
+                            *[argument for url in sources for argument in ("--source", url)]],
+                           "locate locked wheels", stdout=output)
+            run_shared([sys.executable, "-I", "-S", str(tool), "acquire", "--lock", str(projected),
+                        "--source-lock", str(lock), "--pool", str(pool)], "acquire locked wheels")
             with pool_lock(pool, exclusive=False) as descriptor:
                 select_wheels(lock, pool, lock_fd=descriptor)
 
@@ -327,4 +336,8 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except WheelhouseNetworkError as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1) from None

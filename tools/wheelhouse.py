@@ -7,13 +7,17 @@ require_container()
 import argparse
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 import re
 import shutil
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -26,6 +30,36 @@ SOURCE_TEMP_PREFIX = ".unicore-source."
 # A fixed 1 MiB read buffer bounds streaming memory for hashes and downloads.
 # repo-check: allow-module-constant
 CHUNK_BYTES = 1024 * 1024
+
+
+class WheelhouseNetworkError(OSError):
+    """A direct wheelhouse fetch failed at its network boundary."""
+
+
+def network_request(name, operation):
+    """Report bounded transport evidence without exposing URLs or response text."""
+    try:
+        return operation()
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        if isinstance(error, urllib.error.HTTPError):
+            detail = f"the server returned HTTP {error.code}"
+        else:
+            reason = error.reason if isinstance(error, urllib.error.URLError) else error
+            if isinstance(reason, socket.gaierror):
+                detail = "name resolution failed"
+            elif isinstance(reason, TimeoutError):
+                detail = "the connection timed out"
+            elif isinstance(reason, ssl.SSLError):
+                detail = "the TLS connection failed"
+            elif isinstance(reason, OSError) and (match := re.match(r"^Tunnel connection failed: ([0-9]{3})(?:\s|$)", str(reason))):
+                detail = f"the proxy tunnel returned HTTP {match[1]}"
+            elif isinstance(reason, OSError) and isinstance(reason.errno, int):
+                detail = f"the network failed with error number {reason.errno}"
+            elif isinstance(reason, http.client.HTTPException):
+                detail = "the HTTP connection failed"
+            else:
+                detail = "the network request failed"
+        raise WheelhouseNetworkError(f"Cannot acquire {name}: {detail}.") from None
 
 
 def digest(path):
@@ -104,8 +138,8 @@ def acquire_source(source, partial):
     """Fetch the admitted Uni-Core archive to one private file in its pool."""
     checksum = hashlib.sha256()
     size = 0
-    with open_url(urllib.request.Request(source["url"]), timeout=60) as response, partial.open("wb") as stream:
-        while chunk := response.read(CHUNK_BYTES):
+    with network_request("Uni-Core source", lambda: open_url(urllib.request.Request(source["url"]), timeout=60)) as response, partial.open("wb") as stream:
+        while chunk := network_request("Uni-Core source", lambda: response.read(CHUNK_BYTES)):
             size += len(chunk)
             if not (size <= source["size"]):
                 raise ValueError("Cannot acquire Uni-Core source: response exceeds declared size")
@@ -347,8 +381,9 @@ def prepare_core_assets(inputs, pool, *, download):
         staged = Path(temporary)
         try:
             print(f"Downloading shared release artifact: {name}", flush=True)
-            with open_url(urllib.request.Request(url), timeout=60) as response, staged.open("wb") as target:
-                shutil.copyfileobj(response, target, CHUNK_BYTES)
+            with network_request(name, lambda: open_url(urllib.request.Request(url), timeout=60)) as response, staged.open("wb") as target:
+                while chunk := network_request(name, lambda: response.read(CHUNK_BYTES)):
+                    target.write(chunk)
                 target.flush()
                 os.fsync(target.fileno())
             if digest(staged) != checksum:
@@ -460,4 +495,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except WheelhouseNetworkError as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1) from None

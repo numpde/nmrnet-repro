@@ -196,7 +196,7 @@ def acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
 def _acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
     """Reuse the declared wheel or publish it through the shared tool."""
     from tools.wheelhouse import prepare_core_assets
-    from tools.wheelhouse_acquire import shared_asset_present
+    from tools.wheelhouse_acquire import run_shared, shared_asset_present
 
     wheel = next(package for package in document["packages"] if package["name"] == "ruff")
     pool = Path(wheelhouse)
@@ -248,7 +248,8 @@ def _acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
                         '[[packages]]\nname = "ruff"\nversion = ' + json.dumps(wheel["version"]) + '\n'
                         '[packages.archive]\nurl = ' + json.dumps(wheel["url"]) + '\n'
                         '[packages.archive.hashes]\nsha256 = ' + json.dumps(wheel["sha256"]) + '\n')
-        subprocess.run([sys.executable, "-I", "-S", str(tool), "acquire", "--lock", str(lock), "--pool", str(pool)], check=True)
+        run_shared([sys.executable, "-I", "-S", str(tool), "acquire", "--lock", str(lock), "--pool", str(pool)],
+                   "acquire the checker Ruff wheel")
     if file_identity(target) != expected:
         raise ValueError("Cannot acquire checker Ruff wheel: published bytes differ from declaration")
 
@@ -336,6 +337,8 @@ def _download(document, declaration_sha256, output, base, wheelhouse, tool_asset
 
 
 def _finish_download(document, declaration_sha256, output, wheelhouse, staged, resume):
+    from tools.wheelhouse import network_request
+
     sys.stdout.write(f"Acquiring checker dependencies into {staged}; incomplete staging is retained on failure.\n")
     sys.stdout.flush()
     for package in document["packages"]:
@@ -345,8 +348,9 @@ def _finish_download(document, declaration_sha256, output, wheelhouse, staged, r
         if resume and destination.exists():
             continue
         count = 0
-        with open_url(urllib.request.Request(package["url"]), timeout=60) as response, destination.open("xb") as target:
-            while chunk := response.read(1024 * 1024):
+        name = f"checker dependency {package['file']}"
+        with network_request(name, lambda: open_url(urllib.request.Request(package["url"]), timeout=60)) as response, destination.open("xb") as target:
+            while chunk := network_request(name, lambda: response.read(1024 * 1024)):
                 count += len(chunk)
                 if not (count <= package["size"]):
                     raise ValueError("Cannot acquire checker dependencies: artifact exceeds its declared size")
@@ -438,7 +442,13 @@ def main():
     if args.action == "download":
         if args.tool_assets is None or args.stream_assets is None:
             parser.error("checker acquisition requires shared tool pins")
-        download(args.declaration, args.directory, args.base, args.wheelhouse, args.tool_assets, args.stream_assets, args.resume_stage)
+        from tools.wheelhouse import WheelhouseNetworkError
+
+        try:
+            download(args.declaration, args.directory, args.base, args.wheelhouse, args.tool_assets, args.stream_assets, args.resume_stage)
+        except WheelhouseNetworkError as error:
+            print(error, file=sys.stderr)
+            raise SystemExit(1) from None
     elif args.action == "install":
         install(args.declaration, args.directory, args.base, args.wheelhouse)
     else:

@@ -4,8 +4,12 @@ import hashlib
 import io
 import json
 import os
+import socket
+import ssl
 import tempfile
+import traceback
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -153,6 +157,41 @@ class WheelhouseTests(unittest.TestCase):
         source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
         self.assertEqual(self.source_bytes, source.read_bytes())
         self.assertFalse(source.is_symlink())
+        self.assertEqual([], list(self.pool.glob(".unicore-source.*")))
+
+    def test_direct_asset_network_failures_are_bounded_and_remove_partial(self):
+        assets = self.root / "assets.in"
+        name = "wheelhouse-tool-1.0.0.pyz"
+        assets.write_text(f"https://github.com/numpde/nmr-provider-tools/releases/download/v1/{name}#sha256=" + "a" * 64 + "\n")
+        failures = [
+            (urllib.error.HTTPError("https://secret.invalid/path", 503, "private body", {}, None), "HTTP 503"),
+            (urllib.error.URLError(socket.gaierror(-2, "private resolver")), "name resolution failed"),
+            (urllib.error.URLError(ssl.SSLError("private certificate")), "TLS connection failed"),
+            (urllib.error.URLError(OSError("Tunnel connection failed: 502 private proxy")), "proxy tunnel returned HTTP 502"),
+        ]
+        for error, detail in failures:
+            with self.subTest(detail=detail), patch.object(wheelhouse, "open_url", side_effect=error) as network:
+                with self.assertRaises(wheelhouse.WheelhouseNetworkError) as captured:
+                    wheelhouse.prepare_core_assets(assets, self.pool, download=True)
+                network.assert_called_once()
+                rendered = "".join(traceback.format_exception(captured.exception))
+                self.assertIn(detail, rendered)
+                self.assertNotIn("private", rendered)
+                self.assertNotIn("secret.invalid", rendered)
+                self.assertFalse((self.pool / name).exists())
+                self.assertEqual([], list(self.pool.glob(f".{name}.*.part")))
+
+    def test_source_read_timeout_preserves_existing_pool_and_removes_partial(self):
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.side_effect = TimeoutError("private endpoint")
+        with patch.object(wheelhouse, "open_url", return_value=response) as network:
+            with self.assertRaises(wheelhouse.WheelhouseNetworkError) as captured:
+                wheelhouse.prepare_source(self.source, self.pool)
+        network.assert_called_once()
+        self.assertIn("connection timed out", str(captured.exception))
+        self.assertNotIn("private", "".join(traceback.format_exception(captured.exception)))
+        self.assertEqual(self.wheel_bytes, self.wheel.read_bytes())
         self.assertEqual([], list(self.pool.glob(".unicore-source.*")))
 
     def test_wrong_or_excess_source_bytes_are_rejected_without_retaining_staging(self):

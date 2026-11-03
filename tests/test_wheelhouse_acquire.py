@@ -2,6 +2,7 @@
 
 import fcntl
 import hashlib
+import io
 import multiprocessing
 import os
 import subprocess
@@ -9,7 +10,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,6 +43,37 @@ class SharedAcquisitionTests(unittest.TestCase):
                                        declarations=[self.declaration])
         assets.assert_not_called()
         run.assert_not_called()
+
+    def test_shared_tool_failure_preserves_status_without_printing_command(self):
+        output = io.StringIO()
+        failure = subprocess.CalledProcessError(7, ["tool", "https://secret.invalid/private"])
+        with patch.object(wheelhouse_acquire.subprocess, "run", side_effect=failure), redirect_stderr(output):
+            with self.assertRaises(SystemExit) as stopped:
+                wheelhouse_acquire.run_shared(failure.cmd, "locate locked wheels")
+        self.assertEqual(7, stopped.exception.code)
+        self.assertIn("locate locked wheels", output.getvalue())
+        self.assertNotIn("secret.invalid", output.getvalue())
+        self.assertNotIn("private", output.getvalue())
+
+    def test_support_cli_reports_network_failure_without_traceback(self):
+        source_url = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        self.assets.write_text(source_url + "\n")
+        script = '''
+import runpy, sys, urllib.error
+from unittest.mock import patch
+import tools.wheelhouse as wheelhouse
+sys.argv = ["wheelhouse_acquire", "--support", "--assets", sys.argv[1], "--pool", sys.argv[2]]
+failure = urllib.error.HTTPError("https://secret.invalid/private", 503, "private body", {}, None)
+with patch.object(wheelhouse, "open_url", side_effect=failure):
+    runpy.run_module("tools.wheelhouse_acquire", run_name="__main__")
+'''
+        result = subprocess.run([sys.executable, "-B", "-c", script, str(self.assets), str(self.pool)],
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("HTTP 503", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertNotIn("secret.invalid", result.stderr)
+        self.assertNotIn("private", result.stderr)
 
     def test_readiness_distinguishes_present_missing_and_conflicting_wheels(self):
         cached = wheel(self.pool, "pool-alpha", "1.0")
