@@ -558,13 +558,12 @@ class AcquisitionClientTests(unittest.TestCase):
                 "NMRNET_FAKE_WORKER_STATUS": "143",
             },
         )
-        self.assertEqual(143, result.returncode)
+        self.assertEqual(143, result.returncode, result.stderr)
         self.assertTrue((self.root / "attach-completed").is_file())
         self.assertIn("worker removal", result.stderr)
         self.assertIn("not admitted", result.stderr)
-        self.assertEqual(
-            [["rm", "--force", "c" * 64]], [call["arguments"] for call in self.fixture.calls() if call["arguments"][0] == "rm"]
-        )
+        self.assertIn("proxy while a dependent container remains unconfirmed", result.stderr)
+        self.assertEqual([], [call["arguments"] for call in self.fixture.calls() if call["arguments"][0] == "rm"])
         receipt = Path((self.root / "worker-cid-path").read_text())
         self.assertEqual(b"damaged-started-worker\n", receipt.read_bytes())
         self.assertTrue(receipt.parent.is_dir())

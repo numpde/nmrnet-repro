@@ -91,6 +91,7 @@ docker_client_directory=
 scratch=
 proxy_id=
 worker_id=
+worker_retirement_confirmed=true
 map_probe_id=
 map_probe_removal_attempted=false
 mapped_pool_uid=
@@ -320,11 +321,16 @@ cleanup() {
                 if [[ "$removal_status" != 0 ]] || ! "$inference_retirement_confirmed"; then
                     printf -v pending_diagnostic '%sCannot confirm acquisition worker removal; container ID is recorded in %s/worker.cid.\n' "$pending_diagnostic" "$scratch"
                     cleanup_failed=true
+                else
+                    worker_retirement_confirmed=true
                 fi
             fi
         fi
         if "$inference_retirement_confirmed" && [[ -n "$scratch" && ( -e "$scratch/proxy.cid" || -L "$scratch/proxy.cid" || -n "$proxy_id" ) ]]; then
-            if ! container_id_matches_receipt "$proxy_id" "$scratch/proxy.cid"; then
+            if ! "$worker_retirement_confirmed"; then
+                printf -v pending_diagnostic '%sCannot remove acquisition proxy while a dependent container remains unconfirmed; evidence remains in %s.\n' "$pending_diagnostic" "$scratch"
+                cleanup_failed=true
+            elif ! container_id_matches_receipt "$proxy_id" "$scratch/proxy.cid"; then
                 printf -v pending_diagnostic '%sCannot confirm proxy removal: its container ID was not admitted; evidence remains in %s.\n' "$pending_diagnostic" "$scratch"
                 cleanup_failed=true
             else
@@ -599,6 +605,7 @@ if "$print_command"; then
     printf '%q ' "${engine[@]}" start --attach WORKER_ID; printf '\n'
 else
     mkdir -m 700 -- "$scratch/worker-create"
+    worker_retirement_confirmed=false
     if inference_native 'acquisition worker creation' "$metadata_timeout" stdio bash -eu -c '
         directory=$1; shift
         umask 077

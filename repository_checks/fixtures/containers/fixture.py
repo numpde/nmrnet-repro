@@ -74,6 +74,7 @@ class LauncherFixture:
             "container.sh",
             "docker.sh",
             "docker_client.sh",
+            "user_namespace_map.sh",
             "check_git_inputs.sh",
             "inference_image.sh",
             "inference_native.sh",

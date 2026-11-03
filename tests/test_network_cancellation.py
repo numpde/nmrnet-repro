@@ -33,6 +33,7 @@ case "$operation" in
     receipt=$2
     kind=${receipt##*/}
     kind=${kind%.cid}
+    if [[ "$kind" == worker && ${WORKER_CREATE_NO_CID:-0} == 1 ]]; then exit 9; fi
     if [[ "$kind" == proxy ]]; then
       identifier=$(printf 'c%.0s' {1..64})
     else
@@ -115,6 +116,7 @@ class NetworkCancellationTests(unittest.TestCase):
                     "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
                     "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
                     "ENGINE_STATE": str(state),
                     "PATH": str(binary) + ":" + os.environ["PATH"],
                     "PYTHONPATH": str(Path.cwd()),
@@ -142,10 +144,7 @@ class NetworkCancellationTests(unittest.TestCase):
                     _stdout, stderr = process.communicate(timeout=3)
                     self.assertEqual(143, process.returncode, msg=stderr)
                     self.assertEqual("", stderr)
-                    self.assertEqual(
-                        ["rm --force " + "c" * 64],
-                        [event for event in (state / "events").read_text().splitlines() if event.startswith("rm ")],
-                    )
+                    self.assertEqual([], [event for event in (state / "events").read_text().splitlines() if event.startswith("rm ")])
                     with self.assertRaises(ProcessLookupError):
                         os.kill(attach_pid, 0)
                     scratch = Path((state / "scratch").read_text().strip())
@@ -179,6 +178,7 @@ class NetworkCancellationTests(unittest.TestCase):
                     "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
                     "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
                     "ENGINE_STATE": str(state),
                     "DELAY_IDENTITY": phase,
                     "PATH": str(binary) + ":" + os.environ["PATH"],
@@ -258,6 +258,7 @@ class ContainerIdentityTests(unittest.TestCase):
                 "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
                 "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
                 "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
+                "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
                 "ENGINE_STATE": str(state),
                 "PATH": str(binary) + ":" + os.environ["PATH"],
                 "PYTHONPATH": str(Path.cwd()),
@@ -295,8 +296,8 @@ class ContainerIdentityTests(unittest.TestCase):
         self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("matching its CID file", result.stderr)
         effects = [event for event in events if event.startswith(("start ", "rm "))]
-        # silent-defaults: allow-contract -- Rejected proxy identity permits no effects; worker rejection permits only the already admitted proxy start and removal; proof=tests/test_network_cancellation.py::ContainerIdentityTests.test_malformed_returned_and_recorded_identities_never_authorize_effects
-        expected = [] if phase == "proxy" else ["start " + "c" * 64, "rm --force " + "c" * 64]
+        # Rejected worker identity leaves the gateway needed by that unknown worker.
+        expected = [] if phase == "proxy" else ["start " + "c" * 64]
         self.assertEqual(expected, effects)
         self.assertTrue(retained, msg="Unadmitted container identity discarded its creation evidence")
 
@@ -340,15 +341,21 @@ class ContainerIdentityTests(unittest.TestCase):
         result, events, retained = self.operation({"WORKER_STATUS": "7", "REMOVE_STATUS": "9"})
         self.assertEqual(7, result.returncode, msg=result.stderr)
         self.assertIn("worker removal", result.stderr)
-        self.assertIn("proxy removal", result.stderr)
+        self.assertIn("proxy while a dependent container remains unconfirmed", result.stderr)
         self.assertTrue(retained)
         self.assertEqual(
             [
                 "rm --force " + "d" * 64,
-                "rm --force " + "c" * 64,
             ],
             [event for event in events if event.startswith("rm ")],
         )
+
+    def test_worker_create_without_identity_keeps_the_gateway(self):
+        result, events, retained = self.operation({"WORKER_CREATE_NO_CID": "1"})
+        self.assertEqual(9, result.returncode, msg=result.stderr)
+        self.assertIn("proxy while a dependent container remains unconfirmed", result.stderr)
+        self.assertTrue(retained)
+        self.assertEqual([], [event for event in events if event.startswith("rm ")])
 
 
 class WheelhouseProbeTests(unittest.TestCase):
