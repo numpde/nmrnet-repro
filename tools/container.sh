@@ -146,7 +146,7 @@ cleanup_launcher() {
                 printf -v pending_diagnostic '%sCannot confirm checker Git scaffold removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$check_input_directory/git" "$removal_status"
                 if [[ $status == 0 ]]; then status=$removal_status; fi
             fi
-            if { rm -f -- "$check_input_directory/root-entries" "$check_input_directory/mapped-owner" && rmdir -- "$check_input_directory"; } 2>/dev/null; then :; else
+            if { rm -f -- "$check_input_directory/root-entries" "$check_input_directory/mapped-owner" "$check_input_directory/module-name" "$check_input_directory/module-pointer" && rmdir -- "$check_input_directory"; } 2>/dev/null; then :; else
                 removal_status=$?
                 printf -v pending_diagnostic '%sCannot confirm checker source inventory removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$check_input_directory" "$removal_status"
                 if [[ $status == 0 ]]; then status=$removal_status; fi
@@ -775,7 +775,8 @@ case "$1" in
                     if container_native 'repository check input preparation' untimed discard bash -eu -c '
                         repository=$1 destination=$2
                         find "$repository" -mindepth 1 -maxdepth 1 -printf "%y\t%f\0" > "$destination/root-entries"
-                        bash "$repository/tools/check_git_inputs.sh" "$repository" "$destination/git"
+                        bash "$repository/tools/check_git_inputs.sh" "$repository" "$destination/git" > "$destination/module-name"
+                        printf "%s\n" "gitdir: ../.git/modules/nmrnet" > "$destination/module-pointer"
                     ' bash "$repository_root" "$check_input_directory"; then preparation_status=0; else preparation_status=$?; fi
                     pending_diagnostic+=$inference_diagnostic
                     if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || $preparation_status != 0 ]]; then
@@ -783,8 +784,12 @@ case "$1" in
                     fi
                 fi
                 if "$print_command"; then
-                    checker_uid=MAPPED_UID checker_gid=MAPPED_GID
+                    checker_uid=MAPPED_UID checker_gid=MAPPED_GID module_name=MODULE_NAME
                 else
+                    IFS= read -r module_name < "$check_input_directory/module-name"
+                    [[ $module_name =~ ^[A-Za-z0-9._/-]+$ && /$module_name/ != *'/../'* && /$module_name/ != *'/./'* && $module_name != *'//'* ]] \
+                        && cmp -s "$check_input_directory/module-name" <(printf '%s\n' "$module_name") \
+                        || { printf '%s\n' 'Cannot run repository checks: module Git directory is invalid.' >&2; exit 2; }
                     if controller_native 'repository checker owner mapping' untimed stdio \
                         bash "$repository_root/tools/docker.sh" --pool-owner "$caller_uid:$caller_gid" map-owner "$image" \
                         > "$check_input_directory/mapped-owner"; then mapping_status=0; else mapping_status=$?; fi
@@ -809,7 +814,7 @@ case "$1" in
                     --mount "type=bind,src=$check_input_directory/root-entries,dst=/repository-source-inventory/root-entries,readonly"
                     --mount "type=bind,src=$check_input_directory/git,dst=/workspace/.git,readonly"
                     --mount "type=bind,src=$repository_root/.git/objects,dst=/workspace/.git/objects,readonly"
-                    --mount "type=bind,src=$repository_root/.git/modules/nmrnet/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
+                    --mount "type=bind,src=$repository_root/.git/modules/$module_name/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
                     --env "NMRNET_EXPECTED_UID=$checker_uid" --env "NMRNET_EXPECTED_GID=$checker_gid")
                 for source_input in tests containers requirements artifacts notes docs NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
@@ -820,6 +825,7 @@ case "$1" in
                         command+=(--mount "type=bind,src=$repository_root/$source_input,dst=/workspace/$source_input,readonly")
                     fi
                 done
+                command+=(--mount "type=bind,src=$check_input_directory/module-pointer,dst=/workspace/NMRNetplusplus/.git,readonly")
                 # Config mixes public definitions with private machine settings.
                 # Grant tracked public files individually; never mount its tree.
                 if [[ -d "$repository_root/config" ]]; then

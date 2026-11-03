@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Scientific checks consume Git objects, not checkout hooks, remotes or logs.
 # https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/repository_checks/nmrpeak_source.py
-# This scaffold admits the supported checkout topology for two read-only object
+# This scaffold admits the checkout's local module store for two read-only object
 # mounts. Those mounts expose committed history; they do not freeze host objects
 # or provide a hostile-code sandbox. The caller owns their container grants.
 set -euo pipefail
@@ -28,9 +28,22 @@ git_binary=$(command -v git) || fail 'Git is required for source identity admiss
 [[ "$git_binary" == /* && -f "$git_binary" && -x "$git_binary" ]] || fail 'Git must resolve to an executable file.'
 
 parent_git="$repository/.git"
-module_git="$parent_git/modules/nmrnet"
+pointer="$repository/NMRNetplusplus/.git"
+[[ -d "$repository/NMRNetplusplus" && ! -L "$repository/NMRNetplusplus" && -f "$pointer" && ! -L "$pointer" ]] \
+    || fail 'upstream checkout and Git pointer must not be linked or special.'
+module_git=$(env -i PATH=/usr/bin:/bin HOME=/nonexistent LC_ALL=C \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_ALLOW_PROTOCOL='' GIT_TERMINAL_PROMPT=0 \
+    "$git_binary" -C "$repository/NMRNetplusplus" -c core.hooksPath=/dev/null \
+    -c core.fsmonitor=false rev-parse --absolute-git-dir 2>/dev/null) \
+    || fail 'upstream Git directory could not be resolved.'
+module_name=${module_git#"$parent_git/modules/"}
+[[ $module_name =~ ^[A-Za-z0-9._/-]+$ && /$module_name/ != *'/../'* && /$module_name/ != *'/./'* \
+    && $module_name != *'//'* && $module_git == "$parent_git/modules/$module_name" \
+    && $(realpath -e -- "$module_git") == "$module_git" ]] \
+    || fail 'upstream Git directory must be a local module within this checkout.'
 for directory in "$parent_git" "$parent_git/modules" "$module_git"; do
-    [[ -d "$directory" && ! -L "$directory" ]] || fail 'supported .git/modules/nmrnet topology is missing or linked.'
+    [[ -d "$directory" && ! -L "$directory" ]] || fail 'local Git module topology is missing or linked.'
     [[ ! -e "$directory/commondir" && ! -L "$directory/commondir" ]] || fail 'shared Git directories are not admitted.'
 done
 for database in "$parent_git" "$module_git"; do
@@ -46,11 +59,6 @@ for database in "$parent_git" "$module_git"; do
     [[ ! -e "$database/objects/info/alternates" && ! -L "$database/objects/info/alternates" ]] \
         || fail 'alternate object stores are not admitted.'
 done
-pointer="$repository/NMRNetplusplus/.git"
-[[ -d "$repository/NMRNetplusplus" && ! -L "$repository/NMRNetplusplus" && -f "$pointer" && ! -L "$pointer" ]] \
-    || fail 'upstream checkout and Git pointer must not be linked or special.'
-cmp -s -- "$pointer" <(printf '%s\n' 'gitdir: ../.git/modules/nmrnet') \
-    || fail 'upstream Git pointer differs from the supported local topology.'
 
 read_git() {
     # Empty protocol admission overrides local promisor configuration, so missing
@@ -110,3 +118,4 @@ cmp -s -- "$destination/index-stage" "$destination/index-check" \
     || fail 'projected index differs from the tracked entries.'
 rm -- "$destination/index-stage" "$destination/index-check"
 chmod 600 -- "$destination/index"
+printf '%s\n' "$module_name"

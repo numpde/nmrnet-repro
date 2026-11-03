@@ -221,7 +221,8 @@ class ConventionDetectionTests(unittest.TestCase):
                     {
                         f"type=bind,src={root}/.work/repository-check-inputs.PRINT/git,dst=/workspace/.git,readonly",
                         f"type=bind,src={root}/.git/objects,dst=/workspace/.git/objects,readonly",
-                        f"type=bind,src={root}/.git/modules/nmrnet/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly",
+                        f"type=bind,src={root}/.git/modules/MODULE_NAME/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly",
+                        f"type=bind,src={root}/.work/repository-check-inputs.PRINT/module-pointer,dst=/workspace/NMRNetplusplus/.git,readonly",
                     }
                 )
                 self.assertEqual(expected_mounts, mounts)

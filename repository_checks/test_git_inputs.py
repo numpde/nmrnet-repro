@@ -93,7 +93,7 @@ class GitInputTests(unittest.TestCase):
     def test_projection_resolves_current_gitlink_upstream_and_historical_producer(self):
         result = self.prepare()
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        self.assertEqual("", result.stdout)
+        self.assertEqual("nmrnet\n", result.stdout)
         self.assertEqual({path.name for path in self.destination.iterdir()}, {"HEAD", "config", "index", "objects", "refs", "modules"})
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o700)
         self.assertNotIn("private-config-marker", (self.destination / "config").read_text())
@@ -140,6 +140,15 @@ class GitInputTests(unittest.TestCase):
         self.assertIn("tracked.md", projected)
         self.assertIn("staged.txt", projected)
         self.assertNotIn("tools/producer.py", projected)
+
+    def test_projection_resolves_the_checkout_submodule_git_directory(self):
+        modules = self.repository / ".git/modules"
+        (modules / "nmrnet").rename(modules / "NMRNetplusplus")
+        (self.upstream / ".git").write_text("gitdir: ../.git/modules/NMRNetplusplus\n")
+        result = self.prepare()
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("NMRNetplusplus\n", result.stdout)
+        self.assertTrue((self.destination / "modules/nmrnet/HEAD").is_file())
 
     def test_wrong_gitlink_rejects_before_metadata_creation(self):
         (self.upstream / "uninmr/worker.py").write_text("VALUE = 2\n")
@@ -192,7 +201,7 @@ class GitInputTests(unittest.TestCase):
     def test_unrelated_git_author_identity_does_not_change_source_admission(self):
         result = self.prepare(GIT_AUTHOR_NAME="unused author identity", GIT_COMMITTER_EMAIL="unused@example.test")
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        self.assertEqual("", result.stdout)
+        self.assertEqual("nmrnet\n", result.stdout)
 
     def test_existing_destination_or_link_is_preserved(self):
         self.destination.mkdir()

@@ -123,7 +123,7 @@ class LauncherTests(unittest.TestCase):
         # engine or Git dependency in the base-image unit lane. The separate Git
         # suite proves the real scaffold against committed objects.
         helper = checkout / "tools/check_git_inputs.sh"
-        helper.write_text('#!/bin/bash\nmkdir -p -- "$2/objects" "$2/modules/nmrnet/objects"\n')
+        helper.write_text('#!/bin/bash\nmkdir -p -- "$2/objects" "$2/modules/nmrnet/objects"\nprintf "nmrnet\\n"\n')
         docker = checkout / "bin/docker"
         # The source fixture is executable on its read-only mount; /tmp is noexec.
         docker.symlink_to(Path(__file__).resolve())
