@@ -138,11 +138,18 @@ now=$(date -u +%s)
 for identifier in "${!candidates[@]}"; do
     capture image inspect --format '{{len .RepoTags}} {{len .RepoDigests}} {{.Created}}' "$identifier"
     aliases=$(< "$scratch/output")
-    [[ $aliases =~ ^([0-9]+)\ ([0-9]+)\ ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z)$ ]] \
+    [[ $aliases =~ ^([0-9]+)\ ([0-9]+)\ ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2}))$ ]] \
         || refuse 'image alias or creation-time inspection was incomplete.'
     tags=${BASH_REMATCH[1]} digests=${BASH_REMATCH[2]} created=${BASH_REMATCH[3]}
+    if [[ $created =~ [+-]([0-9]{2}):([0-9]{2})$ ]]; then
+        (( 10#${BASH_REMATCH[1]} <= 23 && 10#${BASH_REMATCH[2]} <= 59 )) \
+            || refuse 'an image creation time has an invalid UTC offset; retain existing images.'
+    fi
     created_epoch=$(date -u -d "$created" +%s) || refuse 'an image creation time is invalid; retain existing images.'
     [[ $created_epoch =~ ^[0-9]+$ ]] || refuse 'an image creation time is invalid; retain existing images.'
+    if [[ $created =~ \.([0-9]{1,9}) ]] && [[ ${BASH_REMATCH[1]} =~ [1-9] ]]; then
+        created_epoch=$((created_epoch + 1))
+    fi
     # Created is an extra buffer, not a publication time: cached image IDs may
     # be older than their latest use. Prepared records and recipes own pins.
     if [[ $tags == 0 && $digests == 0 ]] && (( now >= created_epoch && now - created_epoch >= 86400 )); then

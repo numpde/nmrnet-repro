@@ -1,11 +1,13 @@
 """Image retirement protects actual reference owners before any Engine deletion."""
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -143,8 +145,27 @@ else: raise SystemExit(91)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.removed(), [])
 
+    def test_engine_creation_time_accepts_explicit_utc_offset(self):
+        self.state["created"] = {image("f"): "2001-01-01T03:00:00.123456789+03:00"}
+        self.save_state()
+        result = self.retire()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.removed(), [image("f")])
+
+    def test_fractional_creation_time_is_not_rounded_down_at_day_boundary(self):
+        binary = self.root / "bin"
+        binary.mkdir()
+        clock = binary / "date"
+        clock.symlink_to(ROOT / "tests/fake_image_retirement_date.py")
+        self.state["created"] = {image("f"): "2001-01-01T00:00:00.1Z"}
+        self.save_state()
+        with mock.patch.dict(os.environ, {"PATH": str(binary) + os.pathsep + os.environ["PATH"]}):
+            result = self.retire()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.removed(), [])
+
     def test_unknown_or_future_creation_time_never_removes_image(self):
-        for created in ("not-a-time", "2999-01-01T00:00:00Z"):
+        for created in ("not-a-time", "2001-01-01T00:00:00+24:00", "2001-01-01T00:00Z", "2999-01-01T00:00:00Z"):
             with self.subTest(created=created):
                 self.state["created"] = {image("f"): created}
                 self.save_state()
