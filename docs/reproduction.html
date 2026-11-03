@@ -81,11 +81,12 @@ locks, target Python/platform and package sources. <code>WHEELHOUSE</code> selec
 the cache; <code>NETWORK_INTERFACE</code> selects acquisition routing. Each project
 uses its own locks to acquire missing packages and consume compatible cached
 files. The pool has no global completeness marker.</p>
-<p><code>make packages/wheelhouse</code> prepares the inference and geometry
-images' locked packages, pinned Uni-Core source and released SDK dependencies in that pool.
+<p><code>make packages/wheelhouse</code> prepares the locked packages for the inference,
+geometry and provider images, the pinned Uni-Core source, and the build streaming tool in that pool.
 <code>make packages/preparation/wheelhouse</code> prepares the geometry image's
-locked packages and SDK dependencies when only that image is needed. Each target resolves its locks separately;
-the SDK wheel and source distribution come from their pinned GitHub release.</p>
+locked packages and SDK dependencies when only that image is needed. Each target resolves its locks separately.
+The SDK wheel comes from its pinned GitHub release; its source archive is acquired separately
+for consumer tests as described in the <a href="requirements/provider-core.html">shared runtime dependency guide</a>.</p>
 <p><code>WHEELHOUSE</code> selects a shared dependency cache. There is no default:
 when omitted, Make asks for a path on the controlling terminal.
 Both the prompt and <code>WHEELHOUSE=</code> accept absolute or relative paths,
@@ -102,29 +103,27 @@ Without a terminal, pass the path on the Make command line; piped input and
 environment variables do not select it. Wheel files live directly in this one
 root. Different projects, versions and platforms can share it: each consumer
 uses its own hash-locked requirements and pip's compatibility selection.
-Image builds mount this directory as their wheelhouse context and install from
-the shared files in place; they do not make a wheel copy.</p>
+Image builds select the needed files and stream them with the captured build inputs
+to Docker. Builds install offline and do not mount the live pool into BuildKit.</p>
 <p>The pinned Uni-Core source is also stored here, as
 <code>Uni-Core-&lt;commit&gt;.tar.gz</code>. It is verified separately against
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/unicore-source.json">its source declaration</a>,
 including its byte size and SHA-256; it is not treated as a wheel.</p>
 <p>The <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L66">terminal prompt follows the established operator-input pattern</a>:
 command-line values are passed literally, and environment variables cannot
-choose a cache. Acquisition downloads directly into the selected shared pool.
-The host holds an exclusive lock while it downloads and verifies artifacts;
-managed checks and builds hold a shared lock while they select or copy them.
-This keeps those consumers from reading a wheel while pip is writing it. The
-pool is not replaced or cleared, and existing complete artifacts remain in the
-same location for later acquisitions.</p>
+choose a cache. The shared publisher verifies and publishes acquired artifacts
+in the selected pool. It coordinates publication with managed checks and build
+streams through locks on the pool. The pool is not replaced or cleared, and
+existing complete artifacts remain in the same location for later acquisitions.</p>
 <p>A complete cached lock needs no index query. With a partly populated pool,
-pip can resolve existing wheels from that same directory while acquiring only
-missing locked dependencies. Pip owns platform compatibility and hash checks.
+the shared publisher selects compatible cached wheels and acquires missing
+locked dependencies. The target Python environment verifies the selected wheels
+against the locks.
 If an acquisition is interrupted, completed files remain in the pool for a
 retry; no second HTTP cache or wheel staging directory is created. Acquisition
 may still contact package indexes; checks and builds select locally with
 <code>--no-index</code> and install nothing from the network. See
-<a href="https://pip.pypa.io/en/stable/cli/pip_download/">pip download</a>
-and <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip installation reports</a>.</p>
+<a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip installation reports</a>.</p>
 <p>For the provider, acquire the two model archives and extract their declared
 members:</p>
 <pre><code class="language-sh">for archive in weight.zip checkpoints.zip; do
