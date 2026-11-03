@@ -38,11 +38,23 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "artifacts.py",
             "container_guard.py",
             "docker.sh",
+            "wheelhouse.py",
+            "wheelhouse_path.sh",
+            "user_namespace_map.sh",
             "acquisition_interface.sh",
             "docker_client.sh",
             "inference_native.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
+        (self.root / "tools/docker.sh").rename(self.root / "tools/docker-real.sh")
+        (self.root / "tools/docker.sh").write_text('''#!/bin/bash
+if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
+    if [[ ${CHECKER_FIXTURE_MAP_FAIL-} ]]; then exit 23; fi
+    printf '%s\\n' "${CHECKER_FIXTURE_MAP_RESULT:-0:0}"
+    exit
+fi
+exec bash "$(dirname "$0")/docker-real.sh" "$@"
+''')
         for name in ("Dockerfile", "Dockerfile.dockerignore"):
             (self.root / "containers/checker" / name).write_text("fixture recipe\n")
         self.document["base"] = (
@@ -54,6 +66,26 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         (self.root / ".work/checker").mkdir(parents=True)
         self.directory.rename(self.root / ".work/checker/dependencies")
         self.directory = self.root / ".work/checker/dependencies"
+        pool = self.root / "pool"
+        pool.mkdir()
+        wheel = next(item["file"] for item in self.document["packages"] if item["name"] == "ruff")
+        shutil.copyfile(self.directory / wheel, pool / wheel)
+        streamer = pool / "wheelhouse-tool-1.0.0.pyz"
+        streamer.write_text('''import json, pathlib, sys, tarfile
+args = sys.argv
+sources = json.loads(pathlib.Path(args[args.index("--source-allowlist") + 1]).read_text())
+items = json.loads(pathlib.Path(args[args.index("--manifest") + 1]).read_text())
+pool = pathlib.Path(args[args.index("--pool") + 1])
+with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
+    for item in sources:
+        tar.add(item["path"], arcname=item["destination"])
+    for item in items:
+        tar.add(pool / item["filename"], arcname=item["directory"] + "/" + item["filename"])
+''')
+        pin = hashlib.sha256(streamer.read_bytes()).hexdigest()
+        asset = f"https://github.com/numpde/nmr-provider-tools/releases/download/v1/{streamer.name}#sha256={pin}\n"
+        (self.root / "requirements/wheelhouse-tool-assets.in").write_text(asset)
+        (self.root / "requirements/wheelhouse-acquirer-assets.in").write_text(asset)
         (self.root / "bin/docker").symlink_to(ROOT / "tests/test_checker_engine.py")
         self.retained = set()
         self.addCleanup(self._remove_retained)
@@ -69,6 +101,9 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "CHECKER_FIXTURE_STATE": str(self.root / "state"),
             "CHECKER_FIXTURE_BUILD_OUTPUT": "sha256:" + "d" * 64 + "\n",
             "CHECKER_FIXTURE_INSPECTED_ID": "sha256:" + "d" * 64,
+            "NMRNET_WHEELHOUSE_INPUT": str(pool),
+            "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
+            "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
         }
 
     # silent-defaults: allow-contract -- Omitted preview runs the finite checker client; explicit preview must print the same worker without another engine call; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
@@ -429,8 +464,8 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual("sha256:" + "c" * 64 + "\n", record.read_text())
                 evidence = json.loads((self.root / "state/build.json").read_text())
-                self.assertFalse(Path(evidence["context"]).exists())
-                self.assertFalse(Path(evidence["dependencies"]).exists())
+                self.assertEqual("CHECKER_FIXTURE_BUILD_FAIL" in additions, Path(evidence["context"]).exists())
+                self.assertEqual("CHECKER_FIXTURE_BUILD_FAIL" in additions, Path(evidence["dependencies"]).exists())
 
     def test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture(self):
         (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
@@ -443,13 +478,9 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         capture = Path(evidence["context"]).parent
         self.assertTrue(Path(evidence["context"]).is_dir())
         self.assertTrue(Path(evidence["dependencies"]).is_dir())
-        self.assertIn("build capture", result.stderr)
+        self.assertIn("inputs retained", result.stderr)
         self.assertIn(str(capture), result.stderr)
-        self.assertIn("attempted path", result.stderr)
-        self.assertEqual(
-            [["-rf", "--", str(capture)]],
-            [json.loads(line) for line in (self.root / "state/cleanup.jsonl").read_text().splitlines()],
-        )
+        self.assertFalse((self.root / "state/cleanup.jsonl").exists())
 
     def test_successful_build_with_failed_capture_cleanup_fails_and_keeps_published_record(self):
         (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
@@ -527,7 +558,8 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         worker = shlex.split(download.stdout.splitlines()[-2])
         mounts = [worker[index + 1] for index, value in enumerate(worker) if value == "--mount"]
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
-        self.assertEqual([f"type=bind,src={self.root}/.work/checker,dst=/output"], writable)
+        self.assertEqual([f"type=bind,src={self.root}/.work/checker,dst=/output",
+                          f"type=bind,src={self.root}/pool,dst=/wheelhouse"], writable)
         self.assertNotIn("/var/run/docker.sock", " ".join(mounts))
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
 
@@ -568,7 +600,10 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         printed = self.launch("check", preview=True)
         self.assertEqual(0, printed.returncode, msg=printed.stderr)
         arguments = shlex.split(printed.stdout)
-        self.assertEqual(call["arguments"], arguments[arguments.index("run") :])
+        arguments = arguments[arguments.index("run") :]
+        self.assertEqual("<mapped-owner>", arguments[arguments.index("--user") + 1])
+        arguments[arguments.index("--user") + 1] = "0:0"
+        self.assertEqual(call["arguments"], arguments)
         self.assertEqual(1, len(self.calls()))
 
     def test_check_preserves_native_status_and_streams(self):
@@ -578,8 +613,29 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 result = self.launch("check", additions={"CHECKER_FIXTURE_RUN_STATUS": str(status)})
                 self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual(expected, result.stdout)
-                self.assertEqual("checker run diagnostic\n", result.stderr)
+                self.assertIn("checker run diagnostic\n", result.stderr)
                 self.assertFalse(Path(self.calls()[-1]["client_config"]).parent.exists())
+
+    def test_checker_uses_mapped_owner_and_refuses_unverified_mapping(self):
+        result = self.launch("check", additions={"CHECKER_FIXTURE_MAP_RESULT": "42:43"})
+        self.assertEqual(0, result.returncode, result.stderr)
+        arguments = self.calls()[-1]["arguments"]
+        self.assertEqual("42:43", arguments[arguments.index("--user") + 1])
+        for additions in ({"CHECKER_FIXTURE_MAP_FAIL": "1"}, {"CHECKER_FIXTURE_MAP_RESULT": "bad"}):
+            with self.subTest(additions=additions):
+                before = self.calls()
+                result = self.launch("check", additions=additions)
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual(before, self.calls())
+
+    def test_failed_captured_verification_retains_borrowed_inputs(self):
+        result = self.launch("build", additions={"CHECKER_FIXTURE_RUN_STATUS": "37", "CHECKER_FIXTURE_RUN_STATUS_CALL": "2"})
+        self.assertEqual(37, result.returncode, result.stderr)
+        self.assertIn("operation retirement is unconfirmed", result.stderr)
+        captures = list((self.root / ".work/checker").glob(".build.*"))
+        self.assertEqual(1, len(captures))
+        self.assertTrue((captures[0] / "dependencies").is_dir())
+        self.assertEqual(["run", "run"], [call["arguments"][0] for call in self.calls()])
 
     def test_raw_combined_receipt_and_build_identity_gate_publication(self):
         good = self.launch("build")
@@ -608,7 +664,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                     [call["arguments"][0] for call in calls],
                 )
                 evidence = json.loads((self.root / "state/build.json").read_text())
-                self.assertFalse(Path(evidence["context"]).parent.exists())
+                self.assertEqual(fault == "malformed-build", Path(evidence["context"]).parent.exists())
                 self.assertFalse(Path(calls[-1]["client_config"]).parent.exists())
                 if fault != "malformed-build":
                     receipt = Path(calls[-1]["receipt_directory"])

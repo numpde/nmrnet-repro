@@ -11,6 +11,8 @@ import os
 import signal
 import subprocess
 import sys
+import tarfile
+import tempfile
 import time
 from pathlib import Path
 
@@ -186,18 +188,27 @@ def main():
         document = checker.declaration(mounts["/input/dependencies.json"])
         if document["base"] != arguments[arguments.index("--base") + 1]:
             raise SystemExit(97)
-        checker.check(mounts["/input/dependencies.json"], mounts["/dependencies"])
+        checker.check(mounts["/input/dependencies.json"], mounts["/dependencies"], document["base"], mounts["/wheelhouse"])
         sys.stdout.write(hashlib.sha256(mounts["/input/dependencies.json"].read_bytes()).hexdigest() + "\n")
-        if "CHECKER_FIXTURE_RUN_STATUS" in os.environ:
+        if "CHECKER_FIXTURE_RUN_STATUS" in os.environ and (
+            "CHECKER_FIXTURE_RUN_STATUS_CALL" not in os.environ
+            or os.environ["CHECKER_FIXTURE_RUN_STATUS_CALL"] == str(len(observations) + 1)
+        ):
             sys.stderr.write("checker run diagnostic\n")
             raise SystemExit(int(os.environ["CHECKER_FIXTURE_RUN_STATUS"]))
     elif arguments[0] == "build":
         fail_build = os.environ.get("CHECKER_FIXTURE_BUILD_FAIL") == "1"
         if not fail_build:
             build_output = os.environ["CHECKER_FIXTURE_BUILD_OUTPUT"]
-        context = Path(arguments[-1])
+        if arguments[-1] != "-":
+            raise SystemExit(97)
+        temporary = tempfile.TemporaryDirectory(prefix="checker-stream-fixture-")
+        context = Path(temporary.name)
+        with tarfile.open(fileobj=sys.stdin.buffer, mode="r|") as archive:
+            archive.extractall(context, filter="data")
         dependencies = Path(arguments[arguments.index("--build-context") + 1].split("=", 1)[1])
-        checker.check(context / "requirements/checker-dependencies.json", dependencies)
+        declaration = context / "requirements/checker-dependencies.json"
+        checker.check(declaration, dependencies, checker.declaration(declaration)["base"], context / "checker-wheels")
         mutation = os.environ.get("CHECKER_FIXTURE_MUTATE")
         if mutation:
             Path(mutation).write_bytes(b"later live source mutation\n")
@@ -207,7 +218,7 @@ def main():
             if path.is_file()
         }
         (state / "build.json").write_text(
-            json.dumps({"context": str(context), "manifest": manifest, "dependencies": str(dependencies)})
+            json.dumps({"context": str(dependencies.parent / "context"), "manifest": manifest, "dependencies": str(dependencies)})
         )
         label = arguments[arguments.index("--label") + 1].split("=", 1)[1]
         (state / "label").write_text(label)

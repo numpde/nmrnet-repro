@@ -14,3 +14,8 @@ The broader repository wheelhouse and operator-input lanes have stale fake-Docke
 fixtures, including an import of the removed tests.unit.wheel_capture_ports.
 Repair that lane separately; the focused package and acquisition lanes provide
 the verification for the current publisher change.
+
+The older full checker launcher fixture predates streamed contexts and mapped
+identities. Its complete cancellation and cleanup suite needs reconciliation;
+focused launcher witnesses cover the shared-pool cutover, but are not a claim
+that the entire older suite passes.

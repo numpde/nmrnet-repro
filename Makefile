@@ -377,9 +377,9 @@ help:
 		'make test/unit/baseline-launcher       Run only the contained baseline-launcher tests.' \
 		'make test/repository                   Run strict repository checks; pending policies remain red.' \
 		'make test/probe                        Check contained output ownership.' \
-		'make checks/dependencies/download NETWORK_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
-		'make checks/dependencies/check         Verify retained checker dependencies offline.' \
-		'make checks/image/build                Build and record the offline repository checker image.' \
+		'make checks/dependencies/download WHEELHOUSE=PATH NETWORK_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
+		'make checks/dependencies/check WHEELHOUSE=PATH  Verify checker dependencies offline.' \
+		'make checks/image/build WHEELHOUSE=PATH  Build and record the offline repository checker image.' \
 		'make packages/base-images/python/download Download the pinned Debian Python worker base into local Docker using Docker default routing.' \
 		'make packages/lock/stage NETWORK_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
 		'make packages/lock/apply STAGE=lock.ID  Apply the reviewed stage offline.' \

@@ -45,6 +45,13 @@ The completed declaration's SHA-256 is
 <code>dda2f9555dd64c637f6fe4c161ba0523e3da28dca08f51354c4230f50e0e0432</code>.
 No package artifact was acquired or installed during resolution. The declaration
 and advisory findings were independently reviewed before artifact acquisition.</p>
+<p>Checker preparation verifies Ruff in the selected shared wheelhouse and keeps
+the Debian packages in the checker dependency directory. The offline build streams
+the pinned Ruff wheel from the pool; it does not copy that wheel into the checker
+capture. Existing private checker dependencies are preserved.</p>
+<p>If an older private checker cache contains Ruff but the selected shared pool
+does not, preparation stops and preserves the private wheel. Resolve that cache
+migration before retrying; it will not silently download a duplicate.</p>
 <p><code>checker-advisories.json</code> records the exact-version advisory lookup at
 2026-10-14T10:17:32Z, including every declared Debian binary's source package and
 source version. Debian's source advisory records were compared with those exact

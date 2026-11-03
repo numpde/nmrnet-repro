@@ -70,6 +70,45 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
     def test_valid_exact_inputs_and_receipt_are_accepted(self):
         self.assertEqual(checker.check(self.path, self.directory, self.document["base"]), checker.inventory(self.path, self.directory))
 
+    def test_shared_wheel_validates_existing_receipt_without_private_wheel(self):
+        wheel = next(package for package in self.document["packages"] if package["name"] == "ruff")
+        pool = self.root / "pool"
+        pool.mkdir()
+        (pool / wheel["file"]).write_bytes((self.directory / wheel["file"]).read_bytes())
+        (self.directory / wheel["file"]).unlink()
+        receipt = checker.check(self.path, self.directory, self.document["base"], pool)
+        self.assertEqual(receipt["files"][wheel["file"]]["sha256"], wheel["sha256"])
+        (pool / wheel["file"]).write_bytes(b"wrong")
+        with self.assertRaisesRegex(ValueError, "artifact bytes differ"):
+            checker.check(self.path, self.directory, self.document["base"], pool)
+
+    def test_unexpected_private_files_remain_rejected_with_shared_wheel(self):
+        wheel = next(package for package in self.document["packages"] if package["name"] == "ruff")
+        pool = self.root / "pool"
+        pool.mkdir()
+        (pool / wheel["file"]).write_bytes((self.directory / wheel["file"]).read_bytes())
+        (self.directory / "unexpected").write_text("unexpected")
+        with self.assertRaisesRegex(ValueError, "inventory differs"):
+            checker.check(self.path, self.directory, self.document["base"], pool)
+
+    def test_stale_private_dependencies_stop_before_shared_acquisition(self):
+        (self.directory / self.document["packages"][0]["file"]).write_bytes(b"changed")
+        pool = self.root / "pool"
+        pool.mkdir()
+        with patch.object(checker, "acquire_ruff") as acquire:
+            with self.assertRaisesRegex(ValueError, "artifact bytes differ"):
+                checker.download(self.path, self.directory, self.document["base"], pool, None, None)
+        acquire.assert_not_called()
+
+    def test_private_only_wheel_is_preserved_without_redownload(self):
+        pool = self.root / "pool"
+        pool.mkdir()
+        with patch.object(checker.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "private cached wheel exists"):
+                checker.acquire_ruff(self.document, pool, None, None, self.directory)
+        run.assert_not_called()
+        self.assertEqual([], list(pool.iterdir()))
+
     def test_unknown_missing_and_wrong_container_fields_are_rejected(self):
         for field in self.document:
             for change in ("missing", "extra", "type"):
@@ -364,6 +403,8 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             str(self.directory),
             "--base",
             self.document["base"],
+            "--wheelhouse",
+            str(self.directory),
         ]
         with patch.object(sys, "argv", argv), patch.object(sys, "stdout", output):
             checker.main()

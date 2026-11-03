@@ -10,3 +10,5 @@
 !tools/container_guard.py
 !requirements/
 !requirements/checker-dependencies.json
+!checker-wheels/
+!checker-wheels/*

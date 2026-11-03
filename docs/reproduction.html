@@ -33,9 +33,9 @@ and pass its immutable ID as <code>SHARED_RUNTIME_IMAGE</code> on acquisition co
 Ordinary builds use local inputs with networking disabled; they do not pull missing images.</p>
 <p>Repository checks use a separate image containing pinned Git, Make and Ruff.
 Prepare it explicitly after provisioning that base image:</p>
-<pre><code class="language-sh">make checks/dependencies/download NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
-make checks/dependencies/check
-make checks/image/build
+<pre><code class="language-sh">make checks/dependencies/download WHEELHOUSE=/absolute/cache/root NETWORK_INTERFACE=YOUR_SETUP_INTERFACE SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
+make checks/dependencies/check WHEELHOUSE=/absolute/cache/root
+make checks/image/build WHEELHOUSE=/absolute/cache/root
 </code></pre>
 <p>The <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/checker-dependencies.json">dependency declaration</a> and
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/checker-advisories.json">advisory record</a> identify the exact

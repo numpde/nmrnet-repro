@@ -12,6 +12,7 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -128,25 +129,30 @@ def declaration(path):
     return admitted_declaration(path)[0]
 
 
-def inventory_for_declaration(document, declaration_sha256, directory):
+def inventory_for_declaration(document, declaration_sha256, directory, wheelhouse=None):
     """Recompute identities against one already admitted declaration read."""
     directory = Path(directory)
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("Cannot verify checker dependencies: directory is missing or a symlink")
     expected = {package["file"]: {"size": package["size"], "sha256": package["sha256"]} for package in document["packages"]}
     actual = {entry.name for entry in directory.iterdir()} - {".complete"}
-    if actual != set(expected):
+    wheel = next(package["file"] for package in document["packages"] if package["name"] == "ruff")
+    required = set(expected) if wheelhouse is None else set(expected) - {wheel}
+    if not required <= actual or actual - set(expected):
         raise ValueError(
             "Cannot verify checker dependencies: file inventory differs from declaration "
-            f"({len(set(expected) - actual)} missing, {len(actual - set(expected))} unexpected); "
+            f"({len(required - actual)} missing, {len(actual - set(expected))} unexpected); "
             "preserve this directory for inspection; move it aside before reacquiring at the same path"
         )
     for filename, identity in expected.items():
-        if file_identity(directory / filename) != identity:
+        artifact = Path(wheelhouse) / filename if wheelhouse is not None and filename == wheel else directory / filename
+        if file_identity(artifact) != identity:
             raise ValueError(
                 f"Cannot verify checker dependencies: artifact bytes differ from declaration for {filename!r}; "
                 "preserve this directory for inspection; move it aside before reacquiring at the same path"
             )
+        if wheelhouse is not None and filename == wheel and filename in actual and file_identity(directory / filename) != identity:
+            raise ValueError("Cannot verify checker dependencies: retained private Ruff wheel differs from declaration")
     return {"declaration_sha256": declaration_sha256, "files": expected}
 
 
@@ -156,17 +162,65 @@ def inventory(path, directory):
     return inventory_for_declaration(document, declaration_sha256, directory)
 
 
-def check(path, directory, base):
+def check(path, directory, base, wheelhouse=None):
     document, declaration_sha256 = admitted_declaration(path)
     if document["base"] != base:
         raise ValueError("Cannot verify checker dependencies: declaration names another base image")
-    expected = inventory_for_declaration(document, declaration_sha256, directory)
+    expected = inventory_for_declaration(document, declaration_sha256, directory, wheelhouse)
     if read_document(Path(directory) / ".complete") != expected:
         raise ValueError("Cannot verify checker dependencies: completion receipt differs from admitted inputs")
     return expected
 
 
-def download(path, output, base):
+def checker_proxy():
+    proxy = os.environ.get("HTTPS_PROXY")
+    if not (proxy is not None and (match := re.fullmatch(r"http://127\.0\.0\.1:([0-9]+)", proxy)) is not None
+            and 1 <= int(match[1]) <= 65535
+            and all(os.environ.get(name) == proxy for name in ("HTTP_PROXY", "http_proxy", "https_proxy"))
+            and all(os.environ.get(name) in (None, "") for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"))):
+        raise ValueError("Cannot acquire checker dependencies: launcher-owned loopback proxy configuration is required")
+
+
+def acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
+    """Reuse the declared wheel or publish it through the shared tool."""
+    from tools.wheelhouse import prepare_core_assets
+
+    wheel = next(package for package in document["packages"] if package["name"] == "ruff")
+    pool = Path(wheelhouse)
+    target = pool / wheel["file"]
+    expected = {"size": wheel["size"], "sha256": wheel["sha256"]}
+    descriptor = os.open(pool, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        if not target.exists() and not target.is_symlink() and (Path(legacy) / wheel["file"]).exists():
+            raise ValueError("Cannot acquire checker Ruff wheel: a private cached wheel exists but the shared pool is missing it; preserve it and resolve the cache migration before retrying")
+        stream_line = next(line.strip() for line in Path(stream_assets).read_text().splitlines() if line.startswith("https://"))
+        stream_tool = pool / Path(urlsplit(stream_line).path).name
+        if not stream_tool.exists() and not stream_tool.is_symlink():
+            checker_proxy()
+        prepare_core_assets(stream_assets, pool, download=True)
+        if target.exists() or target.is_symlink():
+            if file_identity(target) != expected:
+                raise ValueError("Cannot acquire checker Ruff wheel: cached bytes differ from declaration")
+            return
+        checker_proxy()
+        prepare_core_assets(tool_assets, pool, download=True)
+    finally:
+        os.close(descriptor)
+    tool_line = next(line.strip() for line in Path(tool_assets).read_text().splitlines() if line.startswith("https://"))
+    tool = pool / Path(urlsplit(tool_line).path).name
+    with tempfile.TemporaryDirectory(prefix="checker-wheel-lock-") as temporary:
+        lock = Path(temporary) / "pylock.checker.toml"
+        lock.write_text('lock-version = "1.0"\ncreated-by = "nmrnet checker"\n'
+                        '[[packages]]\nname = "ruff"\nversion = ' + json.dumps(wheel["version"]) + '\n'
+                        '[packages.archive]\nurl = ' + json.dumps(wheel["url"]) + '\n'
+                        '[packages.archive.hashes]\nsha256 = ' + json.dumps(wheel["sha256"]) + '\n')
+        subprocess.run([sys.executable, "-I", "-S", str(tool), "acquire", "--lock", str(lock), "--pool", str(pool)], check=True)
+    if file_identity(target) != expected:
+        raise ValueError("Cannot acquire checker Ruff wheel: published bytes differ from declaration")
+
+
+def download(path, output, base, wheelhouse=None, tool_assets=None, stream_assets=None):
     """Publish only a complete verified dependency set; retain failed staging.
 
     The existing acquisition launcher supplies one loopback interface-bound
@@ -177,24 +231,26 @@ def download(path, output, base):
     if document["base"] != base:
         raise ValueError("Cannot acquire checker dependencies: declaration names another base image")
     output = Path(output)
+    if wheelhouse is not None and (output.exists() or output.is_symlink()):
+        legacy_wheel = next(package["file"] for package in document["packages"] if package["name"] == "ruff")
+        verification_pool = None if (output / legacy_wheel).exists() else wheelhouse
+        expected = inventory_for_declaration(document, declaration_sha256, output, verification_pool)
+        if read_document(output / ".complete") != expected:
+            raise ValueError("Cannot acquire checker dependencies: completion receipt differs from admitted declaration")
+    if wheelhouse is not None:
+        acquire_ruff(document, wheelhouse, tool_assets, stream_assets, output)
     if output.exists() or output.is_symlink():
-        expected = inventory_for_declaration(document, declaration_sha256, output)
+        expected = inventory_for_declaration(document, declaration_sha256, output, wheelhouse)
         if read_document(output / ".complete") != expected:
             raise ValueError("Cannot acquire checker dependencies: completion receipt differs from admitted declaration")
         return
-    proxy = os.environ.get("HTTPS_PROXY")
-    if not (
-        proxy is not None
-        and (match := re.fullmatch(r"http://127\.0\.0\.1:([0-9]+)", proxy)) is not None
-        and 1 <= int(match[1]) <= 65535
-        and all(os.environ.get(name) == proxy for name in ("HTTP_PROXY", "http_proxy", "https_proxy"))
-        and all(os.environ.get(name) in (None, "") for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"))
-    ):
-        raise ValueError("Cannot acquire checker dependencies: launcher-owned loopback proxy configuration is required")
+    checker_proxy()
     staged = Path(tempfile.mkdtemp(prefix=".dependencies.pending-", dir=output.parent))
     sys.stdout.write(f"Acquiring checker dependencies into {staged}; incomplete staging is retained on failure.\n")
     sys.stdout.flush()
     for package in document["packages"]:
+        if wheelhouse is not None and package["name"] == "ruff":
+            continue
         destination = staged / package["file"]
         count = 0
         with open_url(urllib.request.Request(package["url"]), timeout=60) as response, destination.open("xb") as target:
@@ -207,7 +263,7 @@ def download(path, output, base):
             os.fsync(target.fileno())
         if file_identity(destination) != {"size": package["size"], "sha256": package["sha256"]}:
             raise ValueError("Cannot acquire checker dependencies: artifact size or SHA-256 differs")
-    receipt = inventory_for_declaration(document, declaration_sha256, staged)
+    receipt = inventory_for_declaration(document, declaration_sha256, staged, wheelhouse)
     with (staged / ".complete").open("x") as stream:
         json.dump(receipt, stream, sort_keys=True)
         stream.write("\n")
@@ -218,7 +274,7 @@ def download(path, output, base):
     fsync_directory(output.parent)
 
 
-def install(path, directory, base):
+def install(path, directory, base, wheelhouse=None):
     """Install verified local artifacts during the networkless checker build only.
 
     This owner uses the closed Debian closure rather than a live resolver or
@@ -228,7 +284,7 @@ def install(path, directory, base):
     document, declaration_sha256 = admitted_declaration(path)
     if document["base"] != base:
         raise ValueError("Cannot install checker dependencies: declaration names another base image")
-    expected = inventory_for_declaration(document, declaration_sha256, directory)
+    expected = inventory_for_declaration(document, declaration_sha256, directory, wheelhouse)
     if read_document(Path(directory) / ".complete") != expected:
         raise ValueError("Cannot install checker dependencies: completion receipt differs")
     debs = [str(Path(directory) / package["file"]) for package in document["packages"] if package["name"] != "ruff"]
@@ -250,7 +306,7 @@ def install(path, directory, base):
                 "--no-cache-dir",
                 "--disable-pip-version-check",
                 "--find-links",
-                str(directory),
+                str(wheelhouse if wheelhouse is not None else directory),
                 "--requirement",
                 str(lock),
             ],
@@ -275,13 +331,24 @@ def main():
     parser.add_argument("--declaration", type=Path, required=True)
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--base", required=True)
+    parser.add_argument("--wheelhouse", type=Path)
+    parser.add_argument("--tool-assets", type=Path)
+    parser.add_argument("--stream-assets", type=Path)
     args = parser.parse_args()
+    if args.wheelhouse is None:
+        parser.error("checker dependencies require --wheelhouse")
     if args.action == "download":
-        download(args.declaration, args.directory, args.base)
+        if args.tool_assets is None or args.stream_assets is None:
+            parser.error("checker acquisition requires shared tool pins")
+        download(args.declaration, args.directory, args.base, args.wheelhouse, args.tool_assets, args.stream_assets)
     elif args.action == "install":
-        install(args.declaration, args.directory, args.base)
+        install(args.declaration, args.directory, args.base, args.wheelhouse)
     else:
-        expected = check(args.declaration, args.directory, args.base)
+        expected = check(args.declaration, args.directory, args.base, args.wheelhouse)
+        if args.stream_assets is not None:
+            from tools.wheelhouse import prepare_core_assets
+
+            prepare_core_assets(args.stream_assets, args.wheelhouse, download=False)
         sys.stdout.write(expected["declaration_sha256"] + "\n")
 
 

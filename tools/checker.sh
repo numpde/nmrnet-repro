@@ -45,6 +45,21 @@ if [[ ! -f "$declaration" || -L "$declaration" ]]; then
     exit 2
 fi
 readonly dependencies="$repository_root/.work/checker/dependencies"
+source "$repository_root/tools/wheelhouse_path.sh"
+select_wheelhouse
+if [[ "$1" == download ]]; then
+    if ! "$print_command"; then
+        mkdir -p -- "$wheelhouse_directory"
+        pool_owner=$(stat -c '%u:%g' -- "$wheelhouse_directory")
+        [[ $pool_owner == "$caller_uid:$caller_gid" ]] || {
+            printf 'Checker acquisition requires pool owner %s:%s; observed %s.\n' "$caller_uid" "$caller_gid" "$pool_owner" >&2
+            exit 2
+        }
+    fi
+else
+    require_wheelhouse_pool
+    if ! "$print_command"; then lock_wheelhouse shared; fi
+fi
 run() {
     if "$print_command"; then printf '%q ' "$@"; printf '\n'; else "$@"; fi
 }
@@ -53,18 +68,22 @@ worker=(--pull never --read-only --user "$caller_uid:$caller_gid" --cap-drop ALL
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --env NMRNET_IN_CONTAINER=1 --workdir /workspace)
 tool_mounts=(--mount "type=bind,src=$repository_root/tools/checker.py,dst=/workspace/tools/checker.py,readonly"
     --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+    --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
-    --mount "type=bind,src=$declaration,dst=/input/dependencies.json,readonly")
+    --mount "type=bind,src=$declaration,dst=/input/dependencies.json,readonly"
+    --mount "type=bind,src=$repository_root/requirements/wheelhouse-acquirer-assets.in,dst=/input/tool-assets.in,readonly"
+    --mount "type=bind,src=$repository_root/requirements/wheelhouse-tool-assets.in,dst=/input/stream-assets.in,readonly")
 if [[ "$1" == download ]]; then
     source "$repository_root/tools/acquisition_interface.sh"
     select_acquisition_interface
     if ! "$print_command"; then mkdir -p -m 700 -- "$repository_root/.work/checker"; fi
     proxy_command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then proxy_command+=(--print); fi
-    download_command=("${proxy_command[@]}" --success-note $'\nNext, verify the checker dependencies offline:\n  make checks/dependencies/check' run "${worker[@]}" "${tool_mounts[@]}"
+    download_command=("${proxy_command[@]}" --success-note $'\nNext, verify the checker dependencies offline:\n  make checks/dependencies/check' --pool-owner "$caller_uid:$caller_gid" run "${worker[@]}" "${tool_mounts[@]}"
         --mount "type=bind,src=$repository_root/.work/checker,dst=/output"
+        --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse"
         "$base" python3 -B -m tools.checker download --declaration /input/dependencies.json
-        --directory /output/dependencies --base "$base")
+        --directory /output/dependencies --base "$base" --wheelhouse /wheelhouse --tool-assets /input/tool-assets.in --stream-assets /input/stream-assets.in)
     # No checker client exists yet. Transfer the supported PID so a directed
     # signal reaches the acquisition owner and its cleanup, without a wrapper.
     exec "${download_command[@]}"
@@ -83,6 +102,7 @@ inference_diagnostic=
 inference_retirement_confirmed=true
 inference_cancellation_status=0
 caller_cancellation=0
+capture_borrowed=false
 next_actions=
 cleanup() {
     local status=$? record_status=0 capture_status=0 client_status=0 admission_status=0 cancelled=0
@@ -101,7 +121,7 @@ cleanup() {
                 if [[ $status == 0 ]]; then status=$record_status; fi
             fi
         fi
-        if [[ -n "$capture" ]]; then
+        if [[ -n "$capture" ]] && ! "$capture_borrowed"; then
             if rm -rf -- "$capture" 2>/dev/null; then capture=; else
                 capture_status=$?
                 if [[ $status == 0 ]]; then status=$capture_status; fi
@@ -151,7 +171,11 @@ cleanup() {
                 printf "Cannot confirm unpublished checker image record removal; attempted path %q (status %s).\n" "$2" "$3" >&2
             fi
             if [[ -n "$4" ]]; then
-                printf "Cannot confirm checker build capture removal; attempted path %q (status %s).\n" "$4" "$5" >&2
+                if [[ "$5" == 0 ]]; then
+                    printf "Checker operation retirement is unconfirmed; inputs retained at %q.\n" "$4" >&2
+                else
+                    printf "Cannot confirm checker build capture removal; attempted path %q (status %s).\n" "$4" "$5" >&2
+                fi
             fi
             if [[ -n "$6" ]]; then
                 printf "Cannot confirm checker Docker client configuration removal; attempted path %q (status %s).\n" "$6" "$7" >&2
@@ -181,6 +205,14 @@ trap cleanup EXIT
 trap 'caller_cancellation=129; exit 129' HUP
 trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
+if ! "$print_command"; then
+    mapped_owner=$(bash "$repository_root/tools/docker.sh" --pool-owner "$caller_uid:$caller_gid" map-owner "$base")
+    [[ $mapped_owner =~ ^[0-9]+:[0-9]+$ ]] || { printf 'Cannot map checker dependency owner: unexpected mapping output %q.\n' "$mapped_owner" >&2; exit 2; }
+    worker[4]=$mapped_owner
+else
+    printf '%s\n' 'Checker worker UID:GID is resolved through the selected engine when executed.' >&2
+    worker[4]='<mapped-owner>'
+fi
 if "$print_command"; then docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
 elif docker_client_prepare run; then :
 else
@@ -190,8 +222,9 @@ else
 fi
 verify=("${engine[@]}" run --rm --network none "${worker[@]}" "${tool_mounts[@]}"
     --mount "type=bind,src=$dependencies,dst=/dependencies,readonly"
+    --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
     "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json
-    --directory /dependencies --base "$base")
+    --directory /dependencies --base "$base" --wheelhouse /wheelhouse --stream-assets /input/stream-assets.in)
 if [[ "$1" == check ]]; then
     if "$print_command"; then run "${verify[@]}"; else
         inference_native 'checker dependency verification' "$dependency_check_seconds" stdio "${verify[@]}"
@@ -207,7 +240,8 @@ else
     capture="$repository_root/.work/checker/.build.PRINT"
 fi
 inputs=(containers/checker/Dockerfile containers/checker/Dockerfile.dockerignore
-    tools/checker.py tools/checker.sh tools/artifacts.py tools/container_guard.py requirements/checker-dependencies.json)
+    tools/checker.py tools/checker.sh tools/artifacts.py tools/container_guard.py requirements/checker-dependencies.json
+    requirements/wheelhouse-tool-assets.in)
 if ! "$print_command"; then
     for input in "${inputs[@]}"; do
         [[ -f "$repository_root/$input" && ! -L "$repository_root/$input" ]] || {
@@ -216,16 +250,20 @@ if ! "$print_command"; then
         mkdir -p -- "$capture/context/$(dirname -- "$input")"
         cp --preserve=mode -- "$repository_root/$input" "$capture/context/$input"
     done
-    cp -a -- "$dependencies" "$capture/dependencies"
+    mkdir -- "$capture/dependencies"
+    cp -a -- "$dependencies"/*.deb "$dependencies/.complete" "$capture/dependencies/"
     captured_verify=("${engine[@]}" run --rm --network none "${worker[@]}")
     for tool in checker.py artifacts.py container_guard.py; do
         captured_verify+=(--mount "type=bind,src=$capture/context/tools/$tool,dst=/workspace/tools/$tool,readonly")
     done
     captured_verify+=(--mount "type=bind,src=$capture/context/requirements/checker-dependencies.json,dst=/input/dependencies.json,readonly"
         --mount "type=bind,src=$capture/dependencies,dst=/dependencies,readonly"
+        --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
         "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json
-        --directory /dependencies --base "$base")
+        --directory /dependencies --base "$base" --wheelhouse /wheelhouse)
+    capture_borrowed=true
     inference_native 'checker captured dependency verification' "$dependency_check_seconds" stdio "${captured_verify[@]}" >/dev/null
+    capture_borrowed=false
     input_id="$(cd -- "$capture/context"; { sha256sum -- "${inputs[@]}"; stat -c '%a %n' -- "${inputs[@]}"; } | sha256sum | cut -d ' ' -f1)"
 else
     input_id=PRINT
@@ -233,9 +271,35 @@ fi
 build=("${engine[@]}" build --builder default --quiet --network none --pull=false
     --label "io.nmrnet-repro.checker-inputs=$input_id"
     --build-context "dependencies=$capture/dependencies"
-    --file "$capture/context/containers/checker/Dockerfile" "$capture/context")
+    --file containers/checker/Dockerfile -)
 if "$print_command"; then run "${build[@]}"; exit; fi
-inference_native 'checker image build' "$build_seconds" image-id "${build[@]}"
+python3 -I -S - "$capture/context" "$capture" "${inputs[@]}" <<'PY'
+import hashlib, json, pathlib, sys
+context, output = map(pathlib.Path, sys.argv[1:3])
+sources = []
+for name in sys.argv[3:]:
+    path = context / name
+    sources.append({'path': str(path), 'destination': name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                    'executable': bool(path.stat().st_mode & 0o111)})
+(output / 'sources.json').write_text(json.dumps(sources))
+declaration = json.loads((context / 'requirements/checker-dependencies.json').read_text())
+wheel = next(package for package in declaration['packages'] if package['name'] == 'ruff')
+(output / 'manifest.json').write_text(json.dumps([{'directory': 'checker-wheels', 'filename': wheel['file'], 'sha256': wheel['sha256']}]))
+PY
+tool_line=$(grep '^https://github.com/numpde/nmr-provider-tools/releases/download/' "$capture/context/requirements/wheelhouse-tool-assets.in")
+tool_url=${tool_line%%#sha256=*}; tool_hash=${tool_line##*#sha256=}; tool_name=${tool_url##*/}
+[[ $tool_name =~ ^wheelhouse-tool-[0-9]+\.[0-9]+\.[0-9]+\.pyz$ && $tool_hash =~ ^[0-9a-f]{64}$ ]] || exit 2
+[[ -f $wheelhouse_directory/$tool_name && ! -L $wheelhouse_directory/$tool_name ]] || {
+    printf '%s\n' 'Checker stream tool must be a regular file in the selected wheelhouse.' >&2; exit 2;
+}
+observed=$(sha256sum -- "$wheelhouse_directory/$tool_name")
+[[ ${observed%% *} == "$tool_hash" ]] || { printf '%s\n' 'Checker stream tool differs from its pin.' >&2; exit 2; }
+capture_borrowed=true
+inference_native 'checker image build' "$build_seconds" image-id bash -o pipefail -c '
+    tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
+    python3 -I -S "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"
+' bash "$wheelhouse_directory/$tool_name" "$wheelhouse_directory" "$capture/sources.json" "$capture/manifest.json" "${build[@]}"
+capture_borrowed=false
 image_id=$inference_result
 admission_directory=$(umask 077; mktemp -d /tmp/nmrnet-checker-admission.XXXXXXXX)
 (umask 077; : > "$admission_directory/stdout"; : > "$admission_directory/stderr")

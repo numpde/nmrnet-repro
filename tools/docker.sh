@@ -45,6 +45,7 @@ operation=$1
 case "$operation" in
     check-interface) require_interface; exit ;;
     require-images) shift; if [[ $# == 0 ]]; then exit 0; fi ;;
+    map-owner) shift; [[ -n $pool_owner && $# == 1 ]] || { printf '%s\n' 'Map an owner with --pool-owner UID:GID map-owner IMAGE.' >&2; exit 2; } ;;
     run) ;;
     *) printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2; exit 2 ;;
 esac
@@ -85,6 +86,7 @@ map_probe_id=
 map_probe_removal_attempted=false
 mapped_pool_uid=
 mapped_pool_gid=
+mapped_result=
 pending_diagnostic=
 retain_preflight_receipts=false
 inference_diagnostic=
@@ -106,8 +108,8 @@ map_pool_owner() {
         exec "$@" > "$output" 2> "$diagnostic"
     ' bash "$output" "$diagnostic" "$receipt" "${engine[@]}" create --cidfile "$receipt" --network none \
         --read-only --user 0:0 --cap-drop ALL --security-opt no-new-privileges:true \
-        --memory 64m --memory-swap 64m --pids-limit 8 --entrypoint /opt/provider-core/environment/bin/python \
-        "$proxy_image" -I -B -c 'import time; time.sleep(60)' "$probe_token"; then create_status=0; else create_status=$?; fi
+        --memory 64m --memory-swap 64m --pids-limit 8 --entrypoint "${map_probe_python:-/opt/provider-core/environment/bin/python}" \
+        "${map_probe_image:-$proxy_image}" -I -B -c 'import time; time.sleep(60)' "$probe_token"; then create_status=0; else create_status=$?; fi
     if [[ $inference_retirement_confirmed != true ]]; then return "$create_status"; fi
     local created=
     if private_receipt_below_limit "$output" && IFS= read -r -N 64 created < "$output" \
@@ -118,7 +120,7 @@ map_pool_owner() {
         return 2
     fi
     [[ $create_status == 0 ]] || return "$create_status"
-    inference_native 'wheelhouse owner mapping probe start' "$metadata_timeout" stdio "${engine[@]}" start "$map_probe_id"
+    inference_native 'wheelhouse owner mapping probe start' "$metadata_timeout" discard "${engine[@]}" start "$map_probe_id"
     inference_native 'wheelhouse owner mapping probe inspect' "$metadata_timeout" stdio "${engine[@]}" inspect \
         --format '{{.State.Pid}} {{.State.Running}}' "$map_probe_id" > "$scratch/pool-map-inspect"
     IFS=' ' read -r pid running extra < "$scratch/pool-map-inspect" || return 2
@@ -377,6 +379,7 @@ cleanup() {
         if inference_native 'next-action reporting' untimed stdio bash -eu -c \
             'printf "%s\n" "$1" >&2' bash "$next_actions"; then :; else status=$?; fi
     fi
+    if [[ $status == 0 && -n $mapped_result ]]; then printf '%s\n' "$mapped_result"; fi
     # Reporting owns its new fact. Exit immediately; no fallback or cleanup.
     exit "$status"
 }
@@ -396,6 +399,15 @@ else
     scratch="$(mktemp -d /tmp/nmrnet-proxy.XXXXXXXX)"
 fi
 if [[ "$operation" == require-images ]]; then require_images "$@"; exit; fi
+if [[ "$operation" == map-owner ]]; then
+    if "$print_command"; then printf '%s\n' 'Map host owner through a verified, networkless checker-image probe.'; exit; fi
+    map_probe_image=$1 map_probe_python=/usr/local/bin/python3
+    require_images "$map_probe_image"
+    IFS=: read -r pool_owner_uid pool_owner_gid <<< "$pool_owner"
+    map_pool_owner "$pool_owner_uid" "$pool_owner_gid"
+    mapped_result="$mapped_pool_uid:$mapped_pool_gid"
+    exit
+fi
 if "$print_command"; then scratch=/tmp/nmrnet-proxy.PRINT; else
     require_images "$proxy_image"
     mkdir -m 700 -- "$scratch/ready"

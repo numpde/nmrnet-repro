@@ -522,7 +522,13 @@ case "$1" in
                     command+=(tests.test_image_retirement tests.test_provider_deployment_launcher
                         repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health)
                 elif [[ "$1" == test/unit/packages/wheelhouse ]]; then
-                    command+=(tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_inference_image tests.test_git_stream_sources
+                    command+=(tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_checker
+                        tests.test_checker_launcher.CheckerLauncherTests.test_checker_uses_mapped_owner_and_refuses_unverified_mapping
+                        tests.test_checker_launcher.CheckerLauncherTests.test_failed_captured_verification_retains_borrowed_inputs
+                        tests.test_checker_launcher.CheckerLauncherTests.test_check_preview_is_offline_readonly_and_download_only_writes_owned_stage
+                        tests.test_checker_launcher.CheckerLauncherTests.test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture
+                        tests.test_checker_launcher.CheckerLauncherTests.test_build_failure_and_wrong_observed_id_preserve_predecessor_and_retire_capture
+                        tests.test_inference_image tests.test_git_stream_sources
                         tests.unit.normative.test_wheelhouse_path tests.unit.adversarial.test_wheelhouse_path
                         tests.unit.normative.test_wheel_pool)
                 else
