@@ -87,6 +87,17 @@ test/integration/rdkit-runtime:
 .PHONY: packages/shared-tool/wheelhouse packages/shared-tool/wheelhouse/check
 .PHONY: packages/provider-core/test-support packages/provider-core/test-support/check
 .PHONY: packages/images/retire test/unit/packages/images
+.PHONY: packages/proxy-bootstrap/check packages/proxy-bootstrap/refresh
+
+override export NMRNET_BOOTSTRAP_WHEEL_INPUT := $(if $(filter command line,$(origin PROVIDER_CORE_WHEEL)),$(value PROVIDER_CORE_WHEEL))
+unexport PROVIDER_CORE_WHEEL
+
+packages/proxy-bootstrap/check:
+	python3 -B tools/bootstrap_snapshot.py
+
+packages/proxy-bootstrap/refresh:
+	@test -n "$$NMRNET_BOOTSTRAP_WHEEL_INPUT" || { printf '%s\n' 'Supply PROVIDER_CORE_WHEEL=<pinned-wheel> on the command line.' >&2; exit 2; }
+	python3 -B tools/bootstrap_snapshot.py --wheel "$$NMRNET_BOOTSTRAP_WHEEL_INPUT"
 
 packages/images/retire:
 	bash tools/image_retirement.sh
@@ -224,7 +235,7 @@ unexport LOG_LEVEL
 unexport DOCKER_CONTEXT NMRNET_DOCKER_CONTEXT_INPUT NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN NMRNET_DOCKER_ENDPOINT_INPUT
 override export NMRNET_DOCKER_CONTEXT_INPUT := $(if $(filter command line,$(origin DOCKER_CONTEXT)),$(value DOCKER_CONTEXT))
 override export NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN := $(origin DOCKER_CONTEXT)
-ifneq ($(filter-out help,$(MAKECMDGOALS)),)
+ifneq ($(filter-out help packages/proxy-bootstrap/check packages/proxy-bootstrap/refresh,$(MAKECMDGOALS)),)
 # Resolve once in the Make process so every recipe, nested launcher and cleanup
 # in this invocation inherits the same context endpoint snapshot.
 make_shell_quote = '$(subst ','\'',$(1))'
