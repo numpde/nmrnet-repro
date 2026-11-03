@@ -74,6 +74,10 @@ else
     require_wheelhouse_pool
     if ! "$print_command"; then lock_wheelhouse shared; fi
 fi
+if [[ $1 == build ]] && ! "$print_command"; then
+    source "$repository_root/tools/image_lifecycle.sh"
+    image_lifecycle_lock shared
+fi
 run() {
     if "$print_command"; then printf '%q ' "$@"; printf '\n'; else "$@"; fi
 }

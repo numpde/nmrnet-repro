@@ -75,7 +75,7 @@ require_inventory_directory() {
     fi
 }
 require_inventory_directory "$repository_root/.work"
-for role in provider preparation inference; do
+for role in provider preparation inference checker; do
     require_inventory_directory "$repository_root/.work/$role"
     record=$repository_root/.work/$role/image-id
     if [[ -e $record || -L $record ]]; then
@@ -123,7 +123,7 @@ if [[ -s $scratch/output ]]; then
         (( ${#image_ids[@]} == ${#batch[@]} )) || refuse 'container image inspection was incomplete.'
     done
 fi
-for role in provider geometry inference; do
+for role in provider geometry inference checker; do
     capture image ls --all --quiet --no-trunc --filter "label=io.nmrnet-repro.$role-inputs"
     read_image_ids
     for identifier in "${image_ids[@]}"; do

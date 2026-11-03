@@ -60,10 +60,10 @@ class RepositoryHygieneTest(unittest.TestCase):
                 'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
                 'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
             )
-            for script in ("container.sh", "inference_image.sh"):
+            for script in ("container.sh", "inference_image.sh", "checker.sh"):
                 (root / "tools" / script).write_text('exit "${TEST_BUILD_STATUS}"\n')
             (root / "tools/image_retirement.sh").write_text('touch "$(dirname "$0")/cleanup-called"\nexit 7\n')
-            for target in ("provider/image/build", "geometry/image/build", "packages/image"):
+            for target in ("provider/image/build", "geometry/image/build", "packages/image", "checks/image/build"):
                 for build_status in (7, 0):
                     with self.subTest(target=target, build_status=build_status):
                         (root / "tools/cleanup-called").unlink(missing_ok=True)

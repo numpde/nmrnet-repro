@@ -538,6 +538,7 @@ checks/dependencies/check:
 
 checks/image/build:
 	bash tools/checker.sh build
+	@bash tools/image_retirement.sh || { status=$$?; printf 'Image build succeeded; retirement is incomplete (status %s). Retry make packages/images/retire.\n' "$$status" >&2; }
 
 weights/download:
 	bash tools/container.sh download

@@ -45,6 +45,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "acquisition_interface.sh",
             "docker_client.sh",
             "inference_native.sh",
+            "image_lifecycle.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
         (self.root / "tools/docker.sh").rename(self.root / "tools/docker-real.sh")
@@ -434,8 +435,9 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
     def test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture(self):
         selected = self.root / "tools/checker.py"
         expected = hashlib.sha256(selected.read_bytes()).hexdigest()
-        result = self.launch("build", additions={"CHECKER_FIXTURE_MUTATE": str(selected)})
+        result = self.launch("build", additions={"CHECKER_FIXTURE_MUTATE": str(selected), "CHECKER_FIXTURE_PROBE_LEASE": "1"})
         self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertTrue((self.root / "state/build-lease-held").exists())
         evidence = json.loads((self.root / "state/build.json").read_text())
         self.assertEqual(expected, evidence["manifest"]["tools/checker.py"])
         declared = {item["file"] for item in self.document["packages"] if item["name"] != "ruff"}

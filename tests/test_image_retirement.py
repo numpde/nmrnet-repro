@@ -63,7 +63,7 @@ elif args[:2]==["image","rm"]:
     with (root/"removed").open("a") as stream: stream.write(args[-1]+"\\n")
 else: raise SystemExit(91)
 ''')
-        for role, letter in (("provider", "a"), ("preparation", "b"), ("inference", "c")):
+        for role, letter in (("provider", "a"), ("preparation", "b"), ("inference", "c"), ("checker", "9")):
             path = self.root / ".work" / role
             path.mkdir(parents=True)
             (path / "image-id").write_text(image(letter) + "\n")
@@ -73,7 +73,7 @@ else: raise SystemExit(91)
         (bundle / "compose.json").write_text(json.dumps({"services": {"provider": {"image": image("d")}}}))
         (self.deployment / "current").symlink_to("bundles/generation-selected")
         self.state = {
-            "images": {"provider": [image(x) for x in "adef0"], "geometry": [image("b")], "inference": [image("c")]},
+            "images": {"provider": [image(x) for x in "adef0"], "geometry": [image("b")], "inference": [image("c")], "checker": [image("9")]},
             "used": image("e"), "tagged": image("0"),
         }
         self.save_state()
@@ -120,6 +120,13 @@ else: raise SystemExit(91)
         result = self.retire()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.removed(), [])
+
+    def test_checker_record_is_protected_and_older_unreferenced_checker_is_retired(self):
+        self.state["images"]["checker"].append(image("8"))
+        self.save_state()
+        result = self.retire()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertCountEqual(self.removed(), [image("f"), image("8")])
 
     def test_incomplete_retained_generation_blocks_every_removal(self):
         (self.deployment / "bundles/generation-incomplete").mkdir()

@@ -197,6 +197,10 @@ def main():
             sys.stderr.write("checker run diagnostic\n")
             raise SystemExit(int(os.environ["CHECKER_FIXTURE_RUN_STATUS"]))
     elif arguments[0] == "build":
+        if os.environ.get("CHECKER_FIXTURE_PROBE_LEASE") == "1":
+            if subprocess.run(["flock", "-n", "-x", str(state.parent), "true"], check=False).returncode == 0:
+                raise SystemExit(97)
+            (state / "build-lease-held").touch()
         fail_build = os.environ.get("CHECKER_FIXTURE_BUILD_FAIL") == "1"
         if not fail_build:
             build_output = os.environ["CHECKER_FIXTURE_BUILD_OUTPUT"]

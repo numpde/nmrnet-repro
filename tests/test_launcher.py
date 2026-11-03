@@ -113,6 +113,7 @@ class LauncherTests(unittest.TestCase):
         (checkout / "tools/wheelhouse_path.sh").write_bytes(Path("tools/wheelhouse_path.sh").read_bytes())
         (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+        (checkout / "tools/image_lifecycle.sh").write_bytes(Path("tools/image_lifecycle.sh").read_bytes())
         (checkout / ".work/checker").mkdir(parents=True)
         (checkout / ".work/wheelhouse").mkdir()
         (checkout / "bin").mkdir()
@@ -144,6 +145,16 @@ class LauncherTests(unittest.TestCase):
         if run_status is not None:
             environment["FAKE_RUN_STATUS"] = str(run_status)
         return checkout, environment
+
+    def test_checker_consumer_holds_image_lease_through_engine_run(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout, environment = self.checker_checkout(temporary, run_status=0)
+            (checkout / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
+            environment["FAKE_CHECK_LEASE_DIR"] = str(checkout)
+            result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "test/repository"],
+                                    env=environment, text=True, capture_output=True, timeout=5)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(2, len((checkout / "engine-log").read_text().splitlines()))
 
     def test_provider_lane_keeps_aggregate_offline_with_required_public_inputs(self):
         result = self.command("test/unit/provider")
@@ -567,6 +578,10 @@ if __name__ == "__main__":
             raise SystemExit(97)
         with Path(os.environ["ENGINE_LOG"]).open("a") as output:
             output.write(" ".join(arguments) + "\n")
+        if "FAKE_CHECK_LEASE_DIR" in os.environ:
+            probe = subprocess.run(["flock", "-n", "-x", os.environ["FAKE_CHECK_LEASE_DIR"], "true"], check=False)
+            if probe.returncode == 0:
+                raise SystemExit(98)
         if arguments[4:6] == ["image", "inspect"]:
             output = os.environ["OBSERVED_IMAGE"].encode("ascii")
             kind = os.environ["FAKE_INSPECT_OUTPUT"]

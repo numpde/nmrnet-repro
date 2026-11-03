@@ -60,6 +60,8 @@ checker_image() {
         checker_image_id=CHECKER_IMAGE_ID_FROM_RECORD
         return
     fi
+    source "$repository_root/tools/image_lifecycle.sh"
+    image_lifecycle_lock shared
     for directory in "$repository_root/.work" "$repository_root/.work/checker"; do
         if [[ ! -d "$directory" || -L "$directory" ]]; then
             printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: checker record directories must exist without symlinks.'
@@ -521,6 +523,7 @@ case "$1" in
                 if [[ "$1" == test/unit/packages/images ]]; then
                     command+=(tests.test_image_retirement tests.test_provider_deployment_launcher tests.test_provider_update
                         tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare
+                        tests.test_launcher.LauncherTests.test_checker_consumer_holds_image_lease_through_engine_run
                         tests.test_checker_launcher.CheckerLauncherTests.test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture
                         tests.test_checker_launcher.CheckerLauncherTests.test_build_failure_and_wrong_observed_id_preserve_predecessor_and_retire_capture
                         tests.test_checker_launcher.CheckerLauncherTests.test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture
