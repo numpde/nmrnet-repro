@@ -21,7 +21,7 @@ from pip._vendor.packaging.tags import sys_tags
 from pip._vendor.packaging.specifiers import Specifier
 from pip._vendor.packaging.version import Version
 
-from tools.wheelhouse import (digest, prepare_core_assets, prepare_source, requirements, select_wheels,
+from tools.wheelhouse import (core_assets, digest, prepare_core_assets, prepare_source, requirements, select_wheels,
                               source_cache_file, source_identity, verified_source)
 
 
@@ -37,14 +37,10 @@ def pool_lock(pool, exclusive):
 
 def shared_asset_present(declaration, pool):
     """Check a single pinned release asset under the caller's pool lock."""
-    lines = [line.strip() for line in Path(declaration).read_text().splitlines()
-             if line.strip() and not line.lstrip().startswith("#")]
-    if len(lines) != 1:
+    assets = core_assets(declaration)
+    if len(assets) != 1:
         raise ValueError("Cannot check shared release asset: expected one pinned URL.")
-    url = lines[0].partition("#sha256=")[0]
-    name = Path(urllib.parse.urlsplit(url).path).name
-    if name in ("", ".", ".."):
-        raise ValueError("Cannot check shared release asset: URL has no filename.")
+    _, _, name = assets[0]
     try:
         (pool / name).lstat()
     except FileNotFoundError:
@@ -71,7 +67,9 @@ def refuse_conflicting_wheels(lock, pool):
     tags = set(sys_tags())
     valid = set()
     conflicts = {}
-    for path in pool.glob("*.whl"):
+    with os.scandir(pool) as entries:
+        paths = [pool / entry.name for entry in entries if entry.name.endswith(".whl")]
+    for path in paths:
         try:
             name, version, _, wheel_tags = parse_wheel_filename(path.name)
         except InvalidWheelFilename:
@@ -95,6 +93,7 @@ def refuse_conflicting_wheels(lock, pool):
     for identity, name in conflicts.items():
         if identity not in valid:
             raise ValueError(f"Cannot acquire wheels: cached wheel {name!r} is unreadable or differs from its lock; existing file preserved.")
+    return set(expected) - valid
 
 
 def missing_wheel_locks(locks, pool, descriptor):
@@ -225,7 +224,40 @@ def check(locks, pool, source=None, stream_assets=None):
     print(f"Verified locked wheels from {pool}")
 
 
-def test_support(assets, pool, download):
+def readiness(locks, pool, source=None, stream_assets=None):
+    """Identify missing build inputs; a pip failure may have additional causes."""
+    missing = False
+    with tempfile.TemporaryDirectory(prefix="nmrnet-wheel-readiness-") as temporary:
+        root = Path(temporary)
+        frozen = []
+        for index, original in enumerate(locks):
+            lock = root / f"requirements-{index}.lock"
+            shutil.copyfile(original, lock)
+            frozen.append(lock)
+        if source is not None:
+            frozen_source = root / "source.json"
+            shutil.copyfile(source, frozen_source)
+            source = frozen_source
+        if stream_assets is not None:
+            frozen_assets = root / "stream-assets.in"
+            shutil.copyfile(stream_assets, frozen_assets)
+            stream_assets = frozen_assets
+        with pool_lock(pool, exclusive=False) as descriptor:
+            for lock in frozen:
+                try:
+                    select_wheels(lock, pool, lock_fd=descriptor)
+                except subprocess.CalledProcessError as error:
+                    if error.returncode != 1 or not refuse_conflicting_wheels(lock, pool):
+                        raise
+                    missing = True
+            if source is not None:
+                missing = not scientific_source_present(source, pool) or missing
+            if stream_assets is not None:
+                missing = not shared_asset_present(stream_assets, pool) or missing
+    return not missing
+
+
+def test_support(assets, pool, download, *, probe=False):
     """Acquire or check only the SDK source archive used by consumer tests."""
     lines = [line.strip() for line in assets.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]
     sources = [line for line in lines if urllib.parse.urlsplit(line.split("#", 1)[0]).path.endswith(".tar.gz")]
@@ -237,12 +269,16 @@ def test_support(assets, pool, download):
         with pool_lock(pool, exclusive=False):
             present = shared_asset_present(declaration, pool)
         if not present:
+            if probe:
+                return False
             if not download:
                 with pool_lock(pool, exclusive=False):
                     prepare_core_assets(declaration, pool, download=False)
             else:
                 with pool_lock(pool, exclusive=True):
                     prepare_core_assets(declaration, pool, download=True)
+    if probe:
+        return True
     if not download:
         print(f"Verified provider test support from {pool}")
 
@@ -258,15 +294,32 @@ def main():
     parser.add_argument("--declaration", type=Path, action="append", default=[])
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--support", action="store_true")
+    parser.add_argument("--probe", action="store_true")
+    parser.add_argument("--tool-only", action="store_true")
     args = parser.parse_args()
     if args.support:
         if args.assets is None or args.lock or args.source is not None or args.tool_assets is not None or args.stream_assets is not None or args.declaration:
             parser.error("test support requires only --assets and --pool")
-        test_support(args.assets, args.pool, download=not args.check)
+        if args.tool_only or (args.probe and args.check):
+            parser.error("test support cannot combine probe with check or tool-only")
+        result = test_support(args.assets, args.pool, download=not args.check, probe=args.probe)
+        if args.probe:
+            return 0 if result else 3
+    elif args.tool_only:
+        if not args.probe or args.assets is None or args.lock or args.source or args.tool_assets or args.stream_assets or args.declaration or args.check:
+            parser.error("tool-only probe requires only --assets and --pool")
+        with pool_lock(args.pool, exclusive=False):
+            return 0 if shared_asset_present(args.assets, args.pool) else 3
     elif args.check:
+        if args.probe:
+            parser.error("check and probe cannot be combined")
         if not args.lock:
             parser.error("check requires at least one --lock")
         check(args.lock, args.pool, args.source, args.stream_assets)
+    elif args.probe:
+        if not args.lock or args.assets is None or args.tool_assets is None:
+            parser.error("acquisition probe requires locks, release assets and the shared tool pin")
+        return 0 if readiness(args.lock, args.pool, args.source, args.stream_assets) else 3
     else:
         if not args.lock or args.assets is None or args.tool_assets is None:
             parser.error("acquisition requires locks, release assets and the shared tool pin")
@@ -274,4 +327,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

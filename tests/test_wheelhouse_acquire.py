@@ -5,6 +5,7 @@ import hashlib
 import multiprocessing
 import os
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -41,6 +42,70 @@ class SharedAcquisitionTests(unittest.TestCase):
                                        declarations=[self.declaration])
         assets.assert_not_called()
         run.assert_not_called()
+
+    def test_readiness_distinguishes_present_missing_and_conflicting_wheels(self):
+        cached = wheel(self.pool, "pool-alpha", "1.0")
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
+        self.assertTrue(wheelhouse_acquire.readiness([lock], self.pool))
+        cached.unlink()
+        self.assertFalse(wheelhouse_acquire.readiness([lock], self.pool))
+        cached.write_bytes(b"conflicting cached bytes")
+        with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
+            wheelhouse_acquire.readiness([lock], self.pool)
+
+    def test_readiness_does_not_treat_pip_failure_with_complete_pool_as_missing(self):
+        cached = wheel(self.pool, "pool-alpha", "1.0")
+        lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
+        with patch.object(wheelhouse_acquire, "select_wheels", side_effect=subprocess.CalledProcessError(1, "pip")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                wheelhouse_acquire.readiness([lock], self.pool)
+
+    def test_readiness_propagates_interruption(self):
+        with patch.object(wheelhouse_acquire, "select_wheels", side_effect=subprocess.CalledProcessError(2, "pip")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                wheelhouse_acquire.readiness([self.lock], self.pool)
+
+    def test_readiness_rejects_invalid_missing_release_declaration(self):
+        self.tool_assets.write_text("https://example.invalid/missing.pyz#sha256=" + "a" * 64 + "\n")
+        with self.assertRaisesRegex(ValueError, "pinned shared-owner"):
+            wheelhouse_acquire.readiness([], self.pool, stream_assets=self.tool_assets)
+
+    def test_conflict_scan_does_not_treat_directory_error_as_missing(self):
+        with patch.object(wheelhouse_acquire.os, "scandir", side_effect=PermissionError("denied")):
+            with self.assertRaises(PermissionError):
+                wheelhouse_acquire.refuse_conflicting_wheels(self.lock, self.pool)
+
+    def test_tool_only_probe_reports_missing_then_verified(self):
+        path = self.pool / "wheelhouse-tool-1.0.0.pyz"
+        content = b"tool bytes"
+        self.tool_assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+                                    + path.name + "#sha256=" + hashlib.sha256(content).hexdigest() + "\n")
+        argv = ["wheelhouse_acquire", "--probe", "--tool-only", "--assets", str(self.tool_assets), "--pool", str(self.pool)]
+        with patch.object(sys, "argv", argv):
+            self.assertEqual(3, wheelhouse_acquire.main())
+            path.write_bytes(content)
+            self.assertEqual(0, wheelhouse_acquire.main())
+            path.write_bytes(b"corrupt")
+            with self.assertRaisesRegex(ValueError, "cached bytes differ"):
+                wheelhouse_acquire.main()
+
+    def test_support_probe_reports_missing_then_verified(self):
+        path = self.pool / "provider_core-1.0.tar.gz"
+        content = b"source bytes"
+        self.assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+                               + path.name + "#sha256=" + hashlib.sha256(content).hexdigest() + "\n")
+        self.assertFalse(wheelhouse_acquire.test_support(self.assets, self.pool, download=False, probe=True))
+        path.write_bytes(content)
+        self.assertTrue(wheelhouse_acquire.test_support(self.assets, self.pool, download=False, probe=True))
+        path.write_bytes(b"corrupt")
+        with self.assertRaisesRegex(ValueError, "cached bytes differ"):
+            wheelhouse_acquire.test_support(self.assets, self.pool, download=False, probe=True)
+
+    def test_probe_rejects_incompatible_cli_modes(self):
+        argv = ["wheelhouse_acquire", "--probe", "--check", "--pool", str(self.pool), "--lock", str(self.lock)]
+        with patch.object(sys, "argv", argv), self.assertRaises(SystemExit) as error:
+            wheelhouse_acquire.main()
+        self.assertEqual(2, error.exception.code)
 
     def test_warm_stream_asset_remains_readable_during_another_shared_lease(self):
         content = b"cached release tool"

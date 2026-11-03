@@ -67,11 +67,6 @@ if [[ "$1" == download ]]; then
         printf '%s\n' 'Wheel acquisition cannot mount the repository or its ancestors writable; select a cache directory.' >&2
         exit 2
     fi
-    source "$repository_root/tools/acquisition_interface.sh"
-    select_acquisition_interface
-    if ! "$print_command"; then
-        bash "$repository_root/tools/docker.sh" require-images "$image"
-    fi
 fi
 if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     printf '%s\n' 'Wheelhouse lanes require a nonzero host UID and GID.' >&2
@@ -92,6 +87,10 @@ for input in "${inputs[@]}"; do
     fi
 done
 if [[ "$1" == download ]]; then
+    source "$repository_root/tools/acquisition_interface.sh"
+    if "$print_command" || [[ -n ${NMRNET_NETWORK_INTERFACE_INPUT-} || ${NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN-} == 'command line' ]]; then
+        select_acquisition_interface
+    fi
     if ! "$print_command"; then
         mkdir -p -- "$parent_directory"
         pool_owner=$(stat -c '%u:%g' -- "$parent_directory")
@@ -103,10 +102,43 @@ if [[ "$1" == download ]]; then
     else
         pool_owner=$caller_uid:$caller_gid
     fi
+    if ! "$print_command"; then
+        source "$repository_root/tools/inference_native.sh"
+        readiness_arguments=("${worker_arguments[@]}" --probe)
+        if [[ $profile == shared-tool ]]; then
+            readiness_arguments=(--tool-only --assets /input/wheelhouse-tool-assets.in --pool /wheelhouse --probe)
+        fi
+        probe=(bash "$repository_root/tools/docker.sh" --pool-owner "$pool_owner" probe "$image"
+            --pull never --read-only --env NMRNET_IN_CONTAINER=1 --user "$caller_uid:$caller_gid"
+            --cap-drop ALL --security-opt no-new-privileges:true --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace
+            --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
+            --mount "type=bind,src=$repository_root/tools/wheelhouse_acquire.py,dst=/workspace/tools/wheelhouse_acquire.py,readonly"
+            --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+            --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
+        for input in "${inputs[@]}"; do
+            probe+=(--mount "type=bind,src=$repository_root/requirements/$input,dst=/input/$input,readonly")
+        done
+        probe+=(--mount "type=bind,src=$parent_directory,dst=/wheelhouse,readonly" "$image" python3 -B -m tools.wheelhouse_acquire "${readiness_arguments[@]}")
+        if controller_native 'wheelhouse offline readiness' untimed stdio "${probe[@]}"; then probe_status=0; else probe_status=$?; fi
+        if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || -n $inference_diagnostic ]]; then
+            printf '%s' "$inference_diagnostic" >&2
+            if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+            exit 1
+        fi
+        if [[ $probe_status == 0 ]]; then
+            printf '%s\n' 'All wheelhouse inputs are already available; no download is needed.'
+            if [[ -n $next_actions ]]; then report_next_actions "$next_actions"; fi
+            exit
+        fi
+        if [[ $probe_status != 3 ]]; then exit "$probe_status"; fi
+        if [[ -z ${interface-} ]]; then select_acquisition_interface; fi
+        bash "$repository_root/tools/docker.sh" require-images "$image"
+    fi
     if ! "$print_command" && ! "$shared_acquisition"; then lock_wheelhouse exclusive; fi
     command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then command+=(--print); fi
-    command+=(--success-note "$next_actions")
+    if "$print_command"; then command+=(--success-note "$next_actions"); else command+=(--success-note ''); fi
     command+=(--pool-owner "$pool_owner" run)
     output_mount="type=bind,src=$parent_directory,dst=$container_parent"
     memory=2g
@@ -208,7 +240,26 @@ else
     command+=(--mount "$output_mount" "$image" python3 -B -m tools.wheelhouse "$1" "${worker_arguments[@]}")
 fi
 if [[ "$1" == download ]]; then
-    exec "${command[@]}"
+    if "$print_command"; then exec "${command[@]}"; fi
+    if controller_native 'wheelhouse acquisition' untimed stdio "${command[@]}"; then acquisition_status=0; else acquisition_status=$?; fi
+    if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || -n $inference_diagnostic ]]; then
+        printf '%s' "$inference_diagnostic" >&2
+        if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+        exit 1
+    fi
+    if [[ $acquisition_status != 0 ]]; then exit "$acquisition_status"; fi
+    if ! "$shared_acquisition"; then exec {wheelhouse_lock_fd}<&-; fi
+    if controller_native 'wheelhouse offline recheck' untimed stdio "${probe[@]}"; then probe_status=0; else probe_status=$?; fi
+    if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || -n $inference_diagnostic ]]; then
+        printf '%s' "$inference_diagnostic" >&2
+        if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+        exit 1
+    fi
+    if [[ $probe_status != 0 ]]; then
+        if [[ $probe_status == 3 ]]; then printf '%s\n' 'Cannot complete wheelhouse acquisition: required inputs remain missing after the acquisition attempt.' >&2; exit 1; fi
+        exit "$probe_status"
+    fi
+    if [[ -n $next_actions ]]; then report_next_actions "$next_actions"; fi
 elif "$print_command"; then
     printf '%q ' "${command[@]}"; printf '\n'
 else

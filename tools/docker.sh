@@ -46,6 +46,7 @@ case "$operation" in
     check-interface) require_interface; exit ;;
     require-images) shift; if [[ $# == 0 ]]; then exit 0; fi ;;
     map-owner) shift; [[ -n $pool_owner && $# == 1 ]] || { printf '%s\n' 'Map an owner with --pool-owner UID:GID map-owner IMAGE.' >&2; exit 2; } ;;
+    probe) shift; [[ -n $pool_owner && $# -ge 2 ]] || { printf '%s\n' 'Probe a pool with --pool-owner UID:GID probe IMAGE DOCKER_CREATE_ARGS.' >&2; exit 2; }; map_probe_image=$1; map_probe_python=/usr/local/bin/python3; shift ;;
     run) ;;
     *) printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2; exit 2 ;;
 esac
@@ -74,6 +75,14 @@ if [[ "$operation" == run ]]; then
         resolver_mount=(--mount "type=bind,src=$resolver_source,dst=/run/systemd/resolve/resolv.conf,readonly")
     fi
 fi
+if [[ "$operation" == probe ]]; then
+    readonly caller_uid="$(id -u)"
+    readonly caller_gid="$(id -g)"
+    if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
+        printf '%s\n' 'Wheelhouse probes require a nonzero host UID and GID.' >&2
+        exit 2
+    fi
+fi
 
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
@@ -89,6 +98,7 @@ mapped_pool_gid=
 mapped_result=
 pending_diagnostic=
 retain_preflight_receipts=false
+probe_removal_safe=false
 inference_diagnostic=
 inference_retirement_confirmed=true
 inference_cancellation_status=0
@@ -297,7 +307,10 @@ cleanup() {
             fi
         fi
         if [[ -n "$scratch" && ( -e "$scratch/worker.cid" || -L "$scratch/worker.cid" || -n "$worker_id" ) ]]; then
-            if ! container_id_matches_receipt "$worker_id" "$scratch/worker.cid"; then
+            if [[ $operation == probe && $probe_removal_safe == false ]]; then
+                printf -v pending_diagnostic '%sCannot confirm wheelhouse probe retirement; container evidence remains in %s.\n' "$pending_diagnostic" "$scratch"
+                cleanup_failed=true
+            elif ! container_id_matches_receipt "$worker_id" "$scratch/worker.cid"; then
                 printf -v pending_diagnostic '%sCannot confirm acquisition worker removal: its container ID was not admitted; evidence remains in %s.\n' "$pending_diagnostic" "$scratch"
                 cleanup_failed=true
             else
@@ -324,19 +337,20 @@ cleanup() {
                 fi
             fi
         fi
-        if "$cleanup_failed" && [[ "$status" == 0 ]]; then status=1; fi
+        if "$cleanup_failed" && [[ "$status" == 0 || ( $operation == probe && $status == 3 ) ]]; then status=1; fi
         if "$inference_retirement_confirmed"; then
             # Keep failed metadata/engine-removal evidence. A worker's ordinary
             # exit alone needs no new diagnostic and does not retain metadata.
             if ! "$cleanup_failed" && ! "$retain_preflight_receipts" && [[ -z "$pending_diagnostic" && -n "$scratch" ]]; then
                 if rm -rf -- "$scratch" 2>/dev/null; then scratch=; else
                     scratch_status=$?
-                    if [[ "$status" == 0 ]]; then status=1; fi
+                    if [[ "$status" == 0 || ( $operation == probe && $status == 3 ) ]]; then status=1; fi
                 fi
             fi
             if docker_client_cleanup 2>/dev/null; then :; else
                 client_status=$?
-                if [[ "$status" == 0 ]]; then status=$client_status; fi
+                if [[ $operation == probe ]]; then status=1
+                elif [[ "$status" == 0 ]]; then status=$client_status; fi
             fi
         fi
     fi
@@ -351,6 +365,7 @@ cleanup() {
     if [[ $cleanup_cancellation != 0 ]]; then exit "$cleanup_cancellation"; fi
     if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
     if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
+    if [[ $operation == probe && $status == 3 ]] && ! "$probe_removal_safe"; then status=1; fi
     if ! "$inference_retirement_confirmed"; then
         # No further helper can overwrite the unknown retirement fact. This
         # controlled direct report retains the existing blocked-stderr limit.
@@ -372,6 +387,7 @@ cleanup() {
         ' bash "$pending_diagnostic" "$docker_client_directory" "$client_status" "$scratch" "$scratch_status"; then :; else
             local report_status=$?
             if [[ $inference_cancellation_status != 0 ]]; then status=$inference_cancellation_status
+            elif [[ $operation == probe ]]; then status=1
             elif [[ "$status" == 0 ]]; then status=$report_status; fi
         fi
     fi
@@ -408,6 +424,13 @@ if [[ "$operation" == map-owner ]]; then
     mapped_result="$mapped_pool_uid:$mapped_pool_gid"
     exit
 fi
+if [[ $operation == probe ]]; then
+    if "$print_command"; then scratch=/tmp/nmrnet-proxy.PRINT; else
+        require_images "$map_probe_image"
+        IFS=: read -r pool_owner_uid pool_owner_gid <<< "$pool_owner"
+        map_pool_owner "$pool_owner_uid" "$pool_owner_gid"
+    fi
+else
 if "$print_command"; then scratch=/tmp/nmrnet-proxy.PRINT; else
     require_images "$proxy_image"
     mkdir -m 700 -- "$scratch/ready"
@@ -550,6 +573,7 @@ else
     fi
 fi
 proxy_url="http://127.0.0.1:$proxy_port"
+fi
 worker_run_args=("$@")
 if [[ -n $pool_owner && $print_command == false ]]; then
     user_arguments=0
@@ -562,10 +586,14 @@ if [[ -n $pool_owner && $print_command == false ]]; then
     done
     [[ $user_arguments == 1 ]] || { printf '%s\n' 'Wheelhouse acquisition requires one explicit worker --user to map to the pool owner.' >&2; exit 2; }
 fi
-worker=("${engine[@]}" create --cidfile "$scratch/worker.cid" --network host
-    --env "HTTP_PROXY=$proxy_url" --env "HTTPS_PROXY=$proxy_url"
-    --env "http_proxy=$proxy_url" --env "https_proxy=$proxy_url"
-    --env NO_PROXY= --env no_proxy= --env ALL_PROXY= --env all_proxy= "${worker_run_args[@]}")
+if [[ $operation == probe ]]; then
+    worker=("${engine[@]}" create --cidfile "$scratch/worker.cid" --network none "${worker_run_args[@]}")
+else
+    worker=("${engine[@]}" create --cidfile "$scratch/worker.cid" --network host
+        --env "HTTP_PROXY=$proxy_url" --env "HTTPS_PROXY=$proxy_url"
+        --env "http_proxy=$proxy_url" --env "https_proxy=$proxy_url"
+        --env NO_PROXY= --env no_proxy= --env ALL_PROXY= --env all_proxy= "${worker_run_args[@]}")
+fi
 if "$print_command"; then
     printf '%q ' "${worker[@]}"; printf '\n'
     printf '%q ' "${engine[@]}" start --attach WORKER_ID; printf '\n'
@@ -598,5 +626,22 @@ else
     # TERM before escalation and joins its held group even if CID cleanup fails.
     if inference_native 'acquisition worker attachment' untimed stdio "${engine[@]}" start --attach "$worker_id"; then status=0; else status=$?; fi
     pending_diagnostic+=$inference_diagnostic
+    if [[ $operation == probe ]] && "$inference_retirement_confirmed" \
+        && [[ $inference_cancellation_status == 0 && -z $pending_diagnostic ]]; then
+        if inference_native 'wheelhouse probe state inspection' "$metadata_timeout" stdio bash -eu -c '
+            output=$1; shift
+            umask 077
+            ulimit -f 4
+            exec "$@" > "$output"
+        ' bash "$scratch/worker-state" "${engine[@]}" inspect --type container \
+            --format '{{.State.Status}}|{{.State.Running}}|{{.State.Pid}}|{{.State.ExitCode}}|{{.State.Restarting}}' "$worker_id"; then
+            if "$inference_retirement_confirmed" && [[ $inference_cancellation_status == 0 && -z $inference_diagnostic ]] \
+                && cmp -s "$scratch/worker-state" <(printf 'exited|false|0|%s|false\n' "$status"); then
+                probe_removal_safe=true
+            fi
+        fi
+        pending_diagnostic+=$inference_diagnostic
+    fi
+    if [[ $operation == probe && $probe_removal_safe == false && ( $status == 0 || $status == 3 ) ]]; then status=1; fi
     exit "$status"
 fi

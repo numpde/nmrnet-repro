@@ -26,7 +26,7 @@ shift
 printf '%s\n' "$operation $*" >> "$ENGINE_STATE/events"
 case "$operation" in
   image) exit 0 ;;
-  inspect) printf 'true\n'; exit ;;
+  inspect) printf '%s\n' "${ENGINE_PROBE_STATE:-true}"; exit ;;
   logs) exit ;;
   create|run)
     while [[ "$1" != --cidfile ]]; do shift; done
@@ -349,6 +349,100 @@ class ContainerIdentityTests(unittest.TestCase):
             ],
             [event for event in events if event.startswith("rm ")],
         )
+
+
+class WheelhouseProbeTests(unittest.TestCase):
+    def operation(self, status, state, *, removal=None, additions=None):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tools").mkdir()
+            (root / "bin").mkdir()
+            for name in ("docker_client.sh", "inference_native.sh", "user_namespace_map.sh"):
+                shutil.copyfile(Path.cwd() / "tools" / name, root / "tools" / name)
+            source = (Path.cwd() / "tools/docker.sh").read_text()
+            anchor = 'if "$print_command"; then\n    docker_client_prepare print'
+            self.assertEqual(1, source.count(anchor))
+            source = source.replace(anchor, 'map_pool_owner() { mapped_pool_uid=$1; mapped_pool_gid=$2; }\n' + anchor)
+            (root / "tools/docker.sh").write_text(source)
+            (root / "bin/docker").symlink_to(Path(__file__).resolve())
+            environment = os.environ | {
+                "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                "ENGINE_STATE": str(root), "ENGINE_PROBE_STATE": state,
+                "PYTHONPATH": str(Path.cwd()),
+                "PATH": str(root / "bin") + ":" + os.environ["PATH"],
+            }
+            if removal is not None:
+                environment["REMOVE_STATUS"] = str(removal)
+            environment.update(additions or {})
+            command = ["bash", str(root / "tools/docker.sh"), "--pool-owner", "123:456", "probe",
+                       "fixture-image", "--user", "123:456", "fixture-image", "true"]
+            if status is None:
+                process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, start_new_session=True)
+                try:
+                    deadline = time.monotonic() + 5
+                    while not (root / "started-worker").exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue((root / "started-worker").exists())
+                    process.send_signal(signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=8)
+                    result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+                finally:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.communicate()
+            else:
+                environment["WORKER_STATUS"] = str(status)
+                result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15, check=False)
+            self.assertTrue((root / "events").exists(), result.stderr)
+            events = (root / "events").read_text().splitlines()
+            scratch = Path((root / "scratch").read_text().strip())
+            retained = scratch.exists()
+            if retained:
+                shutil.rmtree(scratch)
+            return result, events, retained
+
+    def test_confirmed_complete_missing_and_error_are_retired(self):
+        for status in (0, 1, 3):
+            with self.subTest(status=status):
+                result, events, retained = self.operation(status, f"exited|false|0|{status}|false")
+                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertIn("rm --force " + "d" * 64, events)
+                self.assertTrue(any(event.startswith("inspect ") and event.endswith("d" * 64) for event in events))
+                self.assertFalse(retained)
+                self.assertTrue(any("create --cidfile" in event and "--network none" in event for event in events))
+
+    def test_uncertain_state_retains_container_and_refuses_missing(self):
+        result, events, retained = self.operation(3, "running|true|99|0|false")
+        self.assertNotEqual(3, result.returncode)
+        self.assertFalse(any(event.startswith("rm --force ") for event in events))
+        self.assertTrue(retained)
+
+    def test_mismatched_worker_exit_refuses_missing_and_preserves_evidence(self):
+        result, events, retained = self.operation(3, "exited|false|0|0|false")
+        self.assertNotEqual(3, result.returncode)
+        self.assertFalse(any(event.startswith("rm --force ") for event in events))
+        self.assertTrue(retained)
+
+    def test_mismatched_creation_receipt_never_authorizes_removal(self):
+        result, events, retained = self.operation(3, "exited|false|0|3|false",
+                                                  additions={"ALTER_IDENTITY": "worker", "RECORDED_ID": "e" * 64})
+        self.assertNotEqual(3, result.returncode)
+        self.assertFalse(any(event.startswith("rm --force ") for event in events))
+        self.assertTrue(retained)
+
+    def test_removal_failure_status_three_is_not_a_missing_result(self):
+        result, _events, retained = self.operation(3, "exited|false|0|3|false", removal=3)
+        self.assertNotEqual(3, result.returncode)
+        self.assertTrue(retained)
+
+    def test_signal_during_probe_preserves_uncertain_worker(self):
+        result, events, retained = self.operation(None, "exited|false|0|3|false")
+        self.assertEqual(143, result.returncode, result.stderr)
+        self.assertFalse(any(event.startswith("rm --force ") for event in events))
+        self.assertTrue(retained)
 
 
 if __name__ == "__main__":

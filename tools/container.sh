@@ -522,7 +522,8 @@ case "$1" in
                     command+=(tests.test_image_retirement tests.test_provider_deployment_launcher
                         repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health)
                 elif [[ "$1" == test/unit/packages/wheelhouse ]]; then
-                    command+=(tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_checker
+                    command+=(tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_wheelhouse_launcher
+                        tests.test_network_cancellation.WheelhouseProbeTests tests.test_checker
                         tests.test_checker_launcher.CheckerLauncherTests.test_actual_operation_deadlines_stop_client_before_checker_teardown
                         tests.test_checker_launcher.CheckerLauncherTests.test_checker_uses_mapped_owner_and_refuses_unverified_mapping
                         tests.test_checker_launcher.CheckerLauncherTests.test_failed_captured_verification_retains_borrowed_inputs

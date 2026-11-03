@@ -311,10 +311,11 @@ def prepare_source(source_path, directory):
         partial.unlink(missing_ok=True)
 
 
-def prepare_core_assets(inputs, pool, *, download):
-    """Acquire pinned GitHub bytes directly, without invoking an index or a build."""
+def core_assets(inputs):
+    """Read and validate pinned shared-owner release artifacts."""
     with regular_file(inputs, os.O_RDONLY) as stream:
         lines = stream.read().decode().splitlines()
+    assets = []
     for line in lines:
         if not line or line.startswith("#"):
             continue
@@ -325,6 +326,15 @@ def prepare_core_assets(inputs, pool, *, download):
                 or re.fullmatch(r"[0-9a-f]{64}", checksum) is None):
             raise ValueError("Cannot acquire shared release artifact: require a pinned shared-owner GitHub release URL and SHA-256.")
         name = parsed.path.rsplit("/", 1)[1]
+        if name in ("", ".", ".."):
+            raise ValueError("Cannot acquire shared release artifact: the URL must name a file.")
+        assets.append((url, checksum, name))
+    return assets
+
+
+def prepare_core_assets(inputs, pool, *, download):
+    """Acquire pinned GitHub bytes directly, without invoking an index or a build."""
+    for url, checksum, name in core_assets(inputs):
         destination = pool / name
         if destination.exists() or destination.is_symlink():
             if digest(destination) != checksum:
