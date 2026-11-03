@@ -25,11 +25,11 @@
     }
   },
   "files": {
-    "provider_core-0.5.15-install.lock": "dbf06c7b5f5b22b8c35ab90b642cb815bb29c097adcdb407290639fcae645038",
-    "provider_core-0.5.15-native-install.lock": "e44149edabbfc8c6fb05b0fbe7ad880ac2fee0dec59b78484af3cedde0690201",
-    "provider_core-0.5.15-py3-none-any.whl": "6981bcffc3c5a560e0601bdf935fcd743945014f59a7cf7f4824399332d2dfcc",
-    "provider_core-0.5.15.tar.gz": "03189af2fef28a658e31db8226fe7732559ac2705a89b1f0f475fda80a0e38d3",
-    "wheelhouse-tool-0.5.15.pyz": "9d8cd59c0aeffd61ce462fa81f2951a24fb8a8749a1332d5f87842b4c095d656"
+    "provider_core-0.5.16-install.lock": "56d078afbca0669e0256d876668d367ad0713fdc1802b925419a53e529eba4f0",
+    "provider_core-0.5.16-native-install.lock": "e3d03bce667e554f510dac616277f68a4e1919fa961e17bc6195e664cd7dae2d",
+    "provider_core-0.5.16-py3-none-any.whl": "b3276cc3b19b200fbdddfd6cda3845326839f15c0040e5dc470243ea6c9ebf15",
+    "provider_core-0.5.16.tar.gz": "83c9058775174dae8d95cca25c2b3b7abc458070e49e4586919408abd021f648",
+    "wheelhouse-tool-0.5.16.pyz": "9d8cd59c0aeffd61ce462fa81f2951a24fb8a8749a1332d5f87842b4c095d656"
   },
   "source_files": {
     "MANIFEST.in": {
@@ -39,12 +39,12 @@
     },
     "README.md": {
       "mode": 420,
-      "sha256": "8ad1f26c45386c5973d3de1732fea30d7cc8617ad47397c7a9e9fd5a0906ca5b",
-      "size": 20730
+      "sha256": "56602f26107a613a8234af41b0758852ef24caee05c376d8415428ac56cf04d8",
+      "size": 21067
     },
     "pyproject.toml": {
       "mode": 420,
-      "sha256": "98be6a43ded36158ab979402fd200ef8c6b6e072da0d86ac71d5676424516200",
+      "sha256": "32c119c4ecee2d12cb5ba53aab4b9ef46865fb149c45f08cdb2fd1fa38ef7abd",
       "size": 589
     },
     "src/provider_core/__init__.py": {
@@ -99,8 +99,13 @@
     },
     "src/provider_core/chat.py": {
       "mode": 420,
-      "sha256": "3b182d92ce913a4195f0d21fa1d262f442ea136e462d6649d412cc6227a47a3d",
-      "size": 13686
+      "sha256": "83c2c1e6ded63e7cbf8cb1b89c4c59bee240f6c4bf0c3ca0ec72007d87c47d28",
+      "size": 13322
+    },
+    "src/provider_core/chat_errors.py": {
+      "mode": 420,
+      "sha256": "a1915b39d2f877a952d9c50118c32beb8e61720d77aedc0c090aba3ac9d234aa",
+      "size": 574
     },
     "src/provider_core/container_guard.py": {
       "mode": 420,
@@ -114,8 +119,8 @@
     },
     "src/provider_core/conversation.py": {
       "mode": 420,
-      "sha256": "cdc982efd7b2a85508ddaf73149dbe8600f7d95460569fe5447e14576b871358",
-      "size": 21219
+      "sha256": "8985ea180a6d70a3fd36a6b97c777e455820725469cf81c679b49c022a435f24",
+      "size": 21233
     },
     "src/provider_core/credential.py": {
       "mode": 420,
@@ -334,8 +339,13 @@
     },
     "src/provider_core/transport.py": {
       "mode": 420,
-      "sha256": "e3c57c53299c018c391f035a8647c14b382a7cfb7c2eb0c512a7199afdd5881f",
-      "size": 33421
+      "sha256": "51e9015410ec0f09f1d7f307b2364661054cca56cee2d80021c27c3ee3df9dbe",
+      "size": 32238
+    },
+    "src/provider_core/transport_errors.py": {
+      "mode": 420,
+      "sha256": "e99618f8f0387817a2866b185685d4ced7895015e31f4f127ea2f5e1abfbf7dd",
+      "size": 1407
     },
     "src/provider_core/unix_http.py": {
       "mode": 420,
@@ -404,8 +414,8 @@
     },
     "tests/contract/test_installation.py": {
       "mode": 420,
-      "sha256": "3968e599ea4e6a99bd77313f53382ec070b9e3d6af8d8a2b93f63a974a57f18e",
-      "size": 9463
+      "sha256": "46a0b8a250d25de8da431d75b4e655fbd70629ba0c485b9d3bdcd30afcfce815",
+      "size": 9564
     },
     "tests/fakes/__init__.py": {
       "mode": 420,
@@ -724,8 +734,8 @@
     },
     "tests/integration/chat/normative/test_chat.py": {
       "mode": 420,
-      "sha256": "3890adee3b06ab5c68494aefc993617e6b280bd8048b270b5b0000301c33d0a3",
-      "size": 4605
+      "sha256": "f80e9a8a5a96caa45c9f79e42c7d5ff8b5255c2544d0110f15495a9d39cf65db",
+      "size": 5052
     },
     "tests/integration/chat/normative/test_conversation.py": {
       "mode": 420,
@@ -994,8 +1004,8 @@
     },
     "tests/native/test_installation.py": {
       "mode": 420,
-      "sha256": "48edbdc0e1df6eec0dbd92f6a0da4ff16752ffd9e1840876c31269b777a7a754",
-      "size": 2665
+      "sha256": "74a7deb04bbb1deddb139c23be27f0bfd0823380c3acffb7da78c66e20e25b75",
+      "size": 3509
     },
     "tests/native/test_original_future.py": {
       "mode": 420,
@@ -1618,7 +1628,7 @@
       "size": 5770
     }
   },
-  "source_revision": "dcd27ad95a7d8eb0be903e1cdb526eff7449eccd",
+  "source_revision": "a1be7d196fc8ff103ecc20a6c0b03e80ab411106",
   "tool_source_files": {
     "__init__.py": {
       "mode": 420,
