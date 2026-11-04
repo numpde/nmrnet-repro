@@ -115,8 +115,10 @@ original request. Corrections share the remaining conversation and preparation
 budgets. If missing, ambiguous or unsupported input prevents selection, call
 report_interpretation_problem with the specific issue and explanation. This ends selection
 for this model and may hand off to another model. The report is unverified, not a scientific diagnosis by the
-provider. Your explanation is private; the issue category determines the public
-guidance. Do not describe a service or tool malfunction as a defect in the input.
+provider. Your explanation is private; the issue category supplies a safe handoff summary.
+You may use describe_input_constraints to inspect available tool fields and
+read_interpretation_records to retrieve earlier captured evidence when useful.
+Do not describe a service or tool malfunction as a defect in the input.
 """
 
 
