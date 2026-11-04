@@ -30,6 +30,35 @@ from provider_core.uploads import UploadFailed
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelled_source_waiter_retains_already_finished_source_task(self):
+        ports = SessionPorts()
+        retained = []
+        chooser_task = None
+        source_failure = OSError(5, "PRIVATE_LATE_SOURCE_FAILURE")
+
+        async def inspect():
+            chooser_task.cancel()
+            raise source_failure
+
+        async def choose(_instructions, capability):
+            nonlocal chooser_task
+            chooser_task = asyncio.current_task()
+            try:
+                await capability.inspect()
+            except asyncio.CancelledError:
+                retained.append(capability._source_task)
+                raise
+
+        ports.uploads.inspect.side_effect = inspect
+        owner = ports.owner(choose)
+        with self.assertRaises(asyncio.CancelledError):
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
+        self.assertEqual(len(retained), 1)
+        self.assertIsNotNone(retained[0])
+        self.assertTrue(retained[0].done())
+        self.assertIs(owner.source_failure, source_failure)
+        await owner.retire()
+
     async def test_failed_allocation_remains_the_primary_failure_and_preparation_retires(self):
         ports = SessionPorts()
         failure = RuntimeError("native allocation failed")

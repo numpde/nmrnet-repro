@@ -385,16 +385,22 @@ class InputPreparation:
         task = asyncio.create_task(contain_task_exit(self._start_source_call, operation, *args))
         self._source_task = task
         task.add_done_callback(self._record_source_failure)
+        interrupted = False
         try:
             result = await asyncio.shield(task)
             self._require_choosing()
             return result
+        except asyncio.CancelledError:
+            # The task may finish after shield was interrupted but before this
+            # waiter runs. Keep its owner until settlement observes its outcome.
+            interrupted = True
+            raise
         except BaseException:
             if task.done() and self._source_task is task:
                 self._report_source_observation()
             raise
         finally:
-            if task.done() and self._source_task is task:
+            if not interrupted and task.done() and self._source_task is task:
                 self._source_task = None
 
     async def _start_source_call(self, operation, *args):
