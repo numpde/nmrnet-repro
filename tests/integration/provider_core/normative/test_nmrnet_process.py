@@ -145,6 +145,43 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(b"api_progress_recovered", stderr)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
+    async def test_capacity_notice_is_reported_without_failing_clean_shutdown(self):
+        for fail_first in (False, True):
+            with self.subTest(fail_first=fail_first):
+                async with ProcessPeers() as fixture:
+                    class NoticeService:
+                        work_task = unconfirmed_hello = None
+                        capacity_notice_failure = OSError("private capacity output")
+                        shutdown_ready = True
+
+                        def __init__(self, **_arguments):
+                            pass
+
+                        async def run(self, _stop):
+                            pass
+
+                        async def settle(self):
+                            pass
+
+                    notices = []
+
+                    def write_notice(content):
+                        document = json.loads(content)
+                        notices.append(document)
+                        if fail_first and len(notices) == 1:
+                            raise OSError("sink failed")
+
+                    with patch("nmrnet_provider.process.ProviderService", NoticeService), \
+                         patch("nmrnet_provider.process._write_api_notice", side_effect=write_notice):
+                        result = await run_provider(
+                            fixture.config, execution_identity={}, selected_artifacts={},
+                            stop=asyncio.Event(), diagnostics=fixture.diagnostics,
+                        )
+                    self.assertEqual(result, 0)
+                    self.assertEqual(notices[0]["event"], "capacity_notice_unconfirmed")
+                    if fail_first:
+                        self.assertEqual(notices[1]["event"], "provider_shutdown_observation")
+
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
         for recovery_kind in ("observation", "start", "delivery", "condition", "native"):
             for failed_sink in (False, True):
@@ -166,7 +203,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 outage = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; " + attempt.admission.job_ref)
 
             class NoticeService:
-                work_task = unconfirmed_hello = None
+                work_task = unconfirmed_hello = capacity_notice_failure = None
                 shutdown_ready = True
 
                 def __init__(self, **arguments):

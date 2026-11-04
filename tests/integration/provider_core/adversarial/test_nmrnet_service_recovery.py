@@ -30,6 +30,7 @@ from provider_core.controller import ControllerFailed, LiveStartPolicy, StartDef
 from provider_core.delivery_client import DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
 from provider_core.execution import ExecutionRefused
+from provider_core.ownership import LiveCapacityFull
 from provider_core.producer_checkpoint import SuppressedCheckpoint
 from provider_core.uploads import JobUploads
 
@@ -447,6 +448,47 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 fixture.stop.set()
                 await asyncio.gather(task, return_exceptions=True)
                 await fixture.settle_service(service)
+
+    async def test_capacity_notice_failure_does_not_prevent_later_job(self):
+        async with ServicePeers(maximum_live_attempts=1) as fixture:
+            claim_live = fixture.claims.claim_live
+            calls = 0
+            controllers = []
+            notice_failures = []
+
+            async def open_attempt(*args, **kwargs):
+                controller = await fixture.open_attempt(*args, **kwargs)
+                controllers.append(controller)
+                return controller
+
+            def claim_once_full(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls <= 3:
+                    raise LiveCapacityFull("fixture capacity full")
+                self.assertTrue(all(controller.shutdown_ready for controller in controllers[:-1]))
+                return claim_live(*args, **kwargs)
+
+            def fail_notice(*args):
+                failure = OSError("capacity notice unavailable")
+                notice_failures.append(failure)
+                raise failure
+
+            service = fixture.service(open_attempt=open_attempt)
+            fixture.stack.push_async_callback(fixture.settle_service, service)
+            with patch.object(fixture.claims, "claim_live", side_effect=claim_once_full), \
+                 patch("nmrnet_provider.service.LOGGER.info", side_effect=fail_notice):
+                await asyncio.wait_for(service.run(fixture.stop), 5)
+            await fixture.settle_service(service)
+            await fixture.wait_published()
+            self.assertIs(service.capacity_notice_failure, notice_failures[0])
+            self.assertIsNone(service.last_failure)
+            self.assertEqual(calls, 4)
+            self.assertEqual(len(notice_failures), 3)
+            self.assertEqual(fixture.events.count("start"), 1)
+            self.assertEqual(len(fixture.model_peer.requests), 1)
+            self.assertEqual(len(fixture.allocations), 4)
+            self.assertTrue(service.shutdown_ready)
 
     async def test_unacknowledged_selected_result_keeps_service_held_after_physical_cleanup(self):
         async with ServicePeers() as fixture:

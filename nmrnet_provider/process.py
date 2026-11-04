@@ -437,6 +437,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         await service.run(stop)
     except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
         failures.append(("provider operation", cause))
+    if service is not None and service.capacity_notice_failure is not None:
+        report_operator_notice(service.capacity_notice_failure, {"event": "capacity_notice_unconfirmed"})
     stop.set()
     released = await _settle_borrowers(service, factory, failures)
     # silent-defaults: allow-contract -- Startup can fail before a service exists; only an existing service can retain an unconfirmed Hello send.

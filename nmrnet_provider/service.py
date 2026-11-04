@@ -170,6 +170,7 @@ class ProviderService:
         self._expected_cancellations = set()
         self._failures = []
         self.last_failure = None
+        self.capacity_notice_failure = None
         self.unconfirmed_hello = None
         self._state = _State.NEW
         self._stop = None
@@ -386,8 +387,12 @@ class ProviderService:
                 # Capacity refusal precedes START. Retire this unused session;
                 # independent cleanup failures still prevent another selection.
                 await controller.settle()
-                LOGGER.info("Live Attempt bookkeeping is full; no START was sent. Waiting for capacity.")
                 self.controller = None
+                try:
+                    LOGGER.info("Live Attempt bookkeeping is full; no START was sent. Waiting for capacity.")
+                except Exception as cause:
+                    if self.capacity_notice_failure is None:
+                        self.capacity_notice_failure = cause
                 await self._pause(self.policy.idle_seconds)
                 continue
             # Held work remains reachable through the shared live registry.
