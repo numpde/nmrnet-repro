@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 
 import tomllib
 
-from nmrnet_provider.config import _interpreter, load_provider_config, read_startup_file
+from nmrnet_provider.config import load_provider_config, read_startup_file
 from nmrnet_provider.startup_capture import _bind_path
 from provider_core.chat import ChatEndpoint
 from provider_core.credential import parse_provider_credential
@@ -36,20 +36,15 @@ def interpreter_fragment(path):
     """
     raw = read_startup_file(path, maximum_bytes=65536, label="interpreter configuration", secret=True)
     document = tomllib.loads(raw.decode("utf-8"))
-    if set(document) != {"interpreter"}:
-        raise ValueError("Cannot stage interpreter configuration: the fragment must contain only its interpreter table")
-    table = document["interpreter"]
-    if type(table) is not dict or type(table.get("endpoints")) is not list or len(table["endpoints"]) != 1:
-        raise ValueError("Cannot stage interpreter configuration: this qualification requires exactly one endpoint")
-    endpoint = table["endpoints"][0]
-    if type(endpoint) is not dict or "key_file" not in endpoint:
-        raise ValueError("Cannot stage interpreter configuration: its endpoint must name a separate key file")
+    endpoint = document
+    if not {"url", "model", "key_file"} <= endpoint.keys() or endpoint.keys() - {"url", "model", "key_file", "ca_file", "reasoning_effort"}:
+        raise ValueError("Cannot stage interpreter configuration: provide one flat endpoint with documented fields")
     inputs = {
         "configuration_sha256": hashlib.sha256(raw).hexdigest(),
         "key_file": str(_bind_path(endpoint["key_file"])),
         "ca_file": str(_bind_path(endpoint["ca_file"])) if "ca_file" in endpoint else None,
     }
-    return table, inputs
+    return endpoint, inputs
 
 
 def inspect_interpreter(path, output):
@@ -78,6 +73,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
     secrets = destination / "secrets"
     secrets.mkdir(mode=0o700)
     raw = (source / "provider.toml").read_text()
+    endpoint_text = (source / "interpreter.d/00-primary.toml").read_text()
     for name in ("signing.private.json", "interpreter.key", "api-ca.crt", "api-ca.pem", "model-ca.pem"):
         path = source / name
         # A public-CA interpreter has no model-ca file; staging already admitted
@@ -86,6 +82,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
             with (secrets / name).open("xb") as output:
                 output.write(path.read_bytes())
             raw = raw.replace(json.dumps(str(path)), json.dumps("/srv/nmrnet/input/" + name))
+            endpoint_text = endpoint_text.replace(json.dumps(str(path)), json.dumps("/srv/nmrnet/input/" + name))
     raw = raw.replace(json.dumps(str(root / "state")), json.dumps("/srv/nmrnet/attempts"))
     document = tomllib.loads(raw)
     host = urlsplit(document["api"]["origin"]).hostname
@@ -94,7 +91,7 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
     if interpreter_route == "local":
         interpreter.update(network=interpreter_network, addresses=["localhost=" + interpreter_address])
     elif interpreter_route == "mapped":
-        model_host = urlsplit(document["interpreter"]["endpoints"][0]["url"]).hostname
+        model_host = urlsplit(tomllib.loads(endpoint_text)["url"]).hostname
         interpreter["addresses"] = [model_host + "=" + interpreter_address]
     elif interpreter_route != "external":
         raise ValueError("Qualification interpretation requires an explicit local, mapped or external route")
@@ -108,6 +105,9 @@ def stage_deployment(root, *, api_interface, api_address, interpreter_route,
         routes={"interpreter": interpreter, "store": mapped}, project=grants.project, gid=grants.gid,
         maximum_startup_bytes=2097152, resolvers=resolvers if interpreter_route == "external" else [],
     )
+    endpoint_directory = destination / "interpreter.d"
+    endpoint_directory.mkdir(mode=0o700)
+    (endpoint_directory / "00-primary.toml").write_text(endpoint_text)
 
 
 def stage(root, origin, topology, *, inputs, interpreter_config, prediction_image_id):
@@ -139,8 +139,10 @@ def stage(root, origin, topology, *, inputs, interpreter_config, prediction_imag
             captured_inputs[str(value)] = raw
             return raw
 
-        selected = _interpreter(table, retain)
-        model_url = urlsplit(selected.endpoints[0].spec.url)
+        retain(referenced["key_file"], maximum_bytes=16384, label="interpreter key", secret=True)
+        if referenced["ca_file"] is not None:
+            retain(referenced["ca_file"], maximum_bytes=1048576, label="interpreter CA")
+        model_url = urlsplit(table["url"])
         model_origin = f"{model_url.scheme}://{model_url.netloc}"
     original = read_startup_file(inputs / "provider.json", maximum_bytes=16384, label="provider credential", secret=True)
     credential = parse_provider_credential(original)
@@ -168,17 +170,14 @@ def stage(root, origin, topology, *, inputs, interpreter_config, prediction_imag
     raw = raw.replace(str(files.state).encode(), str(root / "state").encode())
     if interpreter_config is not None:
         files.key.write_bytes(captured_inputs[referenced["key_file"]])
-        endpoint = dict(table["endpoints"][0], key_file=str(files.key))
+        endpoint = dict(table, key_file=str(files.key))
         if referenced["ca_file"] is not None:
             model_ca.write_bytes(captured_inputs[referenced["ca_file"]])
             endpoint["ca_file"] = str(model_ca)
         # Endpoint fields have already passed the existing closed configuration
         # owner. Re-emit only this admitted table with its frozen local file paths.
-        fragment = "[interpreter]\nmax_turns = " + str(table["max_turns"]) + "\n\n[[interpreter.endpoints]]\n"
-        fragment += "".join(name + " = " + json.dumps(value, ensure_ascii=False) + "\n" for name, value in endpoint.items())
-        prefix, remaining = raw.split(b"[interpreter]\n", 1)
-        _old, suffix = remaining.split(b"[uploads]\n", 1)
-        raw = prefix + fragment.encode() + b"\n[uploads]\n" + suffix
+        files.endpoint.write_text("".join(name + " = " + json.dumps(value, ensure_ascii=False) + "\n" for name, value in endpoint.items()))
+        raw = raw.replace(b"timeout_seconds = 6", b"timeout_seconds = 240")
         raw = raw.replace(b"\nseconds = 45\n", b"\nseconds = 240\n")
         # The Upload session starts during Attempt assembly, before model turns:
         # allow 240 seconds for preparation plus a finite 60-second setup margin.
@@ -200,10 +199,10 @@ def stage(root, origin, topology, *, inputs, interpreter_config, prediction_imag
     }
     if interpreter_config is not None:
         endpoint_settings = admitted.interpreter.endpoints[0]
-        identity["interpreter"] = {"max_turns": admitted.interpreter.max_turns, "endpoints": [json.loads(
+        identity["interpreter"] = {"timeout_seconds": admitted.interpreter.timeout_seconds, "endpoints": [json.loads(
             ChatEndpoint(
                 endpoint_settings.spec,
-                transport=endpoint_settings.http.new_transport(),
+                transport=None,
                 request_bytes=endpoint_settings.request_bytes,
                 response_bytes=endpoint_settings.response_bytes,
             ).identity

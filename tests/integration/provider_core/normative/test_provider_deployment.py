@@ -195,7 +195,7 @@ class DeploymentBundleTests(unittest.TestCase):
             first = arguments["bundle"]
             freeze_deployment(**arguments)
             previous = {path.relative_to(first): path.read_bytes() for path in first.rglob("*") if path.is_file()}
-            arguments["definition"].write_text(arguments["definition"].read_text().replace("max_turns = 6", "max_turns = 5"))
+            arguments["definition"].write_text(arguments["definition"].read_text().replace("timeout_seconds = 6", "timeout_seconds = 5"))
             second = first.parent / "generation-second"
             second.mkdir(mode=0o700)
             (second / "config").mkdir(mode=0o700)
@@ -237,7 +237,7 @@ class DeploymentBundleTests(unittest.TestCase):
             self.assertEqual((second / "prediction-models.json").read_bytes(), arguments["models"].read_bytes())
             self.assertNotIn("PRIVATE_MODEL_KEY", (second / "compose.json").read_text())
             self.assertEqual({path.relative_to(second).as_posix() for path in second.rglob("*") if path.is_file()}, {
-                "config/provider.toml", "secrets/provider/signing.private.json", "secrets/provider/interpreter.key",
+                "config/provider.toml", "config/interpreter.d/00-primary.toml", "secrets/provider/signing.private.json", "secrets/provider/interpreter.key",
                 "execution.json", "prediction-models.json", "inference.lock", "unicore-source.json",
                 "compose.json", "resolv.conf",
             })

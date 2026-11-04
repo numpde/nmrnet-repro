@@ -391,18 +391,17 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
         instructions = ports.instructions.specification_bytes + b" The coordinates are explicitly in nm."
         ports.instructions = verify_job_input(response(instructions), feed=facts(instructions))
         async with RuntimePeers(ports, "pasted") as fixture:
-            fixture.config = replace(fixture.config, interpreter=replace(fixture.config.interpreter, max_turns=2))
 
             async def model_reply(request, raw):
                 self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
                 self.assertNotIn(b"signature:", request.lower())
                 messages = json.loads(raw)["messages"]
                 self.assertEqual(messages[1]["content"], instructions.decode())
-                corrected = messages[-1]["role"] == "tool"
+                corrected = messages[-2]["role"] == "tool"
                 if corrected:
                     self.assertEqual(
-                        json.loads(messages[-1]["content"]),
-                        {"rejected": "Cannot prepare coordinates: specify source unit angstrom, nm or bohr."},
+                        messages[-2]["content"],
+                        "Cannot prepare coordinates: specify source unit angstrom, nm or bohr.",
                     )
                     ports.allocate_reader.assert_not_awaited()
                     ports.allocate_generator.assert_not_awaited()
@@ -446,8 +445,8 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(fixture.model_peer.requests), 2)
             self.assertEqual(fixture.result["interpretation"], durable[0]["interpretation"])
             self.assertEqual(fixture.result["output"]["verbosity"], "medium")
-            self.assertEqual(durable[0]["interpretation"]["turns_started"], 2)
-            self.assertEqual(durable[0]["interpretation"]["corrections"], 1)
+            self.assertEqual(durable[0]["interpretation"]["visits"][-1]["turns_started"], 2)
+            self.assertEqual(durable[0]["interpretation"]["visits"][-1]["corrections"], 1)
             self.assertEqual(durable[0]["interpretation"]["operations"], ["prepare_pasted"])
             (geometry,) = fixture.result["geometries"]
             self.assertEqual(
@@ -558,9 +557,9 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             async def model_reply(_headers, raw):
                 messages = json.loads(raw)["messages"]
-                replies = [json.loads(message["content"]) for message in messages if message["role"] == "tool"]
-                corrected = any("rejected" in reply for reply in replies)
-                if replies and "rejected" in replies[-1]:
+                replies = [message["content"] for message in messages if message["role"] == "tool"]
+                corrected = any(not reply.startswith("{") for reply in replies)
+                if replies and not replies[-1].startswith("{"):
                     acquisition = controller.session._input_preparation._uploads
                     self.assertIsInstance(acquisition.last_failure, UploadInputRejected)
                     self.assertFalse(acquisition.last_failure.grant_issued)
@@ -606,7 +605,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 confirmed = await controller.run(pending)
             self.assertIsInstance(confirmed, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
-            self.assertEqual(fixture.result["interpretation"]["corrections"], 1)
+            self.assertEqual(fixture.result["interpretation"]["visits"][-1]["corrections"], 1)
             self.assertEqual(fixture.result["interpretation"], json.loads(selected.content)["interpretation"])
             self.assertEqual(len(fixture.model_peer.requests), 3 if mistake == "not_inspected" else 4)
             self.assertEqual(len(fixture.store_peer.requests), 1)

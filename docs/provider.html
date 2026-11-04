@@ -54,7 +54,7 @@ fields out of the authored provider definition.</p>
 <p>Installation writes that runtime file under
 <code>secrets/deployments/&lt;name&gt;/bundles/generation-*/config/provider.toml</code>.
 Change the authored inputs and reinstall; do not edit a sealed generation.</p>
-<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v3"</code> and these
+<p>The runtime file requires <code>schema_id = "nmrnet.provider.runtime_config.v4"</code> and these
 closed tables; unknown fields fail startup:</p>
 <table>
 <thead>
@@ -72,12 +72,12 @@ closed tables; unknown fields fail startup:</p>
 </tr>
 <tr>
 <td><code>interpreter</code></td>
-<td><code>max_turns</code>, ordered <code>[[interpreter.endpoints]]</code></td>
+<td><code>timeout_seconds</code></td>
 <td>none</td>
 </tr>
 <tr>
 <td>each endpoint</td>
-<td><code>configuration_id</code>, <code>url</code>, <code>model</code>, <code>key_file</code>, <code>request_bytes</code>, <code>response_bytes</code>, <code>exchange_seconds</code>, <code>retirement_seconds</code></td>
+<td><code>url</code>, <code>model</code>, <code>key_file</code> in each ordered <code>interpreter.d/*.toml</code> file</td>
 <td><code>ca_file</code>, <code>reasoning_effort</code></td>
 </tr>
 <tr>
@@ -156,7 +156,7 @@ changes afterward. Empty or malformed CA files fail; they never select system
 roots. Ambient <code>SSL_CERT_FILE</code>, <code>SSL_CERT_DIR</code> and <code>SSLKEYLOGFILE</code> are rejected.
 The analysis kind is the code-owned <code>peaks_from_mol</code> offering, following
 <a href="https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/identity.py">G01's identity</a>.
-<code>source_sha256</code> identifies only the consumed TOML bytes, not key/CA contents or
+<code>source_sha256</code> identifies the provider TOML and ordered endpoint filenames and TOML bytes, not key/CA contents or
 the complete qualified runtime. Owned error explanations remain public; original
 file/parser evidence and independent close failures remain protected causes.</p>
 <p>This ports <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/config.py#L113-L165">SECS's closed configuration</a>
@@ -509,8 +509,8 @@ prediction. The received result cannot supply its own expected image identity.</
 <p>The scripted target additionally requires <code>LOCAL_NETWORK</code> and <code>LOCAL_INTERFACE</code>
 for its peer's observed internal network. The real targets instead require:</p>
 <ul>
-<li><code>INTERPRETER_CONFIG</code>: an absolute path to a private TOML fragment containing
-  only <code>[interpreter]</code> and exactly one <code>[[interpreter.endpoints]]</code> entry. Its key
+<li><code>INTERPRETER_CONFIG</code>: an absolute path to one private endpoint TOML file.
+  Its key
   must be in the separate <code>key_file</code>; optional <code>ca_file</code> supplies model trust roots.</li>
 <li><code>EXTERNAL_INTERFACE</code> and <code>RESOLVERS</code>: the explicit model-egress interface and
   space-separated literal IPv4 DNS resolvers. These remain separate from the

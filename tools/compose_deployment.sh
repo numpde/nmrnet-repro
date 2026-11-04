@@ -497,6 +497,12 @@ if [[ $action == install || $action == update ]]; then
         path "$file"
         helper_grants+=(--mount "type=bind,src=$file,dst=$file,readonly")
     done
+    for file in "$repository_root/config/deployments/$deployment_name/interpreter.d/"*.toml; do
+        [[ -e $file || -L $file ]] || continue
+        [[ -f $file && ! -L $file ]] || { printf '%s\n' 'Interpreter endpoint must be a regular file without symlinks.' >&2; exit 2; }
+        path "$file"
+        helper_grants+=(--mount "type=bind,src=$file,dst=$file,readonly")
+    done
     # Mount only explicitly present flat input files, never the private root.
     for file in "$root/"*; do
         [[ -f $file && ! -L $file ]] || continue

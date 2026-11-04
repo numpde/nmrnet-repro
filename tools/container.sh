@@ -586,6 +586,9 @@ case "$1" in
                         command+=(--mount "type=bind,src=$repository_root/$probe_input,dst=$probe_target,readonly")
                     done
                 fi
+                if [[ "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
+                    command+=(--mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/consumer/binding_inputs.py,readonly")
+                fi
                 if [[ "$1" == test/integration/provider-core/compose || "$1" == test/integration/provider-core ]]; then
                     require_source_directory tests/fixtures/scientific_inputs
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly"

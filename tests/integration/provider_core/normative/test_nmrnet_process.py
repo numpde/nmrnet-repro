@@ -604,10 +604,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 (original.api.http, routed.api.http, "/routes/api.sock"),
                 (original.uploads.http, routed.uploads.http, "/routes/store.sock"),
             ]
-            pairs.extend(
-                (old.http, new.http, "/routes/model.sock")
-                for old, new in zip(original.interpreter.endpoints, routed.interpreter.endpoints, strict=True)
-            )
             for old, new, socket_path in pairs:
                 self.assertEqual(new.proxy_socket, socket_path)
                 for name in ("trust", "exchange_seconds", "retirement_seconds"):
@@ -621,9 +617,14 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIs(getattr(routed, field.name), getattr(original, field.name))
             self.assertIs(routed.api.identity, original.api.identity)
             self.assertIs(routed.uploads.limits, original.uploads.limits)
-            self.assertEqual(routed.interpreter.max_turns, original.interpreter.max_turns)
+            self.assertEqual(routed.interpreter.timeout_seconds, original.interpreter.timeout_seconds)
+            with self.assertRaises(ValueError):
+                route_provider_config(original, api="/routes/api.sock", interpreter="relative.sock", store="/routes/store.sock")
             for old, new in zip(original.interpreter.endpoints, routed.interpreter.endpoints, strict=True):
                 self.assertIs(new.spec, old.spec)
+                self.assertIs(new.trust, old.trust)
+                self.assertIsNone(old.proxy_socket)
+                self.assertEqual(new.proxy_socket, "/routes/model.sock")
                 self.assertEqual((new.request_bytes, new.response_bytes), (old.request_bytes, old.response_bytes))
 
     async def test_declared_execution_and_selected_members_have_an_explicit_public_projection(self):

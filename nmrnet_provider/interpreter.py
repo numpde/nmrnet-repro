@@ -9,19 +9,17 @@ Method
 A language model chooses preparation tools for pasted coordinates, attached
 structure records, or SMILES molecular notation with a requester-specified
 conformer count. This module defines its instructions and tools, checks tool arguments, and passes operations
-to InputPreparation. That object reads or generates the coordinates;
-ToolConversation manages model exchanges, corrections and model-service fallback.
+to InputPreparation. That object reads or generates the coordinates; the shared
+Interpreter manages model exchanges, corrections and model-service fallback.
 Numerical hydrogen/carbon shift prediction is a separate, subsequent calculation.
 
 Outcome and limitations
 -----------------------
 Successful preparation ends selection. InputInterpreter.run returns a JSON
 record of the interpretation; InputPreparation holds the prepared structures.
-Correctable input rejections return feedback to the model within the same
-conversation budget; exhausting the turn limit raises ConversationFailed.
-A model-reported input problem instead ends selection with
-ModelReportedInputProblem. Its explanation is private and its diagnosis is not
-independently verified. The prompt requires faithful transcription of molecular
+Correctable input rejections return feedback to the model. Exhausted model
+allocations raise InterpretationFailed. A model-reported interpretation problem
+is an unverified handoff; its explanation remains private. The prompt requires faithful transcription of molecular
 text; this module does not independently establish that fidelity.
 
 Design references
@@ -42,17 +40,18 @@ require_container()
 
 import hashlib
 import json
+import asyncio
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.prepared_input import DEFAULT_OUTPUT
-from provider_core.diagnostics import redact_credential_fields
+from provider_core.diagnostics import operator_redactor
 from provider_core.conversation import (
-    ToolConversation,
     ToolFinished,
     ToolRejected,
     ToolReply,
 )
+from provider_core.interpreter import Interpreter, ModelReportedInterpretationProblem, ModelWindowExpired
 from provider_core.response_json import ResponseRejected
 from provider_core.result_verbosity import ResultVerbosity
 from provider_core.upload_response import require_upload_ref
@@ -114,8 +113,8 @@ A successful preparation call ends selection; no confirmation call is needed.
 If a tool returns rejection feedback, correct the call only as supported by the
 original request. Corrections share the remaining conversation and preparation
 budgets. If missing, ambiguous or unsupported input prevents selection, call
-report_input_problem with the specific issue and explanation. This ends selection
-with an unverified report attributed to you, not a scientific diagnosis by the
+report_interpretation_problem with the specific issue and explanation. This ends selection
+for this model and may hand off to another model. The report is unverified, not a scientific diagnosis by the
 provider. Your explanation is private; the issue category determines the public
 guidance. Do not describe a service or tool malfunction as a defect in the input.
 """
@@ -226,8 +225,8 @@ _TOOLS = json.dumps(
             },
         ),
         _tool(
-            "report_input_problem",
-            "End selection with an unverified input-problem report. The issue category determines public guidance; "
+            "report_interpretation_problem",
+            "Report unverified interpretation difficulty and end this model visit. The issue category determines safe guidance; "
             "message is a private explanation. Report an input obstacle, not a service or tool malfunction.",
             {"issue": {"type": "string", "enum": list(_PROBLEM_GUIDANCE)}, "message": _TEXT},
         ),
@@ -264,6 +263,13 @@ class ModelReportedInputProblem(RuntimeError):
         self.correction_failures = tuple(correction_failures)
 
 
+class InspectionUnavailable(RuntimeError):
+    """Inspection expired with a retained source or cleanup failure."""
+
+    def __init__(self):
+        super().__init__("Input inspection could not finish within the model window.")
+
+
 class InputInterpreter:
     """Select inputs for one analysis attempt through a single-use model conversation.
 
@@ -271,116 +277,88 @@ class InputInterpreter:
     InputPreparation object holds prepared structures for later prediction.
     """
 
-    # silent-defaults: allow-contract -- Direct scientific callers may retain diagnostics without streaming notices; production assembly requires an explicit operator recipient.
-    def __init__(self, endpoints, *, max_turns, on_endpoint_failure=None):
-        """Configure ordered model services and the total conversation-turn limit."""
-        if on_endpoint_failure is not None and not callable(on_endpoint_failure):
-            raise ValueError("Interpreter endpoint failures require a callable diagnostic recipient.")
+    def __init__(self, endpoint_factories, *, timeout_seconds, context_bytes, secrets, on_endpoint_failure=None):
         self._on_endpoint_failure = on_endpoint_failure
-        self._secrets = tuple(e.spec.api_key for e in endpoints)
-        self._conversation = ToolConversation(
-            endpoints,
-            max_turns=max_turns,
-            secrets=self._secrets,
-        )
+        self._secrets = secrets
+        self._redact = operator_redactor(secrets=secrets)
+        self._conversation = Interpreter(endpoint_factories, timeout_seconds=timeout_seconds,
+                                         context_bytes=context_bytes, secrets=secrets)
         self._tools = json.loads(_TOOLS)
         self._operations = []
         self._diagnostic_recipient = None
 
     async def run(self, instructions, capability):
-        """Select input through capability and return JSON interpretation-record bytes.
-
-        capability is the InputPreparation object; it retains prepared structures.
-        A model-reported problem raises ModelReportedInputProblem; operational
-        failures propagate. The caller must also await retire(),
-        including after failure or cancellation, to settle model connections.
-        """
-        # Keep late model/cleanup evidence attached to the original Job even
-        # when its run has failed. Reuse must not retarget those private bytes.
         if self._diagnostic_recipient is not None and self._diagnostic_recipient is not capability:
-            raise ValueError(
-                "This interpreter already has its diagnostic recipient; create a new interpreter for another input owner."
-            )
+            raise ValueError("This interpreter already has its diagnostic recipient; create a new interpreter for another input owner.")
         self._diagnostic_recipient = capability
 
-        async def dispatch(name, arguments):
-            """Retain prior interpreter failures before invoking a preparation tool."""
+        async def dispatch(name, arguments, *, not_after):
             self._retain_diagnostics()
-            return await self._dispatch(capability, name, arguments)
+            if name not in ("inspect_uploads", "inspect_upload"):
+                return await self._dispatch(capability, name, arguments)
+            deadline = asyncio.timeout_at(not_after)
+            try:
+                async with deadline:
+                    return await self._dispatch(capability, name, arguments)
+            except TimeoutError as failure:
+                cancellation = failure.__cause__
+                if not deadline.expired() or not isinstance(cancellation, asyncio.CancelledError):
+                    raise
+                retained = await capability.settle_interrupted_inspection()
+                failures = tuple(item for index, item in enumerate((cancellation.__cause__, retained))
+                                 if item is not None and (index == 0 or item is not cancellation.__cause__))
+                if failures:
+                    cause = failures[0] if len(failures) == 1 else BaseExceptionGroup("Input inspection failures", failures)
+                    raise InspectionUnavailable() from cause
+                raise ModelWindowExpired() from failure
 
-        messages = [
-            {"role": "system", "content": PROMPT},
-            {"role": "user", "content": instructions.specification_text},
-        ]
+        messages = [{"role": "system", "content": PROMPT},
+                    {"role": "user", "content": instructions.specification_text}]
         try:
             result = await self._conversation.run(messages, self._tools, dispatch)
         finally:
-            # This single-use run reports fallback failures once, including a
-            # successful fallback. Repeated retirement still snapshots late
-            # protected evidence without replaying these operator notices.
             if self._on_endpoint_failure is not None:
-                for index, failure in self._conversation.endpoint_failures:
-                    self._on_endpoint_failure(index, failure)
+                reported = set()
+                for visit, failure in self._conversation.failures:
+                    if visit not in reported and not isinstance(failure, ModelReportedInterpretationProblem):
+                        reported.add(visit)
+                        self._on_endpoint_failure(visit - 1, failure)
         observation = {
-            "schema_id": "nmrnet.input_interpretation.v1",
+            "schema_id": "nmrnet.input_interpretation.v2",
             "prompt_sha256": hashlib.sha256(PROMPT.encode()).hexdigest(),
-            **json.loads(result.observation),
+            "visits": [json.loads(item) for item in result.observations],
             "operations": self._operations,
             "outcome": "selected",
         }
-        if result.value is not None:
-            observation["outcome"] = "model_reported_input_problem"
-        encoded = json.dumps(
-            observation,
-            ensure_ascii=True,
-            allow_nan=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("ascii")
-        if result.value is not None:
-            raise ModelReportedInputProblem(
-                result.value,
-                encoded,
-                endpoint_failures=result.endpoint_failures,
-                correction_failures=result.correction_failures,
-            )
-        return encoded
+        return json.dumps(observation, ensure_ascii=True, allow_nan=False,
+                          sort_keys=True, separators=(",", ":")).encode("ascii")
 
     async def retire(self):
-        """Wait for model-connection cleanup; this does not retire preparation workers."""
         try:
             await self._conversation.retire()
         finally:
-            # Retirement can reveal late heads/cleanup causes. A snapshot failure
-            # keeps the original operation/cleanup in Python's exception context.
             self._retain_diagnostics()
 
     def _retain_diagnostics(self):
-        """Snapshot bounded protected causes at their final model-I/O owner."""
-        if self._diagnostic_recipient is None or not (
-            self._conversation.endpoint_failures
-            or self._conversation.correction_failures
-            or self._conversation.last_failure is not None
-        ):
+        if self._diagnostic_recipient is None:
             return
-        # process_reports recognizes this module's failures; defer its import to
-        # reuse that renderer/redaction without a circular module import.
         from nmrnet_provider.process_reports import failure_evidence  # noqa: PLC0415
-
         history = [
-            {"endpoint_index": index, "failure": failure_evidence(failure, secrets=self._secrets)}
-            for index, failure in self._conversation.endpoint_failures
+            {"endpoint_index": visit - 1, "failure": failure_evidence(failure, secrets=self._secrets)}
+            for visit, failure in self._conversation.failures
         ]
         history.extend(
-            {"turn_index": turn, "failure": failure_evidence(failure, secrets=self._secrets)}
-            for turn, failure in self._conversation.correction_failures
+            {"endpoint_index": visit - 1, "turn_index": turn,
+             "failure": failure_evidence(failure, secrets=self._secrets)}
+            for visit, turn, failure in self._conversation.correction_failures
         )
-        last = self._conversation.last_failure
-        if last is not None and all(last is not failure for _, failure in self._conversation.endpoint_failures):
-            history.append({"failure": failure_evidence(last, secrets=self._secrets)})
-        self._diagnostic_recipient.retain_interpreter_diagnostics(
-            json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
-        )
+        if self._conversation.last_failure is not None:
+            history.append({"failure": failure_evidence(self._conversation.last_failure, secrets=self._secrets)})
+        if history:
+            self._diagnostic_recipient.retain_interpreter_diagnostics(
+                json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True,
+                           separators=(",", ":")).encode("ascii")
+            )
 
     def _admit_arguments(self, name, arguments):
         """Check tool names, argument fields and scalar values before preparation.
@@ -452,12 +430,13 @@ class InputInterpreter:
                 raise ToolRejected(str(rejection)) from rejection
         if name == "inspect_upload":
             return ToolReply(await capability.inspect_upload(arguments["upload_ref"]))
-        if name == "report_input_problem":
-            message = self._conversation.redact(arguments["message"])
-            message = redact_credential_fields(message)
+        if name == "report_interpretation_problem":
+            message = self._redact(arguments["message"])
             if not message.strip() or not message.isprintable() or len(message.encode("utf-8")) > 2048:
                 raise ToolRejected("Provide a nonblank, single-line printable explanation within 2048 UTF-8 bytes.")
-            return ToolFinished(_InputProblemReport(arguments["issue"], message))
+            report = _InputProblemReport(arguments["issue"], message)
+            cause = ModelReportedInputProblem(report, b"{}")
+            raise ModelReportedInterpretationProblem(model_summary=_PROBLEM_GUIDANCE[report.issue]) from cause
         if name == "prepare_smiles":
             await capability.prepare_smiles(**arguments)
         elif name == "prepare_pasted":

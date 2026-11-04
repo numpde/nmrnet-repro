@@ -15,6 +15,19 @@ from nmrnet_provider.startup_capture import startup_authorities
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_endpoint_file_rejects_legacy_fields_and_unsafe_url(self):
+        for replacement in ("request_bytes = 65536\n", 'url = "http://model.example/chat"\n'):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                files = ConfigFiles(directory)
+                original = files.endpoint.read_text()
+                if replacement.startswith("url"):
+                    original = original.replace('url = "https://model.example/chat"\n', replacement)
+                else:
+                    original += replacement
+                files.endpoint.write_text(original)
+                with self.assertRaises(ConfigurationRejected):
+                    load_provider_config(files.path)
+
     def test_missing_packaged_offering_refuses_startup_and_preserves_the_file_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
@@ -78,7 +91,10 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
         for role in ("model", "store"):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
                 files = ConfigFiles(Path(directory))
-                files.write(files.raw.replace(f"https://{role}.example".encode(), f"https://{role}.example:443".encode()))
+                if role == "model":
+                    files.endpoint.write_text(files.endpoint.read_text().replace("https://model.example", "https://model.example:443"))
+                else:
+                    files.write(files.raw.replace(f"https://{role}.example".encode(), f"https://{role}.example:443".encode()))
                 with self.assertRaisesRegex(ConfigurationRejected, "canonical"):
                     startup_authorities(load_provider_config(files.path))
 
@@ -88,7 +104,10 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 with self.subTest(role=role, authority=authority), tempfile.TemporaryDirectory() as directory:
                     files = ConfigFiles(Path(directory))
                     original = f"https://{role}.example".encode()
-                    files.write(files.raw.replace(original, f"https://{authority}".encode()))
+                    if role == "model":
+                        files.endpoint.write_text(files.endpoint.read_text().replace(original.decode(), f"https://{authority}"))
+                    else:
+                        files.write(files.raw.replace(original, f"https://{authority}".encode()))
                     # These are admitted by the reusable direct-mode config;
                     # the production CONNECT route has a narrower host grant.
                     load_provider_config(files.path)
@@ -249,18 +268,16 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                 b"PRIVATE broken TOML",
                 b"x" * 65537,
                 b"PRIVATE = " + b"9" * 6000,
-                files.raw.replace(b"max_turns = 6", b"PRIVATE_UNKNOWN_KEY = 'PRIVATE_VALUE'"),
-                files.raw.replace(b"max_turns = 6", b"max_turns = 0"),
+                files.raw.replace(b"timeout_seconds = 6", b"PRIVATE_UNKNOWN_KEY = 'PRIVATE_VALUE'"),
+                files.raw.replace(b"timeout_seconds = 6", b"timeout_seconds = 0"),
                 files.raw.replace(b"max_worker_calls = 2", b"max_worker_calls = true"),
                 files.raw.replace(b"generation_seconds = 5", b"generation_seconds = 1"),
                 files.raw.replace(b"exchange_seconds = 2", b"exchange_seconds = nan"),
                 files.raw.replace(b"exchange_seconds = 2", b"exchange_seconds = " + b"9" * 400),
-                files.raw.replace(b"request_bytes = 65536", b"request_bytes = -1"),
                 files.raw.replace(b'allowed_job_states = ["open"]', b'allowed_job_states = ["cancelled"]'),
                 files.raw.replace(b'provider_ref = "provider:example"', b'provider_ref = "provider:other"'),
                 files.raw.replace(b'profile = "dev-local"', b'profile = "run"'),
-                files.raw.replace(b"https://model.example/chat", b"http://model.example/chat"),
-                files.raw.replace(b'schema_id = "nmrnet.provider.runtime_config.v3"', b'schema_id = "PRIVATE"'),
+                files.raw.replace(b'schema_id = "nmrnet.provider.runtime_config.v4"', b'schema_id = "PRIVATE"'),
                 files.raw.replace(b"[api]", b'PRIVATE = "unrecognised"\n[api]'),
                 files.raw.replace(
                     b'consumer_id = "lane:fixture"', b'analysis_kind_ref = "PRIVATE"\nconsumer_id = "lane:fixture"'

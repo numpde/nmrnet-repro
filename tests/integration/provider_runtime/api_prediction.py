@@ -606,18 +606,17 @@ def require_selected_interpretation(observation, interpreter, operation):
     ToolConversation owns the total turn ceiling and ordered endpoint fallback.
     Delivery qualification must not turn a valid correction into another Job.
     """
-    turns, corrections = observation["turns_started"], observation["corrections"]
-    routes, operations = observation["routes"], observation["operations"]
+    visits, operations = observation["visits"], observation["operations"]
     require(
-        observation["schema_id"] == "nmrnet.input_interpretation.v1"
+        observation["schema_id"] == "nmrnet.input_interpretation.v2"
         and observation["outcome"] == "selected"
-        and type(turns) is int and 0 < turns <= interpreter["max_turns"]
-        and type(corrections) is int and 0 <= corrections < turns
-        and operations and operations[-1] == operation and len(operations) <= turns
-        and 0 < len(routes) <= len(interpreter["endpoints"])
-        and all(route["endpoint"] == endpoint and type(route["turns_started"]) is int and route["turns_started"] > 0
-                for route, endpoint in zip(routes, interpreter["endpoints"]))
-        and sum(route["turns_started"] for route in routes) == turns,
+        and 0 < len(visits) <= len(interpreter["endpoints"])
+        and all(type(visit["turns_started"]) is int and 0 < visit["turns_started"] <= 12
+                and type(visit["corrections"]) is int and 0 <= visit["corrections"] <= 3
+                for visit in visits)
+        and all(all(route["endpoint"] == endpoint for route in visit["routes"])
+                for visit, endpoint in zip(visits, interpreter["endpoints"]))
+        and operations and operations[-1] == operation,
         "Selected interpretation differs from the admitted endpoints, turn budget or successful input operation",
     )
 

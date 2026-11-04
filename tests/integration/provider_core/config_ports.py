@@ -47,7 +47,15 @@ class ConfigFiles:
         ca = ca_line(ca_file)
         model_ca = ca if model_ca_file is None else ca_line(model_ca_file)
         store_ca = ca if store_ca_file is None else ca_line(store_ca_file)
-        self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v3"
+        self.endpoint_directory = self.root / "interpreter.d"
+        self.endpoint_directory.mkdir(mode=0o700, exist_ok=True)
+        self.endpoint = self.endpoint_directory / "00-primary.toml"
+        self.endpoint.write_text(f'''url = {json.dumps(model_origin + "/chat")}
+model = "fixture-model"
+key_file = {json.dumps(str(self.key))}
+{model_ca}''')
+        self.endpoint.chmod(0o600)
+        self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v4"
 
 [api]
 origin = {json.dumps(api_origin)}
@@ -62,18 +70,7 @@ retirement_seconds = 1
 max_retries = 0
 
 [interpreter]
-max_turns = 6
-
-[[interpreter.endpoints]]
-configuration_id = "primary"
-url = {json.dumps(model_origin + "/chat")}
-model = "fixture-model"
-key_file = {json.dumps(str(self.key))}
-request_bytes = 65536
-response_bytes = 16384
-exchange_seconds = 2
-retirement_seconds = 1
-{model_ca}
+timeout_seconds = 6
 [uploads]
 store_origin = {json.dumps(store_origin)}
 per_source_bytes = 1048576

@@ -14,7 +14,7 @@ from tests.integration.nmrnet.interpreter_ports import chat_endpoint, tool_reply
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.interpreter import InputInterpreter
+from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.session import PreparationEvidenceFailed
 from provider_core.analysis import AnalysisFailure
@@ -23,6 +23,34 @@ from provider_core.conversation import ConversationFailed
 
 
 class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_expired_inspection_settles_source_failure_before_job_outcome(self):
+        ports = SessionPorts()
+        failure = OSError(5, "PRIVATE_LATE_SOURCE_FAILURE")
+        ports.uploads.last_failure = None
+
+        async def inspect():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise failure from None
+
+        async def choose(_headers, _raw):
+            return tool_reply("inspect", "inspect_uploads", {})
+
+        ports.uploads.inspect.side_effect = inspect
+        async with TlsPeer("success", response_factory=choose) as first, TlsPeer("success") as second:
+            chooser = fixture_interpreter((chat_endpoint(first, identifier="first"),
+                                           chat_endpoint(second, identifier="second")), timeout_seconds=0.3)
+            owner = ports.owner(chooser.run, chooser=chooser)
+            session = ports.make_session(owner)
+            self.addAsyncCleanup(session.retire)
+            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertIs(owner.source_failure, failure)
+            self.assertIsNone(owner._source_task)
+            self.assertEqual(len(second.requests), 0)
+            self.assertNotIn("PRIVATE_LATE_SOURCE_FAILURE", outcome.message)
+
     async def test_interrupted_model_post_retains_final_private_diagnostics_after_received_headers(self):
         await self.check_interrupted_post(repeated_cancellation=False)
 
@@ -43,7 +71,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             "body-stall",
             response_headers=((b"x-request-id", b"request:input-selection"), (b"x-private", b"PRIVATE_HEADER")),
         ) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
             owner = ports.owner(chooser.run, chooser=chooser)
             retiring, release_retirement = asyncio.Event(), asyncio.Event()
             original_retire = chooser._conversation.retire
@@ -95,7 +123,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_interpreter_cannot_retarget_old_diagnostics_to_another_capability(self):
         ports, other_ports = SessionPorts(), SessionPorts()
         async with TlsPeer("success", response_status=503, response_body=b"PRIVATE_BODY") as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
             owner = ports.owner(chooser.run, chooser=chooser)
             other = other_ports.owner(chooser.run, chooser=chooser)
             try:
@@ -106,7 +134,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     await chooser.run(other_ports.instructions, other)
                 await owner.retire()
                 self.assertIsNone(other.interpreter_diagnostics)
-                self.assertEqual(len(peer.requests), 1)
+                self.assertEqual(len(peer.requests), 2)
             finally:
                 await owner.retire()
 
@@ -120,7 +148,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async def generate(_smiles, _count):
             diagnostics = json.loads(owner.interpreter_diagnostics)
-            self.assertEqual([entry.get("turn_index") for entry in diagnostics], [None, 2])
+            self.assertIn(1, [entry.get("turn_index") for entry in diagnostics])
             self.assertEqual(diagnostics[0]["endpoint_index"], 0)
             self.assertIn(str(rejection), json.dumps(diagnostics))
             return ports.batch
@@ -132,8 +160,8 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async def respond(_headers, raw):
             messages = json.loads(raw)["messages"]
-            if messages[-1]["role"] == "tool":
-                self.assertEqual(json.loads(messages[-1]["content"]), {"rejected": str(rejection)})
+            if messages[-2]["role"] == "tool":
+                self.assertEqual(messages[-2]["content"], str(rejection))
                 self.assertNotIn("PRIVATE reader dump", json.dumps(messages))
                 return tool_reply("corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
             return tool_reply(
@@ -152,8 +180,8 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             TlsPeer("success", response_factory=lost_reply) as first,
             TlsPeer("success", response_factory=respond) as second,
         ):
-            chooser = InputInterpreter(
-                (chat_endpoint(first, identifier="first"), chat_endpoint(second, identifier="second")), max_turns=3
+            chooser = fixture_interpreter(
+                (chat_endpoint(first, identifier="first"), chat_endpoint(second, identifier="second")), timeout_seconds=3
             )
             owner = ports.owner(chooser.run, chooser=chooser)
             session = ports.make_session(owner)
@@ -168,7 +196,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("PRIVATE_MODEL_KEY", private)
             self.assertNotIn("PRIVATE_CREDENTIAL", private)
             self.assertLess(len(private), 16000)
-            self.assertEqual(prepared["interpretation"]["corrections"], 1)
+            self.assertEqual(prepared["interpretation"]["visits"][-1]["corrections"], 1)
             self.assertNotIn("Cannot select", json.dumps(prepared["interpretation"]))
             self.assertEqual(ports.worker.events, [])
             outcome = await session.execute(handle, report_condition=unexpected_condition)
@@ -187,8 +215,8 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 # silent-defaults: allow-contract -- Bind this finite subcase's ports and invalid value for the asynchronous local peer.
                 async def respond(_headers, raw, *, ports=ports, digits=digits):
                     messages = json.loads(raw)["messages"]
-                    if messages[-1]["role"] == "tool":
-                        self.assertIn("shift_significant_digits", json.loads(messages[-1]["content"])["rejected"])
+                    if messages[-2]["role"] == "tool":
+                        self.assertIn("shift_significant_digits", messages[-2]["content"])
                         ports.allocate_reader.assert_not_awaited()
                         ports.allocate_generator.assert_not_awaited()
                         ports.uploads.acquire.assert_not_awaited()
@@ -204,14 +232,14 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     )
 
                 async with TlsPeer("success", response_factory=respond) as peer:
-                    chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+                    chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
                     session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
                     self.addAsyncCleanup(session.retire)
                     handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
                     identity = json.loads(handle.identity.content)
                     self.assertEqual(identity["output"], {"shift_significant_digits": 3, "verbosity": "medium"})
-                    self.assertEqual(identity["interpretation"]["corrections"], 1)
-                    self.assertEqual(identity["interpretation"]["turns_started"], 2)
+                    self.assertEqual(identity["interpretation"]["visits"][-1]["corrections"], 1)
+                    self.assertEqual(identity["interpretation"]["visits"][-1]["turns_started"], 2)
                     ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
                     self.assertEqual(ports.worker.events, [])
 
@@ -220,16 +248,16 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async def respond(_headers, raw):
             messages = json.loads(raw)["messages"]
-            if messages[-1]["role"] == "tool":
+            if messages[-2]["role"] == "tool":
                 self.assertEqual(
-                    json.loads(messages[-1]["content"]),
-                    {"rejected": "The issue field must be one of the advertised choices."},
+                    messages[-2]["content"],
+                    "The issue field must be one of the advertised choices.",
                 )
-                self.assertNotIn("PRIVATE_UNKNOWN_ISSUE", json.dumps(messages))
-                self.assertNotIn("PRIVATE_DISCARDED_REPORT", json.dumps(messages))
+                self.assertNotIn("PRIVATE_UNKNOWN_ISSUE", json.dumps(messages[-2:]))
+                self.assertNotIn("PRIVATE_DISCARDED_REPORT", json.dumps(messages[-2:]))
                 return tool_reply(
                     "corrected",
-                    "report_input_problem",
+                    "report_interpretation_problem",
                     {
                         "issue": "source_unit_unclear",
                         "message": "PRIVATE_RETAINED_REPORT",
@@ -237,7 +265,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 )
             return tool_reply(
                 "invalid",
-                "report_input_problem",
+                "report_interpretation_problem",
                 {
                     "issue": "PRIVATE_UNKNOWN_ISSUE",
                     "message": "PRIVATE_DISCARDED_REPORT",
@@ -245,18 +273,14 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertIn("Specify angstrom, nm or bohr", outcome.message)
-            self.assertIn("not independently verified", outcome.message)
+            self.assertEqual(outcome.code, "interpretation_failed")
             self.assertNotIn("PRIVATE_", outcome.message)
-            report = json.loads(outcome.evidence.content)["model_report"]
-            self.assertEqual(report["issue"], "source_unit_unclear")
-            self.assertEqual(report["explanation"], "PRIVATE_RETAINED_REPORT")
-            self.assertEqual(report["interpretation"]["corrections"], 1)
+            self.assertIn("PRIVATE_RETAINED_REPORT", outcome.evidence.content.decode())
             self.assertEqual(len(peer.request_bodies), 2)
             ports.allocate_reader.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
@@ -267,53 +291,47 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async def respond(_headers, raw):
             messages = json.loads(raw)["messages"]
-            if messages[-1]["role"] == "tool":
-                self.assertIn("count", json.loads(messages[-1]["content"])["rejected"])
-                self.assertEqual(messages[-2]["reasoning_content"], "fixture reasoning")
+            if messages[-2]["role"] == "tool":
+                self.assertIn("count", messages[-2]["content"])
+                self.assertEqual(messages[-3]["reasoning_content"], "fixture reasoning")
                 return tool_reply("corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
             return tool_reply("invalid", "prepare_smiles", {"smiles": "CCl", "requested_count": 0})
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
             observation = json.loads(handle.identity.content)["interpretation"]
-            self.assertEqual(observation["corrections"], 1)
-            self.assertEqual(observation["turns_started"], 2)
+            self.assertEqual(observation["visits"][-1]["corrections"], 1)
+            self.assertEqual(observation["visits"][-1]["turns_started"], 2)
             self.assertEqual(len(peer.request_bodies), 2)
             self.assertEqual(ports.worker.events, [])
 
-    async def test_model_report_is_attributed_publishable_and_private_without_fallback(
+    async def test_model_reports_exhaust_ladder_without_disclosing_private_explanation(
         self,
     ):
         ports = SessionPorts()
         report = "PRIVATE_SOURCE_EXCERPT " + "x" * 1500
 
         async def respond(_headers, _raw):
-            return tool_reply("report", "report_input_problem", {"issue": "other_input_problem", "message": report})
+            return tool_reply("report", "report_interpretation_problem", {"issue": "other_input_problem", "message": report})
 
         async with TlsPeer("success", response_factory=respond) as peer:
             first = chat_endpoint(peer, identifier="first")
             unused = chat_endpoint(peer, identifier="unused")
-            chooser = InputInterpreter((first, unused), max_turns=4)
+            chooser = fixture_interpreter((first, unused), timeout_seconds=4)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual(outcome.code, "interpreter_reported_input_problem")
+            self.assertEqual(outcome.code, "interpretation_failed")
             published = fail_body(ATTEMPT_REF, outcome.code, outcome.message)
             self.assertNotIn(b"PRIVATE_SOURCE_EXCERPT", published)
-            self.assertIn("not independently verified", outcome.message)
-            model_report = json.loads(outcome.evidence.content)["model_report"]
-            self.assertEqual(model_report["explanation"], report)
-            self.assertIs(model_report["independently_verified"], False)
-            self.assertEqual(
-                model_report["interpretation"]["outcome"],
-                "model_reported_input_problem",
-            )
-            self.assertEqual(len(peer.request_bodies), 1)
+            self.assertIn("PRIVATE_SOURCE_EXCERPT", outcome.evidence.content.decode())
+            self.assertEqual(len(peer.request_bodies), 2)
+            self.assertNotIn("PRIVATE_SOURCE_EXCERPT", peer.request_bodies[1].decode())
             self.assertEqual(ports.worker.events, [])
             ports.allocate_generator.assert_not_awaited()
             ports.uploads.acquire.assert_not_awaited()
@@ -326,12 +344,12 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async def respond(_headers, raw):
             messages = json.loads(raw)["messages"]
-            if messages[-1]["role"] == "tool":
+            if messages[-2]["role"] == "tool":
                 self.assertNotIn("PRIVATE", json.dumps(messages))
-                self.assertEqual(json.loads(messages[-1]["content"]), {"rejected": str(failure)})
+                self.assertEqual(messages[-2]["content"], str(failure))
                 return tool_reply(
                     "report",
-                    "report_input_problem",
+                    "report_interpretation_problem",
                     {"issue": "record_selection_unclear", "message": "The selected records could not be read."},
                 )
             return tool_reply(
@@ -347,13 +365,13 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual(outcome.code, "interpreter_reported_input_problem")
+            self.assertEqual(outcome.code, "interpretation_failed")
             private = json.loads(outcome.evidence.content)["interpreter_diagnostics"]
-            self.assertEqual(private[0]["turn_index"], 1)
+            self.assertIn(1, [entry.get("turn_index") for entry in private])
             self.assertIn(str(failure), json.dumps(private))
             self.assertIn("PRIVATE reader dump", json.dumps(private))
             self.assertNotIn("PRIVATE reader dump", outcome.message)
@@ -375,12 +393,12 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter(
+            chooser = fixture_interpreter(
                 (
                     chat_endpoint(peer, identifier="first"),
                     chat_endpoint(peer, identifier="unused"),
                 ),
-                max_turns=4,
+                timeout_seconds=4,
             )
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)

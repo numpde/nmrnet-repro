@@ -18,7 +18,7 @@ from nmrnet_provider.interpreter import InputInterpreter
 from nmrnet_provider.session import NMRNetSession
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
-from provider_core.chat import ChatEndpoint
+from provider_core.chat import ChatEndpointFactory
 from provider_core.controller import AttemptController
 from provider_core.shared_delivery_client import SharedDeliveryClient
 from provider_core.uploads import JobUploads, UploadRecovery
@@ -87,16 +87,17 @@ async def assemble_attempt(
         ),
     )
     endpoints = tuple(
-        ChatEndpoint(
-            settings.spec,
-            transport=settings.http.new_transport(),
-            request_bytes=settings.request_bytes,
-            response_bytes=settings.response_bytes,
-        )
+        ChatEndpointFactory(spec=settings.spec, trust=settings.trust,
+                            proxy_socket=settings.proxy_socket,
+                            retirement_seconds=settings.retirement_seconds,
+                            request_bytes=settings.request_bytes, response_bytes=settings.response_bytes)
         for settings in config.interpreter.endpoints
     )
     chooser = InputInterpreter(
-        endpoints, max_turns=config.interpreter.max_turns, on_endpoint_failure=on_interpreter_failure
+        endpoints, timeout_seconds=config.interpreter.timeout_seconds,
+        context_bytes=min(endpoint.context_bytes for endpoint in endpoints),
+        secrets=tuple(settings.spec.api_key for settings in config.interpreter.endpoints),
+        on_endpoint_failure=on_interpreter_failure,
     )
     settings = config.preparation
     preparation = InputPreparation(

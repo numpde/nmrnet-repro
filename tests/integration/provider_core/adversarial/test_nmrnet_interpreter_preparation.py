@@ -18,7 +18,8 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
-from nmrnet_provider.interpreter import InputInterpreter
+from nmrnet_provider.native_session import NativeWorkerExited
+from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected
@@ -30,6 +31,87 @@ from provider_core.uploads import UploadFailed
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_interrupted_inspection_retains_late_reader_crash(self):
+        ports = SessionPorts()
+        started, release = asyncio.Event(), asyncio.Event()
+        native = SimpleNamespace(retire=AsyncMock())
+        crash = NativeWorkerExited(native, RuntimeError("reader exited"))
+
+        async def allocate():
+            started.set()
+            await release.wait()
+            raise crash
+
+        async def choose(_instructions, capability):
+            async def inspect():
+                async with capability._worker(allocate):
+                    pass
+
+            task = asyncio.create_task(inspect())
+            await started.wait()
+            task.cancel()
+            release.set()
+            with self.assertRaises(NativeWorkerExited) as caught:
+                await task
+            self.assertIs(caught.exception, crash)
+            raise crash
+
+        owner = ports.owner(choose)
+        with self.assertRaises(NativeWorkerExited) as caught:
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
+        self.assertIs(caught.exception, crash)
+        native.retire.assert_not_awaited()
+        await owner.retire()
+        native.retire.assert_awaited_once()
+
+    async def test_unstarted_source_cancellation_does_not_reuse_prior_upload_failure(self):
+        ports = SessionPorts()
+        ports.uploads.last_failure = OSError(5, "PRIVATE_OLD_SOURCE_FAILURE")
+        done = RuntimeError("finished inspection witness")
+
+        async def choose(_instructions, capability):
+            task = asyncio.create_task(capability._start_source_call(ports.uploads.inspect))
+            capability._source_task = task
+            task.cancel()
+            self.assertIsNone(await capability.settle_interrupted_inspection())
+            raise done
+
+        owner = ports.owner(choose)
+        with self.assertRaises(RuntimeError) as caught:
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
+        self.assertIs(caught.exception, done)
+        await owner.retire()
+
+    async def test_interrupted_inspection_settles_source_and_retains_late_failure(self):
+        ports = SessionPorts()
+        started = asyncio.Event()
+        source_failure = OSError(5, "PRIVATE_LATE_SOURCE_FAILURE")
+        ports.uploads.last_failure = None
+
+        async def inspect():
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise source_failure from None
+
+        async def choose(_instructions, capability):
+            task = asyncio.create_task(capability.inspect())
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            retained = await capability.settle_interrupted_inspection()
+            self.assertIs(retained, source_failure)
+            raise source_failure
+
+        ports.uploads.inspect.side_effect = inspect
+        owner = ports.owner(choose)
+        with self.assertRaises(OSError) as caught:
+            await owner.prepare(ports.instructions, require_execution=lambda: None)
+        self.assertIs(caught.exception, source_failure)
+        await owner.retire()
+
     async def test_cancelled_source_waiter_retains_already_finished_source_task(self):
         ports = SessionPorts()
         retained = []
@@ -269,7 +351,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                     exchange.response_head = HttpResponseHead(503, ((b"x-request-id", b"request:late-model"),))
 
             endpoint.retire = observe_late_fault
-            chooser = InputInterpreter((endpoint,), max_turns=2)
+            chooser = fixture_interpreter((endpoint,), timeout_seconds=2)
             owner = ports.owner(chooser.run, chooser=chooser, seconds=0.5)
             session = ports.make_session(owner)
             try:

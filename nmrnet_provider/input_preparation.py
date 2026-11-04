@@ -153,7 +153,10 @@ class InputPreparation:
         self._candidate = None
         self.last_retirement_failure = None
         self.allocation_failure = None
+        self._allocation_failure_task = None
         self.source_failure = None
+        self._source_failure_task = None
+        self._source_started_task = None
         self.chooser_failure = None
         self._interpreter_diagnostics = None
 
@@ -406,9 +409,13 @@ class InputPreparation:
     async def _start_source_call(self, operation, *args):
         self._require_choosing()
         self._require_execution()
+        self._source_started_task = asyncio.current_task()
         return await operation(*args)
 
     def _record_source_failure(self, task):
+        if self._source_failure_task is task:
+            return
+        self._source_failure_task = task
         try:
             self.source_failure = task.exception()
         except asyncio.CancelledError as cause:
@@ -548,6 +555,8 @@ class InputPreparation:
             # uncertainty remains operational and keeps the original cause.
             try:
                 await self._retire_worker(observed_failure=operation_failure)
+            except NativeWorkerExited:
+                raise
             except PreparationRetirementFailed as cleanup_failure:
                 self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cleanup_failure:
@@ -564,11 +573,13 @@ class InputPreparation:
         return await allocator(**configuration)
 
     def _record_allocation_failure(self, task):
+        if self._allocation_failure_task is task:
+            return
+        self._allocation_failure_task = task
         try:
             self.allocation_failure = task.exception()
         except asyncio.CancelledError as cause:
-            if self.allocation_failure is None:
-                self.allocation_failure = cause
+            self.allocation_failure = cause
 
     async def _retire_worker(self, *, observed_failure=None):
         if self._worker_task is None:
@@ -578,6 +589,8 @@ class InputPreparation:
             async with asyncio.timeout(self._seconds):
                 client, host = await asyncio.shield(self._worker_task)
         except NativeWorkerExited as failure:
+            if isinstance(observed_failure, asyncio.CancelledError):
+                raise
             await failure.native_operation.retire()
             self._worker_task = None
             return
@@ -621,6 +634,39 @@ class InputPreparation:
         await self._settle_task(task)
         self._report_source_observation()
         self._source_task = None
+
+    async def settle_interrupted_inspection(self):
+        """Settle the interrupted inspection's owners and return retained source failure."""
+        source_task = self._source_task
+        worker_task = self._worker_task
+        if source_task is not None and source_task.done() and self._source_failure_task is not source_task:
+            self._record_source_failure(source_task)
+        await self._settle_source()
+        if worker_task is not None and worker_task.done() and self._allocation_failure_task is not worker_task:
+            self._record_allocation_failure(worker_task)
+        await self._retire_worker()
+        if worker_task is not None and self._allocation_failure_task is not worker_task:
+            self._record_allocation_failure(worker_task)
+        worker_failure = self.allocation_failure if worker_task is not None else None
+        if isinstance(worker_failure, NativeWorkerExited):
+            raise worker_failure
+        if isinstance(worker_failure, asyncio.CancelledError) and worker_failure.__cause__ is None:
+            worker_failure = None
+        if source_task is None:
+            return worker_failure
+        if self._source_failure_task is not source_task:
+            self._record_source_failure(source_task)
+        failure = self.source_failure
+        if isinstance(failure, asyncio.CancelledError) and failure.__cause__ is None:
+            failure = None
+        upload_failure = self._uploads.last_failure if self._source_started_task is source_task else None
+        failures = []
+        for item in (worker_failure, failure, upload_failure):
+            if item is not None and all(item is not prior for prior in failures):
+                failures.append(item)
+        if not failures:
+            return None
+        return failures[0] if len(failures) == 1 else BaseExceptionGroup("Input inspection failures", failures)
 
     async def _settle_task(self, task):
         """Cancel/join owned source or chooser work; its callback retains failures."""

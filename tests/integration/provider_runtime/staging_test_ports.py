@@ -33,11 +33,9 @@ def staging_inputs(root):
     key = inputs / "interpreter.key"
     fragment = inputs / "interpreter.toml"
     fragment.write_text(
-        "[interpreter]\nmax_turns = 6\n\n[[interpreter.endpoints]]\n"
-        'configuration_id = "selected-fixture"\nurl = "https://model.example/chat/completions"\n'
+        'url = "https://model.example/chat/completions"\n'
         'model = "selected-model"\nreasoning_effort = "none"\n'
         f"key_file = {json.dumps(str(root / 'unmounted-selection/model.key'))}\n"
-        "request_bytes = 65536\nresponse_bytes = 262144\nexchange_seconds = 25\nretirement_seconds = 5\n"
     )
     fragment.chmod(0o600)
     return inputs, selection, fragment, key

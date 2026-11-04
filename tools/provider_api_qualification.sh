@@ -562,6 +562,8 @@ api_witness_main() {
     mkdir -p -m 700 -- "$repository_root/secrets/deployments" || return $?
     mkdir -m 700 -- "$private" || return $?
     cp -- "$provider_host_root/deployment/"{provider,deployment}.toml "$public/" || return $?
+    mkdir -m 700 -- "$public/interpreter.d" || return $?
+    cp -- "$provider_host_root/deployment/interpreter.d/"*.toml "$public/interpreter.d/" || return $?
     for input in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
         if [[ -f $provider_host_root/deployment/secrets/$input ]]; then
             cp -- "$provider_host_root/deployment/secrets/$input" "$private/$input" || return $?

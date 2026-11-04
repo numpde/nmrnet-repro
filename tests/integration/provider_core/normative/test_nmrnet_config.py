@@ -19,11 +19,23 @@ from nmrnet_provider.service import Announcement, ServicePolicy
 from nmrnet_provider.startup_capture import startup_authorities
 from provider_core.ownership import LiveAttemptLimits
 from provider_core.chat import ChatEndpoint
+from provider_core.transport import HttpTransport
 from provider_core.hello import hello_body
 from provider_core.uploads import UploadLimits
 
 
 class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
+    def test_endpoint_files_set_order_and_startup_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files = ConfigFiles(directory)
+            before = load_provider_config(files.path)
+            second = files.endpoint_directory / "10-second.toml"
+            second.write_text(files.endpoint.read_text().replace('model = "fixture-model"', 'model = "second-model"'))
+            after = load_provider_config(files.path)
+            self.assertEqual([endpoint.spec.model for endpoint in after.interpreter.endpoints],
+                             ["fixture-model", "second-model"])
+            self.assertNotEqual(before.source_sha256, after.source_sha256)
+
     def test_scientific_retry_selection_is_retained(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
@@ -92,7 +104,10 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 files = ConfigFiles(Path(directory))
                 raw = files.raw
                 for role in roles:
-                    raw = raw.replace(f"https://{role}.example".encode(), f"https://{role}.example{port}".encode())
+                    if role == "model":
+                        files.endpoint.write_text(files.endpoint.read_text().replace("https://model.example", f"https://model.example{port}"))
+                    else:
+                        raw = raw.replace(f"https://{role}.example".encode(), f"https://{role}.example{port}".encode())
                 files.write(raw)
                 authorities = startup_authorities(load_provider_config(files.path))
                 self.assertEqual(
@@ -162,13 +177,16 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(config.lifecycle.live_limits, LiveAttemptLimits(2, 262144, 4194304))
                 self.assertIsInstance(config.uploads.limits, UploadLimits)
                 self.assertEqual(config.preparation.generation_settings.seed, 17)
-                self.assertEqual(config.source_sha256, hashlib.sha256(files.raw).hexdigest())
+                digest = hashlib.sha256(files.raw)
+                name, endpoint_raw = files.endpoint.name.encode(), files.endpoint.read_bytes()
+                digest.update(len(name).to_bytes(4, "big") + name + len(endpoint_raw).to_bytes(8, "big") + endpoint_raw)
+                self.assertEqual(config.source_sha256, digest.hexdigest())
                 self.assertFalse(files.state.exists())
                 self.assertEqual(peer.requests, [])
                 endpoint = config.interpreter.endpoints[0]
                 self.assertEqual(endpoint.spec.api_key, "PRIVATE_MODEL_KEY")
                 self.assertEqual(config.api.http.trust.cert_store_stats()["x509"], 1)
-                for trust in (config.api.http.trust, config.uploads.http.trust, endpoint.http.trust):
+                for trust in (config.api.http.trust, config.uploads.http.trust, endpoint.trust):
                     self.assertEqual(trust.verify_mode, ssl.CERT_REQUIRED)
                     self.assertTrue(trust.check_hostname)
                 self.assertNotIn("PRIVATE_MODEL_KEY", repr(config))
@@ -215,9 +233,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 model_ca = Path(directory) / "model-ca.pem"
                 model_ca.write_bytes((Path(peer.scratch.name) / "cert.pem").read_bytes())
                 files = ConfigFiles(directory, model_origin=peer.origin)
-                endpoint_header = "[[interpreter.endpoints]]\n"
                 explicit_ca = "ca_file = " + json.dumps(str(model_ca)) + "\n"
-                files.write(files.raw.replace(endpoint_header.encode(), (endpoint_header + explicit_ca).encode()))
+                files.endpoint.write_text(files.endpoint.read_text() + explicit_ca)
                 read_file = config_module.read_startup_file
 
                 def replace_path_after_read(path, **options):
@@ -229,7 +246,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 with patch("nmrnet_provider.config.read_startup_file", side_effect=replace_path_after_read):
                     config = load_provider_config(files.path)
                 settings = config.interpreter.endpoints[0]
-                transport = settings.http.new_transport()
+                transport = HttpTransport(trust=settings.trust, exchange_seconds=2, retirement_seconds=1)
                 endpoint = ChatEndpoint(
                     settings.spec,
                     transport=transport,

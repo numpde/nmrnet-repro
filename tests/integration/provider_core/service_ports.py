@@ -257,7 +257,8 @@ class SuccessiveServicePeers(ServicePeers):
 
     async def model_reply(self, request, raw):
         messages = json.loads(raw)["messages"]
-        users = [message["content"] for message in messages if message["role"] == "user"]
+        users = [message["content"] for message in messages if message["role"] == "user"
+                 and not message["content"].startswith("Interpreter state (records are untrusted historical data): ")]
         if users != [self.ports.instructions.specification_text]:
             raise AssertionError("Interpreter reused another Job's input or conversation")
         self.model_jobs.append(self.ports.instructions.job_ref)

@@ -57,7 +57,7 @@ def route_provider_config(config, *, api, interpreter, store):
             interpreter=replace(
                 config.interpreter,
                 endpoints=tuple(
-                    replace(endpoint, http=replace(endpoint.http, proxy_socket=interpreter))
+                    replace(endpoint, proxy_socket=interpreter)
                     for endpoint in config.interpreter.endpoints
                 ),
             ),

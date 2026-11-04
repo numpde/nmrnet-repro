@@ -108,7 +108,7 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     if type(local["routes"]) is not dict or set(local["routes"]) != {"interpreter", "store"}:
         raise ConfigurationRejected("deployment.toml owns only interpreter/store routes; the host owns the API route.")
     routes = dict(local["routes"])
-    consumed, retained_provider = {}, {}
+    consumed, retained_provider, endpoint_documents = {}, {}, {}
 
     def retain_input(actual, leaf, **limits):
         content = read_startup_file(actual, **limits)
@@ -124,6 +124,10 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         path = _bind_path(path)
         if path == definition:
             return raw
+        if path.parent == definition.parent / "interpreter.d" and path.suffix == ".toml":
+            content = read_startup_file(path, **limits)
+            endpoint_documents[path.name] = tomllib.loads(content.decode("utf-8"))
+            return content
         if not path.is_relative_to(INPUT_ROOT) or len(path.relative_to(INPUT_ROOT).parts) != 1:
             raise ConfigurationRejected("provider key and CA paths must name files directly under /srv/nmrnet/input/.")
         leaf = Path("provider") / path.name
@@ -138,18 +142,23 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     # Only admitted input paths change; the writer preserves the parsed scientific
     # values without imposing scalar-line or table-layout restrictions on TOML.
     document["api"]["credential_file"] = str(retained_provider[Path(document["api"]["credential_file"])])
-    for endpoint in document["interpreter"]["endpoints"]:
+    for endpoint in endpoint_documents.values():
         endpoint["key_file"] = str(retained_provider[Path(endpoint["key_file"])])
     if "ca_file" in document["api"]:
         document["api"]["ca_file"] = str(retained_provider[Path(document["api"]["ca_file"])])
-    for table in (document["uploads"], *document["interpreter"]["endpoints"]):
+    for table in (document["uploads"], *endpoint_documents.values()):
         if "ca_file" in table:
             table["ca_file"] = str(retained_provider[Path(table["ca_file"])])
     frozen = tomli_w.dumps(document).encode("utf-8")
-    if len(frozen) + sum(map(len, consumed.values())) > maximum:
+    endpoint_bytes = {name: tomli_w.dumps(endpoint).encode("utf-8") for name, endpoint in endpoint_documents.items()}
+    if len(frozen) + sum(map(len, consumed.values())) + sum(map(len, endpoint_bytes.values())) > maximum:
         raise ConfigurationRejected("the frozen deployment exceeds maximum_startup_bytes; no runtime profile was published.")
     path = bundle / "config/provider.toml"
     _write(path, frozen)
+    endpoint_directory = bundle / "config/interpreter.d"
+    endpoint_directory.mkdir(mode=0o700)
+    for name, content in endpoint_bytes.items():
+        _write(endpoint_directory / name, content)
 
     def read_frozen(value, **limits):
         return read_startup_file(_source_path(value, bundle), **limits)
@@ -379,7 +388,7 @@ def client_inputs(*, bundle, prediction_image_id, client_root):
         "profile": tomllib.loads(raw.decode())["api"]["profile"],
         "topology": admitted.api.expected_topology, "provider_ref": admitted.lifecycle.scope.provider_ref,
         "interpretation_scripted": False,
-        "interpreter": {"max_turns": admitted.interpreter.max_turns, "endpoints": [
+        "interpreter": {"timeout_seconds": admitted.interpreter.timeout_seconds, "endpoints": [
             json.loads(ChatEndpoint(endpoint.spec, transport=None, request_bytes=endpoint.request_bytes,
                                     response_bytes=endpoint.response_bytes).identity)
             for endpoint in admitted.interpreter.endpoints

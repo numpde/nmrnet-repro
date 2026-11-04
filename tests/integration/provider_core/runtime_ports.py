@@ -337,7 +337,7 @@ class RuntimePeers:
 
     async def model_reply(self, request, raw):
         require_model_credentials(request)
-        last = json.loads(raw)["messages"][-1]
+        last = json.loads(raw)["messages"][-2]
         if self.route == "smiles":
             return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "output": self.output})
         if self.route == "pasted":

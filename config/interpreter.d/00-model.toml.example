@@ -1,0 +1,4 @@
+url = "https://model.example/v1/chat/completions"
+model = "gpt-5.6-luna"
+key_file = "/srv/nmrnet/input/interpreter.key"
+reasoning_effort = "none"

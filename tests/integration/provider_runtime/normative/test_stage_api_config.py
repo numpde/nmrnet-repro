@@ -74,8 +74,8 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertEqual(private["deployment"], {"project": "fixture-delivery", "gid": 1001})
             self.assertEqual(private["routes"]["interpreter"], {"mode": "external", "interface": "external0", "log_level": "INFO"})
             self.assertEqual(private["resolvers"], ["192.0.2.53"])
-            selected = public["interpreter"]["endpoints"][0]
-            previous = original["interpreter"]["endpoints"][0]
+            selected = tomllib.loads((root / "deployment/interpreter.d/00-primary.toml").read_text())
+            previous = tomllib.loads((root / "source/interpreter.d/00-primary.toml").read_text())
             self.assertEqual(selected | {"key_file": previous["key_file"]}, previous)
             self.assertEqual(selected["key_file"], "/srv/nmrnet/input/interpreter.key")
             for name in ("interpreter.key", "signing.private.json", "api-ca.crt"):
@@ -115,11 +115,11 @@ class StageApiConfigTests(unittest.TestCase):
             admitted = load_provider_config(root / "source/provider.toml")
             endpoint = admitted.interpreter.endpoints[0]
             self.assertIn("https://numpde.github.io/nmrnet-repro/", admitted.service.announcement.description)
-            self.assertEqual((endpoint.spec.configuration_id, endpoint.spec.model), ("selected-fixture", "selected-model"))
+            self.assertEqual((endpoint.spec.configuration_id, endpoint.spec.model), ("00-primary", "selected-model"))
             self.assertEqual(endpoint.spec.reasoning_effort, "none")
             self.assertEqual(endpoint.spec.api_key, "synthetic-fixture-key")
             self.assertEqual(
-                (admitted.interpreter.max_turns, endpoint.http.exchange_seconds, endpoint.http.retirement_seconds), (6, 25, 5)
+                (admitted.interpreter.timeout_seconds, endpoint.retirement_seconds), (240, 5)
             )
             self.assertEqual(
                 (endpoint.request_bytes, endpoint.response_bytes, admitted.preparation.seconds), (65536, 262144, 240)
@@ -128,12 +128,12 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertEqual((admitted.api.http.exchange_seconds, admitted.api.http.retirement_seconds), (2, 1))
             self.assertEqual((admitted.uploads.http.exchange_seconds, admitted.uploads.http.retirement_seconds), (2, 1))
             self.assertEqual((root / "source/interpreter.key").read_bytes(), key.read_bytes())
-            config = tomllib.loads((root / "source/provider.toml").read_text())
-            self.assertEqual(config["interpreter"]["endpoints"][0]["key_file"], str(root / "source/interpreter.key"))
-            self.assertNotIn("ca_file", config["interpreter"]["endpoints"][0])
+            endpoint_config = tomllib.loads((root / "source/interpreter.d/00-primary.toml").read_text())
+            self.assertEqual(endpoint_config["key_file"], str(root / "source/interpreter.key"))
+            self.assertNotIn("ca_file", endpoint_config)
             identity = json.loads((root / "source/identity.json").read_bytes())
             self.assertFalse(identity["interpretation_scripted"])
-            self.assertEqual(identity["interpreter"]["max_turns"], admitted.interpreter.max_turns)
+            self.assertEqual(identity["interpreter"]["timeout_seconds"], admitted.interpreter.timeout_seconds)
             self.assertEqual(identity["interpreter"]["endpoints"][0]["model"], "selected-model")
             self.assertNotIn("synthetic-fixture-key", json.dumps(identity))
 
@@ -153,8 +153,8 @@ class StageApiConfigTests(unittest.TestCase):
             stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
             self.assertEqual((root / "source/model-ca.pem").read_bytes(), selected_ca.read_bytes())
             self.assertEqual((selection / "ca_file.txt").read_text(), str(selected_ca) + "\n")
-            admitted = tomllib.loads((root / "source/provider.toml").read_text())
-            self.assertEqual(admitted["interpreter"]["endpoints"][0]["ca_file"], str(root / "source/model-ca.pem"))
+            admitted = tomllib.loads((root / "source/interpreter.d/00-primary.toml").read_text())
+            self.assertEqual(admitted["ca_file"], str(root / "source/model-ca.pem"))
 
     def test_preparation_budget_does_not_rewrite_selected_endpoint_deadlines(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -162,11 +162,6 @@ class StageApiConfigTests(unittest.TestCase):
             inputs, selection, fragment, key = staging_inputs(root)
             key.write_bytes(b"synthetic-fixture-key\n")
             key.chmod(0o600)
-            fragment.write_text(
-                fragment.read_text()
-                .replace("exchange_seconds = 25", "exchange_seconds = 45")
-                .replace("retirement_seconds = 5", "retirement_seconds = 45")
-            )
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
             stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
@@ -174,10 +169,10 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertEqual(admitted.preparation.seconds, 240)
             self.assertEqual(
                 (
-                    admitted.interpreter.endpoints[0].http.exchange_seconds,
-                    admitted.interpreter.endpoints[0].http.retirement_seconds,
+                    admitted.interpreter.timeout_seconds,
+                    admitted.interpreter.endpoints[0].retirement_seconds,
                 ),
-                (45, 45),
+                (240, 5),
             )
 
     def test_scripted_staging_retains_its_fixed_endpoint_and_preparation_budget(self):

@@ -11,6 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF
+from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from tests.integration.nmrnet.interpreter_ports import (
     UploadPorts,
     chat_endpoint,
@@ -94,7 +95,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             return next(replies)
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=4)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=4)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
@@ -102,7 +103,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             document = json.loads(outcome.content)
             self.assertEqual(document["interpretation"]["operations"], ["inspect_uploads", "inspect_upload", "prepare_upload"])
-            self.assertEqual(document["interpretation"]["turns_started"], 3)
+            self.assertEqual(document["interpretation"]["visits"][-1]["turns_started"], 3)
             self.assertEqual(len(peer.request_bodies), 3)
             self.assertEqual(ports.worker.events.count("execute"), 1)
             self.assertEqual([row["source"]["record_number"] for row in document["geometries"]], [2, 1])
@@ -145,7 +146,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             )
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
@@ -153,8 +154,8 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             result = json.loads((await session.execute(handle, report_condition=unexpected_condition)).content)
             self.assertEqual(result["output"], {"shift_significant_digits": 3, "verbosity": "max"})
             self.assertEqual(result["interpretation"]["operations"], ["prepare_smiles"])
-            self.assertEqual(result["interpretation"]["turns_started"], 1)
-            self.assertEqual(result["interpretation"]["corrections"], 0)
+            self.assertEqual(result["interpretation"]["visits"][-1]["turns_started"], 1)
+            self.assertEqual(result["interpretation"]["visits"][-1]["corrections"], 0)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
             self.assertEqual(len(peer.request_bodies), 1)
 
@@ -175,7 +176,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
         ):
             endpoints = (chat_endpoint(first_peer, identifier="first"), chat_endpoint(second_peer, identifier="second"))
             notices = Mock()
-            chooser = InputInterpreter(endpoints, max_turns=2, on_endpoint_failure=notices)
+            chooser = fixture_interpreter(endpoints, timeout_seconds=2, on_endpoint_failure=notices)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
@@ -183,11 +184,11 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, [])
             self.assertTrue(all(endpoint.retirement_confirmed for endpoint in endpoints))
             observation = json.loads(handle.identity.content)["interpretation"]
-            self.assertEqual([r["turns_started"] for r in observation["routes"]], [1, 1])
+            self.assertEqual([r["turns_started"] for r in [route for visit in observation["visits"] for route in visit["routes"]]], [1, 1])
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             self.assertEqual(json.loads(outcome.content)["interpretation"], observation)
             self.assertEqual(ports.worker.events, ["prepare", "execute"])
-            self.assertEqual(notices.call_args.args, (0, chooser._conversation.endpoint_failures[0][1]))
+            notices.assert_any_call(0, chooser._conversation.failures[0][1])
             await session.retire()
             notices.assert_called_once()
 
@@ -210,7 +211,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                 async def respond(_headers, raw, route=route, ports=ports):
                     request = json.loads(raw)
                     messages = request["messages"]
-                    last = messages[-1]
+                    last = messages[-2]
                     if route == "smiles":
                         return tool_reply(
                             "prepare",
@@ -245,7 +246,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
 
                 async with TlsPeer("success", response_factory=respond) as peer:
                     endpoint = chat_endpoint(peer)
-                    chooser = InputInterpreter((endpoint,), max_turns=5)
+                    chooser = fixture_interpreter((endpoint,), timeout_seconds=5)
                     owner = ports.owner(chooser.run, chooser=chooser)
                     session = ports.make_session(owner)
                     self.addAsyncCleanup(session.retire)
@@ -273,12 +274,12 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         separators=(",", ":"),
                     ).encode()
                     self.assertEqual(
-                        interpretation["tools_sha256"],
+                        interpretation["visits"][-1]["tools_sha256"],
                         hashlib.sha256(tools).hexdigest(),
                     )
-                    self.assertEqual(interpretation["turns_started"], len(requests))
+                    self.assertEqual(interpretation["visits"][-1]["turns_started"], len(requests))
                     self.assertEqual(
-                        interpretation["routes"],
+                        interpretation["visits"][-1]["routes"],
                         [
                             {
                                 "endpoint": json.loads(endpoint.identity),

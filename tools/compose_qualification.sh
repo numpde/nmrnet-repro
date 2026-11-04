@@ -391,6 +391,8 @@ compose_witness_main() {
     worker_retirement_command start "$scratch/peer" "${engine[@]}" start "$peer_id" || return $?
     compose_witness_wait "$peer_data/ready.json" 15 || return $?
     cp -- "$peer_data/provider.toml" "$peer_data/deployment.toml" "$public/" || return $?
+    mkdir -m 700 -- "$public/interpreter.d" || return $?
+    cp -- "$peer_data/interpreter.d/"*.toml "$public/interpreter.d/" || return $?
     for input in api.toml signing.private.json api-ca.pem interpreter.key model-ca.pem store-ca.pem; do
         cp -- "$peer_data/configuration/$input" "$private/$input" || return $?
         chmod 600 -- "$private/$input" || return $?

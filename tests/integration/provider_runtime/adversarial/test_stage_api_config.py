@@ -28,7 +28,7 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "changed after"):
                 stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
             fragment.write_text(original + '\n[[interpreter.endpoints]]\nkey_file = "/ungranted/key"\n')
-            with self.assertRaisesRegex(ValueError, "exactly one endpoint"):
+            with self.assertRaisesRegex(ValueError, "one flat endpoint"):
                 interpreter_fragment(fragment)
 
     def test_selected_key_still_requires_the_existing_private_descriptor_admission(self):

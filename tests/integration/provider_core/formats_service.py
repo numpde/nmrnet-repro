@@ -110,19 +110,19 @@ class FormatFixture:
         self.model_calls += 1
         messages = json.loads(raw)["messages"]
         self.assertEqual(messages[1]["content"], self.instructions.decode())
-        if messages[-1]["role"] != "tool":
+        if messages[-2]["role"] != "tool":
             return tool_reply(f"inspect_uploads-{self.model_calls}", "inspect_uploads", {})
         response = json.loads(tool_reply(f"prepare_upload-{self.model_calls}", "prepare_upload", {"upload_ref": UPLOAD_REF}))
         function = response["choices"][0]["message"]["tool_calls"][0]["function"]
         options = dict(self.reader_options)
         if self.expected_preparation_calls == 2:
             messages = json.loads(raw)["messages"]
-            feedback = json.loads(messages[-1]["content"])
-            if "rejected" in feedback:
+            feedback = messages[-2]["content"]
+            if not feedback.startswith("{"):
                 self.assertEqual(len(self.source_clients), 1)
                 self.assertTrue(self.source_clients[0][1].confirmed)
                 self.assertEqual((self.worker.preparations, self.worker.executions), (0, 0))
-                self.assertIn("record 4" if self.format_case == "sdf-correction" else "alternate", feedback["rejected"].lower())
+                self.assertIn("record 4" if self.format_case == "sdf-correction" else "alternate", feedback.lower())
             elif self.format_case == "sdf-correction":
                 options["selection"] = "all"
             else:

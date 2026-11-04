@@ -24,15 +24,14 @@ from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.api_config import (
     ApiConfigurationRejected, ApiPublicationMaterial, ApiSettings, HttpsSettings,
-    api_settings_with_material, https_settings,
+    api_settings_with_material, https_settings, https_trust,
 )
 from provider_core.attempt_record import RecoveryScope
 from provider_core.ownership import LiveAttemptLimits
 from provider_core.delivery_client import DeliveryEndpoint
 from provider_core.delivery_worker import require_delivery_retry_settings
-from provider_core.transport import _positive_seconds
+from provider_core.transport import _positive_seconds, require_unix_socket_path
 from provider_core.chat import ChatEndpointSpec, require_chat_limits
-from provider_core.conversation import require_turn_limit
 from provider_core.execution import require_execution_settings, require_observation_gap
 from provider_core.startup_file import StartupFileRejected, read_startup_file as core_read_startup_file
 from provider_core.uploads import UploadLimits, require_store_origin
@@ -59,18 +58,23 @@ class ConfigurationRejected(ValueError):
 @dataclass(frozen=True, slots=True, repr=False)
 class InterpreterEndpointSettings:
     spec: ChatEndpointSpec
-    http: HttpsSettings
+    trust: object
     request_bytes: int
     response_bytes: int
+    retirement_seconds: float
+    proxy_socket: str | None = None
 
     def __post_init__(self):
         require_chat_limits(request_bytes=self.request_bytes, response_bytes=self.response_bytes)
+        _positive_seconds(self.retirement_seconds)
+        if self.proxy_socket is not None:
+            require_unix_socket_path(self.proxy_socket)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
 class InterpreterSettings:
     endpoints: tuple[InterpreterEndpointSettings, ...]
-    max_turns: int
+    timeout_seconds: float
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -155,6 +159,7 @@ def load_provider_config(path):
 def _read_provider_config(path, read_file, *, read_api_file):
     """Use the same admission path for runtime and exact-byte offline capture."""
     raw, document = _configuration_document(path, read_file)
+    digest = hashlib.sha256(raw)
     # Only known owner messages may cross this disclosure boundary. Raw TOML,
     # filesystem and SSL errors remain private causes instead of public text.
     try:
@@ -162,14 +167,14 @@ def _read_provider_config(path, read_file, *, read_api_file):
         return ProviderConfig(
             api,
             publication,
-            _interpreter(document["interpreter"], read_file),
+            _interpreter(document["interpreter"], Path(path).parent / "interpreter.d", read_file, digest),
             _uploads(document["uploads"], read_file),
             _preparation(document["preparation"]),
             _lifecycle(document["lifecycle"], api.identity.origin, provider_ref),
             _delivery(document["delivery"], api.identity.origin, provider_ref),
             _service(document["service"]),
             document["scientific_retry"]["max_retries"],
-            hashlib.sha256(raw).hexdigest(),
+            digest.hexdigest(),
         )
     except ConfigurationRejected:
         raise
@@ -189,8 +194,8 @@ def _configuration_document(path, read_file):
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
     _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service", "scientific_retry"}, "configuration")
-    if document["schema_id"] != "nmrnet.provider.runtime_config.v3":
-        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v3.")
+    if document["schema_id"] != "nmrnet.provider.runtime_config.v4":
+        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v4.")
     retry = document["scientific_retry"]
     _fields(retry, {"max_retries"}, "scientific_retry")
     if type(retry["max_retries"]) is not int or retry["max_retries"] not in (0, 1):
@@ -242,16 +247,38 @@ def _api(table, read_file):
         raise ConfigurationRejected(str(failure), cause=failure.cause) from None
 
 
-def _interpreter(table, read_file):
-    _fields(table, {"max_turns", "endpoints"}, "interpreter")
-    require_turn_limit(table["max_turns"])
-    endpoints = table["endpoints"]
-    if type(endpoints) is not list or not endpoints:
-        raise ConfigurationRejected("interpreter requires a nonempty ordered endpoints array.")
-    admitted = tuple(_endpoint(endpoint, read_file) for endpoint in endpoints)
-    if len({endpoint.spec.configuration_id for endpoint in admitted}) != len(admitted):
-        raise ConfigurationRejected("interpreter endpoint configuration IDs must be distinct.")
-    return InterpreterSettings(admitted, table["max_turns"])
+def _interpreter(table, directory, read_file, digest):
+    _fields(table, {"timeout_seconds"}, "interpreter")
+    _positive_seconds(table["timeout_seconds"])
+    try:
+        paths = sorted(path for path in directory.glob("*.toml") if not path.name.startswith("."))
+    except OSError as cause:
+        raise ConfigurationRejected("cannot enumerate interpreter endpoint files.", cause=cause) from None
+    if not paths:
+        raise ConfigurationRejected("interpreter requires at least one endpoint file.")
+    endpoints = []
+    total_bytes = 0
+    for path in paths:
+        if path.is_symlink():
+            raise ConfigurationRejected("interpreter endpoint files must not be symlinks.")
+        raw = read_file(path, maximum_bytes=65536, label="interpreter endpoint")
+        name = path.name.encode("utf-8")
+        digest.update(len(name).to_bytes(4, "big"))
+        digest.update(name)
+        digest.update(len(raw).to_bytes(8, "big"))
+        digest.update(raw)
+        total_bytes += len(raw)
+        if total_bytes > 65536:
+            raise ConfigurationRejected("interpreter endpoint files exceed the total startup limit.")
+        try:
+            document = tomllib.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeError) as cause:
+            raise ConfigurationRejected("interpreter endpoint requires UTF-8 TOML.", cause=cause) from None
+        _fields(document, {"url", "model", "key_file"}, "interpreter endpoint", {"ca_file", "reasoning_effort"})
+        endpoint = {**document, "configuration_id": path.stem, "request_bytes": 65536,
+                    "response_bytes": 262144, "retirement_seconds": 5}
+        endpoints.append(_endpoint(endpoint, read_file))
+    return InterpreterSettings(tuple(endpoints), table["timeout_seconds"])
 
 
 def _endpoint(table, read_file):
@@ -264,7 +291,6 @@ def _endpoint(table, read_file):
             "key_file",
             "request_bytes",
             "response_bytes",
-            "exchange_seconds",
             "retirement_seconds",
         },
         "interpreter endpoint",
@@ -286,9 +312,15 @@ def _endpoint(table, read_file):
         api_key=key,
         reasoning_effort=table.get("reasoning_effort"),
     )
-    return InterpreterEndpointSettings(
-        spec, _https(table, "interpreter", read_file), table["request_bytes"], table["response_bytes"]
-    )
+    raw_ca = read_file(table["ca_file"], maximum_bytes=1048576, label="interpreter CA") if "ca_file" in table else None
+    if raw_ca is not None and type(raw_ca) is not bytes:
+        raise ConfigurationRejected("interpreter CA reader must return bytes.")
+    try:
+        trust = https_trust(raw_ca, label="interpreter")
+    except ApiConfigurationRejected as failure:
+        raise ConfigurationRejected(str(failure), cause=failure.cause) from None
+    return InterpreterEndpointSettings(spec, trust, table["request_bytes"], table["response_bytes"],
+                                       table["retirement_seconds"])
 
 
 def _uploads(table, read_file):

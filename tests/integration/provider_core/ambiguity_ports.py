@@ -1,6 +1,7 @@
 """Scripted model decisions for offline probe mechanics, never semantic evidence."""
 
 import json
+import hashlib
 from types import SimpleNamespace
 
 from stage_api_config import inspect_interpreter
@@ -13,24 +14,15 @@ def settings(root, *, exchange_seconds=45, retirement_seconds=45):
     key = root / "model.key"
     key.write_bytes(b"PRIVATE_PROBE_KEY\n")
     key.chmod(0o600)
-    table = {
-        "max_turns": 6,
-        "endpoints": [
-            {
-                "configuration_id": "authored",
-                "url": "https://model.example/chat",
-                "model": "authored-model",
-                "key_file": str(key),
-                "request_bytes": 65536,
-                "response_bytes": 262144,
-                "exchange_seconds": exchange_seconds,
-                "retirement_seconds": retirement_seconds,
-            }
-        ],
-    }
+    endpoint_directory = root / "interpreter.d"
+    endpoint_directory.mkdir(mode=0o700, exist_ok=True)
+    endpoint_path = endpoint_directory / "authored.toml"
+    endpoint_path.write_text('url = "https://model.example/chat"\nmodel = "authored-model"\n'
+                             + f'key_file = {json.dumps(str(key))}\n')
+    endpoint_path.chmod(0o600)
     from nmrnet_provider.config import read_startup_file  # noqa: PLC0415 -- This fixture uses the real key admission.
 
-    return _interpreter(table, read_startup_file)
+    return _interpreter({"timeout_seconds": exchange_seconds}, endpoint_directory, read_startup_file, hashlib.sha256())
 
 
 def scripted_carrier(case, *, issue=None, prepare=False, prepare_name="prepare_smiles", prepare_arguments=None, operational=None):
@@ -46,7 +38,7 @@ def scripted_carrier(case, *, issue=None, prepare=False, prepare_name="prepare_s
     replies.append(
         call(
             "report",
-            "report_input_problem",
+            "report_interpretation_problem",
             {"issue": issue, "message": "Useful private explanation. Bearer DISTINCT_REPORT_CANARY"},
         )
     )
@@ -83,10 +75,8 @@ def selected_files(root):
     fragment, key, selection = root / "interpreter.toml", root / "granted.key", root / "selection"
     selection.mkdir(mode=0o700)
     fragment.write_text(
-        "[interpreter]\nmax_turns = 6\n[[interpreter.endpoints]]\n"
-        'configuration_id = "authored"\nurl = "https://model.example/chat"\nmodel = "authored-model"\n'
+        'url = "https://model.example/chat"\nmodel = "authored-model"\n'
         f"key_file = {json.dumps(str(root / 'unmounted/model.key'))}\n"
-        "request_bytes = 65536\nresponse_bytes = 262144\nexchange_seconds = 45\nretirement_seconds = 45\n"
     )
     fragment.chmod(0o600)
     key.write_bytes(b"PRIVATE_PROBE_KEY\n")

@@ -93,6 +93,7 @@ class ProcessPeers:
             maximum_live_attempts=2,
             **model_options,
         )
+        self.files.write(self.files.raw.replace(b"timeout_seconds = 6", b"timeout_seconds = 2"))
         self.config = load_provider_config(self.files.path)
         port = urlsplit(self.peer.origin).port
         authorities = [f"127.0.0.1:{port}"]

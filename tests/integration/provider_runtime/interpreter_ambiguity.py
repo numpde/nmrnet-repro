@@ -23,7 +23,7 @@ from pathlib import Path
 import tomllib
 from stage_api_config import interpreter_fragment
 
-from nmrnet_provider.config import ConfigurationRejected, _interpreter, read_startup_file
+from nmrnet_provider.config import ConfigurationRejected, InterpreterSettings, _endpoint, read_startup_file
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.interpreter import InputInterpreter, ModelReportedInputProblem
 from nmrnet_provider.process import _diagnostics_directory, _failure_report, _publish
@@ -31,6 +31,8 @@ from nmrnet_provider.process_reports import failure_evidence
 from provider_core.diagnostics import operator_redactor
 from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
+from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
+from provider_core.transport import HttpTransport
 from provider_core.job_input import INPUT_SCHEMA, FeedInputFacts, VerifiedJobInput
 from provider_core.upload_response import UploadMember, UploadSet
 from provider_core.uploads import UploadInputRejected
@@ -57,8 +59,7 @@ def batch_budget(settings, *, probe="ambiguity"):
         seconds = math.ceil(
             _CASE_COUNTS[probe]
             * (
-                settings.max_turns * (endpoint.http.exchange_seconds + endpoint.http.retirement_seconds)
-                + endpoint.http.retirement_seconds
+                settings.timeout_seconds + endpoint.retirement_seconds
             )
             + 60
         )
@@ -98,7 +99,9 @@ def admit_selection(fragment, *, selection, key_file, ca_file=None, probe="ambig
         return read_startup_file(grants[str(path)], **limits)
 
     try:
-        settings = _interpreter(table, read_grant)
+        endpoint = _endpoint({**table, "configuration_id": "selected", "request_bytes": 65536,
+                              "response_bytes": 262144, "retirement_seconds": 5}, read_grant)
+        settings = InterpreterSettings((endpoint,), 240)
     except ConfigurationRejected:
         raise
     except OverflowError as cause:
@@ -115,16 +118,15 @@ def admit_selection(fragment, *, selection, key_file, ca_file=None, probe="ambig
         "endpoint": json.loads(
             ChatEndpoint(
                 endpoint.spec,
-                transport=endpoint.http.new_transport(),
+                transport=None,
                 request_bytes=endpoint.request_bytes,
                 response_bytes=endpoint.response_bytes,
             ).identity
         ),
-        "max_turns": settings.max_turns,
+        "timeout_seconds": settings.timeout_seconds,
         "request_bytes": endpoint.request_bytes,
         "response_bytes": endpoint.response_bytes,
-        "exchange_seconds": endpoint.http.exchange_seconds,
-        "retirement_seconds": endpoint.http.retirement_seconds,
+        "retirement_seconds": endpoint.retirement_seconds,
         "probe": probe,
         "case_count": _CASE_COUNTS[probe],
         **batch_budget(settings, probe=probe),
@@ -309,12 +311,14 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
         endpoint = settings.endpoints[0]
         carrier = ChatEndpoint(
             endpoint.spec,
-            transport=endpoint.http.new_transport(),
+            transport=HttpTransport(trust=endpoint.trust, proxy_socket=endpoint.proxy_socket,
+                                    exchange_seconds=settings.timeout_seconds, retirement_seconds=endpoint.retirement_seconds),
             request_bytes=endpoint.request_bytes,
             response_bytes=endpoint.response_bytes,
         )
         interpreter = InputInterpreter if probe == "formats" else _ProblemOnlyInterpreter
-        chooser = interpreter((carrier,), max_turns=settings.max_turns)
+        chooser = interpreter((lambda **_kwargs: carrier,), timeout_seconds=settings.timeout_seconds,
+                              context_bytes=60000, secrets=secrets)
         observed = {
             "case_id": case["id"],
             "configuration_sha256": configuration_sha256,
@@ -340,6 +344,22 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
         except _FormatChoiceRejected as cause:
             observed["choice_refusal"] = str(cause)
             failures.append(("model argument choice", cause))
+        except InterpretationFailed as exhausted:
+            reports = [cause.__cause__ for _, cause in exhausted.failures
+                       if isinstance(cause, ModelReportedInterpretationProblem)
+                       and isinstance(cause.__cause__, ModelReportedInputProblem)]
+            if not reports:
+                failures.append(("input interpretation", exhausted))
+                reports = []
+            report = reports[-1] if reports else None
+            if report is not None:
+                observed.update(issue=report.issue, guidance=str(report), explanation=report.explanation,
+                                interpretation={"outcome": "model_reported_input_problem",
+                                                "corrections": len(exhausted.correction_failures)})
+                if probe == "formats" or report.issue != case["expected_issue"]:
+                    failures.append(("model decision", RuntimeError("The model reported a different category from the authored case.")))
+                if exhausted.correction_failures:
+                    failures.append(("model decision", RuntimeError("A corrected conversation does not qualify an uncoached ambiguity decision.")))
         except ModelReportedInputProblem as report:
             observed.update(
                 issue=report.issue,
@@ -472,7 +492,7 @@ def main():
         if earlier != profile:
             raise ConfigurationRejected("the admitted interpreter batch profile changed before execution.")
         endpoint = settings.endpoints[0]
-        settings = replace(settings, endpoints=(replace(endpoint, http=replace(endpoint.http, proxy_socket=args.proxy_socket)),))
+        settings = replace(settings, endpoints=(replace(endpoint, proxy_socket=args.proxy_socket),))
 
         async def run():
             async with asyncio.timeout(profile["process_seconds"]):

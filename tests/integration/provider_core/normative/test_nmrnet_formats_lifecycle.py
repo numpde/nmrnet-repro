@@ -20,7 +20,7 @@ from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.config import load_provider_config
-from nmrnet_provider.interpreter import InputInterpreter
+from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from nmrnet_provider.pdb import prepare_pdb
 from nmrnet_provider.process_reports import failure_evidence
 from provider_core.job_input import verify_job_input
@@ -82,7 +82,7 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
             return body
 
         async with TlsPeer("success", response_factory=reply) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=6)
+            chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=6)
             owner = ports.owner(chooser.run, chooser=chooser)
             try:
                 prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)

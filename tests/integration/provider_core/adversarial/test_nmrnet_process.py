@@ -42,7 +42,6 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         '"reason": "exchange_failed"',
                         '"status": 200',
                         "request:interrupted-model",
-                        "aggregate deadline expired",
                     ):
                         self.assertIn(fact, rendered)
                     self.assertNotIn("PRIVATE", rendered)

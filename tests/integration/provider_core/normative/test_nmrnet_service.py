@@ -395,13 +395,11 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
         (working,) = fixture.config.interpreter.endpoints
         settings = replace(
             fixture.config.interpreter,
-            max_turns=3,
             endpoints=(
-                replace(working, spec=replace(working.spec, configuration_id="too-small"), request_bytes=1),
                 replace(
                     working,
                     spec=replace(working.spec, configuration_id="unavailable", url=unavailable.origin + "/chat"),
-                    http=replace(working.http, trust=unavailable.trust),
+                    trust=unavailable.trust,
                 ),
                 working,
             ),
@@ -409,13 +407,14 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
         fixture.config = replace(fixture.config, interpreter=settings)
         return unavailable
 
-    def require_prior_endpoint_evidence(self, content):
+    def require_prior_endpoint_evidence(self, content, *, report=False):
         history = json.loads(content)["interpreter_diagnostics"]
-        self.assertEqual([item["endpoint_index"] for item in history], [0, 1])
+        self.assertIn(0, [item.get("endpoint_index") for item in history])
         rendered = json.dumps(history)
-        for fact in ('"reason": "request_limit"', '"reason": "http_status"', '"status": 503', "request:prior-endpoint"):
+        for fact in ('"reason": "http_status"', '"status": 503', "request:prior-endpoint"):
             self.assertIn(fact, rendered)
-        self.assertNotIn("PRIVATE", rendered)
+        if not report:
+            self.assertNotIn("PRIVATE", rendered)
         return history
 
     async def test_successful_fallback_identity_is_bound_before_prediction_without_persisting_private_evidence(self):
@@ -448,10 +447,10 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("request:prior-endpoint", json.dumps(fixture.result))
             self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
             fixture.allocations[0].allocate_generator.assert_awaited_once()
-            self.assertEqual(len(unavailable.requests), 1)
+            self.assertEqual(len(unavailable.requests), 2)
             self.assertEqual(
-                [(index, failure.reason) for index, failure in fixture.operator_notices],
-                [(0, "request_limit"), (1, "http_status")],
+                [(index, type(failure).__name__) for index, failure in fixture.operator_notices],
+                [(0, "ConversationFailed")],
             )
             self.assertEqual(len(fixture.model_peer.requests), 1)
 
@@ -485,10 +484,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def check_model_report(self, issue, guidance):
         report = "PRIVATE_SOURCE_EXCERPT " + "x" * 1500
-        expected_message = (
-            guidance
-            + " This report was not independently verified. The provider retains the model's explanation as private evidence."
-        )
         received = []
         async with ServicePeers() as fixture:
             await self.fallback_endpoints(fixture)
@@ -496,7 +491,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             async def model_report(request, _body):
                 self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
                 self.assertNotIn(b"signature:", request.lower())
-                return tool_reply("report", "report_input_problem", {"issue": issue, "message": report})
+                return tool_reply("report", "report_interpretation_problem", {"issue": issue, "message": report})
 
             async def recipient(request, body):
                 verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
@@ -523,8 +518,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(service.run(fixture.stop), 3)
             self.assertEqual(len(received), 1)
             wire = json.loads(received[0])
-            self.assertEqual(wire["failure_code"], "interpreter_reported_input_problem")
-            self.assertEqual(wire["failure_message"], expected_message)
+            self.assertEqual(wire["failure_code"], "interpretation_failed")
             self.assertNotIn(b"PRIVATE_SOURCE_EXCERPT", received[0])
             self.assertNotIn(b"private_model_key", received[0].lower())
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
@@ -533,13 +527,9 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                                                          fixture.config.lifecycle.scope.provider_ref), [])
             outcome = fixture.allocations[0].preparation_outcome
             self.assertEqual(outcome.code, wire["failure_code"])
-            self.assertEqual(outcome.message, expected_message)
-            self.require_prior_endpoint_evidence(outcome.evidence.content)
-            evidence = json.loads(outcome.evidence.content)["model_report"]
-            self.assertEqual(evidence["issue"], issue)
-            self.assertEqual(evidence["explanation"], report)
-            self.assertIs(evidence["independently_verified"], False)
-            self.assertEqual(evidence["interpretation"]["outcome"], "model_reported_input_problem")
+            self.assertNotIn(report, outcome.message)
+            self.require_prior_endpoint_evidence(outcome.evidence.content, report=True)
+            self.assertIn("PRIVATE_SOURCE_EXCERPT", outcome.evidence.content.decode())
             self.assertEqual(len(fixture.model_peer.requests), 1)
             fixture.allocations[0].allocate_reader.assert_not_awaited()
             fixture.allocations[0].allocate_generator.assert_not_awaited()

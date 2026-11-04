@@ -18,8 +18,8 @@ class DeploymentRefusalTests(unittest.TestCase):
                 if failure == "permissions":
                     files.key.chmod(0o644)
                 elif failure == "escape":
-                    definition = arguments["definition"]
-                    definition.write_bytes(definition.read_bytes().replace(b"/srv/nmrnet/input/interpreter.key", b"/srv/nmrnet/input/../outside.key"))
+                    endpoint = arguments["definition"].parent / "interpreter.d/00-primary.toml"
+                    endpoint.write_bytes(endpoint.read_bytes().replace(b"/srv/nmrnet/input/interpreter.key", b"/srv/nmrnet/input/../outside.key"))
                 elif failure == "missing":
                     files.key.unlink()
                 else:

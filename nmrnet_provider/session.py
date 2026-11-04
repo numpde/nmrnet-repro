@@ -21,7 +21,7 @@ from enum import Enum, auto
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
-from nmrnet_provider.interpreter import ModelReportedInputProblem
+from nmrnet_provider.interpreter import InspectionUnavailable, ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
@@ -30,6 +30,7 @@ from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFa
 from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
+from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected
 from provider_core.task_boundary import contain_task_exit
 
 
@@ -249,6 +250,9 @@ class NMRNetSession:
             ConformerShortfall,
             ConformerOutputLimit,
             ModelReportedInputProblem,
+            InterpretationFailed,
+            InterpretationInputRejected,
+            InspectionUnavailable,
             InputWorkerCallLimit,
             InputSelectionTimeLimit,
         ) as cause:
@@ -303,6 +307,12 @@ class NMRNetSession:
             elif type(cause) is InputSelectionTimeLimit:
                 code = "input_selection_time_limit"
                 document[code] = {"seconds": cause.seconds}
+            elif type(cause) is InterpretationFailed:
+                code = "interpretation_failed"
+            elif type(cause) is InterpretationInputRejected:
+                code = "interpretation_input_rejected"
+            elif type(cause) is InspectionUnavailable:
+                code = "interpretation_failed"
             elif isinstance(cause, ModelReportedInputProblem):
                 code = "interpreter_reported_input_problem"
                 document["model_report"] = {

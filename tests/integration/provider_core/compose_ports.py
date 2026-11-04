@@ -56,7 +56,11 @@ def deployment_inputs(root):
     (files.root / "api.toml").write_text(tomli_w.dumps(api))
     (files.root / "api.toml").chmod(0o600)
     document["lifecycle"]["lifetime_root"] = "/srv/nmrnet/attempts"
-    document["interpreter"]["endpoints"][0]["key_file"] = "/srv/nmrnet/input/interpreter.key"
+    endpoint_directory = definition.parent / "interpreter.d"
+    endpoint_directory.mkdir(mode=0o700)
+    endpoint = tomllib.loads(files.endpoint.read_text())
+    endpoint["key_file"] = "/srv/nmrnet/input/interpreter.key"
+    (endpoint_directory / "00-primary.toml").write_text(tomli_w.dumps(endpoint))
     definition.write_text(tomli_w.dumps(document))
     settings = root / "config/deployments/web/deployment.toml"
     settings.parent.mkdir(parents=True, mode=0o700)

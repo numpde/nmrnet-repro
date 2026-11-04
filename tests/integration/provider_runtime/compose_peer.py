@@ -227,7 +227,7 @@ async def serve(root, seconds, case, delivery_project):
             raise AssertionError("The connected witness must not repeat successful interpretation")
         if not direct_case:
             require_model_credentials(request)
-            if json.loads(body)["messages"][-1]["role"] != "tool":
+            if json.loads(body)["messages"][-2]["role"] != "tool":
                 return tool_reply("inspect", "inspect_uploads", {})
             return tool_reply("prepare", "prepare_upload", {
                 "upload_ref": UPLOAD_REF, "source_format": "xyz", "source_unit": "angstrom",
@@ -350,6 +350,11 @@ async def serve(root, seconds, case, delivery_project):
             root, runtime, api=actual_api, api_route=route,
             routes={"interpreter": route, "store": route}, project=delivery_project, gid=os.getegid(),
             maximum_startup_bytes=4194304, resolvers=[], shared_fixture=True,
+        )
+        endpoint_directory = root / "interpreter.d"
+        endpoint_directory.mkdir(mode=0o700)
+        (endpoint_directory / "00-primary.toml").write_text(
+            files.endpoint.read_text().replace(str(source), "/srv/nmrnet/input")
         )
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin,
                                "provider_ref": actual_api["provider_ref"]})

@@ -78,14 +78,13 @@ def scientific_documents():
         output={"shift_significant_digits": 17, "verbosity": "max"},
     )
     actual["interpretation"] = {
-        "schema_id": "nmrnet.input_interpretation.v1",
+        "schema_id": "nmrnet.input_interpretation.v2",
         "outcome": "selected",
         "operations": ["prepare_pasted"],
-        "turns_started": 1,
-        "corrections": 0,
-        "routes": [{"endpoint": dict(interpreter), "turns_started": 1}],
+        "visits": [{"turns_started": 1, "corrections": 0,
+                    "routes": [{"endpoint": dict(interpreter), "turns_started": 1}]}],
     }
-    return actual, retained, receipt, metadata, {"endpoints": [interpreter], "max_turns": 6}, source_text
+    return actual, retained, receipt, metadata, {"endpoints": [interpreter], "timeout_seconds": 6}, source_text
 
 
 def generated_documents():
