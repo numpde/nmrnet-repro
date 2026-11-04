@@ -647,7 +647,9 @@ class InputPreparation:
         await self._retire_worker()
         if worker_task is not None and self._allocation_failure_task is not worker_task:
             self._record_allocation_failure(worker_task)
-        worker_failure = self.allocation_failure if worker_task is not None else None
+        worker_failure = None
+        if worker_task is not None:
+            worker_failure = self.allocation_failure
         if isinstance(worker_failure, NativeWorkerExited):
             raise worker_failure
         if isinstance(worker_failure, asyncio.CancelledError) and worker_failure.__cause__ is None:
@@ -659,7 +661,9 @@ class InputPreparation:
         failure = self.source_failure
         if isinstance(failure, asyncio.CancelledError) and failure.__cause__ is None:
             failure = None
-        upload_failure = self._uploads.last_failure if self._source_started_task is source_task else None
+        upload_failure = None
+        if self._source_started_task is source_task:
+            upload_failure = self._uploads.last_failure
         failures = []
         for item in (worker_failure, failure, upload_failure):
             if item is not None and all(item is not prior for prior in failures):

@@ -312,7 +312,9 @@ def _endpoint(table, read_file):
         api_key=key,
         reasoning_effort=table.get("reasoning_effort"),
     )
-    raw_ca = read_file(table["ca_file"], maximum_bytes=1048576, label="interpreter CA") if "ca_file" in table else None
+    raw_ca = None
+    if "ca_file" in table:
+        raw_ca = read_file(table["ca_file"], maximum_bytes=1048576, label="interpreter CA")
     if raw_ca is not None and type(raw_ca) is not bytes:
         raise ConfigurationRejected("interpreter CA reader must return bytes.")
     try:

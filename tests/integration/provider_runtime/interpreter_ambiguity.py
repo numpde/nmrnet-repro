@@ -317,7 +317,7 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
             response_bytes=endpoint.response_bytes,
         )
         interpreter = InputInterpreter if probe == "formats" else _ProblemOnlyInterpreter
-        chooser = interpreter((lambda **_kwargs: carrier,), timeout_seconds=settings.timeout_seconds,
+        chooser = interpreter((lambda *, exchange_seconds, connect_seconds, carrier=carrier: carrier,), timeout_seconds=settings.timeout_seconds,
                               context_bytes=60000, secrets=secrets)
         observed = {
             "case_id": case["id"],

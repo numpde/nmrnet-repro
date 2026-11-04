@@ -615,7 +615,7 @@ def require_selected_interpretation(observation, interpreter, operation):
                 and type(visit["corrections"]) is int and 0 <= visit["corrections"] <= 3
                 for visit in visits)
         and all(all(route["endpoint"] == endpoint for route in visit["routes"])
-                for visit, endpoint in zip(visits, interpreter["endpoints"]))
+                for visit, endpoint in zip(visits, interpreter["endpoints"], strict=False))
         and operations and operations[-1] == operation,
         "Selected interpretation differs from the admitted endpoints, turn budget or successful input operation",
     )
