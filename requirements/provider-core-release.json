@@ -8,6 +8,11 @@
       "sha256": "7b5133133e741c8a916b04c13c35c31943c179225c4b123439bc0ca677a673d1",
       "size": 73
     },
+    "acquisition_tool/dns.py": {
+      "mode": 420,
+      "sha256": "6a34ecdce3d5e06bba87ed1e38fd751a75ef7c04c6cc7a7eaa65b2a25bc0dfe2",
+      "size": 3485
+    },
     "acquisition_tool/identity.py": {
       "mode": 420,
       "sha256": "c982ba74531125b95d93b6c0d9d87526d866cc197eb41bffb653ff578d8e3b7b",
@@ -15,8 +20,8 @@
     },
     "acquisition_tool/owner.sh": {
       "mode": 420,
-      "sha256": "9f0a5240b6df854fa5e4e565a0bc94fcc89d9ccf61a187665c36587943fa56a7",
-      "size": 23348
+      "sha256": "73b38ef3273ddf2ecfb5dcb430bc1b981e98284c8a3d684a448fa94fb92faee2",
+      "size": 23489
     },
     "acquisition_tool/proxy.py": {
       "mode": 420,
@@ -130,8 +135,8 @@
     },
     "provider_core/bound_http_proxy.py": {
       "mode": 420,
-      "sha256": "a96e2e8f7e0322f6f13fc7d092f97c6e93dbd4b093615e00dcf05502fad99b5e",
-      "size": 34055
+      "sha256": "8a59a93c0e9591f506d68b4498282f5bf8ecf0b74a04d7c2d7f8b94f90928bbf",
+      "size": 34787
     },
     "provider_core/container_guard.py": {
       "mode": 420,
@@ -175,12 +180,12 @@
     }
   },
   "files": {
-    "acquisition-owner-0.6.4.tar.gz": "b3bab12dd27e50664a0110e10946239800b9b5f6a5726f198f982175edc2de17",
-    "provider_core-0.6.4-install.lock": "94523beefb592a5af6569b67414b78510a79f48478ab01b31cc4fd9bbb000a8a",
-    "provider_core-0.6.4-native-install.lock": "f9d9c7df240a064f4ee0ff4984ee1d31031cdc733adc011fdbb1c6cbb3f6ca78",
-    "provider_core-0.6.4-py3-none-any.whl": "3d222c4f1dfff184d7c7c7b5906cda3565b6cbed3d42e5dd9775bf314cafa028",
-    "provider_core-0.6.4.tar.gz": "cc299ea8ad67cbec3457bf943c93bf2b2fcf11f49f75fd9f80189591400891ca",
-    "wheelhouse-tool-0.6.4.pyz": "9d8cd59c0aeffd61ce462fa81f2951a24fb8a8749a1332d5f87842b4c095d656"
+    "acquisition-owner-0.6.5.tar.gz": "c713d007d0874141cc62d22b14a489e71b596c4645d3d55cb4387789c8723151",
+    "provider_core-0.6.5-install.lock": "4dd7a289aa674ba6b00ff8dbadfe8a9d73b06fb11ccbad7ff8ae38e716beb535",
+    "provider_core-0.6.5-native-install.lock": "0d392bd1d942bb0cd1716e42f20ef678f39bf24f929624ce22b8c5d70015d87d",
+    "provider_core-0.6.5-py3-none-any.whl": "a1a215d01f9021c7e0587d29b3f9c939a00328980fd8639ec08ff2a79d806709",
+    "provider_core-0.6.5.tar.gz": "6fbee1a7b1876a2649d1277722c29d95e6851ca093ddc35b2daf4b43a3f1c879",
+    "wheelhouse-tool-0.6.5.pyz": "9d8cd59c0aeffd61ce462fa81f2951a24fb8a8749a1332d5f87842b4c095d656"
   },
   "source_files": {
     "MANIFEST.in": {
@@ -195,7 +200,7 @@
     },
     "pyproject.toml": {
       "mode": 420,
-      "sha256": "f64d6d4763be0652fdab81646af43eaf7635313b076e54d788a7027ab3382564",
+      "sha256": "d6ce9a23615204a08134f15744ad12e36a7473e21d71a3bcbe90d8e0fe673d20",
       "size": 588
     },
     "src/provider_core/__init__.py": {
@@ -245,8 +250,8 @@
     },
     "src/provider_core/bound_http_proxy.py": {
       "mode": 420,
-      "sha256": "a96e2e8f7e0322f6f13fc7d092f97c6e93dbd4b093615e00dcf05502fad99b5e",
-      "size": 34055
+      "sha256": "8a59a93c0e9591f506d68b4498282f5bf8ecf0b74a04d7c2d7f8b94f90928bbf",
+      "size": 34787
     },
     "src/provider_core/chat.py": {
       "mode": 420,
@@ -1485,8 +1490,8 @@
     },
     "tests/unit/normative/test_bound_http_proxy.py": {
       "mode": 420,
-      "sha256": "620a7bee1769626ee8d6adef5f6eefbe193983384e175f73b62f00495bbe4b69",
-      "size": 21034
+      "sha256": "d3278572886b4bbba4f2cc7018a8cdaa248d15539d305e7a41d4cd93e80219cd",
+      "size": 22471
     },
     "tests/unit/normative/test_bound_http_proxy_unix.py": {
       "mode": 420,
@@ -1760,8 +1765,8 @@
     },
     "tests/unit/normative/test_upload_recovery.py": {
       "mode": 420,
-      "sha256": "75b25b3b0b0c33067649128e40175ba80761d252f32520afb4e57fad54b134cb",
-      "size": 24207
+      "sha256": "abb8c795e18c2a1200efe471adbf19193f87739a78b0ade23f0a6be831a2d0ec",
+      "size": 24277
     },
     "tests/unit/normative/test_upload_recovery_cleanup.py": {
       "mode": 420,
@@ -1799,7 +1804,7 @@
       "size": 5770
     }
   },
-  "source_revision": "8218335354fccb42ab3e5069c765fd2fb9c3d9eb",
+  "source_revision": "ce06831aedc6bbe9607ff7b97bbe56decb636854",
   "tool_source_files": {
     "__init__.py": {
       "mode": 420,

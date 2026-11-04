@@ -1,6 +1,6 @@
 Shared wheelhouse follow-ups
 
-Image builds and acquisition pin wheelhouse-tool 0.5.14. Image input labels
+Image builds and acquisition pin wheelhouse-tool 0.6.5. Image input labels
 remain tied to the bytes actually admitted at build time.
 When a cold wheel selection fails, the conflict check hashes compatible cached
 candidates again, including during the exclusive peer-winner recheck. Large
