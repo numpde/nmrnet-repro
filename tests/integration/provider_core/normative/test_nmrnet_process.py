@@ -236,6 +236,10 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(shutdown["event"], "provider_shutdown_observation")
                 self.assertEqual(shutdown["operation"], "Notice delivery was not confirmed")
                 notices = [shutdown["notice"]]
+                expected_first = ("native_lifecycle_settled" if recovery_kind == "native" else
+                                  "delivery_handoff_retry" if recovery_kind == "delivery" else
+                                  f"api_{recovery_kind}_retry")
+                self.assertEqual(notices[0]["event"], expected_first)
                 self.assertIn("OSError", json.dumps(shutdown["output"]))
                 self.assertIn(
                     "Allocator failed" if recovery_kind == "native" else "Attempt API exchange",

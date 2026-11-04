@@ -296,7 +296,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     def report_operator_notice(failure, facts):
         """Emit protected lifecycle evidence without making a log sink stop the daemon.
 
-        Keep the latest failed output and its original outage for final reporting;
+        Keep the first failed output and its original outage for final reporting;
         no per-retry file, journal, unbounded history or availability dependency.
         """
         nonlocal notice_failure
@@ -307,7 +307,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         except Exception as cause:
             # Rendering and output are diagnostic effects. Neither can veto an
             # already selected crash report or erase the original sink failure.
-            notice_failure = (facts, failure, cause)
+            if notice_failure is None:
+                notice_failure = (facts, failure, cause)
 
     def report_api_retry(kind, failure, seconds):
         nonlocal status_phase
@@ -474,18 +475,22 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         if notice_failure is not None:
             facts, outage, output_failure = notice_failure
             observations += (
-                ("last operator notice cause", outage),
+                ("first operator notice cause", outage),
                 ("operator notice output", output_failure),
             )
-            report_operator_notice(
-                outage,
-                {
-                    "event": "provider_shutdown_observation",
-                    "operation": "Notice delivery was not confirmed",
-                    "notice": facts,
-                    "output": failure_evidence(output_failure, secrets=secrets),
-                },
-            )
+            try:
+                report_operator_notice(
+                    outage,
+                    {
+                        "event": "provider_shutdown_observation",
+                        "operation": "Notice delivery was not confirmed",
+                        "notice": facts,
+                        "output": failure_evidence(output_failure, secrets=secrets),
+                    },
+                )
+            except Exception:
+                # Diagnostic rendering cannot veto completed work or cleanup.
+                pass
         if failures:
             _failure_report(
                 (*failures, *observations),
