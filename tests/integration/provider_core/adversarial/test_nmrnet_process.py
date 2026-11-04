@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.fakes.tls_peer import TlsPeer
+from tests.fakes.attempts import ATTEMPT_REF
 from tests.integration.nmrnet.process_ports import ProcessPeers, read_process_failure
 
 from nmrnet_provider.process import _publish
@@ -30,13 +31,24 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     ) as model,
                     ProcessPeers(model_peer=model) as fixture,
                 ):
+                    original_reply = fixture.peer.response_factory
+                    failures = []
+
+                    async def capture_failure(request, body):
+                        target = request.split(b"\r\n", 1)[0].split(b" ")[1].decode()
+                        if target.endswith("/fail"):
+                            failures.append((target, json.loads(body)))
+                        return await original_reply(request, body)
+
+                    fixture.peer.response_factory = capture_failure
                     if cleanup_failure:
                         (fixture.diagnostics / "inject-input-cleanup-failure").write_bytes(b"test-only\n")
                     process = await fixture.start(child_script="interrupted_model_process.py")
                     await fixture.observed("model-head-received")
                     process.send_signal(signal.SIGTERM)
-                    report = json.loads(await read_process_failure(process))
-                    rendered = json.dumps(report)
+                    notice = json.loads(await asyncio.wait_for(process.stderr.readline(), 5))
+                    self.assertEqual(notice["event"], "interpreter_endpoint_failed")
+                    rendered = json.dumps(notice)
                     for fact in (
                         "ChatFailed",
                         '"reason": "exchange_failed"',
@@ -46,14 +58,17 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn(fact, rendered)
                     self.assertNotIn("PRIVATE", rendered)
                     self.assertIn('"job_ref": "job:example"', rendered)
-                    self.assertIn('"execution_attempt_ref": "execution_attempt:sha256:' + "a" * 64 + '"', rendered)
                     self.assertFalse((fixture.diagnostics / "science-entered").exists())
                     self.assertEqual(len(model.requests), 1)
                     self.assertNotIn("complete", fixture.events)
-                    self.assertNotIn("fail", fixture.events)
                     if cleanup_failure:
+                        report = json.loads(await read_process_failure(process))
+                        rendered = json.dumps(report)
                         self.assertIn('"errno": 5', rendered)
                         self.assertIn('"requires_host_retirement": true', rendered)
+                        self.assertIn(ATTEMPT_REF, rendered)
+                        self.assertNotIn("PRIVATE", rendered)
+                        self.assertNotIn("fail", fixture.events)
                         self.assertIsNone(process.returncode)
                         with self.assertRaises(BlockingIOError):
                             fixture.assert_lifetime_released()
@@ -61,8 +76,14 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         await asyncio.wait_for(process.communicate(), 5)
                     else:
                         _, stderr = await asyncio.wait_for(process.communicate(), 5)
-                        self.assertEqual(process.returncode, 1, stderr.decode())
-                        self.assertIn('"requires_host_retirement": false', rendered)
+                        self.assertEqual(process.returncode, 0, stderr.decode())
+                        async with asyncio.timeout(3):
+                            while "fail" not in fixture.events:
+                                await asyncio.sleep(0.01)
+                        self.assertEqual(len(failures), 1)
+                        self.assertEqual(failures[0][0], "/provider/v1/execution-attempts/fail")
+                        self.assertEqual(failures[0][1]["execution_attempt_ref"], ATTEMPT_REF)
+                        self.assertEqual(failures[0][1]["failure_code"], "interpretation_failed")
                         self.assertNotIn("PRIVATE", stderr.decode())
                     fixture.assert_lifetime_released()
 

@@ -95,7 +95,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotEqual(condition_sends[0][0], condition_sends[1][0], "Fresh signed request for the same report")
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            self.assertIn(b'interpreter_endpoint_failed', stderr)
+            self.assertNotIn(b'PRIVATE', stderr)
             self.assertEqual(len(model.requests), 1)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
@@ -141,7 +143,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(process.returncode)
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            self.assertIn(b'interpreter_endpoint_failed', stderr)
+            self.assertNotIn(b'PRIVATE', stderr)
             self.assertNotIn(b"api_progress_recovered", stderr)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
@@ -347,7 +351,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(process.returncode)
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            self.assertIn(b'interpreter_endpoint_failed', stderr)
+            self.assertNotIn(b'PRIVATE', stderr)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
             self.assertEqual(len(model.requests), 1)
 
