@@ -145,6 +145,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             NativeAttemptFactory(
                 admission_stopping=asyncio.Event(),
                 config=object(),
+            prose_services=(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},

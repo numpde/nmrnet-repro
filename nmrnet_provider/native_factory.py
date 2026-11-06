@@ -78,6 +78,7 @@ class NativeAttemptFactory:
         on_operator_notice,
         start_policy,
         on_delivery_retry,
+        prose_services,
     ):
         if type(policy) is not NativePolicy:
             raise ValueError("Native factory requires explicit admitted allocation and channel budgets.")
@@ -94,6 +95,7 @@ class NativeAttemptFactory:
         if not callable(on_unconfirmed_phase_progress):
             raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
         self.config, self.claims = config, claims
+        self.prose_services = prose_services
         self.admission_stopping = admission_stopping
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
@@ -107,6 +109,11 @@ class NativeAttemptFactory:
         self.allocations, self.clients = [], {}
         self.last_failure = None
         self._operation = None
+
+    @property
+    def prose_retry_seconds(self):
+        """Earliest configured prose service can resume new HTTP work."""
+        return min((service.retry_seconds for service in self.prose_services), default=0.0)
 
     @property
     def shutdown_ready(self):
@@ -141,6 +148,7 @@ class NativeAttemptFactory:
                 ),
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
+                prose_services=self.prose_services,
                 observation_recovery=self.observation_recovery,
                 condition_recovery=self.condition_recovery,
                 on_unconfirmed_phase_progress=self.on_unconfirmed_phase_progress,

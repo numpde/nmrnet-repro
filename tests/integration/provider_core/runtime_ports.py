@@ -31,6 +31,7 @@ from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 
 from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
+from nmrnet_provider.runtime import capture_prose_services
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
@@ -113,6 +114,7 @@ class RuntimePeers:
                 maximum_live_attempts=self.maximum_live_attempts,
             )
             self.config = load_provider_config(self.files.path)
+            self.prose_services = capture_prose_services(self.config)
             self.files.state.mkdir(mode=0o700)
             self.lifetime = ProviderLifetime(self.config.lifecycle.lifetime_root).open()
             self.stack.callback(self.lifetime.close)
@@ -255,6 +257,7 @@ class RuntimePeers:
             "on_source_observation": lambda failure: self.operator_notices.append(("source_observation", failure)),
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
+            "prose_services": self.prose_services,
             "observation_recovery": ObservationRecovery(
                 self.config.lifecycle.observation_gap_seconds,
                 self.config.service.policy.api_backoff_max_seconds,

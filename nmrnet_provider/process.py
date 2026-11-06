@@ -29,6 +29,7 @@ from nmrnet_provider.config import ConfigurationRejected, load_provider_config, 
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService
+from nmrnet_provider.runtime import capture_prose_services
 from provider_core.api import ProviderAPI
 from provider_core.diagnostics import operator_redactor, write_stderr as _write_stderr, write_notice as _write_api_notice
 from provider_core.lifetime import ProviderLifetime
@@ -348,8 +349,12 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         lifetime.open()
         transport = config.api.http.new_transport()
         api = ProviderAPI(config.api.identity, transport, expected_topology=config.api.expected_topology)
+        # Capture the immutable model-service bindings for this provider's
+        # lifetime, not during each Job's source/worker allocation.
+        prose_services = capture_prose_services(config)
         factory = NativeAttemptFactory(
             config=config,
+            prose_services=prose_services,
             admission_stopping=stop,
             claims=AttemptClaims.live(limits=config.lifecycle.live_limits),
             execution_identity=execution_identity,
@@ -424,6 +429,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             on_api_retry=report_api_retry,
             on_api_recovered=report_api_recovered,
             factory_ready=lambda: factory.shutdown_ready,
+            prose_retry_seconds=lambda: factory.prose_retry_seconds,
             on_held_attempt=lambda failure, pending: report_operator_notice(
                 failure, {"event": "attempt_held", "job_ref": pending.input.job_ref}
             ),

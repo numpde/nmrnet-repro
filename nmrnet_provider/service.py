@@ -141,11 +141,12 @@ class ProviderService:
         on_observed_crash,
         factory_ready,
         on_held_attempt,
+        prose_retry_seconds,
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
                 callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered,
-                           on_observed_crash, factory_ready, on_held_attempt)
+                           on_observed_crash, factory_ready, on_held_attempt, prose_retry_seconds)
             )
         ):
             raise ValueError(
@@ -159,6 +160,7 @@ class ProviderService:
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self._on_observed_crash = on_observed_crash
         self._factory_ready, self._on_held_attempt = factory_ready, on_held_attempt
+        self._prose_retry_seconds = prose_retry_seconds
         self.policy = policy
         self.hello_api = ProviderAPI(
             config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology
@@ -343,8 +345,18 @@ class ProviderService:
         while not await self._pause(self.policy.hello_seconds):
             await self._hello_until_available()
 
+    async def _wait_for_prose_service(self):
+        """Do not START a known prose-dependent Job during a captured wait."""
+        seconds = self._prose_retry_seconds()
+        if seconds > 0:
+            await self._pause(seconds)
+            return True
+        return False
+
     async def _work_loop(self):
         while not self._stop.is_set():
+            if await self._wait_for_prose_service():
+                continue
             if not self._snapshot().analysis_offerings:
                 await self._pause(self.policy.idle_seconds)
                 continue
@@ -358,6 +370,10 @@ class ProviderService:
                 # Withdrawal can occur during either network walk. Discard this
                 # selection; resumption must start with fresh observations.
                 await self._pause(self.policy.idle_seconds)
+                continue
+            # A discovery page is not START permission. Another Job may have
+            # observed a model 503 while this request was in flight.
+            if await self._wait_for_prose_service():
                 continue
             self._attempt_stopping = asyncio.Event()
             if self._stop.is_set():
