@@ -145,7 +145,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             NativeAttemptFactory(
                 admission_stopping=asyncio.Event(),
                 config=object(),
-            prose_services=(),
+                prose_services=(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
@@ -167,6 +167,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             NativeAttemptFactory(
                 admission_stopping=asyncio.Event(),
                 config=object(),
+                prose_services=(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
@@ -188,6 +189,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             NativeAttemptFactory(
                 admission_stopping=asyncio.Event(),
                 config=object(),
+                prose_services=(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
@@ -221,6 +223,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             NativeAttemptFactory(
                 admission_stopping=asyncio.Event(),
                 config=object(),
+                prose_services=(),
                 claims=AttemptClaims.live(),
                 execution_identity={},
                 selected_artifacts={},
@@ -274,6 +277,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         return NativeAttemptFactory(
             admission_stopping=asyncio.Event(),
             config=object(),
+            prose_services=(),
             claims=AttemptClaims.live(),
             execution_identity={"prediction_declaration_sha256": "d" * 64},
             selected_artifacts={},
