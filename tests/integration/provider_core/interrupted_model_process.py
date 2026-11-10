@@ -41,6 +41,7 @@ async def recording_factory(factory, pending, *, stopping):
         root = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
         controller = await assemble_attempt(
             config=factory.config,
+            prose_services=factory.prose_services,
             pending=pending,
             claims=factory.claims,
             stopping=stopping,
@@ -94,13 +95,17 @@ async def recording_factory(factory, pending, *, stopping):
 
 async def observed_head(pool, request):
     response = await original_head(pool, request)
-    if request.url.target == b"/chat":
-        # Returning to _perform assigns its received head without an intervening
-        # await. The parent signals only after observing this fixed marker.
-        mark("model-head-received")
-    elif request.url.target.endswith(b"/hello"):
+    if request.url.target.endswith(b"/hello"):
         mark(f"hello-head-{next(hello_head_numbers)}-received")
     return response
+
+
+def observed_model_worker():
+    diagnostics = sys.argv[sys.argv.index("--diagnostics") + 1]
+    return (
+        sys.executable, "-I", "-B",
+        str(Path(__file__).with_name("observed_chat_worker.py")), diagnostics,
+    )
 
 
 if __name__ == "__main__":
@@ -109,5 +114,6 @@ if __name__ == "__main__":
     with (
         patch.object(NativeAttemptFactory, "__call__", recording_factory),
         patch.object(httpcore.AsyncHTTPProxy, "handle_async_request", observed_head),
+        patch("provider_core.chat_process._worker_command", observed_model_worker),
     ):
         raise SystemExit(main())
