@@ -49,7 +49,7 @@ host_id_for_container_id() {
     else printf '%s\\n' "$((100000 + $2))"; fi
 }
 ''')
-        (tools / 'docker_client.sh').write_text('''docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
+        (tools / 'docker_client.sh').write_text('''docker_client_prepare() { export NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
 ''')
         (tools / 'inference_native.sh').write_text('''inference_native() {
