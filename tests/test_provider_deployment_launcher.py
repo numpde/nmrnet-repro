@@ -32,23 +32,26 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / 'tools'
         tools.mkdir()
-        for name in ('compose_deployment.sh', 'compose_image_ids.py', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
+        for name in ('compose_deployment.sh', 'compose_image_ids.py', 'provider_deployment.sh', 'image_lifecycle.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
-        # Tests can opt into a rootless host mapping. The map parser itself is
-        # exercised against synthetic maps by its own tests.
-        (tools / 'user_namespace_map.sh').write_text('''
-require_initial_user_and_pid_namespaces() { return 0; }
-probe_process_starttime() { printf '123\\n'; }
-probe_process_has_token() { return 0; }
-probe_process_is_same() { return 0; }
-wait_for_probe_process_retirement() { return 0; }
-container_id_for_host_id() { printf '%s\\n' "$2"; }
-host_id_for_container_id() {
-    if [[ ${TEST_MAPPED_IDENTITIES-false} != true ]]; then printf '%s\\n' "$2";
-    elif [[ $2 == 0 ]]; then printf '%s\\n' "$TEST_CALLER_UID";
-    else printf '%s\\n' "$((100000 + $2))"; fi
-}
+        # The maintained launcher must invoke the fake CLI, not a Docker probe.
+        command = tools / 'linux-idmap-probe'
+        command.write_text(r'''#!/usr/bin/env bash
+set -eu
+printf '%s\0' "$@" > "$TEST_ROOT/identity-argv"
+if [[ ${TEST_IDENTITY_STATUS-0} != 0 ]]; then
+    printf '{"problem":"fixture unresolved identity probe"}\n' >&2
+    exit "$TEST_IDENTITY_STATUS"
+fi
+if [[ -v TEST_IDENTITY_VALUES ]]; then
+    printf '%s\n' "$TEST_IDENTITY_VALUES"
+elif [[ ${TEST_MAPPED_IDENTITIES-false} == true ]]; then
+    printf '%s %s %s %s\n' "$TEST_CALLER_UID" "$((100000 + TEST_CALLER_UID))" "$TEST_CALLER_GID" "$((100000 + TEST_CALLER_GID))"
+else
+    printf '0 %s 0 %s\n' "$TEST_CALLER_UID" "$TEST_CALLER_GID"
+fi
 ''')
+        command.chmod(0o700)
         (tools / 'docker_client.sh').write_text('''docker_client_prepare() { export NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
 ''')
@@ -265,16 +268,12 @@ esac
     def run_command(self, action, role='provider', *, changes=None, extra=()):
         environment = dict(os.environ, HOME=str(self.home), NMRNET_DEPLOYMENT_INPUT='fixture',
                            NMRNET_SHARED_RUNTIME_IMAGE_INPUT='sha256:' + format(9, '064d'),
-                           TEST_CALLER_UID=str(os.getuid()), TEST_CALLER_GID=str(os.getgid()))
+                           TEST_CALLER_UID=str(os.getuid()), TEST_CALLER_GID=str(os.getgid()),
+                           TEST_ROOT=str(self.root))
         environment.update(changes or {})
+        environment['PATH'] = str(self.root / 'tools') + os.pathsep + environment.get('PATH', os.defpath)
         return subprocess.run(['bash', str(self.root / 'tools' / f'{role}_deployment.sh'), action, *extra],
                               env=environment, capture_output=True, text=True, timeout=5)
-
-    def remove_retained_identity_metadata(self, result):
-        prefix = 'Identity inspection metadata retained at '
-        for line in result.stderr.splitlines():
-            if line.startswith(prefix):
-                Path(line.removeprefix(prefix)).unlink(missing_ok=True)
 
     def calls(self):
         count = int((self.root / 'count').read_text()) if (self.root / 'count').exists() else 0
@@ -345,7 +344,6 @@ esac
                      if call[0] == 'run' and 'prepare-runtime' in call and '--check-only' not in call)
         start = next(index for index, call in enumerate(calls) if call[0] == 'compose' and 'up' in call)
         freeze_call = calls[freeze]
-        probe_create = next(call for call in calls if call[0] == 'create')
         self.assertLess(check, freeze)
         self.assertLess(freeze, stop)
         self.assertLess(stop, down)
@@ -356,7 +354,8 @@ esac
         self.assertNotIn('CHOWN', check_call)
         self.assertEqual(freeze_call[freeze_call.index('--image-id') + 1], scientific_image)
         self.assertEqual(freeze_call[freeze_call.index('--geometry-image-id') + 1], geometry_image)
-        self.assertEqual(probe_create[probe_create.index('--pull') + 1], 'never')
+        self.assertFalse(any(call[0] in ('create', 'start') for call in calls))
+        self.assertTrue((self.root / 'identity-argv').is_file())
         self.assertNotEqual(os.readlink(self.provider / 'current'), 'bundles/generation-original')
 
     def test_update_admits_every_recorded_scientific_image_before_draining(self):
@@ -583,21 +582,17 @@ esac
         self.assertTrue(obsolete.is_dir())
         self.assertIn('Retained previous configuration generations.', result.stdout)
 
-    def test_identity_probe_create_failure_does_not_remove_an_unadmitted_name(self):
-        result = self.run_command('install', changes={'TEST_CREATE_STATUS': '7'})
-        self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertFalse(any(call[0] == 'rm' for call in self.calls()))
-        self.assertIn('Identity probe, if still present:', result.stderr)
-        self.remove_retained_identity_metadata(result)
+    def test_shared_identity_failure_stops_before_helper_selection(self):
+        result = self.run_command('install', changes={'TEST_IDENTITY_STATUS': '3'})
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn('fixture unresolved identity probe', result.stderr)
+        self.assertFalse(any(call[0] in ('create', 'start', 'rm', 'run') for call in self.calls()))
 
-    def test_identity_probe_removal_is_not_retried_after_an_uncertain_attempt(self):
-        result = self.run_command('install', changes={'TEST_MAP_RM_STATUS': '9'})
-        self.assertEqual(result.returncode, 9, result.stderr)
-        removals = [call for call in self.calls() if call[0] == 'rm']
-        self.assertEqual(len(removals), 1)
-        self.assertRegex(removals[0][2], r'^[0-9a-f]{64}$')
-        self.assertIn('Identity probe ID:', result.stderr)
-        self.remove_retained_identity_metadata(result)
+    def test_invalid_shared_projection_stops_before_helper_selection(self):
+        result = self.run_command('install', changes={'TEST_IDENTITY_VALUES': '0 1000 0 1000 unexpected'})
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('invalid numeric projection', result.stderr)
+        self.assertFalse(any(call[0] in ('create', 'start', 'rm', 'run') for call in self.calls()))
 
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command('install')
@@ -621,15 +616,15 @@ esac
         self.assertEqual(selected.stat().st_mode & 0o777, 0o555)
         self.assertEqual((selected / 'compose.json').stat().st_mode & 0o777, 0o444)
         self.assertFalse(self.bundle.exists())
-        probes = [call for call in self.calls() if call[0] in ('create', 'start')]
-        self.assertEqual([call[0] for call in probes], ['create', 'start'])
-        admitted_id = f'{6:064d}'
-        self.assertEqual(probes[1][1], admitted_id)
-        inspected = next(call for call in self.calls() if call[0] == 'inspect'
-                         and any('.State.Pid' in argument for argument in call))
-        self.assertEqual(inspected[-1], admitted_id)
-        removed = next(call for call in self.calls() if call[0] == 'rm')
-        self.assertEqual(removed[-1], admitted_id)
+        self.assertFalse(any(call[0] in ('create', 'start') for call in self.calls()))
+        arguments = [item.decode() for item in (self.root / 'identity-argv').read_bytes().split(b'\0')[:-1]]
+        self.assertEqual(['--endpoint', 'unix:///fixture.sock', '--image'], arguments[:3])
+        self.assertEqual('/opt/provider/environment/bin/python',
+                         arguments[arguments.index('--interpreter') + 1])
+        for flag, value in (('--memory-bytes', '67108864'), ('--pids-limit', '8'),
+                            ('--nano-cpus', '250000000')):
+            self.assertEqual(value, arguments[arguments.index(flag) + 1])
+        self.assertEqual('--values', arguments[-1])
         freeze_user = next(call[call.index('--user') + 1] for call in self.calls() if 'freeze' in call)
         self.assertEqual(freeze_user, f'{os.getuid()}:{os.getgid()}')
 
@@ -857,7 +852,8 @@ fi
         result = self.run_command('install', changes={'TEST_RUN_STATUS': '7', 'TEST_RETIRED': 'false',
                                                      'TEST_INVENTORY_RETIRED': 'true', 'TEST_PROJECT_RETIRED': 'true'})
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ['ps', 'ps', 'image', 'image', 'create', 'start', 'inspect', 'rm', 'ps', 'run'])
+        self.assertEqual(self.calls()[-1][0], 'run')
+        self.assertFalse(any(call[0] in ('create', 'start', 'rm') for call in self.calls()))
         self.assertFalse((self.root / 'cleanup').exists())
         self.assertIn('Configuration helper, if still present:', result.stderr)
 
