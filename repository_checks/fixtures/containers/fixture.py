@@ -84,6 +84,8 @@ class LauncherFixture:
             "operator_guidance.sh",
             "worker_retirement.sh",
             "acquisition_interface.sh",
+            "acquisition_run.sh",
+            "acquisition_bootstrap.py",
             "git_inputs.sh",
             "git_metadata.sh",
             "packages.sh",
@@ -93,6 +95,7 @@ class LauncherFixture:
             "provider_api_qualification.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
+        shutil.copytree(ROOT / "tools/bootstrap/acquisition", root / "tools/bootstrap/acquisition")
         shutil.copyfile(ROOT / "Makefile", root / "Makefile")
         shutil.copytree(ROOT / "containers", root / "containers")
         for name in ("container_guard.py", "artifacts.py", "wheelhouse.py", "build_unicore.py", "package_lock.py"):
@@ -129,6 +132,7 @@ class LauncherFixture:
         (root / "requirements/inference.lock").write_text("fixture==1\n")
         for name in ("preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in"):
             shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
+        shutil.copyfile(ROOT / "requirements/provider-core-release.json", root / "requirements/provider-core-release.json")
         (root / "artifacts").mkdir()
         (root / "artifacts/nmrnet-source.paths").write_text("source_revision " + "a" * 40 + "\nLICENSE\nuninmr\n")
         manifest = "".join(

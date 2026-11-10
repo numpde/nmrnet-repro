@@ -373,6 +373,7 @@ help:
 		'make test/repository/native-images     Check scientific image source/wheel capture and exact metadata admission offline.' \
 		'make test/integration/provider-core/compose WHEELHOUSE=<path> Check fixed Compose deployment grants and role profiles offline.' \
 		'make test/repository/operator-inputs   Check literal selectors, Docker context selection and image inspection admission offline.' \
+		'make test/repository/acquisition      Check acquisition adapters, verified snapshots and engine fixtures offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
@@ -537,6 +538,10 @@ test/unit/baseline-launcher:
 
 test/repository:
 	bash tools/container.sh test/repository
+
+.PHONY: test/repository/acquisition
+test/repository/acquisition:
+	bash tools/container.sh $@
 
 test/probe:
 	bash tools/container.sh probe

@@ -23,6 +23,19 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class EngineMetadataFixtureTests(unittest.TestCase):
+    def test_launcher_acquisition_snapshot_verifies_before_engine_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            command = [sys.executable, "-B", str(fixture.root / "tools/acquisition_bootstrap.py")]
+            verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
+            self.assertEqual(0, verified.returncode, verified.stderr)
+            (fixture.root / "tools/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
+            rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
+            self.assertEqual(1, rejected.returncode, rejected.stderr)
+            self.assertIn("bootstrap files differ from the release inventory", rejected.stderr)
+            self.assertEqual([], fixture.calls())
+
     def inspect(self, fixture, arguments, additions):
         return subprocess.run(
             [str(fixture.root / "bin/docker"), *arguments],
