@@ -68,7 +68,8 @@ class LauncherFixture:
         # proof, rather than permission to recreate an empty resource inventory.
         with (root / "containers.json").open("x") as registry:
             registry.write("{}\n")
-        (root / "acquisition-containers.json").write_text("{}\n")
+        with (root / "acquisition-containers.json").open("x") as registry:
+            registry.write("{}\n")
         self.scratch = set()
         (root / "tools").mkdir(parents=True)
         for name in (

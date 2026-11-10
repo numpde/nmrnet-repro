@@ -23,6 +23,16 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class EngineMetadataFixtureTests(unittest.TestCase):
+    def test_preexisting_acquisition_registry_is_preserved_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "acquisition-containers.json"
+            evidence = b'{"prior-container":{"phase":"running"}}\n'
+            registry.write_bytes(evidence)
+            with self.assertRaises(FileExistsError):
+                LauncherFixture(root)
+            self.assertEqual(evidence, registry.read_bytes())
+
     def test_launcher_acquisition_snapshot_verifies_before_engine_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
