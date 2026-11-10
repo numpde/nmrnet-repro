@@ -246,6 +246,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         factory = NativeAttemptFactory(
             admission_stopping=asyncio.Event(),
             config=SimpleNamespace(),
+            prose_services=(),
             claims=AttemptClaims.live(),
             execution_identity={},
             selected_artifacts={},

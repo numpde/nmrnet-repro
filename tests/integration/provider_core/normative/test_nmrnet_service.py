@@ -16,6 +16,7 @@ from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.runtime import capture_prose_services
 from nmrnet_provider.service import Announcement, ServiceFailed
 from provider_core.api import ProviderAPI
 from provider_core.delivery_client import DeliveryClient
@@ -109,7 +110,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service()
             fixture.stack.push_async_callback(fixture.settle_service, service)
             try:
-                await asyncio.wait_for(service.run(fixture.stop), 5)
+                await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             except ServiceFailed as failure:
                 self.fail(json.dumps(failure_evidence(failure, secrets=())))
             self.assertGreaterEqual(len(requests), refusals + 1)
@@ -160,7 +161,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service.policy = replace(service.policy, hello_seconds=30)
             fixture.stack.push_async_callback(fixture.settle_service, service)
             try:
-                await asyncio.wait_for(service.run(fixture.stop), 3)
+                await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
                 self.assertIsNotNone(outage)
                 self.assertEqual(fixture.events.count("start"), 1)
                 self.assertEqual(len(fixture.model_peer.requests), 1)
@@ -213,7 +214,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service(on_api_retry=retry)
             service.policy = replace(service.policy, hello_seconds=30)
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            await asyncio.wait_for(service.run(fixture.stop), 3)
+            await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             self.assertEqual(len(sent), 2)
             self.assertNotEqual(sent[0]["description"], sent[1]["description"])
             self.assertEqual(sent[1]["description"], "Current after outage")
@@ -240,7 +241,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             )
             task = asyncio.create_task(service.run(fixture.stop))
             try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 1)
+                await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                 await asyncio.wait_for(recovered.wait(), 1)
                 self.assertFalse(task.done())
                 self.assertFalse(fixture.stop.is_set())
@@ -320,7 +321,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             )
             service.policy = replace(service.policy, hello_seconds=30)
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            await asyncio.wait_for(service.run(fixture.stop), 3)
+            await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             self.assertEqual([item[0] for item in notices], ["retry"] * 4 + ["recovered"])
             for notice, ceiling in zip(notices[:4], (0.05, 0.1, 0.2, 0.2), strict=True):
                 self.assertGreaterEqual(notice[2], ceiling / 2)
@@ -348,7 +349,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service(on_api_retry=retry, on_api_recovered=lambda _kind, _failure: None)
             service.policy = replace(service.policy, hello_seconds=30)
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            await asyncio.wait_for(service.run(fixture.stop), 3)
+            await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             # Initial recovery ends at START; relay publication may overlap
             # later idle polling after the producer has handed off its result.
             initial_reads = observed[:observed.index("/provider/v1/execution-attempts/start")]
@@ -405,6 +406,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         fixture.config = replace(fixture.config, interpreter=settings)
+        fixture.prose_services = capture_prose_services(fixture.config)
         return unavailable
 
     def require_prior_endpoint_evidence(self, content, *, report=False):
@@ -439,7 +441,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
             service = fixture.service(open_attempt=open_attempt)
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            await asyncio.wait_for(service.run(fixture.stop), 3)
+            await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             identity = fixture.allocations[-1].preparation_outcome.identity
             self.assertEqual(self.require_prior_endpoint_evidence(identity.content), durable[0])
@@ -515,7 +517,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             fixture.api_peer.response_factory = recipient
             service = fixture.service()
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            await asyncio.wait_for(service.run(fixture.stop), 3)
+            await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             self.assertEqual(len(received), 1)
             wire = json.loads(received[0])
             self.assertEqual(wire["failure_code"], "interpretation_failed")
@@ -542,7 +544,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service(drain_seconds=1)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 1)
+                await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                 fixture.stop.set()
                 fixture.execution_release.set()
                 await asyncio.wait_for(task, 2)
@@ -582,7 +584,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service()
             service.policy = replace(service.policy, hello_seconds=30)
             with patch.object(DeliveryClient, "pending", AsyncMock(side_effect=AssertionError("outbox reads are unavailable")), create=True):
-                await asyncio.wait_for(service.run(fixture.stop), 3)
+                await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             await fixture.settle_service(service)
             self.assertEqual(fixture.events[:5], ["hello", "started", "discover", "allocate", "start"])
             self.assertEqual(len(fixture.allocations), 1)
@@ -600,7 +602,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service(hello_seconds=0.05)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                 fixture.snapshot = Announcement("Changed current name", "Current description", ())
 
                 async def refreshed():

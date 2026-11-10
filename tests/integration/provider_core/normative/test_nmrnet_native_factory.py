@@ -23,6 +23,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
         factory = NativeAttemptFactory(
             admission_stopping=asyncio.Event(),
             config=config,
+            prose_services=(),
             claims=AttemptClaims.live(),
             execution_identity={},
             selected_artifacts={},
@@ -49,6 +50,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             return worker, allocation
 
         async def assembled(**arguments):
+            self.assertIs(arguments["prose_services"], factory.prose_services)
             self.assertIs(arguments["start_policy"], factory.start_policy)
             self.assertIs(arguments["claims"], factory.claims)
             self.assertIs(arguments["stopping"], stopping)

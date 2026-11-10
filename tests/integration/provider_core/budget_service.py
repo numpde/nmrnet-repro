@@ -83,14 +83,18 @@ class InputCallLimitPeers(SuccessiveServicePeers):
 class InputTimeLimitPeers(SuccessiveServicePeers):
     """The first Job's model reply stalls; later Jobs use the original fixture."""
 
+    selection_seconds = 2.0
+
     def __init__(self):
         super().__init__(maximum_live_attempts=1)
         self.failure_bodies = []
 
-    async def __aenter__(self):
-        await super().__aenter__()
-        self.config = replace(self.config, preparation=replace(self.config.preparation, seconds=0.2))
-        return self
+    def arguments(self, pending):
+        arguments = super().arguments(pending)
+        if pending.input == self.jobs[0].identity:
+            config = arguments["config"]
+            arguments["config"] = replace(config, preparation=replace(config.preparation, seconds=self.selection_seconds))
+        return arguments
 
     async def model_reply(self, request, raw):
         response = await super().model_reply(request, raw)
@@ -112,12 +116,12 @@ class InputTimeLimitPeers(SuccessiveServicePeers):
     def failure_receipt(self, index, value, pending):
         if index != 0 or value["failure_code"] != "input_selection_time_limit":
             raise AssertionError("Only the first Job's owned selection deadline may become FAIL")
-        if "0.2" not in value["failure_message"] or "operator" not in value["failure_message"]:
+        if f"{self.selection_seconds:g}-second" not in value["failure_message"] or "operator" not in value["failure_message"]:
             raise AssertionError("Failure recipient lost the configured limit or next action")
         if any(token in value["failure_message"] for token in ("PRIVATE", "invalid_input", self.jobs[0].specification_text)):
             raise AssertionError("Time-limit guidance leaked private input or claimed invalid molecular input")
         evidence = json.loads(self.allocations[index].preparation_outcome.evidence.content)
-        if evidence["input_selection_time_limit"] != {"seconds": 0.2}:
+        if evidence["input_selection_time_limit"] != {"seconds": self.selection_seconds}:
             raise AssertionError("Protected time-limit evidence lost the owned aggregate budget")
         rendered = json.dumps(evidence["interpreter_diagnostics"])
         if "request_cancelled" not in rendered or "may have been processed" not in rendered or "PRIVATE_MODEL_KEY" in rendered:

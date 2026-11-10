@@ -635,7 +635,7 @@ case "$1" in
                     command+=(test_nmrnet_service_admission.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
-                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py)
+                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py test_nmrnet_service_prose_outage.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/recovery ]]; then
                     command+=(test_nmrnet_service_recovery.py test_nmrnet_reference_lifecycle.py test_nmrnet_prediction_recovery.py)

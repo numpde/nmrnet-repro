@@ -112,6 +112,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         return NativeAttemptFactory(
             admission_stopping=asyncio.Event(),
             config=SimpleNamespace(), claims=claims,
+            prose_services=(),
             execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
             policy=NativePolicy(allocation_seconds=2, prediction_seconds=2, source_seconds=2),
             observation_recovery=ObservationRecovery(2, 1, Mock(), Mock()),

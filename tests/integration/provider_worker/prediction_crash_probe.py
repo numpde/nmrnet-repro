@@ -125,6 +125,8 @@ async def controller():
         notices.append({"facts": facts, "failure": failure_evidence(failure, secrets=())})
 
     factory = NativeAttemptFactory(
+        admission_stopping=asyncio.Event(),
+        prose_services=(),
         config=None, claims=claims, execution_identity={"prediction_declaration_sha256": "d" * 64}, selected_artifacts=ARTIFACTS,
         policy=NativePolicy(15, 20, 5), observation_recovery=observation,
         condition_recovery=conditions, start_policy=start_policy,
