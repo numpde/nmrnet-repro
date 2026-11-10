@@ -86,6 +86,8 @@ class LauncherFixture:
             "worker_retirement.sh",
             "acquisition_interface.sh",
             "acquisition_run.sh",
+            "acquisition_wheelhouse.sh",
+            "wheelhouse_acquire.py",
             "acquisition_bootstrap.py",
             "git_inputs.sh",
             "git_metadata.sh",
@@ -131,7 +133,7 @@ class LauncherFixture:
         for name in ("inference.in", "build.in", "unicore-source.json"):
             (root / "requirements" / name).write_text("fixture\n")
         (root / "requirements/inference.lock").write_text("fixture==1\n")
-        for name in ("preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in"):
+        for name in ("preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in", "wheelhouse-acquirer-assets.in", "wheelhouse-tool-assets.in"):
             shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
         shutil.copyfile(ROOT / "requirements/provider-core-release.json", root / "requirements/provider-core-release.json")
         (root / "artifacts").mkdir()
