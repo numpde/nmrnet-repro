@@ -68,6 +68,7 @@ class LauncherFixture:
         # proof, rather than permission to recreate an empty resource inventory.
         with (root / "containers.json").open("x") as registry:
             registry.write("{}\n")
+        (root / "acquisition-containers.json").write_text("{}\n")
         self.scratch = set()
         (root / "tools").mkdir(parents=True)
         for name in (
@@ -117,7 +118,7 @@ class LauncherFixture:
         for directory in ("tests", "repository_checks"):
             (root / directory).mkdir()
         (root / "bin").mkdir()
-        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh")):
+        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh"), ("python3", "python.sh")):
             (root / "bin" / name).symlink_to(FIXTURES / source)
         shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
         (root / ".work/wheelhouse").mkdir(parents=True)
@@ -153,6 +154,10 @@ class LauncherFixture:
                 shutil.copyfile(ROOT / name, destination)
         self.capture_committed_inputs()
         self.environment = os.environ | {
+            "NMRNET_FIXTURE_ROOT": str(root),
+            "NMRNET_FIXTURE_PYTHON": sys.executable,
+            "NMRNET_FAKE_IDENTITY_OWNER": "1000 1000",
+            "NMRNET_FAKE_ACQ_CIDS": json.dumps({"gateway": "1" * 64, "relay": "2" * 64, "worker-1": "3" * 64}),
             "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,

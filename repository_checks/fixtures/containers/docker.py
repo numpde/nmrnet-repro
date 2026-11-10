@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from repository_checks.fixtures.containers.fixture import read_engine_calls, record_engine_call
+from repository_checks.fixtures.containers.acquisition_engine import AcquisitionEngine
 
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
@@ -80,6 +81,10 @@ for fault_name, accepted_values in (
     if fault_name in os.environ and os.environ[fault_name] not in accepted_values:
         sys.stderr.write("unexpected fake docker invocation: unmodeled acquisition fault selector\n")
         raise SystemExit(97)
+if "NMRNET_FAKE_ACQUISITION_SCOPE" in os.environ:
+    if os.environ["NMRNET_FAKE_ACQUISITION_SCOPE"] != "1":
+        raise SystemExit(97)
+    raise SystemExit(AcquisitionEngine(Path(log_path).parent).run(arguments))
 if command in {"build", "create", "start", "stop", "inspect", "rm"}:
     log = Path(log_path)
 if command == "build":

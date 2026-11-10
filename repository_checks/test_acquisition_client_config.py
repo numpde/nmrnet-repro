@@ -28,6 +28,40 @@ from repository_checks.quality.sources import ROOT
 
 
 class AcquisitionClientTests(unittest.TestCase):
+    def test_real_runner_preserves_worker_result_and_retires_its_three_roles(self):
+        receipt = self.root / "scope-retired"
+        result = self.fixture.run(
+            "acquisition_run.sh", "--retired-receipt", str(receipt), "--image", self.worker_image,
+            "--", "--read-only", "--", "python3", "-c", "pass",
+            additions=self.environment | {
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1", "NMRNET_FAKE_IDENTITY_OWNER": "1200 1300",
+                "NMRNET_FAKE_WORKER_STATUS": "17", "NMRNET_FAKE_WORKER_STDOUT": "worker bytes\n",
+                "NMRNET_FAKE_WORKER_STDERR": "worker diagnostic\n",
+            },
+        )
+        self.assertEqual(17, result.returncode, result.stderr)
+        self.assertEqual("worker bytes\n", result.stdout)
+        self.assertEqual("worker diagnostic\n", result.stderr)
+        self.assertEqual("retired\n", receipt.read_text())
+        identity = (self.root / "identity-calls").read_bytes().split(b"\0")
+        self.assertEqual(16, len(identity))
+        self.assertEqual([b"", b""], identity[-2:])
+        self.assertEqual([
+            "-I", "-S", "-B", str(self.root / "tools/bootstrap/acquisition/acquisition_tool/identity.py"),
+            "--endpoint", "unix:///var/run/docker.sock", "--image", self.worker_image,
+            "--host-uid", "1000", "--host-gid", "1000", "--retired-receipt",
+        ], [value.decode() for value in identity[:-3]])
+        self.assertEqual("retired", Path(identity[-3].decode()).name)
+        self.assertFalse(Path(identity[-3].decode()).exists())
+        calls = self.fixture.calls()
+        creates = [call["arguments"] for call in calls if call["arguments"][:1] == ["create"]]
+        self.assertEqual(["gateway", "relay", "worker-1"], [Path(command[command.index("--cidfile") + 1]).parent.name for command in creates])
+        self.assertEqual(["host", "none", "container:" + "2" * 64], [command[command.index("--network") + 1] for command in creates])
+        self.assertTrue(all(command[command.index("--user") + 1] == "1200:1300" for command in creates))
+        self.assertEqual(["3" * 64, "2" * 64, "1" * 64], [call["arguments"][-1] for call in calls if call["arguments"][:1] == ["rm"]])
+        self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
+        self.assertTrue(all(not Path(call["client_config"]["path"]).parent.exists() for call in calls))
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
