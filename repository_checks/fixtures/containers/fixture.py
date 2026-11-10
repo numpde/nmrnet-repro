@@ -121,7 +121,7 @@ class LauncherFixture:
         for directory in ("tests", "repository_checks"):
             (root / directory).mkdir()
         (root / "bin").mkdir()
-        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh"), ("python3", "python.sh")):
+        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh"), ("stat", "stat.py"), ("python3", "python.sh")):
             (root / "bin" / name).symlink_to(FIXTURES / source)
         shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
         (root / ".work/wheelhouse").mkdir(parents=True)
@@ -158,6 +158,8 @@ class LauncherFixture:
         self.capture_committed_inputs()
         self.environment = os.environ | {
             "NMRNET_FIXTURE_ROOT": str(root),
+            "NMRNET_FIXTURE_UID": "1000",
+            "NMRNET_FIXTURE_GID": "1000",
             "NMRNET_FIXTURE_PYTHON": sys.executable,
             "NMRNET_FAKE_IDENTITY_OWNER": "1000 1000",
             "NMRNET_FAKE_ACQ_CIDS": json.dumps({"gateway": "1" * 64, "relay": "2" * 64, "worker-1": "3" * 64}),

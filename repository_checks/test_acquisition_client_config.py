@@ -83,6 +83,8 @@ class AcquisitionClientTests(unittest.TestCase):
 
     def _intercept(self, *names):
         for name in names:
+            if name == "stat":
+                (self.root / "bin" / name).unlink()
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
 
     def _remove_retained(self):
@@ -862,7 +864,8 @@ def fake_command(name):
                 sys.stdout.write("unavailable\n")
                 return 0
             return 97
-        os.execv("/usr/bin/stat", ["stat", *arguments])
+        adapter = ROOT / "repository_checks/fixtures/containers/stat.py"
+        os.execv(sys.executable, [sys.executable, "-B", str(adapter), *arguments])
     if name == "rm":
         if arguments[:2] == ["-rf", "--"] and destination.name.startswith("nmrnet-docker-client."):
             fault = os.environ["NMRNET_ACQUISITION_RM_FAULT"]

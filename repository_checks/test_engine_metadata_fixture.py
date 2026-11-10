@@ -23,6 +23,47 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class EngineMetadataFixtureTests(unittest.TestCase):
+    def test_fixture_identity_and_owned_stat_share_explicit_uid_gid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            environment = fixture.environment | {"NMRNET_FIXTURE_UID": "2100", "NMRNET_FIXTURE_GID": "2200"}
+            for command, expected in (
+                (["id", "-u"], b"2100\n"),
+                (["id", "-g"], b"2200\n"),
+                (["stat", "-c", "%u", str(fixture.root / ".work")], b"2100\n"),
+                (["stat", "-c", "%u:%g", "--", str(fixture.root / ".work")], b"2100:2200\n"),
+            ):
+                with self.subTest(command=command):
+                    result = subprocess.run(command, env=environment, capture_output=True)
+                    self.assertEqual((0, expected, b""), (result.returncode, result.stdout, result.stderr))
+
+    def test_fixture_stat_preserves_other_metadata_paths_and_errors(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            owned = fixture.root / "stat-input"
+            owned.write_bytes(b"real bytes\n")
+            owned.chmod(0o640)
+            link = fixture.root / "stat-link"
+            link.symlink_to(owned)
+            ancestor = fixture.root / "linked-work"
+            ancestor.symlink_to(fixture.root / ".work")
+            cycle = fixture.root / "stat-cycle"
+            cycle.symlink_to(cycle)
+            for output, path in (
+                ("%a:%s:%F", owned), ("%u:%a", owned), ("%u:%g", Path(outside)),
+                ("%u", link), ("%u", ancestor / "checker"), ("%u", cycle), ("%u", fixture.root / "missing"),
+            ):
+                with self.subTest(output=output, path=path):
+                    command = ["stat", "-c", output, "--", str(path)]
+                    actual = subprocess.run(command, executable="/usr/bin/stat", capture_output=True)
+                    observed = subprocess.run(command, env=fixture.environment, capture_output=True)
+                    self.assertEqual(
+                        (actual.returncode, actual.stdout, actual.stderr),
+                        (observed.returncode, observed.stdout, observed.stderr),
+                    )
+
     def test_preexisting_acquisition_registry_is_preserved_and_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
