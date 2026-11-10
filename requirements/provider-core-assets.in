@@ -1,3 +1,3 @@
 # Private package artifacts are published by the shared owner on GitHub.
-https://github.com/numpde/nmr-provider-tools/releases/download/v0.6.6/provider_core-0.6.6-py3-none-any.whl#sha256=22b5a391aa3748340b969f47c935d62a4f9b08b9fe8c98f808fec47e6546b0c7
-https://github.com/numpde/nmr-provider-tools/releases/download/v0.6.6/provider_core-0.6.6.tar.gz#sha256=0f395f3e84744b8917df78b9750386c8161297cca3adcadee5577bebe1686ac9
+https://github.com/numpde/nmr-provider-tools/releases/download/v0.6.9/provider_core-0.6.9-py3-none-any.whl#sha256=59ff3a063502bcd629c5fe37512625bd75bcb18c2e714feec83274bcb6f0b673
+https://github.com/numpde/nmr-provider-tools/releases/download/v0.6.9/provider_core-0.6.9.tar.gz#sha256=a61fba99727fedee57b95fd458ab2921732e930247f8efc77ec50c673c32c3a5
