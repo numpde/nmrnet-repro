@@ -27,6 +27,72 @@ from repository_checks.quality.sources import ROOT
 
 
 class AcquisitionInputTests(unittest.TestCase):
+    def test_wheelhouse_adapter_orders_workers_and_preserves_failure_kind(self):
+        program = r'''
+set -euo pipefail
+source "$1"
+image=fixture:pinned
+interface=lo
+wheelhouse_warm=false
+offline_grants=(--read-only)
+offline_app=(python3 -B -m tools.wheelhouse_acquire --probe)
+online_grants=(--read-only)
+online_app=(python3 -B -m tools.wheelhouse_acquire)
+offline_count=0
+acquisition_set_route() {
+    printf 'route %s\n' "$1" >> "$EVENTS"
+}
+acquisition_worker() {
+    local phase=$1 destination=$2 worker_image=$3 grants_name=$4 app_name=$5
+    [[ $worker_image == "$image" ]] || return 97
+    [[ $grants_name == "${phase}_grants" && $app_name == "${phase}_app" ]] || return 97
+    printf 'worker %s\n' "$phase" >> "$EVENTS"
+    if [[ $OWNER_STATUS != 0 ]]; then return "$OWNER_STATUS"; fi
+    local result
+    if [[ $phase == offline ]]; then
+        offline_count=$((offline_count + 1))
+        if (( offline_count == 1 )); then result=$INITIAL_STATUS; else result=$FINAL_STATUS; fi
+    else
+        result=$ONLINE_STATUS
+    fi
+    printf -v "$destination" '%s' "$result"
+}
+status=0
+nmrnet_acquire_wheelhouse || status=$?
+printf 'warm=%s\n' "$wheelhouse_warm"
+exit "$status"
+'''
+        cold = ["worker offline", "route lo", "worker online", "worker offline"]
+        cases = (
+            ("warm", 0, 0, 0, 0, 0, True, ["worker offline"]),
+            ("cold", 3, 0, 0, 0, 0, False, cold),
+            ("initial-worker-failure", 2, 0, 0, 0, 2, False, ["worker offline"]),
+            ("owner-status-is-not-cache-miss", 3, 0, 0, 3, 3, False, ["worker offline"]),
+            ("online-worker-failure", 3, 7, 0, 0, 7, False, cold[:-1]),
+            ("final-still-missing", 3, 0, 3, 0, 1, False, cold),
+            ("final-worker-failure", 3, 0, 17, 0, 17, False, cold),
+        )
+        for name, initial, online, final, owner, status, warm, events in cases:
+            with self.subTest(case=name):
+                log = self.root / ("adapter-" + name)
+                result = subprocess.run(
+                    ["bash", "-c", program, "bash", str(self.root / "tools/acquisition_wheelhouse.sh")],
+                    cwd=self.root,
+                    env=self.fixture.environment | {
+                        "EVENTS": str(log), "INITIAL_STATUS": str(initial),
+                        "ONLINE_STATUS": str(online), "FINAL_STATUS": str(final), "OWNER_STATUS": str(owner),
+                    },
+                    capture_output=True, text=True, timeout=5, check=False,
+                )
+                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(f"warm={str(warm).lower()}\n", result.stdout)
+                self.assertEqual(events, log.read_text().splitlines())
+                if name == "final-still-missing":
+                    self.assertIn("required inputs remain missing", result.stderr)
+                else:
+                    self.assertEqual("", result.stderr)
+                self.assertFalse(self.fixture.calls())
+
     def read_prompt(self, process, master, received, marker):
         deadline = time.monotonic() + 8
         while marker not in received:
