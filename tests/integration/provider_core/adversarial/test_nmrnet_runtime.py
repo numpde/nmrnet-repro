@@ -124,7 +124,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             fixture.stack.push_async_callback(fixture.settle_controller, controller)
             fixture.model_peer.mode = "headers-stall"
             task = asyncio.create_task(controller.run(pending))
-            await asyncio.wait_for(fixture.model_peer.received.wait(), 1)
+            await asyncio.wait_for(fixture.model_peer.received.wait(), fixture.config.preparation.seconds)
             task.cancel("fixture interpretation cancellation")
             with self.assertRaises(asyncio.CancelledError):
                 await task

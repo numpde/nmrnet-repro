@@ -44,7 +44,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     if cleanup_failure:
                         (fixture.diagnostics / "inject-input-cleanup-failure").write_bytes(b"test-only\n")
                     process = await fixture.start(child_script="interrupted_model_process.py")
-                    await fixture.observed("model-head-received")
+                    await fixture.observed("model-head-received", wait_seconds=fixture.config.preparation.seconds)
                     process.send_signal(signal.SIGTERM)
                     notice = json.loads(await asyncio.wait_for(process.stderr.readline(), 5))
                     self.assertEqual(notice["event"], "interpreter_endpoint_failed")
@@ -96,9 +96,9 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             )
             (fixture.diagnostics / "inject-report-stream-failure").write_bytes(b"test-only\n")
             process = await fixture.start(child_script="held_process.py")
-            await fixture.observed("factory-entered")
+            await fixture.observed("factory-entered", wait_seconds=5)
             process.send_signal(signal.SIGTERM)
-            await fixture.observed("report-stream-failed")
+            await fixture.observed("report-stream-failed", wait_seconds=5)
             report = (fixture.diagnostics / "report-stream-failed").read_text()
             self.assertIn('"requires_host_retirement": true', report)
             self.assertIn("Original service work is still pending", report)
@@ -139,7 +139,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                 .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
             )
             process = await fixture.start(child_script="held_process.py")
-            await fixture.observed("factory-entered")
+            await fixture.observed("factory-entered", wait_seconds=5)
             process.send_signal(signal.SIGTERM)
             report = await read_process_failure(process)
             self.assertIn(b'"requires_host_retirement":true', report)
@@ -152,7 +152,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             # A second normal stop is not a second task cancellation. The marker
             # is published only by the real process's signal callback.
             process.send_signal(signal.SIGTERM)
-            await fixture.observed(f"signal-{signal.SIGTERM}-2")
+            await fixture.observed(f"signal-{signal.SIGTERM}-2", wait_seconds=5)
             self.assertTrue((fixture.diagnostics / "first-cancellation").exists())
             for absent in ("factory-exited", "factory-cleanup-entered", "lifetime-close-entered", "result.json"):
                 self.assertFalse((fixture.diagnostics / absent).exists(), absent)

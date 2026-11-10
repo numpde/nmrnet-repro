@@ -81,7 +81,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service(drain_seconds=0.02)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                 original_work = service.work_task
                 original_work.cancel()
                 await asyncio.wait_for(fixture.stop.wait(), 1)
@@ -283,7 +283,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             task = asyncio.create_task(service.run(fixture.stop))
             calls = []
             try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 1)
+                await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                 ports = fixture.allocations[0]
                 original = ports.host.retire
 
@@ -360,7 +360,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(service, '_wait_task', observed_wait):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
-                    await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                    await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                     driver = service.work_task
                     fixture.stop.set()
                     await asyncio.wait_for(window_elapsed.wait(), 1)
@@ -397,7 +397,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             with patch("nmrnet_provider.service.LOGGER.warning", side_effect=fail_notice):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
-                    await asyncio.wait_for(fixture.execution_entered.wait(), 2)
+                    await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                     fixture.stop.set()
                     await asyncio.wait_for(notice.wait(), 2)
                     self.assertEqual(service.work_task.cancelling(), 0)
@@ -422,7 +422,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             service = fixture.service(hello_seconds=0.05)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
-                await asyncio.wait_for(fixture.execution_entered.wait(), 1)
+                await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                 fixture.hello_failure_after = 1
                 await asyncio.wait_for(asyncio.wait({service._hello_task}), 2)
                 fixture.execution_release.set()

@@ -87,8 +87,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 rendered = json.dumps(notice)
                 self.assertIn("request:condition-outage", rendered)
                 self.assertNotIn("PRIVATE", rendered)
-            await fixture.observed("condition-ack-received")
-            await fixture.observed("model-head-received")
+            await fixture.observed("condition-ack-received", wait_seconds=5)
+            await fixture.observed("model-head-received", wait_seconds=fixture.config.preparation.seconds)
             self.assertEqual(len(model.requests), 1)
             self.assertEqual(len(condition_sends), 2)
             self.assertEqual(condition_sends[0][1], condition_sends[1][1])
@@ -135,7 +135,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("request:phase-unconfirmed", rendered)
             self.assertIn('"status": 503', rendered)
             self.assertNotIn("PRIVATE", rendered)
-            await fixture.observed("model-head-received")
+            await fixture.observed("model-head-received", wait_seconds=fixture.config.preparation.seconds)
             self.assertEqual(len(model.requests), 1)
             requests = [request.split(b"\r\n", 1)[0] for request in fixture.peer.requests]
             put = requests.index(f"PUT /provider/v1/execution-attempts/{ATTEMPT_REF}/progress HTTP/1.1".encode())
@@ -335,7 +335,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
             fixture.peer.response_factory = response
             process = await fixture.start(child_script="interrupted_model_process.py")
-            await fixture.observed("model-head-received")
+            await fixture.observed("model-head-received", wait_seconds=fixture.config.preparation.seconds)
             retry = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
             recovered = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
             self.assertEqual([retry["event"], recovered["event"]], ["api_observation_retry", "api_observation_recovered"])
@@ -583,7 +583,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 fixture.peer.response_factory = response
             process = await fixture.start(child_script="interrupted_model_process.py")
             await asyncio.wait_for(fixture.discovered.wait(), 5)
-            await fixture.observed("hello-head-3-received" if after_outage else "hello-head-2-received")
+            await fixture.observed("hello-head-3-received" if after_outage else "hello-head-2-received", wait_seconds=5)
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())

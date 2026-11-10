@@ -258,7 +258,7 @@ class ProcessPeers:
         result.update(analysis_kind_ref="peaks_from_mol", jobs=jobs, next_cursor=None)
         return json.dumps(result).encode()
 
-    async def observed(self, name):
+    async def observed(self, name, *, wait_seconds):
         async def wait():
             while not (self.diagnostics / name).exists():
                 if self.process is not None and self.process.returncode is not None:
@@ -266,7 +266,7 @@ class ProcessPeers:
                     raise AssertionError("Foreground process exited before " + name + ": " + stderr.decode())
                 await asyncio.sleep(0.01)
 
-        await asyncio.wait_for(wait(), 5)
+        await asyncio.wait_for(wait(), wait_seconds)
 
     def assert_lifetime_released(self):
         """Reacquire the real supervisor lock without creating legacy bookkeeping."""

@@ -87,7 +87,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             try:
                 with patch.object(httpcore.AsyncConnectionPool, "handle_async_request", new=observe_head):
                     task = asyncio.create_task(owner.prepare(ports.instructions, require_execution=lambda: None))
-                    await asyncio.wait_for(received_head.wait(), 1)
+                    await asyncio.wait_for(received_head.wait(), chooser._conversation.timeout_seconds)
                     task.cancel()
                     if repeated_cancellation:
                         await asyncio.wait_for(retiring.wait(), 1)

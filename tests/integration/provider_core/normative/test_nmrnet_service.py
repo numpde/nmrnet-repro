@@ -189,7 +189,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 sent.append(json.loads(body))
                 if len(sent) == failed_send:
                     if failed_send == 2:
-                        await fixture.execution_entered.wait()
+                        await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
                     fixture.api_peer.response_status = 503
                     fixture.api_peer.response_headers = response_headers(status=503, request_id=b"request:hello-outage")
                     return b"PRIVATE maintenance body"
