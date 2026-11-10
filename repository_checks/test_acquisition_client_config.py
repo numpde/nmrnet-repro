@@ -361,11 +361,12 @@ class AcquisitionClientTests(unittest.TestCase):
         )
         for status in (0, 37, 143):
             with self.subTest(status=status):
-                result = self.caller(
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions=dict.fromkeys(forbidden, "private-poison")
+                result = self.fixture.run(
+                    "acquisition_run.sh", "--image", self.worker_image,
+                    "--", "--read-only", "--", "python3", "-c", "pass",
+                    additions=self.environment | dict.fromkeys(forbidden, "private-poison")
                     | {
+                        "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
                         "DOCKER_CONFIG": str(poison),
                         "DOCKER_BUILDKIT": "0",
                         "NMRNET_FAKE_WORKER_STATUS": str(status),
@@ -376,6 +377,9 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual("live worker output\n", result.stdout)
                 self.assertEqual("live worker error\n", result.stderr)
+                worker = [call["arguments"] for call in self.fixture.calls() if call["arguments"][:1] == ["create"]][-1]
+                self.assertIn("--read-only", worker)
+                self.assertEqual([self.worker_image, "python3", "-c", "pass"], worker[-4:])
         for call in self.fixture.calls():
             configuration = call["client_config"]
             self.assertEqual([], configuration["entries"])
@@ -732,6 +736,7 @@ class AcquisitionClientTests(unittest.TestCase):
                     "download",
                     additions=self.environment
                     | {
+                        "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
                         "NMRNET_FAKE_WORKER_STATUS": str(status),
                         "NMRNET_FAKE_WORKER_STDOUT": "checker worker output\n",
                         "NMRNET_FAKE_WORKER_STDERR": "checker worker error\n",
@@ -743,7 +748,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertEqual("checker worker error\n", result.stderr)
                 calls = self.fixture.calls()[before_calls:]
                 self.assertEqual(
-                    [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
+                    [["rm", "--force", "3" * 64], ["rm", "--force", "2" * 64], ["rm", "--force", "1" * 64]],
                     [call["arguments"] for call in calls if call["arguments"][0] == "rm"],
                 )
                 for call in calls:
