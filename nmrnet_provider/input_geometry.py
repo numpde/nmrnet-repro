@@ -215,6 +215,7 @@ def prepare_rows(rows, *, source, source_unit, source_record_number, source_posi
     return PreparedGeometry(
         request_bytes=raw,
         source_sha256=hashlib.sha256(source).hexdigest(),
+        # repo-check: allow-tuple-generator -- PreparedGeometry exposes this ordered source mapping without mutable aliases; proof=tests/test_provider_input.py::test_plaintext_conversion_preserves_order_and_line_mapping
         source_positions=tuple(position for position, _, _ in rows),
         source_position_kind=source_position_kind,
         source_unit=source_unit,

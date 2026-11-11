@@ -184,6 +184,7 @@ class ReleasedPredictionSession:
                 name: importlib.metadata.version(name) for name in ("torch", "numpy", "scikit-learn", "joblib")
             },
         }
+        # repo-check: allow-tuple-generator -- Retain ordered prepared-request hashes for execution and completed-input failure evidence; proof=tests/test_prediction_input.py::test_later_batch_failure_keeps_original_cause_and_completed_input_identity
         self._request_hashes = tuple(hashlib.sha256(raw).hexdigest() for raw in raw_requests)
         return handle
 

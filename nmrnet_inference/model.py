@@ -213,6 +213,7 @@ def compose_net_input(request, dictionary, element):
 
     logical_tokens = torch.tensor([dictionary.bos(), *token_ids, dictionary.eos()], dtype=torch.long, device="cpu")
     real_selection = [int(index == selected_index) for index in token_ids]
+    # repo-check: allow-tuple-generator -- Keep the source-atom index mapping stable beside the prepared tensors for later row pairing; proof=tests/integration/prediction_parity/test_prediction_model.py::test_one_and_maximum_atoms_match_upstream_for_h_and_c
     selected_atom_indices = tuple(atom_index for atom_index, selected in enumerate(real_selection) if selected)
     logical_selection = torch.tensor([dictionary.pad(), *real_selection, dictionary.pad()], dtype=torch.long, device="cpu")
 
@@ -294,4 +295,5 @@ def predict_composed_element(composed, model, scaler):
         raise ValueError("Cannot predict NMRNet++ shifts: inverse scaler changed the prediction row shape.")
     if not np.isfinite(ppm).all():
         raise ValueError("Cannot predict NMRNet++ shifts: inverse-scaled ppm values are not finite.")
+    # repo-check: allow-tuple-generator -- Preserve this head predictor's established tuple result, including () for an absent head; source=nmrnet_inference/model.py::predict_composed_element; indirect-merge-proof=tests/test_prediction_input.py::test_present_heads_load_sequentially_and_merge_by_original_atom_index
     return tuple((atom_index, float(value)) for atom_index, value in zip(composed.selected_atom_indices, ppm[:, 0], strict=True))

@@ -59,6 +59,7 @@ def route_provider_config(config, *, api, interpreter, store):
             api=replace(config.api, http=replace(config.api.http, proxy_socket=api)),
             interpreter=replace(
                 config.interpreter,
+                # repo-check: allow-tuple-generator -- Capture routed endpoint membership and order while retaining the original startup settings; proof=tests/integration/provider_core/normative/test_nmrnet_process.py::test_required_process_routes_reach_every_http_role_without_changing_owner_settings
                 endpoints=tuple(replace(endpoint, proxy_socket=interpreter) for endpoint in config.interpreter.endpoints),
             ),
             uploads=replace(config.uploads, http=replace(config.uploads.http, proxy_socket=store)),
