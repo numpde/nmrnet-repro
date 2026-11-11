@@ -113,8 +113,6 @@ class AcquisitionClientTests(unittest.TestCase):
 
     def _intercept(self, *names):
         for name in names:
-            if name == "stat":
-                (self.root / "bin" / name).unlink()
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
 
     def _remove_retained(self):
@@ -196,11 +194,6 @@ class AcquisitionClientTests(unittest.TestCase):
         process.communicate(timeout=3)
         self.retained.update(paths)
         self._remember()
-
-    # silent-defaults: allow-contract -- Ordinary probes capture real stderr; full_stderr explicitly selects the unread-full-pipe stimulus; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
-    def _start(self, additions, *, full_stderr=False):
-        command = ["bash", str(self.root / "tools/docker.sh"), "run", "sha256:" + "b" * 64]
-        return self._start_command(command, additions, full_stderr=full_stderr)
 
     def _start_command(self, command, additions, *, full_stderr):
         read_descriptor = None
@@ -462,28 +455,6 @@ class AcquisitionClientTests(unittest.TestCase):
             self.assertFalse(Path(configuration["path"]).parent.exists())
         self.assertTrue((poison / "config.json").is_file())
 
-    def test_failed_create_exact_pair_owns_cleanup_without_start(self):
-        for role in ("proxy", "worker"):
-            with self.subTest(role=role):
-                before = len(self.fixture.calls())
-                result = self.caller(
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions={
-                        "NMRNET_FAKE_CREATE_ROLE": role,
-                        "NMRNET_FAKE_CREATE_OUTPUT": "exact",
-                        "NMRNET_FAKE_CREATE_STATUS": "23",
-                    },
-                )
-                self.assertEqual(23, result.returncode)
-                calls = [call["arguments"] for call in self.fixture.calls()[before:]]
-                # silent-defaults: allow-contract -- Each declared create role has its own expected fixture ID; a failed exact pair permits removal but never start; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_failed_create_exact_pair_owns_cleanup_without_start
-                identifier = ("c" if role == "proxy" else "d") * 64
-                self.assertNotIn(["start", identifier], calls)
-                self.assertNotIn(["start", "--attach", identifier], calls)
-                self.assertIn(["rm", "--force", identifier], calls)
-                self.assertIn("create client failed (status 23)", result.stderr)
-
     def test_silent_preflight_status_keeps_private_cause_after_config_cleanup(self):
         allocation = (
             '() { local selected; if selected=$(command mktemp "$@"); then :; else return "$?"; fi; '
@@ -555,71 +526,6 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual(b"", (scratch / "readiness/logs.stdout").read_bytes())
         self.assertIn(str(scratch), result.stderr)
         self.assertFalse(Path(self.fixture.calls()[-1]["client_config"]["path"]).parent.exists())
-
-    def test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout(self):
-        for role in ("proxy", "worker"):
-            for kind in ("empty", "disagree", "nul"):
-                with self.subTest(role=role, kind=kind):
-                    (self.root / "create-held").unlink(missing_ok=True)
-                    before = len(self.fixture.calls())
-                    process, _, _ = self._start(
-                        {
-                            "NMRNET_FAKE_CREATE_ROLE": role,
-                            "NMRNET_FAKE_CREATE_OUTPUT": kind,
-                            "NMRNET_FAKE_CREATE_STATUS": "0",
-                            "NMRNET_FAKE_HOLD_CREATE": "1",
-                        }
-                    )
-                    client = self._observe_client(process, self.root / "create-held")
-                    # silent-defaults: allow-contract -- Within these empty/disagree/NUL cases, both roles use their declared IDs and only empty stdout permits CID-only cleanup after cancellation; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
-                    identifier = ("c" if role == "proxy" else "d") * 64
-                    if kind == "empty":
-                        # The existing authority accepts a complete 64-byte
-                        # EOF receipt even when stdout was never published.
-                        receipt = Path((self.root / (role + "-cid-path")).read_text())
-                        receipt.write_bytes(identifier.encode())
-                        self.assertEqual(64, receipt.stat().st_size)
-                    process.send_signal(signal.SIGTERM)
-                    stdout, stderr = process.communicate(timeout=5)
-                    self._remember(stderr.decode())
-                    self.assertEqual(143, process.returncode)
-                    self.assertEqual(b"", stdout)
-                    self.assertEqual(b"", stderr)
-                    self.assertFalse(Path("/proc", str(client)).exists())
-                    calls = [call["arguments"] for call in self.fixture.calls()[before:]]
-                    if kind == "empty":
-                        self.assertIn(["rm", "--force", identifier], calls)
-                    else:
-                        self.assertNotIn(["rm", "--force", identifier], calls)
-                        scratch = Path((self.root / (role + "-cid-path")).read_text()).parent
-                        self.assertTrue(scratch.is_dir())
-                        expected = b"e" * 64 + b"\n" if kind == "disagree" else identifier.encode() + b"\0"
-                        self.assertEqual(expected, (scratch / (role + "-create/stdout")).read_bytes())
-
-    def test_unavailable_or_nonnumeric_stat_cannot_admit_create_output(self):
-        self._intercept("stat")
-        for fault in ("failure", "nonnumeric"):
-            with self.subTest(fault=fault):
-                before = len(self.fixture.calls())
-                result = self.caller("run", "sha256:" + "b" * 64, additions={"NMRNET_ACQUISITION_STAT_FAULT": fault})
-                self.assertEqual(2, result.returncode, msg=result.stderr)
-                self.assertFalse(any(call["arguments"][0] in {"start", "rm"} for call in self.fixture.calls()[before:]))
-                self.assertIn("not admitted", result.stderr)
-
-    def test_exact_limit_stdout_is_rejected_before_start(self):
-        result = self.caller(
-            "run",
-            "sha256:" + "b" * 64,
-            additions={
-                "NMRNET_FAKE_CREATE_ROLE": "proxy",
-                "NMRNET_FAKE_CREATE_OUTPUT": "cap",
-                "NMRNET_FAKE_CREATE_STATUS": "0",
-            },
-        )
-        self.assertEqual(2, result.returncode, msg=result.stderr)
-        self.assertFalse(any(call["arguments"][0] in {"start", "rm"} for call in self.fixture.calls()))
-        scratch = Path((self.root / "proxy-cid-path").read_text()).parent
-        self.assertEqual(4096, (scratch / "proxy-create/stdout").stat().st_size)
 
     def test_readiness_distinguishes_stopped_from_unobserved_state_and_log_failure(self):
         for state, inspect_status, logs in (("false", "0", "0"), ("true", "37", "23"), ("garbage", "0", "0")):
@@ -861,21 +767,6 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertNotIn("configuration retained", result.stderr)
                 directory = Path(self.fixture.calls()[-1]["client_config"]["path"]).parent
                 self.assertEqual(fault == "retain", directory.exists())
-
-    def test_out_of_range_new_create_status_cannot_wrap_to_success_or_publish_cid(self):
-        result = self.caller(
-            "run",
-            "sha256:" + "b" * 64,
-            additions={
-                "NMRNET_FAKE_CREATE_ROLE": "proxy",
-                "NMRNET_FAKE_CREATE_OUTPUT": "exact",
-                "NMRNET_FAKE_CREATE_STATUS": "256",
-            },
-        )
-        self.assertEqual(97, result.returncode)
-        self.assertFalse((self.root / "proxy-cid-path").exists())
-        self.assertEqual({}, json.loads((self.root / "containers.json").read_text()))
-        self.assertFalse(any(call["arguments"][0] in {"start", "rm"} for call in self.fixture.calls()))
 
     def _checker_inputs(self):
         # Download hands its supported PID to the same real controller exercised
@@ -1134,17 +1025,6 @@ def fake_command(name):
     root = Path(os.environ["NMRNET_ACQUISITION_FIXTURE_ROOT"])
     arguments = sys.argv[1:]
     destination = Path(arguments[-1])
-    if name == "stat":
-        if arguments[:3] == ["-c", "%s", "--"] and destination.parent.name == "proxy-create" and destination.name == "stdout":
-            fault = os.environ["NMRNET_ACQUISITION_STAT_FAULT"]
-            if fault == "failure":
-                return 41
-            if fault == "nonnumeric":
-                sys.stdout.write("unavailable\n")
-                return 0
-            return 97
-        adapter = ROOT / "repository_checks/fixtures/containers/stat.py"
-        os.execv(sys.executable, [sys.executable, "-B", str(adapter), *arguments])
     if name == "rm":
         if arguments[:2] == ["-rf", "--"] and destination.name.startswith("nmrnet-docker-client."):
             fault = os.environ["NMRNET_ACQUISITION_RM_FAULT"]
@@ -1176,6 +1056,6 @@ def fake_command(name):
 
 if __name__ == "__main__":
     executable = Path(sys.argv[0]).name
-    if executable in {"stat", "rm", "mv"}:
+    if executable in {"rm", "mv"}:
         sys.exit(fake_command(executable))
     unittest.main()

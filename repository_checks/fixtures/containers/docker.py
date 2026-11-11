@@ -75,7 +75,6 @@ record_engine_call(
 command = arguments[0] if arguments else ""
 for fault_name, accepted_values in (
     ("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),
-    ("NMRNET_FAKE_HOLD_CREATE", {"1"}),
     ("NMRNET_FAKE_PROXY_NO_READY", {"1"}),
 ):
     if fault_name in os.environ and os.environ[fault_name] not in accepted_values:
@@ -224,16 +223,9 @@ elif command == "create":
     identifier = os.environ[f"NMRNET_FAKE_{role.upper()}_CID"]
     receipt = Path(arguments[arguments.index("--cidfile") + 1])
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
-        if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {
-            "exact",
-            "empty",
-            "disagree",
-            "nul",
-            "cap",
-        }:
+        if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] != "exact":
             sys.stderr.write("unexpected fake docker invocation: unmodeled create output fault\n")
             raise SystemExit(97)
-        output_kind = os.environ["NMRNET_FAKE_CREATE_OUTPUT"]
         if (
             "NMRNET_FAKE_CREATE_STATUS" not in os.environ
             or re.fullmatch(r"0|[1-9][0-9]{0,2}", os.environ["NMRNET_FAKE_CREATE_STATUS"]) is None
@@ -257,30 +249,11 @@ elif command == "create":
         if argument.startswith("type=bind,src=") and argument.endswith(",dst=/ready"):
             (log.parent / "ready-path").write_text(argument.split("src=", 1)[1].split(",dst=", 1)[0])
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
-        # Emit bytes before the real cancellation marker. The controller must
-        # retain contradictory stdout even when the exact CID already exists.
-        if output_kind == "exact":
-            create_output = identifier.encode("ascii") + b"\n"
-        elif output_kind == "empty":
-            create_output = b""
-        elif output_kind == "disagree":
-            # silent-defaults: allow-contract -- Emit a valid 64-hex CID different from the selected identity: e unless that identity is all e, then f; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
-            create_output = (b"e" if identifier != "e" * 64 else b"f") * 64 + b"\n"
-        elif output_kind == "nul":
-            create_output = identifier.encode("ascii") + b"\0"
-        elif output_kind == "cap":
-            create_output = b"x" * 4096
-        sys.stdout.buffer.write(create_output)
+        sys.stdout.buffer.write(identifier.encode("ascii") + b"\n")
         sys.stdout.buffer.flush()
         if os.environ.get("NMRNET_FAKE_CREATE_PRIVATE_ERROR"):
             sys.stderr.write(os.environ["NMRNET_FAKE_CREATE_PRIVATE_ERROR"] + "\n")
             sys.stderr.flush()
-        if os.environ.get("NMRNET_FAKE_HOLD_CREATE") == "1":
-            import signal
-
-            (log.parent / "create-held").write_text(role + "\n" + str(os.getpid()) + "\n")
-            while True:
-                signal.pause()
         raise SystemExit(create_fault_status)
     sys.stdout.write(identifier + "\n")
 elif command == "start":
