@@ -318,7 +318,9 @@ class ProviderService:
                 if self._stop.is_set():
                     return None
                 outage = failure
-                wait = random.uniform(delay / 2, delay) + (failure.retry_after_seconds or 0)
+                wait = random.uniform(delay / 2, delay)
+                if failure.retry_after_seconds is not None:
+                    wait += failure.retry_after_seconds
                 self._on_api_retry(kind, failure, wait)
                 if await self._pause(wait):
                     return None

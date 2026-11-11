@@ -3,8 +3,9 @@
 set -euo pipefail
 umask 077
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-role=${1-} action=${2-}
-[[ $# == 2 && $role == provider && $action =~ ^(install|update|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
+[[ $# == 2 ]] || exit 2
+role=$1 action=$2
+[[ $role == provider && $action =~ ^(install|update|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
 [[ -z ${NMRNET_RETAIN_PRIOR_INPUT-} || ${NMRNET_RETAIN_PRIOR_INPUT} == 1 ]] || {
     printf '%s\n' 'Provider deployment accepts RETAIN_PRIOR=1 to preserve previous images and configuration generations.' >&2; exit 2;
 }
@@ -22,7 +23,7 @@ private_directory() {
         || { refuse 'configuration roots must be caller-owned mode 0700 directories.'; return 2; }
 }
 runtime_directory() {
-    local create=${2-true} ownership
+    local create=$2 ownership
     path "$1"
     if [[ ! -e $1 ]]; then
         [[ $create == true ]] || { refuse 'an active deployment runtime directory is missing; inspect it before updating.'; return 2; }

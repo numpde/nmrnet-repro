@@ -124,7 +124,7 @@ api_witness_finish() {
 
 api_witness_ambiguity() {
     # Both fixed probes share selection, grants, clocks and exact retirement.
-    local probe=${1:-ambiguity} case_fixture=interpreter_ambiguity.json
+    local probe=$1 case_fixture=interpreter_ambiguity.json
     case "$probe" in
         ambiguity) ;;
         formats) case_fixture=interpreter_formats.json ;;

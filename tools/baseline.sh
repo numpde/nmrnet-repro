@@ -118,7 +118,7 @@ elif [[ "$action" == run ]]; then
     # finite nonnegative tolerances before creating its exclusive output directory.
     for name in LABEL_ATOL ATOL RTOL RUN_ID; do
         variable="NMRNET_${name}_INPUT"
-        if [[ -z "${!variable:-}" ]]; then
+        if [[ ! -v $variable || -z ${!variable} ]]; then
             printf 'Cannot run baseline: supply %s explicitly on the make command line.\n' "$name" >&2
             exit 2
         fi

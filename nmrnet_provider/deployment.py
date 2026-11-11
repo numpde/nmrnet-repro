@@ -301,9 +301,11 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
             require_interface_name(interface)
         except ValueError as cause:
             raise ConfigurationRejected(str(cause), cause=cause) from None
-        addresses = route.get("addresses", [])
-        if type(addresses) is not list or any(type(value) is not str for value in addresses):
-            raise ConfigurationRejected("route addresses require explicit host=IPv4 strings.")
+        addresses = []
+        if "addresses" in route:
+            if type(route["addresses"]) is not list or any(type(value) is not str for value in route["addresses"]):
+                raise ConfigurationRejected("route addresses require explicit host=IPv4 strings.")
+            addresses.extend(route["addresses"])
         try:
             ServicePolicy.admit(route["mode"], authorities[role], addresses)
         except ServiceRefused as cause:
