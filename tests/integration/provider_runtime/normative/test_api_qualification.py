@@ -72,7 +72,8 @@ provider_host_create() {
         stage)
             printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt"
             printf '%s\n' '{"provider_ref":"provider:fixture"}' > "$provider_host_root/source/identity.json"
-            mkdir -m 700 -p "$provider_host_root/deployment/secrets"
+            mkdir -m 700 -p "$provider_host_root/deployment/secrets" "$provider_host_root/deployment/interpreter.d"
+            printf 'fixture endpoint\n' > "$provider_host_root/deployment/interpreter.d/00-primary.toml"
             printf 'fixture binding\\n' > "$provider_host_root/deployment/bindings.toml"
             for file in provider.toml deployment.toml; do printf '%s\n' "$file" > "$provider_host_root/deployment/$file"; done
             for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
@@ -141,6 +142,7 @@ printf '%s|%s\n' "$1" "$NMRNET_DEPLOYMENT_INPUT" >> "$TEST_RECORDS/deployments"
 printf '%s\n' "$1" >> "$TEST_RECORDS/events"
 private=$root/secrets/deployments/$NMRNET_DEPLOYMENT_INPUT
 for file in provider.toml deployment.toml; do cmp -s "$public/$file" <(printf '%s\n' "$file"); done
+cmp -s "$public/interpreter.d/00-primary.toml" <(printf 'fixture endpoint\n')
 for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
     cmp -s "$private/$file" <(printf 'fixture-%s\n' "$file")
     [[ $(stat -c '%a' "$private/$file") == 600 ]]
@@ -374,6 +376,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
             "tools/git_metadata.sh",
             "tests/integration/provider_runtime/interpreter_ambiguity.py",
             "tests/integration/provider_runtime/stage_api_config.py",
+            "tests/integration/provider_runtime/interpreter_fragment.py",
             "tests/integration/provider_core/config_ports.py",
             "tests/integration/provider_runtime/binding_inputs.py",
             "tests/fixtures/preparation/interpreter_ambiguity.json",
@@ -553,6 +556,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "requirements/provider-core-release.json",
                     "tests/integration/provider_runtime/model_peer.py",
                     "tests/integration/provider_runtime/stage_api_config.py",
+                    "tests/integration/provider_runtime/interpreter_fragment.py",
+                    "tests/integration/provider_runtime/materialize_api_config.py",
                     "tests/integration/provider_runtime/binding_inputs.py",
                     "tests/integration/provider_runtime/api_prediction.py",
                     "tests/integration/provider_core/config_ports.py",

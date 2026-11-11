@@ -9,7 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from stage_api_config import inspect_interpreter, interpreter_fragment, stage
+from interpreter_fragment import interpreter_fragment
+from materialize_api_config import stage
+from stage_api_config import inspect_interpreter
 from staging_test_ports import staged_real_config, staging_inputs, upload_sources
 
 from nmrnet_provider.config import ConfigurationRejected

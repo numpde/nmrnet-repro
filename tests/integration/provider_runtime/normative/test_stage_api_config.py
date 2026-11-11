@@ -5,19 +5,51 @@ from tools.container_guard import require_container
 require_container()
 
 import json
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import tomllib
-from stage_api_config import inspect_interpreter, stage, stage_deployment
+from materialize_api_config import stage, stage_deployment
+from stage_api_config import inspect_interpreter
 from staging_test_ports import staged_real_config, staging_inputs, upload_sources
 
 from nmrnet_provider.config import load_provider_config
 
 
 class StageApiConfigTests(unittest.TestCase):
+    def test_standalone_inspection_needs_no_materializer_or_sdk_test_fixtures(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture = Path("/fixture")
+            shutil.copyfile(fixture / "interpreter_fragment.py", root / "interpreter_fragment.py")
+            fragment = root / "endpoint.toml"
+            fragment.write_text('url = "https://model.example"\nmodel = "test"\nkey_file = "/absent/key"\n')
+            fragment.chmod(0o600)
+            for name in ("stage_api_config.py", "stage.py"):
+                script = root / name
+                shutil.copyfile(fixture / "stage_api_config.py", script)
+                output = root / (name + ".output")
+                output.mkdir()
+                environment = os.environ | {"PYTHONPATH": str(root)}
+                help_result = subprocess.run(
+                    [sys.executable, "-B", str(script), "--help"], env=environment, capture_output=True, text=True, check=False
+                )
+                self.assertEqual(0, help_result.returncode, help_result.stderr)
+                result = subprocess.run(
+                    [sys.executable, "-B", str(script), "--root", str(output), "--inspect-interpreter", str(fragment)],
+                    env=environment, capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual("/absent/key\n", (output / "key_file.txt").read_text())
+                self.assertEqual("\n", (output / "ca_file.txt").read_text())
+                self.assertEqual(0o600, (output / "interpreter-inputs.json").stat().st_mode & 0o777)
+
     def deployment_settings(self, root):
         path = root / "deployment.toml"
         path.write_text('[deployment]\nproject = "fixture-delivery"\ngid = 1001\n')

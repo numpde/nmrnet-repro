@@ -400,6 +400,8 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly"
                     --mount "type=bind,src=$repository_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_fragment.py,dst=/fixture/interpreter_fragment.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/materialize_api_config.py,dst=/fixture/materialize_api_config.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_stage_api_config.py,dst=/fixture/test_stage_api_config_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_stage_api_config.py,dst=/fixture/test_stage_api_config_adversarial.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/staging_test_ports.py,dst=/fixture/staging_test_ports.py,readonly"
@@ -578,7 +580,7 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation,dst=/fixtures/preparation,readonly")
                 fi
                 if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
-                    for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json tests/fixtures/preparation/interpreter_formats.json; do
+                    for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_runtime/interpreter_fragment.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json tests/fixtures/preparation/interpreter_formats.json; do
                         if [[ ! -f "$repository_root/$probe_input" || -L "$repository_root/$probe_input" ]]; then
                             printf -v pending_diagnostic '%sCannot test the interpreter probe: expected a regular authored input.\n' "$pending_diagnostic"
                             exit 2

@@ -13,7 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from stage_api_config import inspect_interpreter, stage
+from materialize_api_config import stage
+from stage_api_config import inspect_interpreter
 from tests.fakes.credential import document, encoded
 
 from nmrnet_provider.config import load_provider_config

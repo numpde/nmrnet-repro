@@ -21,7 +21,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import tomllib
-from stage_api_config import interpreter_fragment
+from interpreter_fragment import interpreter_fragment
 
 from nmrnet_provider.config import ConfigurationRejected, InterpreterSettings, _endpoint, read_startup_file
 from nmrnet_provider.geometry_protocol import require_read_options
