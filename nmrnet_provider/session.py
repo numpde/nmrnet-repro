@@ -219,7 +219,7 @@ class NMRNetSession:
             raise ValueError("Scientific session permits zero or one prediction retry.")
         if max_retries and (
             type(prediction_seconds) not in (int, float)
-            or not 0 < prediction_seconds
+            or not prediction_seconds > 0
             or not math.isfinite(2 * prediction_seconds)
         ):
             raise ValueError("Prediction retry requires a finite positive prediction deadline.")
