@@ -263,11 +263,11 @@ class PredictionSession:
         for index, request in enumerate(requests, 1):
             try:
                 geometries.append(
-                    tuple(
+                    [
                         (element, compose_net_input(request, dictionary, element))
                         for element in ("H", "C")
                         if element in request["atoms"]
-                    )
+                    ]
                 )
             except Exception as cause:
                 cause.add_note(f"Scientific batch geometry-{index} failed tensor admission.")
