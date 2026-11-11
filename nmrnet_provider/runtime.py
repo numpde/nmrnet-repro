@@ -32,6 +32,7 @@ def capture_prose_services(config):
     retry timing survives, so an unavailable model does not consume successive
     Jobs' budgets before another request is allowed.
     """
+    # repo-check: allow-tuple-generator -- SDK Interpreter requires a nonempty tuple of factories; captured services preserve retry state across Jobs; proof=tests/integration/provider_core/adversarial/test_nmrnet_service_prose_outage.py::NmrnetProseServiceOutageTests.test_captured_http_service_postpones_admission_and_recovers_without_rebinding
     return tuple(
         ProseService(
             ChatEndpointFactory(
@@ -117,6 +118,7 @@ async def assemble_attempt(
         prose_services,
         timeout_seconds=config.interpreter.timeout_seconds,
         context_bytes=min(service.context_bytes for service in prose_services),
+        # repo-check: allow-tuple-generator -- SDK Interpreter requires credentials as a tuple whose members are nonempty strings; proof=tests/integration/provider_core/normative/test_nmrnet_runtime.py::ConfiguredRuntimeTests.test_three_routes_consume_discovered_identity_and_publish_a_complete_result
         secrets=tuple(settings.spec.api_key for settings in config.interpreter.endpoints),
         on_endpoint_failure=on_interpreter_failure,
     )

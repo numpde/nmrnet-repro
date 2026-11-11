@@ -307,8 +307,10 @@ class NMRNetSession:
         # Core binds this identity to the live Attempt before execute(). Keep
         # the admitted bytes here so the worker receives that same preparation.
         if type(prepared) is GeneratedJobInput:
+            # repo-check: allow-tuple-generator -- PredictionClient.prepare requires a tuple of exact bytes; retain the generated batch for execution; proof=tests/integration/provider_core/normative/test_nmrnet_smiles_session.py::SmilesSessionTests.test_generated_batch_keeps_order_and_diagnostics_through_one_prediction_path
             requests = tuple(item.request_bytes for item in prepared.generated.conformers)
         else:
+            # repo-check: allow-tuple-generator -- PredictionClient.prepare requires a tuple of exact bytes; retain the supplied batch for execution; proof=tests/integration/provider_core/test_nmrnet_session.py::NMRNetSessionTests.test_preparation_owner_supplies_one_ordered_batch_and_retires_with_session
             requests = tuple(geometry.request_bytes for geometry in prepared.geometries)
         self._prepared = _PreparedExecution(handle, requests, plan)
         self._phase = _Phase.PREPARED

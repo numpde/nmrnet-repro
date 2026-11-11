@@ -61,6 +61,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
                 ):
                     raise WorkerProtocolError("Preparation requires a bounded ordered list of encoded geometry requests")
                 try:
+                    # repo-check: allow-tuple-generator -- require_request_batch admits an exact tuple of request bytes before preparation; proof=tests/test_provider_worker.py::PredictionWorkerTests.test_real_worker_returns_the_whole_ordered_batch_once
                     raw_requests = tuple(base64.b64decode(item, validate=True) for item in encoded)
                 except (ValueError, binascii.Error) as cause:
                     raise WorkerProtocolError("Preparation request is not valid base64") from cause
