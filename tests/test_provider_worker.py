@@ -389,7 +389,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
                         declaration.write_bytes(b'{"selection":"changed"}')
                     models = SelectedReleaseModels(declaration_path=declaration, weight_root=root, checkpoint_root=root)
                     prediction = ReleasedPredictionSession(models)
-                    prediction._prediction.prepare = Mock(side_effect=lambda _requests, models=models: (models._selection(), object())[1])
+                    prediction._prediction.prepare = Mock(
+                        side_effect=lambda _requests, models=models: (models._selection(), object())[1]
+                    )
                     connection = RecordingConnection(prepare_frame())
                     with (
                         patch("nmrnet_inference.worker.secrets.token_hex", return_value="a" * 32),
@@ -544,9 +546,11 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
             time.sleep(0.02)
             return result
 
-        with patch("nmrnet_provider.worker_client.frame", side_effect=slow_frame):
-            with self.assertRaises(WorkerExchangeTimedOut) as expired:
-                await client.prepare((b"request",))
+        with (
+            patch("nmrnet_provider.worker_client.frame", side_effect=slow_frame),
+            self.assertRaises(WorkerExchangeTimedOut) as expired,
+        ):
+            await client.prepare((b"request",))
         self.assertFalse(expired.exception.send_started)
         self.assertEqual(writer.sent, [])
         self.assertIn('"send_started": false', json.dumps(failure_evidence(expired.exception, secrets=())))
@@ -557,9 +561,8 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
             reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64
         )
         cleanup = OSError("PRIVATE_CLOSE_FAILURE")
-        with patch.object(writer, "close", side_effect=cleanup):
-            with self.assertRaises(ExceptionGroup) as caught:
-                await client.prepare((b"request",))
+        with patch.object(writer, "close", side_effect=cleanup), self.assertRaises(ExceptionGroup) as caught:
+            await client.prepare((b"request",))
         timeout, reported_cleanup = caught.exception.exceptions
         self.assertIs(type(timeout), WorkerExchangeTimedOut)
         self.assertTrue(timeout.send_started)
@@ -572,9 +575,8 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_lost_channel_and_close_failure_remain_independent(self):
         client, writer = self.client(b"")
         cleanup = OSError("PRIVATE_CLOSE_FAILURE")
-        with patch.object(writer, "close", side_effect=cleanup):
-            with self.assertRaises(ExceptionGroup) as caught:
-                await client.prepare((b"request",))
+        with patch.object(writer, "close", side_effect=cleanup), self.assertRaises(ExceptionGroup) as caught:
+            await client.prepare((b"request",))
         primary, reported_cleanup = caught.exception.exceptions
         self.assertIs(type(primary), asyncio.IncompleteReadError)
         self.assertIs(reported_cleanup, cleanup)
@@ -610,9 +612,8 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         client = PredictionClient(
             reader, writer, allocation="test-allocation", operation_seconds=1, declaration_sha256="d" * 64, native=native
         )
-        with patch.object(writer, "close", side_effect=cleanup):
-            with self.assertRaises(asyncio.CancelledError) as caught:
-                await client.prepare((b"request",))
+        with patch.object(writer, "close", side_effect=cleanup), self.assertRaises(asyncio.CancelledError) as caught:
+            await client.prepare((b"request",))
         self.assertIs(caught.exception, interruption)
         self.assertTrue(any(isinstance(item, asyncio.IncompleteReadError) for item in caught.exception.__cause__.exceptions))
         self.assertIn(cleanup, caught.exception.__cause__.exceptions)
