@@ -52,9 +52,9 @@ def run():
         mark("factory-entered")
         try:
             await asyncio.Event().wait()
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as cancellation:
             if not stopping.is_set():
-                raise AssertionError("Factory setup was cancelled before its effect cutoff")
+                raise AssertionError("Factory setup was cancelled before its effect cutoff") from cancellation
             mark("cutoff-before-cancellation")
             if asyncio.current_task() is original and factory._operation is original:
                 mark("original-owner-retained")
