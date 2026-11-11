@@ -334,24 +334,24 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 local_settings = repository / "config/deployments/original/deployment.toml"
                 local_settings.parent.mkdir(parents=True)
                 local_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
-                environment = dict(
-                    PATH=os.environ["PATH"],
-                    TEST_RECORDS=str(records),
-                    TEST_PYTHON=sys.executable,
-                    NMRNET_SHARED_RUNTIME_IMAGE_INPUT="sha256:" + "a" * 64,
-                    TEST_QUERY_FAILED=str(scenario == "query-failure").lower(),
-                    NMRNET_DEPLOYMENT_INPUT="original",
-                    TEST_VOLUME_MISSING=str(scenario == "missing-volume").lower(),
-                    NMRNET_PROJECT_REF_INPUT="project:fixture",
-                    NMRNET_USER_ID_INPUT="fixture",
-                    NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT=str(root / "credentials"),
-                    NMRNET_CA_FILE_INPUT=str(root / "ca.pem"),
-                    NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
-                    NMRNET_ADDRESS_INPUT="127.0.0.1",
-                    NMRNET_INTERFACE_INPUT="fixture0",
-                    NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64,
-                    NMRNET_OUTPUT_INPUT=str(output),
-                )
+                environment = {
+                    "PATH": os.environ["PATH"],
+                    "TEST_RECORDS": str(records),
+                    "TEST_PYTHON": sys.executable,
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                    "TEST_QUERY_FAILED": str(scenario == "query-failure").lower(),
+                    "NMRNET_DEPLOYMENT_INPUT": "original",
+                    "TEST_VOLUME_MISSING": str(scenario == "missing-volume").lower(),
+                    "NMRNET_PROJECT_REF_INPUT": "project:fixture",
+                    "NMRNET_USER_ID_INPUT": "fixture",
+                    "NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT": str(root / "credentials"),
+                    "NMRNET_CA_FILE_INPUT": str(root / "ca.pem"),
+                    "NMRNET_RETAINED_RESULT_INPUT": str(root / "oracle.json"),
+                    "NMRNET_ADDRESS_INPUT": "127.0.0.1",
+                    "NMRNET_INTERFACE_INPUT": "fixture0",
+                    "NMRNET_API_CLIENT_IMAGE_INPUT": "sha256:" + "a" * 64,
+                    "NMRNET_OUTPUT_INPUT": str(output),
+                }
                 result = subprocess.run(
                     ["bash", str(script), "existing-pasted"],
                     env=environment,

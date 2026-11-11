@@ -38,18 +38,18 @@ class ComposeFixture:
         self.grants = SharedGrants("nmr-api-delivery", self.config.delivery.endpoint.socket_group_id)
 
     def plan(self, **changes):
-        arguments = dict(
-            deployment="web",
-            checkout=self.root / "checkout",
-            bundle=self.bundle,
-            uid=1000,
-            gid=1001,
-            prepared=self.root / "prepared",
-            execution=self.execution,
-            routes=self.routes,
-            grants=self.grants,
-            shared_image_id="sha256:" + "9" * 64,
-        )
+        arguments = {
+            "deployment": "web",
+            "checkout": self.root / "checkout",
+            "bundle": self.bundle,
+            "uid": 1000,
+            "gid": 1001,
+            "prepared": self.root / "prepared",
+            "execution": self.execution,
+            "routes": self.routes,
+            "grants": self.grants,
+            "shared_image_id": "sha256:" + "9" * 64,
+        }
         arguments.update(changes)
         return render_compose(self.config, **arguments)
 
@@ -112,23 +112,23 @@ def deployment_inputs(root):
     bundle.mkdir(mode=0o700)
     for directory in (bundle / "config", bundle / "secrets", bundle / "secrets" / "provider"):
         directory.mkdir(mode=0o700)
-    return dict(
-        definition=definition,
-        settings=settings,
-        secrets=files.root,
-        bundle=bundle,
-        source_root=source_root,
-        source_names=tuple(sources),
-        models=models,
-        deployment="web",
-        checkout=root / "checkout",
-        uid=1000,
-        gid=1001,
-        prepared=root / "prepared",
-        shared_image_id="sha256:" + "9" * 64,
-        image_id="sha256:" + "1" * 64,
-        geometry_image_id="sha256:" + "2" * 64,
-        controller_image_id="sha256:" + "3" * 64,
-        repository_revision="a" * 40,
-        upstream_revision="b" * 40,
-    ), files
+    return {
+        "definition": definition,
+        "settings": settings,
+        "secrets": files.root,
+        "bundle": bundle,
+        "source_root": source_root,
+        "source_names": tuple(sources),
+        "models": models,
+        "deployment": "web",
+        "checkout": root / "checkout",
+        "uid": 1000,
+        "gid": 1001,
+        "prepared": root / "prepared",
+        "shared_image_id": "sha256:" + "9" * 64,
+        "image_id": "sha256:" + "1" * 64,
+        "geometry_image_id": "sha256:" + "2" * 64,
+        "controller_image_id": "sha256:" + "3" * 64,
+        "repository_revision": "a" * 40,
+        "upstream_revision": "b" * 40,
+    }, files
