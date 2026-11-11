@@ -158,11 +158,11 @@ class Client:
         for signature_attempt in range(3):
             prefix, response, content = self._signed_response(label, method, path, query, body, 1048576)
             Path(str(prefix) + ".response.json").write_bytes(content)
-            if signature_attempt < 2 and self._read_window_closed(method, response, content):
-                continue
-            self._api_accepted(response, status)
-            require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
-            return decode_strict_json(content.decode("utf-8"))
+            if signature_attempt == 2 or not self._read_window_closed(method, response, content):
+                break
+        self._api_accepted(response, status)
+        require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
+        return decode_strict_json(content.decode("utf-8"))
 
     def _read_window_closed(self, method, response, content):
         """Refresh a GET signature after the API's no-effect replay-epoch refusal.
