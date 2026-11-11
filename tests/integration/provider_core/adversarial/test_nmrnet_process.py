@@ -34,7 +34,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     original_reply = fixture.peer.response_factory
                     failures = []
 
-                    async def capture_failure(request, body):
+                    async def capture_failure(request, body, *, failures=failures, original_reply=original_reply):
                         target = request.split(b"\r\n", 1)[0].split(b" ")[1].decode()
                         if target.endswith("/fail"):
                             failures.append((target, json.loads(body)))

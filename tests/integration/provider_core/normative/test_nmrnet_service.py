@@ -29,7 +29,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 async with ServicePeers() as fixture:
                     notices = []
 
-                    async def response(request, body):
+                    async def response(request, body, *, route=route, fixture=fixture):
                         fixture.api_peer.response_status = 200
                         fixture.api_peer.response_headers = response_headers()
                         target = request.split(b"\r\n", 1)[0].split(b" ")[1].split(b"?", 1)[0]
@@ -39,7 +39,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                             return b"rate limited"
                         return await fixture.api_reply(request, body)
 
-                    def retry(kind, failure, seconds):
+                    def retry(kind, failure, seconds, *, notices=notices, fixture=fixture):
                         notices.append((kind, failure.status, seconds))
                         fixture.stop.set()
 

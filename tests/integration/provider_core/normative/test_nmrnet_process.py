@@ -166,7 +166,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
                     notices = []
 
-                    def write_notice(content):
+                    def write_notice(content, *, notices=notices, fail_first=fail_first):
                         document = json.loads(content)
                         notices.append(document)
                         if fail_first and len(notices) == 1:

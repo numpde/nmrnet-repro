@@ -292,7 +292,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 original_reply = fixture.api_peer.response_factory
                 starts = []
 
-                async def reply(request, body):
+                async def reply(request, body, *, starts=starts, entered=entered, release=release, original_reply=original_reply):
                     if request.startswith(b"POST /provider/v1/execution-attempts/start "):
                         starts.append(body)
                         entered.set()
@@ -303,7 +303,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 service = fixture.service(drain_seconds=0.02)
                 wait_task = service._wait_task
 
-                async def observed_wait(task, seconds):
+                async def observed_wait(task, seconds, *, wait_task=wait_task, service=service, elapsed=elapsed):
                     finished = await wait_task(task, seconds)
                     if task is service.work_task and seconds == service.policy.drain_seconds:
                         elapsed.set()
