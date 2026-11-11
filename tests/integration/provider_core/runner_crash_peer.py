@@ -51,7 +51,7 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
             old.connect(deadline=deadline)
             listener = owned.enter_context(socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET))
             listener.bind(str(probe_path))
-            os.chmod(probe_path, 0o600)
+            probe_path.chmod(0o600)
             observed = probe_path.lstat()
             bound_identity = observed.st_dev, observed.st_ino
             listener.listen(1)

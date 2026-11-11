@@ -596,7 +596,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                                     )
                                 else:
                                     await owner.acquire(api.member.upload_ref)
-                            self.assertEqual(os.listdir(root), [])
+                            self.assertEqual(list(Path(root).iterdir()), [])
                     failure = caught.exception
                     rendered = json.dumps(self.receive(failure))
                     self.assertIsInstance(failure.cause, ExchangeFailed)
