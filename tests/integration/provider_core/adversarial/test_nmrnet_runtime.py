@@ -73,7 +73,6 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, [])
             fixture.allocate_prediction.assert_not_awaited()
 
-
     async def test_construction_failure_does_not_acquire_prediction(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
@@ -157,8 +156,6 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
             self.assertIn(controller, fixture.claims.live_owners())
             self.assertIsNone(fixture.result)
-
-
 
     async def test_invalid_context_or_missing_diagnostic_recipient_refuses_before_start(self):
         ports = SessionPorts()

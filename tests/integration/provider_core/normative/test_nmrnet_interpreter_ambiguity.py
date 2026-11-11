@@ -28,7 +28,9 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
                 await release.wait()
 
         with (
-            patch.object(loop, "add_signal_handler", side_effect=lambda number, callback: callbacks.__setitem__(number, callback)),
+            patch.object(
+                loop, "add_signal_handler", side_effect=lambda number, callback: callbacks.__setitem__(number, callback)
+            ),
             patch.object(loop, "remove_signal_handler") as remove,
             patch("interpreter_ambiguity.signal.signal") as restore,
         ):

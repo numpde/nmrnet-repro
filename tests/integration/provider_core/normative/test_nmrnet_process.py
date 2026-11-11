@@ -96,8 +96,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
-            self.assertIn(b'interpreter_endpoint_failed', stderr)
-            self.assertNotIn(b'PRIVATE', stderr)
+            self.assertIn(b"interpreter_endpoint_failed", stderr)
+            self.assertNotIn(b"PRIVATE", stderr)
             self.assertEqual(len(model.requests), 1)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
@@ -144,8 +144,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
-            self.assertIn(b'interpreter_endpoint_failed', stderr)
-            self.assertNotIn(b'PRIVATE', stderr)
+            self.assertIn(b"interpreter_endpoint_failed", stderr)
+            self.assertNotIn(b"PRIVATE", stderr)
             self.assertNotIn(b"api_progress_recovered", stderr)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
@@ -153,6 +153,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
         for fail_first in (False, True):
             with self.subTest(fail_first=fail_first):
                 async with ProcessPeers() as fixture:
+
                     class NoticeService:
                         work_task = unconfirmed_hello = None
                         capacity_notice_failure = OSError("private capacity output")
@@ -175,11 +176,16 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         if fail_first and len(notices) == 1:
                             raise OSError("sink failed")
 
-                    with patch("nmrnet_provider.process.ProviderService", NoticeService), \
-                         patch("nmrnet_provider.process._write_api_notice", side_effect=write_notice):
+                    with (
+                        patch("nmrnet_provider.process.ProviderService", NoticeService),
+                        patch("nmrnet_provider.process._write_api_notice", side_effect=write_notice),
+                    ):
                         result = await run_provider(
-                            fixture.config, execution_identity={}, selected_artifacts={},
-                            stop=asyncio.Event(), diagnostics=fixture.diagnostics,
+                            fixture.config,
+                            execution_identity={},
+                            selected_artifacts={},
+                            stop=asyncio.Event(),
+                            diagnostics=fixture.diagnostics,
                         )
                     self.assertEqual(result, 0)
                     self.assertEqual(notices[0]["event"], "capacity_notice_unconfirmed")
@@ -219,7 +225,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         self.policy = arguments["open_attempt"].start_policy
                         lifecycle = arguments["config"].lifecycle
                         if (self.policy.cadence_seconds, self.policy.maximum_replays, self.policy.window_seconds) != (
-                            lifecycle.poll_seconds, lifecycle.start_replays, lifecycle.start_seconds
+                            lifecycle.poll_seconds,
+                            lifecycle.start_replays,
+                            lifecycle.start_seconds,
                         ):
                             raise AssertionError("Live START bounds differ from the admitted lifecycle policy")
                     else:
@@ -227,9 +235,15 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
                 async def run(self, _stop):
                     if recovery_kind == "native":
-                        self.policy(outage, {"event": "native_lifecycle_settled", "role": "reader",
-                                             "job_ref": attempt.admission.job_ref,
-                                             "execution_attempt_ref": attempt.admission.execution_attempt_ref})
+                        self.policy(
+                            outage,
+                            {
+                                "event": "native_lifecycle_settled",
+                                "role": "reader",
+                                "job_ref": attempt.admission.job_ref,
+                                "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+                            },
+                        )
                     elif recovery_kind == "delivery":
                         self.policy(attempt, outage, 0.1)
                     elif recovery_kind == "condition":
@@ -277,9 +291,13 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(shutdown["event"], "provider_shutdown_observation")
                 self.assertEqual(shutdown["operation"], "Notice delivery was not confirmed")
                 notices = [shutdown["notice"]]
-                expected_first = ("native_lifecycle_settled" if recovery_kind == "native" else
-                                  "delivery_handoff_retry" if recovery_kind == "delivery" else
-                                  f"api_{recovery_kind}_retry")
+                expected_first = (
+                    "native_lifecycle_settled"
+                    if recovery_kind == "native"
+                    else "delivery_handoff_retry"
+                    if recovery_kind == "delivery"
+                    else f"api_{recovery_kind}_retry"
+                )
                 self.assertEqual(notices[0]["event"], expected_first)
                 self.assertIn("OSError", json.dumps(shutdown["output"]))
                 self.assertIn(
@@ -352,8 +370,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
-            self.assertIn(b'interpreter_endpoint_failed', stderr)
-            self.assertNotIn(b'PRIVATE', stderr)
+            self.assertIn(b"interpreter_endpoint_failed", stderr)
+            self.assertNotIn(b"PRIVATE", stderr)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
             self.assertEqual(len(model.requests), 1)
 

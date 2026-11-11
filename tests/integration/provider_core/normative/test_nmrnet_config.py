@@ -32,8 +32,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
             second = files.endpoint_directory / "10-second.toml"
             second.write_text(files.endpoint.read_text().replace('model = "fixture-model"', 'model = "second-model"'))
             after = load_provider_config(files.path)
-            self.assertEqual([endpoint.spec.model for endpoint in after.interpreter.endpoints],
-                             ["fixture-model", "second-model"])
+            self.assertEqual([endpoint.spec.model for endpoint in after.interpreter.endpoints], ["fixture-model", "second-model"])
             self.assertNotEqual(before.source_sha256, after.source_sha256)
 
     def test_scientific_retry_selection_is_retained(self):
@@ -84,15 +83,22 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     declaration = json.loads((destination / "execution.json").read_bytes())
                     self.assertEqual({name: declaration[name] for name in identities}, identities)
                     self.assertEqual(declaration["runtime_identity_source"], "caller")
-                    self.assertEqual(declaration["tool_sources"], {
-                        name: {"size": len((source_root / name).read_bytes()),
-                               "sha256": hashlib.sha256((source_root / name).read_bytes()).hexdigest()}
-                        for name in names
-                    })
+                    self.assertEqual(
+                        declaration["tool_sources"],
+                        {
+                            name: {
+                                "size": len((source_root / name).read_bytes()),
+                                "sha256": hashlib.sha256((source_root / name).read_bytes()).hexdigest(),
+                            }
+                            for name in names
+                        },
+                    )
                     self.assertEqual(declaration["tool_sources"]["requirements/inference.lock"]["size"], 110000)
                     self.assertEqual((destination / "execution.json").stat().st_mode & 0o777, 0o600)
                     self.assertEqual({path.name for path in destination.iterdir()}, {"execution.json"})
-            self.assertEqual({path.relative_to(source_root).as_posix() for path in source_root.rglob("*") if path.is_file()}, set(names))
+            self.assertEqual(
+                {path.relative_to(source_root).as_posix() for path in source_root.rglob("*") if path.is_file()}, set(names)
+            )
 
     def test_capture_preserves_omitted_default_and_custom_destination_ports(self):
         for port, expected, roles in (
@@ -105,7 +111,9 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 raw = files.raw
                 for role in roles:
                     if role == "model":
-                        files.endpoint.write_text(files.endpoint.read_text().replace("https://model.example", f"https://model.example{port}"))
+                        files.endpoint.write_text(
+                            files.endpoint.read_text().replace("https://model.example", f"https://model.example{port}")
+                        )
                     else:
                         raw = raw.replace(f"https://{role}.example".encode(), f"https://{role}.example{port}".encode())
                 files.write(raw)
@@ -150,10 +158,13 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(body["display_name"], "NMRNet local fixture")
             self.assertEqual(
-                body["analysis_offerings"], [{
-                    "analysis_kind_ref": "peaks_from_mol",
-                    "description": (Path(config_module.__file__).with_name("about") / "hello.md").read_text(encoding="utf-8"),
-                }]
+                body["analysis_offerings"],
+                [
+                    {
+                        "analysis_kind_ref": "peaks_from_mol",
+                        "description": (Path(config_module.__file__).with_name("about") / "hello.md").read_text(encoding="utf-8"),
+                    }
+                ],
             )
             self.assertFalse(files.state.exists())
 
@@ -198,8 +209,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 peer_ca = Path(peer.scratch.name) / "cert.pem"
                 ca = Path(directory) / "api-ca.pem"
                 ca.write_bytes(peer_ca.read_bytes())
-                files = ConfigFiles(directory, api_origin=peer.origin, ca_file=ca,
-                                    model_ca_file=peer_ca, store_ca_file=peer_ca)
+                files = ConfigFiles(directory, api_origin=peer.origin, ca_file=ca, model_ca_file=peer_ca, store_ca_file=peer_ca)
                 credential_bytes = files.credential.read_bytes()
                 ca_bytes = ca.read_bytes()
                 read_file = config_module.read_startup_file

@@ -184,7 +184,9 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, [])
             self.assertTrue(all(endpoint.retirement_confirmed for endpoint in endpoints))
             observation = json.loads(handle.identity.content)["interpretation"]
-            self.assertEqual([r["turns_started"] for r in [route for visit in observation["visits"] for route in visit["routes"]]], [1, 1])
+            self.assertEqual(
+                [r["turns_started"] for r in [route for visit in observation["visits"] for route in visit["routes"]]], [1, 1]
+            )
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             self.assertEqual(json.loads(outcome.content)["interpretation"], observation)
             self.assertEqual(ports.worker.events, ["prepare", "execute"])

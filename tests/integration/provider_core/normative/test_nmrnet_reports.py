@@ -137,11 +137,20 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
     def live_controller(self, transport, session, *, poll_seconds=1, condition_recovery=None):
         claims = AttemptClaims.live()
         controller = AttemptController.live(
-            api(transport, scope().api_origin), claims, session,
-            scope=scope(), stopping=asyncio.Event(), start_policy=LiveStartPolicy(1, Mock(), Mock()),
-            allow_active_start_replay=True, delivery=RecordingDelivery(), on_delivery_retry=Mock(),
-            delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04,
-            allowed_job_states=frozenset({"open"}), poll_seconds=poll_seconds, task_settle_seconds=0.1,
+            api(transport, scope().api_origin),
+            claims,
+            session,
+            scope=scope(),
+            stopping=asyncio.Event(),
+            start_policy=LiveStartPolicy(1, Mock(), Mock()),
+            allow_active_start_replay=True,
+            delivery=RecordingDelivery(),
+            on_delivery_retry=Mock(),
+            delivery_retry_initial_seconds=0.01,
+            delivery_retry_max_seconds=0.04,
+            allowed_job_states=frozenset({"open"}),
+            poll_seconds=poll_seconds,
+            task_settle_seconds=0.1,
             condition_recovery=condition_recovery,
         )
         return controller, claims
@@ -155,13 +164,14 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             _failure_report((("operation", failure),), secrets=secrets, held=False)
         return json.loads(output.getvalue())
 
-
-
     async def test_connect_rejection_reaches_operator_as_proxy_status_without_private_reason_or_api_status(self):
-        report = self.receive(ExchangeFailed(
-            "The CONNECT proxy refused the tunnel",
-            primary=httpcore.ProxyError("PRIVATE_PROXY_REASON"), proxy_connect_status=502,
-        ))
+        report = self.receive(
+            ExchangeFailed(
+                "The CONNECT proxy refused the tunnel",
+                primary=httpcore.ProxyError("PRIVATE_PROXY_REASON"),
+                proxy_connect_status=502,
+            )
+        )
         rendered = json.dumps(report)
         self.assertIn('"proxy_connect_status": 502', rendered)
         self.assertNotIn('"status": 502', rendered)
@@ -171,36 +181,61 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         key, other_key = "CURRENT_MODEL_KEY", "FALLBACK_CREDENTIAL_" + "z" * 80
         prompt = 'PRIVATE_INPUT "coordinates"\nC 0 0 0; api_key=' + key
         reason = "Unsupported tool_choice; password=PRIVATE_FIELD; " + "x" * 940 + other_key
-        response = HttpResponse(400, ((b"x-request-id", b"request:model-rejection"),), json.dumps({"error": {
-            "message": reason, "code": "unsupported_parameter", "param": "tool_choice",
-            "request": "PRIVATE_RESPONSE_DUMP",
-        }}).encode())
-        transport = SimpleNamespace(exchange_decoded=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True)
+        response = HttpResponse(
+            400,
+            ((b"x-request-id", b"request:model-rejection"),),
+            json.dumps(
+                {
+                    "error": {
+                        "message": reason,
+                        "code": "unsupported_parameter",
+                        "param": "tool_choice",
+                        "request": "PRIVATE_RESPONSE_DUMP",
+                    }
+                }
+            ).encode(),
+        )
+        transport = SimpleNamespace(
+            exchange_decoded=AsyncMock(return_value=response), retire=AsyncMock(), retirement_confirmed=True
+        )
         endpoint = ChatEndpoint(
-            ChatEndpointSpec(configuration_id="fixture", model="fixture", url="https://example.invalid/chat",
-                             api_key=key, reasoning_effort=None),
-            transport=transport, request_bytes=4096, response_bytes=16384,
+            ChatEndpointSpec(
+                configuration_id="fixture",
+                model="fixture",
+                url="https://example.invalid/chat",
+                api_key=key,
+                reasoning_effort=None,
+            ),
+            transport=transport,
+            request_bytes=4096,
+            response_bytes=16384,
         )
         with self.assertRaises(ChatFailed) as caught:
             await endpoint.complete([{"role": "user", "content": prompt}], [])
         rendered = json.dumps(self.receive(caught.exception, secrets=(key, other_key)))
-        for useful in ("Unsupported tool_choice", "unsupported_parameter", "request:model-rejection",
-                       '"endpoint_error_unverified": true', '"status": 400'):
+        for useful in (
+            "Unsupported tool_choice",
+            "unsupported_parameter",
+            "request:model-rejection",
+            '"endpoint_error_unverified": true',
+            '"status": 400',
+        ):
             self.assertIn(useful, rendered)
         for private in (key, "FALLBACK_CREDENTIAL_", "PRIVATE_FIELD", "PRIVATE_RESPONSE_DUMP", "PRIVATE_INPUT", "C 0 0 0"):
             self.assertNotIn(private, rendered)
-
 
     async def test_condition_expiry_retains_first_latest_and_uncertainty_in_stderr(self):
         transport = _ConditionOutageTransport(first_failed_put=5)
         transport.faults = itertools.chain(
             (reply(b"PRIVATE first body", status=503, headers=((b"x-request-id", b"request:condition-first"),)),),
-            itertools.repeat(reply(b"PRIVATE latest body", status=503,
-                headers=((b"x-request-id", b"request:condition-latest"),))),
+            itertools.repeat(
+                reply(b"PRIVATE latest body", status=503, headers=((b"x-request-id", b"request:condition-latest"),))
+            ),
         )
         session = _SwallowingSession()
-        controller, claims = self.live_controller(transport, session, poll_seconds=0.005,
-            condition_recovery=ConditionRecovery(0.05, 0.01, Mock(), Mock()))
+        controller, claims = self.live_controller(
+            transport, session, poll_seconds=0.005, condition_recovery=ConditionRecovery(0.05, 0.01, Mock(), Mock())
+        )
         with self.assertRaises(ControllerFailed) as caught:
             await asyncio.wait_for(controller.run(record()), 2)
         failure = caught.exception.cause
@@ -209,9 +244,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(failure.outcome, session.outcome)
         rendered = json.dumps(self.receive(failure))
         for fact in (
-            "ConditionRecoveryExpired", "request:condition-first", "request:condition-latest",
-            '"condition_code": "waiting_capacity"', '"phase": "running"',
-            '"condition_receipt_received": false', '"attempt_mutation_may_have_committed": true',
+            "ConditionRecoveryExpired",
+            "request:condition-first",
+            "request:condition-latest",
+            '"condition_code": "waiting_capacity"',
+            '"phase": "running"',
+            '"condition_receipt_received": false',
+            '"attempt_mutation_may_have_committed": true',
         ):
             self.assertIn(fact, rendered)
         self.assertNotIn("PRIVATE", rendered)
@@ -296,8 +335,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         session = _DiagnosticSession()
         session.outcome = replace(session.outcome, content=b"PRIVATE_RESULT_BYTES")
         transport = Transport(
-            reply(start_response()), reply(observation()), reply(response()), reply(progress_response()),
-            reply(observation()), reply(progress_response(phase="running")), reply(observation()),
+            reply(start_response()),
+            reply(observation()),
+            reply(response()),
+            reply(progress_response()),
+            reply(observation()),
+            reply(progress_response(phase="running")),
+            reply(observation()),
             reply(observation(job_state="closed")),
         )
         controller, claims = self.live_controller(transport, session)
@@ -327,8 +371,9 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
 
         transport = _ConditionTransport()
         transport.release.set()
-        transport.failure = ExchangeFailed("Cannot receive authored progress acknowledgement",
-            primary=OSError(errno.ETIMEDOUT, "PRIVATE_TRANSPORT"))
+        transport.failure = ExchangeFailed(
+            "Cannot receive authored progress acknowledgement", primary=OSError(errno.ETIMEDOUT, "PRIVATE_TRANSPORT")
+        )
         session = LaterFailureSession()
         session.retirement_failure = OSError(errno.EIO, "PRIVATE_CLEANUP")
         controller, claims = self.live_controller(transport, session)
@@ -339,8 +384,14 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(failure.cause, session.report_failure)
         rendered = json.dumps(self.receive(failure, secrets=("PRIVATE_BINDING_SECRET",)))
         for fact in (
-            "ApiFailure", "ResultRejected", "Cannot assemble authored result", "ExchangeFailed",
-            '"errno": 110', '"errno": 5', '"relationship": "context"', "independent cleanup",
+            "ApiFailure",
+            "ResultRejected",
+            "Cannot assemble authored result",
+            "ExchangeFailed",
+            '"errno": 110',
+            '"errno": 5',
+            '"relationship": "context"',
+            "independent cleanup",
         ):
             self.assertIn(fact, rendered)
         self.assertIn('"outcome_in_memory": false', rendered)
@@ -526,7 +577,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     owner, api, _, client = file_sources()
                     await owner.inspect()
                     headers = store_headers(b"geometry") + (
-                        (b"x-request-id", b"request:store-refusal"), (b"x-private", b"PRIVATE_HEADER"),
+                        (b"x-request-id", b"request:store-refusal"),
+                        (b"x-private", b"PRIVATE_HEADER"),
                     )
                     status = 503 if refusal == "status" else 200
                     if refusal == "header":
@@ -538,7 +590,9 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                         with private_source_directory() as (root, directory):
                             with self.assertRaises(UploadFailed) as caught:
                                 if file_output:
-                                    await owner.acquire_file(api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1)
+                                    await owner.acquire_file(
+                                        api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1
+                                    )
                                 else:
                                     await owner.acquire(api.member.upload_ref)
                             self.assertEqual(os.listdir(root), [])
@@ -551,8 +605,11 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn(f'"status": {status}', rendered)
                     self.assertIn("request:store-refusal", rendered)
                     self.assertIn('"grant_issued": true', rendered)
-                    expected = {"status": "store returned HTTP 503", "header": "content-type does not match",
-                                "encoding": "encoded or partial store responses"}[refusal]
+                    expected = {
+                        "status": "store returned HTTP 503",
+                        "header": "content-type does not match",
+                        "encoding": "encoded or partial store responses",
+                    }[refusal]
                     self.assertIn(expected, rendered)
                     self.assertNotIn("PRIVATE", rendered)
 
@@ -862,13 +919,22 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
 
     def test_start_enqueue_and_api_receipt_presence_remain_distinct_without_cleanup_or_deletion_claims(self):
         active = acknowledge_start(record(), admission())
-        item = DeliveryOutcome(active.start.scope.api_origin, active.start.scope.provider_ref,
-            active.admission.job_ref, ATTEMPT_REF, TerminalOperation.FAIL,
-            fail_body(ATTEMPT_REF, "input_rejected", "PRIVATE_MESSAGE"))
+        item = DeliveryOutcome(
+            active.start.scope.api_origin,
+            active.start.scope.provider_ref,
+            active.admission.job_ref,
+            ATTEMPT_REF,
+            TerminalOperation.FAIL,
+            fail_body(ATTEMPT_REF, "input_rejected", "PRIVATE_MESSAGE"),
+        )
         for acknowledgement in (None, active):
-            failure = StartFailed("Cannot finish live Attempt startup",
-                cause=OSError(errno.EIO, "PRIVATE"), acknowledgement=acknowledgement,
-                api_failure=None, settlement_failures=())
+            failure = StartFailed(
+                "Cannot finish live Attempt startup",
+                cause=OSError(errno.EIO, "PRIVATE"),
+                acknowledgement=acknowledgement,
+                api_failure=None,
+                settlement_failures=(),
+            )
             report = self.receive(failure)
             owner = report["relationships"][0]["failure"]
             self.assertEqual(owner["acknowledgement_received"], acknowledgement is active)
@@ -876,8 +942,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(owner["observed_attempt_state"], "in_progress")
             self.assertNotIn("PRIVATE", json.dumps(report))
         for acceptance in (None, item.acceptance()):
-            failure = ExecutionFailed(cause=DeliveryRejected("Cannot confirm the selected terminal handoff"),
-                outcome=None, api_failure=None, cleanup_failures=(), attempt=active)
+            failure = ExecutionFailed(
+                cause=DeliveryRejected("Cannot confirm the selected terminal handoff"),
+                outcome=None,
+                api_failure=None,
+                cleanup_failures=(),
+                attempt=active,
+            )
             failure.delivery_acceptance = acceptance
             report = self.receive(failure)
             owner = report["relationships"][0]["failure"]
@@ -888,7 +959,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         for received in (False, True):
             failure = DeliveryWorkerFailed(
                 cause=DeliveryStorageFailed("Cannot remove the published queue row", cause=OSError(errno.EIO, "PRIVATE_DISK")),
-                api_failure=None, cleanup_failures=(OSError(errno.EPIPE, "PRIVATE_CLEANUP"),),
+                api_failure=None,
+                cleanup_failures=(OSError(errno.EPIPE, "PRIVATE_CLEANUP"),),
                 api_receipt_received=received,
             )
             report = self.receive(failure)

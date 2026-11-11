@@ -135,7 +135,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.session = self.make_session(preparation)
 
         async def acquire():
-            preparation.prepare.assert_awaited_once_with(self.instructions, require_execution=unexpected_condition.require_execution)
+            preparation.prepare.assert_awaited_once_with(
+                self.instructions, require_execution=unexpected_condition.require_execution
+            )
             self.assertEqual(self.worker.events, [])
             return self.worker, self.host, self.worker.runtime
 

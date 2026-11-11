@@ -51,8 +51,12 @@ async def recording_factory(factory, pending, *, stopping):
             selected_artifacts=factory.selected_artifacts,
             allocate_prediction=ports.allocate_prediction,
             on_prediction_failure=lambda failure, attempt: factory.on_operator_notice(
-                failure, {"event": "prediction_failed", "job_ref": pending.input.job_ref,
-                          "execution_attempt_ref": attempt.admission.execution_attempt_ref}
+                failure,
+                {
+                    "event": "prediction_failed",
+                    "job_ref": pending.input.job_ref,
+                    "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+                },
             ),
             on_interpreter_failure=lambda index, failure: factory.on_operator_notice(
                 failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
@@ -103,8 +107,11 @@ async def observed_head(pool, request):
 def observed_model_worker():
     diagnostics = sys.argv[sys.argv.index("--diagnostics") + 1]
     return (
-        sys.executable, "-I", "-B",
-        str(Path(__file__).with_name("observed_chat_worker.py")), diagnostics,
+        sys.executable,
+        "-I",
+        "-B",
+        str(Path(__file__).with_name("observed_chat_worker.py")),
+        diagnostics,
     )
 
 

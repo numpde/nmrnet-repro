@@ -310,8 +310,11 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             outcome = await controller.run(pending)
             self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
-            fail_bodies = [body for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies)
-                           if b"/fail HTTP/1.1" in request.split(b"\r\n", 1)[0]]
+            fail_bodies = [
+                body
+                for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies)
+                if b"/fail HTTP/1.1" in request.split(b"\r\n", 1)[0]
+            ]
             self.assertEqual(len(fail_bodies), 1)
             body = json.loads(fail_bodies[0])
             self.assertEqual(body["failure_code"], "prediction_execution_failed")
@@ -374,9 +377,14 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(fixture.settle_controller, controller)
-            with patch("tests.integration.nmrnet.runtime_ports.start_response", return_value=start_response(
-                analysis_kind_ref=pending.analysis_kind_ref, state="failed", replayed=True,
-            )):
+            with patch(
+                "tests.integration.nmrnet.runtime_ports.start_response",
+                return_value=start_response(
+                    analysis_kind_ref=pending.analysis_kind_ref,
+                    state="failed",
+                    replayed=True,
+                ),
+            ):
                 outcome = await controller.run(pending)
             self.assertIsInstance(outcome, AcknowledgedAttempt)
             fixture.allocate_prediction.assert_not_awaited()
@@ -459,9 +467,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(geometry["source"]["input_fingerprint"], pending.input.input_fingerprint)
             self.assertEqual(durable[0]["geometries"][0]["source"], geometry["source"])
             self.assertEqual(durable[0]["geometries"][0]["request_sha256"], hashlib.sha256(ports.worker.requests[0]).hexdigest())
-            self.assertEqual(
-                durable[0]["interpretation"], json.loads(selected_identity.content)["interpretation"]
-            )
+            self.assertEqual(durable[0]["interpretation"], json.loads(selected_identity.content)["interpretation"])
             ports.allocate_reader.assert_awaited_once()
             ports.reader.read.assert_awaited_once_with(source, source_format="table", source_unit="nm", selection=None)
             ports.allocate_generator.assert_not_awaited()
@@ -515,8 +521,12 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             session = alternative.make_session(alternative.owner(choose))
             fixture.stack.push_async_callback(session.retire)
-            handle = await session.prepare(alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition)
-            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2, "verbosity": "medium"})
+            handle = await session.prepare(
+                alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition
+            )
+            self.assertEqual(
+                json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2, "verbosity": "medium"}
+            )
             self.assertEqual(fixture.api_peer.request_bodies[-1], body)
             self.assertEqual(captured.evidence.content, raw_evidence)
             self.assertEqual(alternative.worker.events, [])

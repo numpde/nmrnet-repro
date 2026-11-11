@@ -17,8 +17,9 @@ def settings(root, *, exchange_seconds=45, retirement_seconds=45):
     endpoint_directory = root / "interpreter.d"
     endpoint_directory.mkdir(mode=0o700, exist_ok=True)
     endpoint_path = endpoint_directory / "authored.toml"
-    endpoint_path.write_text('url = "https://model.example/chat"\nmodel = "authored-model"\n'
-                             + f'key_file = {json.dumps(str(key))}\n')
+    endpoint_path.write_text(
+        'url = "https://model.example/chat"\nmodel = "authored-model"\n' + f"key_file = {json.dumps(str(key))}\n"
+    )
     endpoint_path.chmod(0o600)
     from nmrnet_provider.config import read_startup_file  # noqa: PLC0415 -- This fixture uses the real key admission.
 

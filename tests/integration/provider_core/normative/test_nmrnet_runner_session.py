@@ -38,8 +38,7 @@ else:
     raise AssertionError('A FIFO must not admit a native session')
 assert operation.session is None
 """
-            result = subprocess.run([sys.executable, "-c", code, str(root)],
-                                    capture_output=True, text=True, timeout=3)
+            result = subprocess.run([sys.executable, "-c", code, str(root)], capture_output=True, text=True, timeout=3)
             self.assertEqual(result.returncode, 0, result.stderr)
 
 
@@ -103,7 +102,9 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(self.notices.call_args.args[0], opening.exception)
 
     async def test_observed_channel_failure_while_child_lives_stops_and_joins_original_reader(self):
-        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3, observation_seconds=0.06, on_notice=Mock())
+        operation = NativeOperation(
+            role="reader", endpoint=self.runner.path, operation_seconds=0.3, observation_seconds=0.06, on_notice=Mock()
+        )
         await operation.start()
         try:
             await operation.observe_failure(asyncio.IncompleteReadError(b"", 1))
@@ -148,9 +149,11 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             stopped.set()
 
         self.addAsyncCleanup(operation.retire)
-        with (patch.object(operation, "_lease_identity", side_effect=gated_lease),
-              patch.object(RunnerSession, "connect", observed_connect),
-              patch.object(operation, "_request_stop", requested_stop)):
+        with (
+            patch.object(operation, "_lease_identity", side_effect=gated_lease),
+            patch.object(RunnerSession, "connect", observed_connect),
+            patch.object(operation, "_request_stop", requested_stop),
+        ):
             caller = asyncio.create_task(operation.start())
             retirement = None
             try:
@@ -210,8 +213,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             close()
             await original()
 
-        with (patch.object(operation.writer, "wait_closed", side_effect=gated),
-              patch.object(operation.writer, "close")):
+        with patch.object(operation.writer, "wait_closed", side_effect=gated), patch.object(operation.writer, "close"):
             try:
                 with self.assertRaises(TimeoutError):
                     await operation.retire()
@@ -352,7 +354,9 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
 
     def operation(self):
         self.notices = Mock()
-        return NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=self.notices)
+        return NativeOperation(
+            role="reader", endpoint=self.runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=self.notices
+        )
 
     async def test_opening_cancellation_stops_before_waiting_for_its_original_thread(self):
         admitted, release = threading.Event(), threading.Event()
@@ -516,7 +520,9 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.01)
 
     async def test_expired_cleanup_does_not_acquire_a_fresh_proof_child(self):
-        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3, observation_seconds=0.06, on_notice=Mock())
+        operation = NativeOperation(
+            role="reader", endpoint=self.runner.path, operation_seconds=0.3, observation_seconds=0.06, on_notice=Mock()
+        )
         await operation.start()
         entered, release = threading.Event(), threading.Event()
 

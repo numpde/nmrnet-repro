@@ -60,9 +60,7 @@ class UploadPreparationTests(unittest.IsolatedAsyncioTestCase):
             return verified
 
         async def choose(_instructions, capability):
-            await capability.prepare_upload(
-                UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,)
-            )
+            await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
 
         def report(cause):
             observed.append((cause, owner._source))

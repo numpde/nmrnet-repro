@@ -50,10 +50,10 @@ class ConfigFiles:
         self.endpoint_directory = self.root / "interpreter.d"
         self.endpoint_directory.mkdir(mode=0o700, exist_ok=True)
         self.endpoint = self.endpoint_directory / "00-primary.toml"
-        self.endpoint.write_text(f'''url = {json.dumps(model_origin + "/chat")}
+        self.endpoint.write_text(f"""url = {json.dumps(model_origin + "/chat")}
 model = "fixture-model"
 key_file = {json.dumps(str(self.key))}
-{model_ca}''')
+{model_ca}""")
         self.endpoint.chmod(0o600)
         self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v4"
 

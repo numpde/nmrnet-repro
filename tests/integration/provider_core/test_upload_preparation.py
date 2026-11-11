@@ -34,7 +34,9 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         self.verified = VerifiedUpload(
             "job:example", UPLOAD_REF, len(self.source), "sha256:" + hashlib.sha256(self.source).hexdigest(), self.source
         )
-        self.uploads = SimpleNamespace(job_ref="job:example", inspect=AsyncMock(), acquire=AsyncMock(return_value=self.verified), recovery_failure=None)
+        self.uploads = SimpleNamespace(
+            job_ref="job:example", inspect=AsyncMock(), acquire=AsyncMock(return_value=self.verified), recovery_failure=None
+        )
         self.transports = (SimpleNamespace(retire=AsyncMock()), SimpleNamespace(retire=AsyncMock()))
         self.readers = []
         self.instructions = verify_job_input(response(), feed=facts())

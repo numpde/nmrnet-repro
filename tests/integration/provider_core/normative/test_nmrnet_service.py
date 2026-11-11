@@ -352,7 +352,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             # Initial recovery ends at START; relay publication may overlap
             # later idle polling after the producer has handed off its result.
-            initial_reads = observed[:observed.index("/provider/v1/execution-attempts/start")]
+            initial_reads = observed[: observed.index("/provider/v1/execution-attempts/start")]
             discovery = [target for target in initial_reads if urlsplit(target).path == "/provider/v1/jobs"]
             self.assertEqual(discovery, [first_page, second_page, first_page])
             self.assertNotIn("/provider/v1/execution-attempts", fixture.request_paths)
@@ -456,7 +456,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(fixture.model_peer.requests), 1)
 
-
     async def test_model_report_reaches_the_failure_recipient_with_safe_actionable_guidance(self):
         cases = (
             (
@@ -503,8 +502,9 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(request.startswith(b"POST "))
                     self.assertFalse(fixture.allocations[0].host.confirmed)
                     self.assertEqual(fixture.allocations[0].worker.events, [])
-                    pending = fixture.relay.queue.next_pending(fixture.config.api.identity.origin,
-                                                               fixture.config.lifecycle.scope.provider_ref)
+                    pending = fixture.relay.queue.next_pending(
+                        fixture.config.api.identity.origin, fixture.config.lifecycle.scope.provider_ref
+                    )
                     self.assertIsNotNone(pending)
                     self.assertEqual(pending.body, body)
                     received.append(body)
@@ -525,8 +525,9 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(b"private_model_key", received[0].lower())
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             await fixture.wait_published()
-            self.assertEqual(fixture.relay.queue.inventory(fixture.config.api.identity.origin,
-                                                         fixture.config.lifecycle.scope.provider_ref), [])
+            self.assertEqual(
+                fixture.relay.queue.inventory(fixture.config.api.identity.origin, fixture.config.lifecycle.scope.provider_ref), []
+            )
             outcome = fixture.allocations[0].preparation_outcome
             self.assertEqual(outcome.code, wire["failure_code"])
             self.assertNotIn(report, outcome.message)
@@ -560,7 +561,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                     await task
                 await fixture.settle_service(service)
 
-
     async def test_already_stopped_service_allocates_and_sends_nothing(self):
         async with ServicePeers() as fixture:
             fixture.stop.set()
@@ -583,7 +583,9 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             fixture.api_peer.response_factory = verify_reply
             service = fixture.service()
             service.policy = replace(service.policy, hello_seconds=30)
-            with patch.object(DeliveryClient, "pending", AsyncMock(side_effect=AssertionError("outbox reads are unavailable")), create=True):
+            with patch.object(
+                DeliveryClient, "pending", AsyncMock(side_effect=AssertionError("outbox reads are unavailable")), create=True
+            ):
                 await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             await fixture.settle_service(service)
             self.assertEqual(fixture.events[:5], ["hello", "started", "discover", "allocate", "start"])

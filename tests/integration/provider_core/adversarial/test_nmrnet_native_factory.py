@@ -108,9 +108,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         ):
             await factory.allocate_prediction(job_ref="job:example")
         self.assertIs(failure.exception.cause, primary)
-        self.assertEqual(failure.exception.cleanup_failures, (
-            ("native retirement", retirement), ("allocation I/O", pending_io),
-        ))
+        self.assertEqual(
+            failure.exception.cleanup_failures,
+            (
+                ("native retirement", retirement),
+                ("allocation I/O", pending_io),
+            ),
+        )
         self.assertEqual(failure.exception.job_ref, "job:example")
         self.assertEqual(factory.allocations, [allocation])
         self.assertFalse(factory.shutdown_ready)
@@ -124,7 +128,9 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         factory = self.factory(seconds=1)
         controller = object()
         with (
-            patch.object(factory, "_open_role", new=AsyncMock(side_effect=AssertionError("Prediction allocated before START"))) as opened,
+            patch.object(
+                factory, "_open_role", new=AsyncMock(side_effect=AssertionError("Prediction allocated before START"))
+            ) as opened,
             patch("nmrnet_provider.native_factory.assemble_attempt", new=AsyncMock(return_value=controller)) as assembly,
         ):
             self.assertIs(await factory(record(), stopping=asyncio.Event()), controller)
@@ -291,7 +297,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def allocation(self):
-        allocation = Mock(allocation="a" * 32, ipc=Path("/unused"), start=AsyncMock(return_value=(object(), Mock(close=Mock(), wait_closed=AsyncMock()))), retire=AsyncMock(), settle=AsyncMock())
+        allocation = Mock(
+            allocation="a" * 32,
+            ipc=Path("/unused"),
+            start=AsyncMock(return_value=(object(), Mock(close=Mock(), wait_closed=AsyncMock()))),
+            retire=AsyncMock(),
+            settle=AsyncMock(),
+        )
         allocation.retirement = allocation
         allocation.retire_channel = partial(retire_worker_channel, native_retirement=allocation)
         return allocation

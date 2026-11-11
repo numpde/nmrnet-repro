@@ -91,8 +91,9 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
             fixture.files.write(
-                fixture.files.raw.replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
-                .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
+                fixture.files.raw.replace(b"drain_seconds = 1", b"drain_seconds = 0.05").replace(
+                    b"settle_seconds = 5", b"settle_seconds = 0.05"
+                )
             )
             (fixture.diagnostics / "inject-report-stream-failure").write_bytes(b"test-only\n")
             process = await fixture.start(child_script="held_process.py")
@@ -135,8 +136,9 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
             fixture.files.write(
-                fixture.files.raw.replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
-                .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
+                fixture.files.raw.replace(b"drain_seconds = 1", b"drain_seconds = 0.05").replace(
+                    b"settle_seconds = 5", b"settle_seconds = 0.05"
+                )
             )
             process = await fixture.start(child_script="held_process.py")
             await fixture.observed("factory-entered", wait_seconds=5)
@@ -236,7 +238,6 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse((fixture.diagnostics / "failure.json").exists())
                     self.assertFalse(fixture.files.state.exists())
                     self.assertEqual(fixture.peer.requests, [])
-
 
     async def test_invalid_config_has_no_journal_or_requests_and_no_private_echo(self):
         async with ProcessPeers() as fixture:

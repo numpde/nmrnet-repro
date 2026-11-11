@@ -108,10 +108,13 @@ class ProcessPeers:
         self.config.delivery.endpoint.socket_path.parent.chmod(0o710)
         endpoint = self.config.delivery.endpoint
         self.relay = SharedDeliveryService(
-            relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
+            relay_root,
+            limits=QueueLimits(8, 16777216, 8, 16777216),
             socket=SharedDeliverySocket(endpoint.socket_path, endpoint.socket_group_id),
-            proxy_socket=self.root / "proxy.sock", request_seconds=2,
-            retry_initial_seconds=0.01, retry_max_seconds=0.1,
+            proxy_socket=self.root / "proxy.sock",
+            request_seconds=2,
+            retry_initial_seconds=0.01,
+            retry_max_seconds=0.1,
             on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
             diagnostic_status=lambda: {"output_failures": 0},
         )

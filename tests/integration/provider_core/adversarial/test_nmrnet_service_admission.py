@@ -20,8 +20,9 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
             claim = fixture.claims.claim_live(pending, lifecycle_owner=self)
             row = asdict(pending.input) | {"analysis_kind_ref": "peaks_from_mol", "created_at": "2026-10-18T00:00:00Z"}
             fixture.feed_replies = [feed_response(jobs=[row, row | {"job_ref": "job:free"}])]
-            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(3, 2),
-                                                 owner=self, claims=fixture.claims)
+            selected = await select_pending_start(
+                fixture.config, fixture.api, policy=AdmissionPolicy(3, 2), owner=self, claims=fixture.claims
+            )
             self.assertEqual(selected.input.job_ref, "job:free")
             self.assertEqual(fixture.request_paths, ["/provider/v1/jobs", "/provider/v1/jobs"])
             self.assertTrue(claim.active)
@@ -32,13 +33,20 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(failure=failure):
                 ports = SessionPorts()
                 async with AdmissionPeers(ports) as fixture:
-                    fixture.feed_replies = [feed_response(next_cursor="YQ"),
-                        b"PRIVATE malformed second page" if failure == "bad_body" else
-                        feed_response(next_cursor="YQ" if failure == "cycle" else "Yg")]
+                    fixture.feed_replies = [
+                        feed_response(next_cursor="YQ"),
+                        b"PRIVATE malformed second page"
+                        if failure == "bad_body"
+                        else feed_response(next_cursor="YQ" if failure == "cycle" else "Yg"),
+                    ]
                     with self.assertRaises(ApiFailure if failure == "bad_body" else AdmissionIncomplete) as caught:
-                        await select_pending_start(fixture.config, fixture.api,
-                            policy=AdmissionPolicy(1, 3 if failure == "cycle" else 2), owner=self,
-                            claims=fixture.claims)
+                        await select_pending_start(
+                            fixture.config,
+                            fixture.api,
+                            policy=AdmissionPolicy(1, 3 if failure == "cycle" else 2),
+                            owner=self,
+                            claims=fixture.claims,
+                        )
                     self.assertNotIn("PRIVATE", str(caught.exception))
                     self.assertEqual(len(fixture.api_peer.requests), 2)
                     self.assertEqual(ports.worker.events, [])
@@ -47,12 +55,13 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_identity_topology_or_missing_owner_refuses_before_network(self):
         ports = SessionPorts()
         async with AdmissionPeers(ports) as fixture:
-            for identity, topology in ((fixture.config.api.identity, "web"),
-                                       (replace(fixture.config.api.identity), "dev-local")):
+            for identity, topology in ((fixture.config.api.identity, "web"), (replace(fixture.config.api.identity), "dev-local")):
                 foreign = ProviderAPI(identity, fixture.config.api.http.new_transport(), expected_topology=topology)
                 try:
                     with self.assertRaises(ValueError):
-                        await select_pending_start(fixture.config, foreign, policy=AdmissionPolicy(1, 2), owner=self, claims=fixture.claims)
+                        await select_pending_start(
+                            fixture.config, foreign, policy=AdmissionPolicy(1, 2), owner=self, claims=fixture.claims
+                        )
                 finally:
                     await foreign.retire()
             for policy, owner in ((AdmissionPolicy(1, 2), None), (object(), self)):
@@ -70,8 +79,9 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         async with AdmissionPeers(ports) as fixture:
             fixture.api_peer.mode = "headers-stall"
-            task = asyncio.create_task(select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(1, 2),
-                owner=self, claims=fixture.claims))
+            task = asyncio.create_task(
+                select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(1, 2), owner=self, claims=fixture.claims)
+            )
             await asyncio.wait_for(fixture.api_peer.received.wait(), 1)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):

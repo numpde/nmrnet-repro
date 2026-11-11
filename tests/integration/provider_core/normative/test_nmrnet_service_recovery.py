@@ -28,7 +28,10 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await fixture.settle_service(service)
         await fixture.wait_published(3)
         self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-        self.assertEqual(fixture.relay.queue.inventory(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref), [])
+        self.assertEqual(
+            fixture.relay.queue.inventory(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref),
+            [],
+        )
         self.assertEqual(len(fixture.start_bodies), 3)
         self.assertEqual(len(fixture.allocations), 3)
         fixture.require_retired_science(3)
@@ -57,9 +60,13 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             fixture.api_peer.response_factory = response
             await self.finish(fixture, fixture.service())
             self.assertEqual(failed, {(0, "preparing"), (1, "running")})
-            self.assertEqual([(attempt.admission.execution_attempt_ref, phase, failure.status)
-                              for attempt, phase, failure in fixture.progress_notices],
-                             [(fixture.attempt_refs[0], "preparing", 503), (fixture.attempt_refs[1], "running", 503)])
+            self.assertEqual(
+                [
+                    (attempt.admission.execution_attempt_ref, phase, failure.status)
+                    for attempt, phase, failure in fixture.progress_notices
+                ],
+                [(fixture.attempt_refs[0], "preparing", 503), (fixture.attempt_refs[1], "running", 503)],
+            )
             self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
             self.assertEqual(len(fixture.complete_bodies), 4)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
@@ -81,8 +88,11 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             sent, notices = [], []
             accepted = None
             original_arguments = fixture.arguments
-            policy = LiveStartPolicy(0.01, lambda pending, failure, seconds: notices.append(("retry", pending, failure, seconds)),
-                                   lambda attempt, failure: notices.append(("recovered", attempt, failure)))
+            policy = LiveStartPolicy(
+                0.01,
+                lambda pending, failure, seconds: notices.append(("retry", pending, failure, seconds)),
+                lambda attempt, failure: notices.append(("recovered", attempt, failure)),
+            )
 
             def arguments(pending):
                 return original_arguments(pending) | {"start_policy": policy}
@@ -90,7 +100,9 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             async def response(request, body):
                 nonlocal accepted
                 if request.split(b"\r\n", 1)[0] == b"POST /provider/v1/execution-attempts/start HTTP/1.1":
-                    verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
+                    verify_signed_request(
+                        request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key
+                    )
                     sent.append((request, body))
                     if len(sent) == 1:
                         accepted = json.loads(await fixture.api_reply(request, body))
@@ -177,7 +189,9 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
                 self.assertEqual(len(fixture.allocations), 2)
                 fixture.require_retired_science(2)
-                retained = fixture.relay.queue.next_pending_handoff(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref)
+                retained = fixture.relay.queue.next_pending_handoff(
+                    fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref
+                )
                 self.assertEqual(retained.outcome.body, fixture.accepted_outcomes[1])
                 self.assertEqual(retained.publication, fixture.config.publication)
                 fixture.stop = asyncio.Event()

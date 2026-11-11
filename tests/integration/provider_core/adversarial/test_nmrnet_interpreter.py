@@ -38,8 +38,9 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         ports.uploads.inspect.side_effect = inspect
         async with TlsPeer("success", response_factory=choose) as first, TlsPeer("success") as second:
-            chooser = fixture_interpreter((chat_endpoint(first, identifier="first"),
-                                           chat_endpoint(second, identifier="second")), timeout_seconds=0.3)
+            chooser = fixture_interpreter(
+                (chat_endpoint(first, identifier="first"), chat_endpoint(second, identifier="second")), timeout_seconds=0.3
+            )
             owner = ports.owner(chooser.run, chooser=chooser)
             session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)

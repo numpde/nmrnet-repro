@@ -73,8 +73,11 @@ def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_s
 
 def fixture_interpreter(endpoints, *, timeout_seconds, on_endpoint_failure=None):
     """Give each scripted visit its own preconstructed fixture carrier."""
-    factories = tuple((lambda *, exchange_seconds, connect_seconds, endpoint=endpoint: endpoint)
-                      for endpoint in endpoints)
-    return InputInterpreter(factories, timeout_seconds=timeout_seconds, context_bytes=60000,
-                            secrets=tuple(endpoint.spec.api_key for endpoint in endpoints),
-                            on_endpoint_failure=on_endpoint_failure)
+    factories = tuple((lambda *, exchange_seconds, connect_seconds, endpoint=endpoint: endpoint) for endpoint in endpoints)
+    return InputInterpreter(
+        factories,
+        timeout_seconds=timeout_seconds,
+        context_bytes=60000,
+        secrets=tuple(endpoint.spec.api_key for endpoint in endpoints),
+        on_endpoint_failure=on_endpoint_failure,
+    )

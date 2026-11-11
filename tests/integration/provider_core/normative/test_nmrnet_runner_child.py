@@ -16,13 +16,13 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
         # This lane installs core and mounts the binding under /consumer. Native
         # image qualification separately proves its -I image-owned installation.
         bootstrap = "import sys; sys.path.append('/consumer'); from nmrnet_provider.native_child import main; main()"
-        runner = RunningSupervisor(
-            role="reader", worker_argv=[sys.executable, "-c", bootstrap, "reader", "--io-seconds", "2"]
-        )
+        runner = RunningSupervisor(role="reader", worker_argv=[sys.executable, "-c", bootstrap, "reader", "--io-seconds", "2"])
         self.addCleanup(runner.close)
         identities = []
         for source in (b"H 0 0 0\nC 1.09 0 0\n", b"C 0 0 0\nH 0 1.09 0\n"):
-            operation = NativeOperation(role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock())
+            operation = NativeOperation(
+                role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock()
+            )
             reader, writer = await operation.start()
             client = GeometryClient(reader, writer, allocation=operation.allocation, operation_seconds=2)
             try:
@@ -34,7 +34,9 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
                 identities.append(operation.allocation)
             except Exception as primary:
                 runner.close()
-                primary.add_note("Disposable native fixture stderr:\n" + runner.diagnostic.decode("utf-8", errors="replace")[-8192:])
+                primary.add_note(
+                    "Disposable native fixture stderr:\n" + runner.diagnostic.decode("utf-8", errors="replace")[-8192:]
+                )
                 raise
             finally:
                 failures = await operation.retire_channel(client)

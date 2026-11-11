@@ -5,6 +5,7 @@ Jobs API, durable result outbox and recording scientific workers. A real HTTPS
 503 exercises the captured SDK ProseService; controlled waits isolate the
 between-Job and operator-stop cases.
 """
+
 import asyncio
 import unittest
 from unittest.mock import AsyncMock
@@ -30,16 +31,25 @@ class NmrnetProseServiceOutageTests(unittest.IsolatedAsyncioTestCase):
             fixture.model_peer.response_factory = AsyncMock(side_effect=unavailable_reply)
             dispatch = AsyncMock()
             interpreter = Interpreter(
-                fixture.prose_services, timeout_seconds=2,
-                context_bytes=min(service.context_bytes for service in fixture.prose_services), secrets=(),
+                fixture.prose_services,
+                timeout_seconds=2,
+                context_bytes=min(service.context_bytes for service in fixture.prose_services),
+                secrets=(),
             )
             try:
                 with self.assertRaises(InterpretationFailed):
                     await interpreter.run(
                         [{"role": "user", "content": "Earlier Job"}],
-                        [{"type": "function", "function": {
-                            "name": "prepare", "parameters": {"type": "object", "properties": {}},
-                        }}], dispatch,
+                        [
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "prepare",
+                                    "parameters": {"type": "object", "properties": {}},
+                                },
+                            }
+                        ],
+                        dispatch,
                     )
             finally:
                 await interpreter.retire()
@@ -92,10 +102,10 @@ class NmrnetProseServiceOutageTests(unittest.IsolatedAsyncioTestCase):
         delay_installed = asyncio.Event()
         delay_until = None
         async with SuccessiveServicePeers(lose_second_completion=False) as fixture:
+
             def retry_seconds():
                 nonlocal delay_until
-                if (len(fixture.allocations) == 1
-                        and fixture.allocations[0].host.confirmed):
+                if len(fixture.allocations) == 1 and fixture.allocations[0].host.confirmed:
                     if delay_until is None:
                         delay_until = loop.time() + 0.3
                         delay_installed.set()
@@ -110,7 +120,8 @@ class NmrnetProseServiceOutageTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(1, len(fixture.start_bodies))
                 await asyncio.sleep(0.08)
                 self.assertEqual(
-                    1, len(fixture.start_bodies),
+                    1,
+                    len(fixture.start_bodies),
                     "The next NMRNet Job started while the prose interpreter service was delayed",
                 )
                 await asyncio.wait_for(task, 8)

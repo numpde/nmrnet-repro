@@ -23,8 +23,13 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
             self.assertEqual(service["pids_limit"], 64)
             self.assertEqual(service["restart"], "unless-stopped")
             self.assertGreater(int(service["stop_grace_period"].removesuffix("s")), 0)
-            self.assertEqual(service["logging"], {"driver": "json-file", "options": {
-                "max-size": "10m", "max-file": "3", "mode": "non-blocking", "max-buffer-size": "1m"}})
+            self.assertEqual(
+                service["logging"],
+                {
+                    "driver": "json-file",
+                    "options": {"max-size": "10m", "max-file": "3", "mode": "non-blocking", "max-buffer-size": "1m"},
+                },
+            )
             self.assertEqual(service["mem_limit"], "4g" if role == "prediction" else "512m")
             self.assertEqual(service["memswap_limit"], service["mem_limit"])
             self.assertNotIn("/workspace", str(service))
@@ -46,8 +51,16 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
             self.assertTrue(grants[f"/native/{role}"]["read_only"])
         self.assertEqual(provider["network_mode"], "none")
         control = grants[str(self.root / "attempts")]
-        self.assertEqual(control, {"type": "volume", "source": checkpoint_volume_name(self.config.lifecycle.scope),
-                                   "target": str(self.root / "attempts"), "read_only": False, "volume": {"nocopy": True}})
+        self.assertEqual(
+            control,
+            {
+                "type": "volume",
+                "source": checkpoint_volume_name(self.config.lifecycle.scope),
+                "target": str(self.root / "attempts"),
+                "read_only": False,
+                "volume": {"nocopy": True},
+            },
+        )
         shared = self.grants.compose()
         for mount in shared["mounts"]:
             self.assertEqual(grants[mount["target"]], mount)
@@ -59,13 +72,20 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
                 self.assertFalse(any(grant["type"] == "volume" for grant in service["volumes"]))
         self.assertIn("/run:rw,nosuid,nodev,noexec,size=64m,mode=0700,uid=1000,gid=1001", provider["tmpfs"])
         self.assertEqual(set(provider["depends_on"]), set(services) - {"provider"})
-        self.assertGreater(int(provider["stop_grace_period"].removesuffix("s")), self.config.service.policy.drain_seconds + self.config.service.policy.settle_seconds)
+        self.assertGreater(
+            int(provider["stop_grace_period"].removesuffix("s")),
+            self.config.service.policy.drain_seconds + self.config.service.policy.settle_seconds,
+        )
         for role in ("prediction", "reader", "smiles"):
             command = services[role]["command"]
-            budgets = {name: float(command[command.index("--" + name + "-seconds") + 1])
-                       for name in ("startup", "terminate", "kill", "cleanup")}
-            self.assertLessEqual(2 * budgets["startup"] + budgets["terminate"] + budgets["kill"] + budgets["cleanup"],
-                                 float(services[role]["stop_grace_period"].removesuffix("s")))
+            budgets = {
+                name: float(command[command.index("--" + name + "-seconds") + 1])
+                for name in ("startup", "terminate", "kill", "cleanup")
+            }
+            self.assertLessEqual(
+                2 * budgets["startup"] + budgets["terminate"] + budgets["kill"] + budgets["cleanup"],
+                float(services[role]["stop_grace_period"].removesuffix("s")),
+            )
 
     def test_prediction_profile_excludes_pre_acquisition_preparation_without_changing_client_budget(self):
         command = self.plan()["services"]["prediction"]["command"]

@@ -66,7 +66,9 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                     next_cursor="Yg",
                 ),
             ]
-            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, claims=fixture.claims)
+            selected = await select_pending_start(
+                fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, claims=fixture.claims
+            )
             self.assertEqual(selected.input.job_ref, "job:z")
             self.assertEqual(json.loads(selected.body)["job_ref"], "job:z")
             self.assertEqual(len(fixture.api_peer.requests), 2)
@@ -86,7 +88,9 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                 "nmrnet_provider.admission.secrets.token_hex",
                 side_effect=AssertionError("Empty discovery must create no start key"),
             ):
-                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims))
+                self.assertIsNone(
+                    await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims)
+                )
             fixture.feed_replies = None
             selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims)
             self.assertEqual(selected.input, ports.instructions.identity)

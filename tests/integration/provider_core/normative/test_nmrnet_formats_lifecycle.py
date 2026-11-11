@@ -132,8 +132,7 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
                         )
 
                     readers = [
-                        SimpleNamespace(read=AsyncMock(side_effect=read), close=Mock(), wait_closed=AsyncMock())
-                        for _ in range(2)
+                        SimpleNamespace(read=AsyncMock(side_effect=read), close=Mock(), wait_closed=AsyncMock()) for _ in range(2)
                     ]
                     hosts = [HostOwner(), HostOwner()]
                     for host in hosts:

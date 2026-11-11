@@ -39,8 +39,11 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
             self.assertFalse(files.state.exists())
 
     def test_live_limits_are_explicit_positive_integers_before_startup_effects(self):
-        for field, current in (("maximum_live_attempts", "2"), ("maximum_control_bytes", "262144"),
-                               ("maximum_pending_terminal_bytes", "4194304")):
+        for field, current in (
+            ("maximum_live_attempts", "2"),
+            ("maximum_control_bytes", "262144"),
+            ("maximum_pending_terminal_bytes", "4194304"),
+        ):
             for value in (None, "0", "-1", "true", '"64"'):
                 with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
                     files = ConfigFiles(directory)
@@ -51,7 +54,17 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     self.assertFalse(files.state.exists())
 
     def test_direct_execution_sources_refuse_invalid_grants_or_identities_without_publication(self):
-        for fault in ("missing", "linked", "empty_names", "duplicate_names", "escaping_name", "absolute_name", "oversized", "image", "revision"):
+        for fault in (
+            "missing",
+            "linked",
+            "empty_names",
+            "duplicate_names",
+            "escaping_name",
+            "absolute_name",
+            "oversized",
+            "image",
+            "revision",
+        ):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
                 source_root, names = execution_source_files(directory)
                 destination = Path(directory) / "declaration"
@@ -92,7 +105,9 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
                 files = ConfigFiles(Path(directory))
                 if role == "model":
-                    files.endpoint.write_text(files.endpoint.read_text().replace("https://model.example", "https://model.example:443"))
+                    files.endpoint.write_text(
+                        files.endpoint.read_text().replace("https://model.example", "https://model.example:443")
+                    )
                 else:
                     files.write(files.raw.replace(f"https://{role}.example".encode(), f"https://{role}.example:443".encode()))
                 with self.assertRaisesRegex(ConfigurationRejected, "canonical"):

@@ -30,7 +30,7 @@ from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 
-PARTIAL_REPLY_CHILD = r'''
+PARTIAL_REPLY_CHILD = r"""
 import argparse, socket
 parser = argparse.ArgumentParser()
 parser.add_argument('--session-fd', type=int)
@@ -49,9 +49,9 @@ with socket.socket(fileno=args.session_fd) as channel:
     received(int.from_bytes(received(4), 'big'))
     channel.sendall(b'\x00\x00')
     raise SystemExit(17)
-'''
+"""
 
-MODEL_FAILURE_CHILD = r'''
+MODEL_FAILURE_CHILD = r"""
 import argparse, json, socket
 parser = argparse.ArgumentParser()
 parser.add_argument('--session-fd', type=int)
@@ -76,7 +76,7 @@ with socket.socket(fileno=args.session_fd) as channel:
     request = json.loads(receive(int.from_bytes(receive(4), 'big')))
     assert request['operation'] == 'execute'
     send({'kind': 'model_call_failed', 'allocation': args.operation, 'diagnostic': 'authored model-call failure'})
-'''
+"""
 
 
 class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
@@ -95,8 +95,11 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
 
         session = NMRNetSession(
             allocate_prediction=partial(factory.allocate_prediction, job_ref=ports.instructions.job_ref),
-            execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
-            input_preparation=ports.preparation, max_retries=1, prediction_seconds=2,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=2,
         )
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
             prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=Mock())
@@ -111,29 +114,43 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
     def factory(self, ports, claims, retry):
         return NativeAttemptFactory(
             admission_stopping=asyncio.Event(),
-            config=SimpleNamespace(), claims=claims,
+            config=SimpleNamespace(),
+            claims=claims,
             prose_services=(),
-            execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
             policy=NativePolicy(allocation_seconds=2, prediction_seconds=2, source_seconds=2),
             observation_recovery=ObservationRecovery(2, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(2, 1, Mock(), Mock()),
             start_policy=LiveStartPolicy(cadence_seconds=1, on_retry=Mock(), on_recovered=Mock()),
             on_operator_notice=Mock(),
-            on_unconfirmed_phase_progress=Mock(), on_delivery_retry=Mock(),
+            on_unconfirmed_phase_progress=Mock(),
+            on_delivery_retry=Mock(),
         )
 
     def controller(self, ports, session, claims, stopping):
-        transport = Transport(reply(start_response()), reply(observation()),
-                              reply(response(ports.instructions.specification_bytes)), reply(progress_response()))
+        transport = Transport(
+            reply(start_response()),
+            reply(observation()),
+            reply(response(ports.instructions.specification_bytes)),
+            reply(progress_response()),
+        )
         delivery = RecordingDelivery()
         controller = AttemptController.live(
-            api(transport, ports.pending.scope.api_origin), claims, session,
-            scope=ports.pending.scope, stopping=stopping,
+            api(transport, ports.pending.scope.api_origin),
+            claims,
+            session,
+            scope=ports.pending.scope,
+            stopping=stopping,
             start_policy=LiveStartPolicy(cadence_seconds=1, on_retry=Mock(), on_recovered=Mock()),
             allow_active_start_replay=True,
-            delivery=delivery, on_delivery_retry=Mock(),
-            delivery_retry_initial_seconds=0.01, delivery_retry_max_seconds=0.04,
-            allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=1,
+            delivery=delivery,
+            on_delivery_retry=Mock(),
+            delivery_retry_initial_seconds=0.01,
+            delivery_retry_max_seconds=0.04,
+            allowed_job_states=frozenset({"open"}),
+            poll_seconds=1,
+            task_settle_seconds=1,
         )
         return controller, transport, delivery
 
@@ -160,7 +177,8 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         factory = self.factory(ports, claims, retry)
         session = NMRNetSession(
             allocate_prediction=partial(factory.allocate_prediction, job_ref=ports.instructions.job_ref),
-            execution_identity={"image_id": "fixture"}, selected_artifacts=ports.worker.artifacts,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
             input_preparation=ports.preparation,
         )
         controller, transport, delivery = self.controller(ports, session, claims, stopping)
@@ -224,8 +242,10 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         preparation = ports.owner(choose, allocate_reader=factory.allocate_reader)
         no_prediction = AsyncMock(side_effect=AssertionError("Prediction cannot follow a failed structure read"))
         session = NMRNetSession(
-            allocate_prediction=no_prediction, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=preparation,
+            allocate_prediction=no_prediction,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=preparation,
         )
         controller, transport, delivery = self.controller(ports, session, claims, stopping)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
@@ -248,7 +268,9 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
     async def test_reader_exit_remains_primary_when_both_channel_close_paths_fail(self):
         runner = RunningSupervisor(role="reader", worker_argv=[sys.executable, "-c", PARTIAL_REPLY_CHILD])
         self.addCleanup(runner.close)
-        operation = NativeOperation(role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock())
+        operation = NativeOperation(
+            role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock()
+        )
         reader, writer = await operation.start()
         client = GeometryClient(reader, writer, allocation=operation.allocation, operation_seconds=2, native=operation)
         try:

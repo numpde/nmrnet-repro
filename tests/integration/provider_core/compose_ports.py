@@ -26,20 +26,33 @@ class ComposeFixture:
         self.files.write(raw.replace(b"prediction_seconds = 90", b"prediction_seconds = 5"))
         self.config = load_provider_config(self.files.path)
         self.execution = {
-            "image_id": "sha256:" + "1" * 64, "geometry_image_id": "sha256:" + "2" * 64,
-            "controller_image_id": "sha256:" + "3" * 64, "repository_revision": "a" * 40,
-            "upstream_revision": "b" * 40, "runtime_identity_source": "caller",
+            "image_id": "sha256:" + "1" * 64,
+            "geometry_image_id": "sha256:" + "2" * 64,
+            "controller_image_id": "sha256:" + "3" * 64,
+            "repository_revision": "a" * 40,
+            "upstream_revision": "b" * 40,
+            "runtime_identity_source": "caller",
             "tool_sources": {"tools/worker.py": {"sha256": "c" * 64, "size": 1}},
         }
         self.routes = {role: {"mode": "external", "interface": "eth0", "log_level": "INFO"} for role in ("interpreter", "store")}
         self.grants = SharedGrants("nmr-api-delivery", self.config.delivery.endpoint.socket_group_id)
 
     def plan(self, **changes):
-        arguments = dict(deployment="web", checkout=self.root / "checkout", bundle=self.bundle,
-                         uid=1000, gid=1001, prepared=self.root / "prepared", execution=self.execution,
-                         routes=self.routes, grants=self.grants, shared_image_id="sha256:" + "9" * 64)
+        arguments = dict(
+            deployment="web",
+            checkout=self.root / "checkout",
+            bundle=self.bundle,
+            uid=1000,
+            gid=1001,
+            prepared=self.root / "prepared",
+            execution=self.execution,
+            routes=self.routes,
+            grants=self.grants,
+            shared_image_id="sha256:" + "9" * 64,
+        )
         arguments.update(changes)
         return render_compose(self.config, **arguments)
+
 
 def deployment_inputs(root):
     """Author exact readonly source inputs and disposable non-deployed credentials."""
@@ -64,9 +77,13 @@ def deployment_inputs(root):
     definition.write_text(tomli_w.dumps(document))
     settings = root / "config/deployments/web/deployment.toml"
     settings.parent.mkdir(parents=True, mode=0o700)
-    settings.write_text('maximum_startup_bytes = 65536\nresolvers = ["192.0.2.53"]\n'
-                        '[deployment]\nproject = "fixture-delivery"\ngid = 1001\n'
-                        + "".join(f'[routes.{role}]\nmode = "external"\ninterface = "eth0"\nlog_level = "INFO"\n' for role in ("interpreter", "store")))
+    settings.write_text(
+        'maximum_startup_bytes = 65536\nresolvers = ["192.0.2.53"]\n'
+        '[deployment]\nproject = "fixture-delivery"\ngid = 1001\n'
+        + "".join(
+            f'[routes.{role}]\nmode = "external"\ninterface = "eth0"\nlog_level = "INFO"\n' for role in ("interpreter", "store")
+        )
+    )
     settings.chmod(0o600)
     source_root = root / "source"
     (source_root / "requirements").mkdir(parents=True, mode=0o700)
@@ -81,17 +98,37 @@ def deployment_inputs(root):
         (source_root / name).write_bytes(content)
     member = {"member": "member.bin", "size": 1, "sha256": "c" * 64}
     models = source_root / "prediction-models.json"
-    models.write_text(json.dumps({"dictionary": {**member, "archive_sha256": "d" * 64},
-                                  "checkpoint_archive": {"archive_sha256": "e" * 64},
-                                  "elements": {element: {role: member for role in ("checkpoint", "scaler")} for element in ("H", "C")}}))
+    models.write_text(
+        json.dumps(
+            {
+                "dictionary": {**member, "archive_sha256": "d" * 64},
+                "checkpoint_archive": {"archive_sha256": "e" * 64},
+                "elements": {element: {role: member for role in ("checkpoint", "scaler")} for element in ("H", "C")},
+            }
+        )
+    )
     sources["prediction-models.json"] = models.read_bytes()
     bundle = private / "bundles/generation-first"
     bundle.mkdir(mode=0o700)
     for directory in (bundle / "config", bundle / "secrets", bundle / "secrets" / "provider"):
         directory.mkdir(mode=0o700)
-    return dict(definition=definition, settings=settings, secrets=files.root, bundle=bundle,
-                source_root=source_root, source_names=tuple(sources), models=models, deployment="web", checkout=root / "checkout", uid=1000, gid=1001,
-                prepared=root / "prepared", shared_image_id="sha256:" + "9" * 64,
-                image_id="sha256:" + "1" * 64,
-                geometry_image_id="sha256:" + "2" * 64, controller_image_id="sha256:" + "3" * 64,
-                repository_revision="a" * 40, upstream_revision="b" * 40), files
+    return dict(
+        definition=definition,
+        settings=settings,
+        secrets=files.root,
+        bundle=bundle,
+        source_root=source_root,
+        source_names=tuple(sources),
+        models=models,
+        deployment="web",
+        checkout=root / "checkout",
+        uid=1000,
+        gid=1001,
+        prepared=root / "prepared",
+        shared_image_id="sha256:" + "9" * 64,
+        image_id="sha256:" + "1" * 64,
+        geometry_image_id="sha256:" + "2" * 64,
+        controller_image_id="sha256:" + "3" * 64,
+        repository_revision="a" * 40,
+        upstream_revision="b" * 40,
+    ), files

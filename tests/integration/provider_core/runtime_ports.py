@@ -68,8 +68,12 @@ def require_model_credentials(request):
 def require_download_credentials(request, body):
     if request.split(b"\r\n", 1)[0] != f"GET /upload/v1/uploads/{UPLOAD_REF}/bytes HTTP/1.1".encode() or body:
         raise AssertionError("Store received an unexpected Upload bytes operation")
-    headers = [(name.lower(), value.strip()) for line in request.split(b"\r\n")[1:] if b":" in line
-               for name, value in [line.split(b":", 1)]]
+    headers = [
+        (name.lower(), value.strip())
+        for line in request.split(b"\r\n")[1:]
+        if b":" in line
+        for name, value in [line.split(b":", 1)]
+    ]
     if [value for name, value in headers if name == b"authorization"] != [b"Bearer " + grant()["capability"].encode()]:
         raise AssertionError("Store did not receive exactly its granted download bearer")
     if any(name in (b"signature", b"signature-input") for name, _ in headers) or b"private_model_key" in request.lower():
@@ -130,15 +134,20 @@ class RuntimePeers:
             self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
             self.config.delivery.endpoint.socket_path.parent.chmod(0o710)
             policy = ServicePolicy.admit("local", [urlsplit(self.api_peer.origin).netloc], ["127.0.0.1=127.0.0.1"])
-            self.proxy = JoinedDeliveryProxy(Path(directory) / "delivery-proxy.sock", "lo", policy, status_directory=Path(directory))
+            self.proxy = JoinedDeliveryProxy(
+                Path(directory) / "delivery-proxy.sock", "lo", policy, status_directory=Path(directory)
+            )
             self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
             self.proxy_thread.start()
             endpoint = self.config.delivery.endpoint
             self.relay = SharedDeliveryService(
-                relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
+                relay_root,
+                limits=QueueLimits(8, 16777216, 8, 16777216),
                 socket=SharedDeliverySocket(endpoint.socket_path, endpoint.socket_group_id),
-                proxy_socket=Path(directory) / "delivery-proxy.sock", request_seconds=2,
-                retry_initial_seconds=0.01, retry_max_seconds=0.1,
+                proxy_socket=Path(directory) / "delivery-proxy.sock",
+                request_seconds=2,
+                retry_initial_seconds=0.01,
+                retry_max_seconds=0.1,
                 on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
                 diagnostic_status=lambda: {"output_failures": 0},
             )
@@ -251,7 +260,9 @@ class RuntimePeers:
             "execution_identity": {"image_id": "fixture"},
             "selected_artifacts": self.ports.worker.artifacts,
             "allocate_prediction": self.allocate_prediction,
-            "on_prediction_failure": lambda failure, attempt: self.operator_notices.append(("prediction_failed", failure, attempt)),
+            "on_prediction_failure": lambda failure, attempt: self.operator_notices.append(
+                ("prediction_failed", failure, attempt)
+            ),
             "on_interpreter_failure": lambda index, failure: self.operator_notices.append((index, failure)),
             "on_source_retry": lambda failure, seconds: self.operator_notices.append(("source_retry", failure, seconds)),
             "on_source_observation": lambda failure: self.operator_notices.append(("source_observation", failure)),
@@ -267,8 +278,14 @@ class RuntimePeers:
             "on_unconfirmed_phase_progress": self.unconfirmed_phase_progress,
             "condition_recovery": None,
             "on_delivery_retry": lambda attempt, failure, seconds: self.delivery_notices.append(
-                (failure, {"event": "producer_delivery_retry", "retry_seconds": seconds,
-                           "execution_attempt_ref": attempt.admission.execution_attempt_ref})
+                (
+                    failure,
+                    {
+                        "event": "producer_delivery_retry",
+                        "retry_seconds": seconds,
+                        "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+                    },
+                )
             ),
         }
 

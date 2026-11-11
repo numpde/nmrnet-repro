@@ -16,9 +16,7 @@ class CoordinateJsonPreparation:
 
     async def prepare(self, instructions, *, require_execution):
         require_execution()
-        return PreparedJobInput(
-            (prepare_json(instructions.specification_bytes),), "direct_coordinate_json", output=self.output
-        )
+        return PreparedJobInput((prepare_json(instructions.specification_bytes),), "direct_coordinate_json", output=self.output)
 
     async def retire(self):
         pass

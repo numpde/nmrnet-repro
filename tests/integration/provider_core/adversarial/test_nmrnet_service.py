@@ -19,7 +19,6 @@ from provider_core.transport import ExchangeFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
-
     async def test_attempt_observer_retains_child_cancellation_and_its_cause(self):
         async with ServicePeers() as fixture:
             original = asyncio.CancelledError("original Attempt interruption")
@@ -63,8 +62,11 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_crash_notice_preserves_the_original_attempt_failure(self):
         async with ServicePeers() as fixture:
             primary = RuntimeError("original Attempt failure")
-            for notice in (RuntimeError("crash notice failure"), SystemExit(7),
-                           BaseExceptionGroup("crash notice failure", [SystemExit(8)])):
+            for notice in (
+                RuntimeError("crash notice failure"),
+                SystemExit(7),
+                BaseExceptionGroup("crash notice failure", [SystemExit(8)]),
+            ):
                 with self.subTest(notice=type(notice).__name__):
                     operation = Mock(spec=AttemptExecutor)
                     operation.observed_crash = object()
@@ -148,7 +150,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 fixture.stop.set()
                 await asyncio.gather(task, return_exceptions=True)
                 await fixture.settle_service(service)
-
 
     async def test_hello_retirement_failure_keeps_the_outage_and_blocks_another_send(self):
         async with ServicePeers() as fixture:
@@ -343,7 +344,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(service.hello_api.retirement_confirmed)
                 await fixture.settle_service(service)
 
-
     async def test_stop_preserves_original_acknowledged_execution_past_the_drain_window(self):
         async with ServicePeers() as fixture:
             fixture.execution_release = asyncio.Event()
@@ -357,7 +357,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     window_elapsed.set()
                 return finished
 
-            with patch.object(service, '_wait_task', observed_wait):
+            with patch.object(service, "_wait_task", observed_wait):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
                     await asyncio.wait_for(fixture.execution_entered.wait(), fixture.config.preparation.seconds)
@@ -374,7 +374,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIsNone(service.last_failure)
                     self.assertTrue(service.shutdown_ready)
                     self.assertEqual(len(fixture.allocations), 1)
-                    self.assertEqual(fixture.allocations[0].worker.events.count('execute'), 1)
+                    self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
                     self.assertTrue(fixture.allocations[0].host.confirmed)
                 finally:
                     fixture.stop.set()
@@ -449,7 +449,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     with suppress(ServiceFailed):
                         await task
                 await fixture.settle_service(service)
-
 
     async def test_withdrawal_during_discovery_abandons_selection_before_factory_handoff(self):
         async with ServicePeers() as fixture:
@@ -536,7 +535,6 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", str(service.last_failure))
             finally:
                 await fixture.settle_service(service)
-
 
     async def test_late_factory_return_after_stop_is_retired_without_starting(self):
         async with ServicePeers() as fixture:
