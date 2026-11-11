@@ -389,7 +389,7 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
                         declaration.write_bytes(b'{"selection":"changed"}')
                     models = SelectedReleaseModels(declaration_path=declaration, weight_root=root, checkpoint_root=root)
                     prediction = ReleasedPredictionSession(models)
-                    prediction._prediction.prepare = Mock(side_effect=lambda _requests: (models._selection(), object())[1])
+                    prediction._prediction.prepare = Mock(side_effect=lambda _requests, models=models: (models._selection(), object())[1])
                     connection = RecordingConnection(prepare_frame())
                     with (
                         patch("nmrnet_inference.worker.secrets.token_hex", return_value="a" * 32),
