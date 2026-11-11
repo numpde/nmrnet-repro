@@ -91,13 +91,16 @@ test/integration/rdkit-runtime:
 
 override export NMRNET_ACQUISITION_ARCHIVE_INPUT := $(if $(filter command line,$(origin ACQUISITION_ARCHIVE)),$(value ACQUISITION_ARCHIVE))
 unexport ACQUISITION_ARCHIVE
+override export NMRNET_ACQUISITION_ISSUER_INPUT := $(if $(filter command line,$(origin ACQUISITION_ISSUER)),$(value ACQUISITION_ISSUER))
+unexport ACQUISITION_ISSUER
 
 packages/acquisition-bootstrap/check:
 	python3 -B tools/acquisition_bootstrap.py
 
 packages/acquisition-bootstrap/refresh:
 	@test -n "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ARCHIVE=<release archive> on the make command line.' >&2; exit 2; }
-	python3 -B tools/acquisition_bootstrap.py --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT"
+	@test -n "$$NMRNET_ACQUISITION_ISSUER_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ISSUER=<incoming release record> on the make command line.' >&2; exit 2; }
+	python3 -B tools/acquisition_bootstrap.py --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" --issuer "$$NMRNET_ACQUISITION_ISSUER_INPUT"
 
 packages/images/retire:
 	bash tools/image_retirement.sh
