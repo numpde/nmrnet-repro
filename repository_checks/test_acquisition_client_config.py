@@ -328,7 +328,7 @@ class AcquisitionClientTests(unittest.TestCase):
 
     def test_python_base_download_make_target_works_without_interface_selection(self):
         result = subprocess.run(
-            ["make", "--no-print-directory", "packages/base-images/python/download"],
+            ["make", "--no-print-directory", "packages/base-images/python/download", "DOCKER_CONTEXT=fixture-local"],
             cwd=self.root,
             env=self.fixture.environment,
             capture_output=True,
