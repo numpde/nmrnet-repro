@@ -4,13 +4,13 @@ FROM scratch AS runtime_wheels
 COPY wheelhouse/runtime/ /wheels/
 FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
-ENV NMRNET_IN_CONTAINER=1 PROVIDER_CORE_IN_CONTAINER=1 NMR_PROVIDER_TOOLS_IN_CONTAINER=1 PYTHONDONTWRITEBYTECODE=1
+ENV NMRNET_IN_CONTAINER=1 PROVIDER_CORE_IN_CONTAINER=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /opt/build
 COPY host/bootstrap/acquisition/acquisition_tool/__init__.py ./acquisition_tool/__init__.py
 COPY host/bootstrap/acquisition/acquisition_tool/installer/tools/ ./acquisition_tool/installer/tools/
 COPY host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json /opt/provider-tools/installer/release.json
 COPY host/bootstrap/acquisition/acquisition_tool/installer/wheels/ /opt/provider-tools/installer/wheels/
-RUN python3 -B -m acquisition_tool.installer.tools.installer \
+RUN NMR_PROVIDER_TOOLS_IN_CONTAINER=1 python3 -B -m acquisition_tool.installer.tools.installer \
         --record /opt/provider-tools/installer/release.json --pool /opt/provider-tools/installer/wheels
 COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/rdkit_environment.py ./tools/
 COPY requirements/preparation.lock /opt/rdkit/preparation.lock
@@ -22,9 +22,9 @@ COPY nmrnet_provider/ ./nmrnet_provider/
 COPY nmrnet_inference/ ./nmrnet_inference/
 RUN --mount=type=bind,from=preparation_wheels,source=/wheels,target=/wheels \
     --mount=type=bind,from=runtime_wheels,source=/wheels,target=/runtime-wheels \
-    python3 -B -m tools.rdkit_environment --root /opt/rdkit \
+    NMR_PROVIDER_TOOLS_IN_CONTAINER=1 python3 -B -m tools.rdkit_environment --root /opt/rdkit \
         --wheels /wheels --lock /opt/rdkit/preparation.lock \
-    && python3 -B -m tools.provider_environment --root /opt/rdkit --source /opt/build \
+    && NMR_PROVIDER_TOOLS_IN_CONTAINER=1 python3 -B -m tools.provider_environment --root /opt/rdkit --source /opt/build \
         --python /opt/rdkit/environment/bin/python --install-lock /opt/build/requirements/provider-core-native-install.lock --runtime-wheels /runtime-wheels \
     && /opt/rdkit/environment/bin/python -I -B -m nmrnet_provider.worker_main --help \
     && rm -rf /opt/build
