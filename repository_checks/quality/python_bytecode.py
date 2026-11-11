@@ -183,9 +183,9 @@ def shell_findings(path, source):
             prefix = tokens[:index]
             enabled = False if entrypoint else global_env
             for position, value in enumerate(prefix):
-                if value in {"-i", "--ignore-environment", "--unset=" + _ENV}:
-                    enabled = False
-                elif value == "-u" and position + 1 < len(prefix) and prefix[position + 1] == _ENV:
+                if value in {"-i", "--ignore-environment", "--unset=" + _ENV} or (
+                    value == "-u" and position + 1 < len(prefix) and prefix[position + 1] == _ENV
+                ):
                     enabled = False
                 elif value.startswith(_ENV + "="):
                     if (entrypoint and position > 0 and prefix[position - 1] == "--env") or (

@@ -103,7 +103,7 @@ def deployment_inputs(root):
             {
                 "dictionary": {**member, "archive_sha256": "d" * 64},
                 "checkpoint_archive": {"archive_sha256": "e" * 64},
-                "elements": {element: {role: member for role in ("checkpoint", "scaler")} for element in ("H", "C")},
+                "elements": {element: dict.fromkeys(("checkpoint", "scaler"), member) for element in ("H", "C")},
             }
         )
     )
