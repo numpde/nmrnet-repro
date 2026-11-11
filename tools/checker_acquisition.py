@@ -228,7 +228,10 @@ def _finish_download(document, declaration_sha256, output, wheelhouse, staged, r
             target.flush()
             os.fsync(target.fileno())
         if file_identity(destination) != {"size": package["size"], "sha256": package["sha256"]}:
-            raise ValueError(f"Cannot acquire checker dependency {package['file']!r}: artifact size or SHA-256 differs")
+            raise ValueError(
+                f"Cannot acquire checker dependency {package['file']!r}: received {count} bytes; "
+                f"expected {package['size']} bytes and the declared SHA-256"
+            )
     receipt = inventory_for_declaration(document, declaration_sha256, staged, wheelhouse)
     if not resume or not (staged / ".complete").exists():
         with (staged / ".complete").open("x") as stream:
