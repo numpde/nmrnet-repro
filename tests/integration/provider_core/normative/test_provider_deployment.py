@@ -101,9 +101,11 @@ class DeploymentBundleTests(unittest.TestCase):
                 (runtime / name).mkdir(mode=0o700)
             unexpected = runtime / "route-store" / "other"
             unexpected.write_text("preserve")
-            with patch("tools.provider_deployment.os.chown") as chown:
-                with self.assertRaisesRegex(ConfigurationRejected, "unowned entry"):
-                    prepare_runtime(runtime, os.getuid(), os.getgid())
+            with (
+                patch("tools.provider_deployment.os.chown") as chown,
+                self.assertRaisesRegex(ConfigurationRejected, "unowned entry"),
+            ):
+                prepare_runtime(runtime, os.getuid(), os.getgid())
             chown.assert_not_called()
             self.assertEqual(unexpected.read_text(), "preserve")
 
@@ -119,9 +121,11 @@ class DeploymentBundleTests(unittest.TestCase):
             external.chmod(0o600)
             original = external.stat()
             (runtime / "prediction/.owner-session.lock").hardlink_to(external)
-            with patch("tools.provider_deployment.os.chown") as chown:
-                with self.assertRaisesRegex(ConfigurationRejected, "another hard link"):
-                    prepare_runtime(runtime, os.getuid(), os.getgid())
+            with (
+                patch("tools.provider_deployment.os.chown") as chown,
+                self.assertRaisesRegex(ConfigurationRejected, "another hard link"),
+            ):
+                prepare_runtime(runtime, os.getuid(), os.getgid())
             chown.assert_not_called()
             self.assertEqual((external.stat().st_uid, external.stat().st_mode & 0o777), (original.st_uid, 0o600))
             self.assertEqual(external.read_text(), "retained")
