@@ -534,7 +534,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         await operation.start()
         entered, release = threading.Event(), threading.Event()
 
-        def delayed_failure(session, **options):
+        def delayed_failure(_session, **options):
             entered.set()
             if not release.wait(timeout=2):
                 raise TimeoutError("Test did not release delayed control failure")

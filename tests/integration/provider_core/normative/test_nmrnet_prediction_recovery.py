@@ -133,7 +133,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             input_preparation=ports.preparation,
             max_retries=1,
             prediction_seconds=0.01,
-            on_prediction_failure=lambda failure, attempt: notices.append(failure),
+            on_prediction_failure=lambda failure, _attempt: notices.append(failure),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         with patch.object(ports.host, "retire_channel", side_effect=slow_retirement):
@@ -254,7 +254,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             input_preparation=ports.preparation,
             max_retries=1,
             prediction_seconds=0.02,
-            on_prediction_failure=lambda failure, attempt: notices.append(failure),
+            on_prediction_failure=lambda failure, _attempt: notices.append(failure),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         outcome = await session.execute(prepared, report_condition=unexpected_condition)
@@ -284,7 +284,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             input_preparation=ports.preparation,
             max_retries=1,
             prediction_seconds=0.02,
-            on_prediction_failure=lambda failure, attempt: time.sleep(0.05),
+            on_prediction_failure=lambda _failure, _attempt: time.sleep(0.05),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         outcome = await session.execute(prepared, report_condition=unexpected_condition)

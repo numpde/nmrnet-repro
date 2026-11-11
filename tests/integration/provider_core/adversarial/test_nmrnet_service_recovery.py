@@ -538,7 +538,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 controller = await original(pending, stopping=stopping)
                 controllers.append(controller)
 
-                async def unavailable(outcome):
+                async def unavailable(_outcome):
                     delivery_returned.set()
                     raise DeliveryUnavailable("Authored unacknowledged delivery", status=400)
 
