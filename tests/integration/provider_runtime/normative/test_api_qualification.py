@@ -127,7 +127,7 @@ provider_host_command() {
 }
 """
 
-DEPLOYMENT = r'''#!/usr/bin/env bash
+DEPLOYMENT = r"""#!/usr/bin/env bash
 set -eu
 [[ $1 =~ ^(install|up|down)$ ]]
 [[ $NMRNET_DEPLOYMENT_INPUT =~ ^qualification-api-[A-Za-z0-9]{8}$ ]]
@@ -154,11 +154,11 @@ if [[ $1 == install ]]; then
     ln -s generation-fixture "$private/current"
 fi
 if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
-'''
+"""
 
 # This fake stops at the shared host's public Make boundary; its owner tests
 # Engine, SQLite and helper retirement separately.
-SHARED_OWNER = r'''#!/usr/bin/env bash
+SHARED_OWNER = r"""#!/usr/bin/env bash
 set -eu
 action=$1
 case $action in
@@ -175,14 +175,14 @@ case $action in
     down) [[ $PROJECT == nmrnet-qualification-* ]]; printf 'delivery-down\n' >> "$TEST_RECORDS/events" ;;
     *) exit 96 ;;
 esac
-'''
+"""
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
     def test_api_cleanup_does_not_dispatch_after_unretired_client(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            script = r'''
+            script = r"""
 source /fixture/provider_api_qualification.sh
 api_witness_mode=existing-pasted
 api_deployment_active=false
@@ -195,9 +195,15 @@ provider_host_remove() { printf '%s\n' "$1" >> "$TEST_ROOT/calls"; inference_ret
 docker_client_cleanup() { : > "$TEST_ROOT/forbidden-cleanup"; }
 sleep() { : > "$TEST_ROOT/held"; command sleep "$@"; }
 api_witness_finish
-'''
-            process = subprocess.Popen(["bash", "-c", script], env=dict(os.environ, TEST_ROOT=str(root)),
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+"""
+            process = subprocess.Popen(
+                ["bash", "-c", script],
+                env=dict(os.environ, TEST_ROOT=str(root)),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
             try:
                 deadline = time.monotonic() + 2
                 while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
@@ -215,7 +221,7 @@ api_witness_finish
         for phase in ("logs",):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                script = r'''
+                script = r"""
 source /workspace/tools/compose_qualification.sh
 scratch=$TEST_ROOT
 deployment_installed=false
@@ -247,10 +253,15 @@ case $TEST_PHASE in
     logs) (exit 7) ;;
 esac
 compose_witness_finish
-'''
-                process = subprocess.Popen(["bash", "-c", script],
+"""
+                process = subprocess.Popen(
+                    ["bash", "-c", script],
                     env=dict(os.environ, TEST_ROOT=str(root), TEST_PHASE=phase),
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
                 try:
                     deadline = time.monotonic() + 2
                     while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
@@ -268,12 +279,12 @@ compose_witness_finish
                 self.assertIn("original cleanup client diagnostic", stderr)
 
     def test_api_delivery_cleanup_preserves_failed_client_before_restore(self):
-        script = r'''
+        script = r"""
 source /fixture/provider_api_qualification.sh
 api_deployment_active=false
 qualification_delivery_down() { printf 'unexpected shared shutdown\n'; return 7; }
 api_witness_stop_deployment 0
-'''
+"""
         result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
@@ -301,43 +312,65 @@ api_witness_stop_deployment 0
                     'repository_git() { if [[ $* != *status* ]]; then printf "%040d\\n" 1; fi; }\n'
                 )
                 (tools / "git_inputs.sh").write_text(
-                    'copy_git_blobs() { local source=$2 target=$4; shift 5; '
+                    "copy_git_blobs() { local source=$2 target=$4; shift 5; "
                     'for path in "$@"; do mkdir -p "$(dirname -- "$target/$path")"; cp -- "$source/$path" "$target/$path"; done; }\n'
                 )
-                (tools / "provider_deployment.sh").write_text('''set -eu
+                (tools / "provider_deployment.sh").write_text("""set -eu
 [[ $# == 1 && $1 == client-inputs && $NMRNET_DEPLOYMENT_INPUT == original ]]
 printf '%s\\n' "$1" > "$TEST_RECORDS/query"
 [[ $TEST_QUERY_FAILED == false ]] || exit 7
 printf '%s\\n' '{"fixture":"admitted original identity"}'
-''')
-                for name in ("tools/inference_native.sh", "tools/worker_retirement.sh",
-                             "tools/container_guard.py", "tests/integration/provider_runtime/api_prediction.py",
-                             "tests/fixtures/preparation/api_pasted.json"):
+""")
+                for name in (
+                    "tools/inference_native.sh",
+                    "tools/worker_retirement.sh",
+                    "tools/container_guard.py",
+                    "tests/integration/provider_runtime/api_prediction.py",
+                    "tests/fixtures/preparation/api_pasted.json",
+                ):
                     path = repository / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.touch()
                 local_settings = repository / "config/deployments/original/deployment.toml"
                 local_settings.parent.mkdir(parents=True)
                 local_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
-                environment = dict(PATH=os.environ["PATH"], TEST_RECORDS=str(records),
+                environment = dict(
+                    PATH=os.environ["PATH"],
+                    TEST_RECORDS=str(records),
                     TEST_PYTHON=sys.executable,
                     NMRNET_SHARED_RUNTIME_IMAGE_INPUT="sha256:" + "a" * 64,
-                    TEST_QUERY_FAILED=str(scenario == "query-failure").lower(), NMRNET_DEPLOYMENT_INPUT="original",
+                    TEST_QUERY_FAILED=str(scenario == "query-failure").lower(),
+                    NMRNET_DEPLOYMENT_INPUT="original",
                     TEST_VOLUME_MISSING=str(scenario == "missing-volume").lower(),
-                    NMRNET_PROJECT_REF_INPUT="project:fixture", NMRNET_USER_ID_INPUT="fixture",
+                    NMRNET_PROJECT_REF_INPUT="project:fixture",
+                    NMRNET_USER_ID_INPUT="fixture",
                     NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT=str(root / "credentials"),
-                    NMRNET_CA_FILE_INPUT=str(root / "ca.pem"), NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
-                    NMRNET_ADDRESS_INPUT="127.0.0.1", NMRNET_INTERFACE_INPUT="fixture0",
-                    NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64, NMRNET_OUTPUT_INPUT=str(output))
-                result = subprocess.run(["bash", str(script), "existing-pasted"], env=environment,
-                                        capture_output=True, text=True, timeout=10, check=False)
+                    NMRNET_CA_FILE_INPUT=str(root / "ca.pem"),
+                    NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
+                    NMRNET_ADDRESS_INPUT="127.0.0.1",
+                    NMRNET_INTERFACE_INPUT="fixture0",
+                    NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64,
+                    NMRNET_OUTPUT_INPUT=str(output),
+                )
+                result = subprocess.run(
+                    ["bash", str(script), "existing-pasted"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
                 if scenario == "existing-output":
                     self.assertEqual(result.returncode, 2, result.stderr)
                     self.assertIn("Use fresh client output", result.stderr)
                     self.assertFalse((records / "query").exists())
                     self.assertFalse((records / "creates").exists())
                     continue
-                self.assertEqual(result.returncode, 7 if scenario == "query-failure" else 2 if scenario == "missing-volume" else 0, result.stderr)
+                self.assertEqual(
+                    result.returncode,
+                    7 if scenario == "query-failure" else 2 if scenario == "missing-volume" else 0,
+                    result.stderr,
+                )
                 self.assertEqual((records / "query").read_text(), "client-inputs\n")
                 self.assertFalse((records / "deployments").exists())
                 if scenario == "query-failure":
@@ -349,8 +382,10 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 else:
                     if scenario == "missing-parent":
                         self.assertEqual(output.parent.stat().st_mode & 0o777, 0o700)
-                    self.assertEqual((records / "creates").read_text().splitlines(),
-                                     ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"])
+                    self.assertEqual(
+                        (records / "creates").read_text().splitlines(),
+                        ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"],
+                    )
                     self.assertEqual((records / "removals").read_text(), "grants\nclient\n")
                     grants = (records / "client.grants").read_bytes()
                     self.assertNotIn(b"/attempts", grants)
@@ -434,7 +469,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(forbidden, selection + proxy + probe)
             argv = (records / "proxy.argv").read_text().split("\0")[:-1]
             self.assertEqual(
-                argv[argv.index("--mode"):],
+                argv[argv.index("--mode") :],
                 [
                     "--mode",
                     "external",
@@ -529,7 +564,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 (shared / "record.sh").write_text(SHARED_OWNER)
                 (shared / "Makefile").write_text("delivery/deployment/%:\n\t@bash record.sh $*\n")
                 (repository / "tools/wheelhouse_path.sh").write_text(
-                    'select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }; lock_wheelhouse() { :; }\n'
+                    "select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }; lock_wheelhouse() { :; }\n"
                 )
                 (repository / "config/deployments").mkdir(parents=True)
                 (repository / "tools/docker_client.sh").write_text(
@@ -703,7 +738,9 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 creates = (records / "creates").read_text().splitlines()
                 self.assertEqual(
                     [line.split("|")[0] for line in creates],
-                    ["grants", "peer", "stage", "client"] if mode == "scripted-pasted" else ["grants", "selection", "stage", "client"],
+                    ["grants", "peer", "stage", "client"]
+                    if mode == "scripted-pasted"
+                    else ["grants", "selection", "stage", "client"],
                 )
                 self.assertTrue(all(line.endswith("|true") for line in creates))
                 self.assertIn(f"stage|none|{image}|true", creates)
@@ -763,7 +800,10 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 if mode != "scripted-pasted":
                     self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "external")
                     self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "fixture0")
-                    self.assertEqual([stage_argv[index + 1] for index, arg in enumerate(stage_argv) if arg == "--resolver"], selectors["RESOLVERS"].split())
+                    self.assertEqual(
+                        [stage_argv[index + 1] for index, arg in enumerate(stage_argv) if arg == "--resolver"],
+                        selectors["RESOLVERS"].split(),
+                    )
                     self.assertNotIn("--interpreter-network", stage_argv)
                     selection_grants = (records / "selection.grants").read_text().split("\0")[:-1]
                     self.assertFalse(any(selected_key in grant or selected_ca in grant for grant in selection_grants))

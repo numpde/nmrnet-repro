@@ -28,7 +28,14 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             original = fragment.read_text()
             fragment.write_text(original.replace('model = "selected-model"', 'model = "changed-model"'))
             with self.assertRaisesRegex(ValueError, "changed after"):
-                stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
+                stage(
+                    root,
+                    "https://api.example:9443",
+                    "dev-local",
+                    inputs=inputs,
+                    interpreter_config=fragment,
+                    prediction_image_id="sha256:" + "c" * 64,
+                )
             fragment.write_text(original + '\n[[interpreter.endpoints]]\nkey_file = "/ungranted/key"\n')
             with self.assertRaisesRegex(ValueError, "one flat endpoint"):
                 interpreter_fragment(fragment)
@@ -43,7 +50,14 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
             with self.assertRaisesRegex(ConfigurationRejected, "0400 or 0600"):
-                stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
+                stage(
+                    root,
+                    "https://api.example:9443",
+                    "dev-local",
+                    inputs=inputs,
+                    interpreter_config=fragment,
+                    prediction_image_id="sha256:" + "c" * 64,
+                )
             self.assertFalse((root / "source/interpreter.key").exists())
 
     def test_private_fragment_read_keeps_the_existing_byte_ceiling(self):

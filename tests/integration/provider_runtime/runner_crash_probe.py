@@ -37,7 +37,7 @@ def main(operation, seconds):
 
     def identity(pid):
         raw = Path(f"/proc/{pid}/stat").read_text()
-        fields = raw[raw.rfind(")") + 2:].split()
+        fields = raw[raw.rfind(")") + 2 :].split()
         return fields[0], int(fields[1]), int(fields[19])
 
     def live(descriptor):
@@ -46,8 +46,9 @@ def main(operation, seconds):
         assert not poller.poll(0), "Crash probe target exited before supervisor kill."
 
     status = read_status("/run/status.json", "reader")
-    assert (status["phase"] == "working"
-            and 0 <= time.monotonic() - status["updated_monotonic"] <= 30), "Reader has no current working supervisor."
+    assert status["phase"] == "working" and 0 <= time.monotonic() - status["updated_monotonic"] <= 30, (
+        "Reader has no current working supervisor."
+    )
     supervisor = status["pid"]
     supervisor_fd = os.pidfd_open(supervisor, 0)
     live(supervisor_fd)
@@ -98,10 +99,20 @@ def main(operation, seconds):
     poller.register(child_fd, select.POLLIN)
     assert not poller.poll(max(1, int(min(0.1, remaining()) * 1000)))
     assert identity(child) == ("T", supervisor, child_ticks)
-    facts = json.dumps({"operation": operation, "lease": list(lease),
-        "supervisor_pid": supervisor, "supervisor_start_ticks": status["start_ticks"],
-        "child_pid": child, "child_start_ticks": child_ticks,
-        "stopped": True, "alive_after_term": True, "remnant_written": True}, separators=(",", ":")).encode()
+    facts = json.dumps(
+        {
+            "operation": operation,
+            "lease": list(lease),
+            "supervisor_pid": supervisor,
+            "supervisor_start_ticks": status["start_ticks"],
+            "child_pid": child,
+            "child_start_ticks": child_ticks,
+            "stopped": True,
+            "alive_after_term": True,
+            "remnant_written": True,
+        },
+        separators=(",", ":"),
+    ).encode()
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as control:
         control.settimeout(remaining())
         control.connect("/native/reader/crash-probe.sock")

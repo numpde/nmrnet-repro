@@ -173,16 +173,22 @@ class Client:
         Concurrent pruning can advance the watermark during admission; this does
         not imply an old signature. The process alarm still bounds all attempts.
         """
-        if (method != "GET" or response.status != 401
-                or [value for key, value in response.getheaders() if key.lower() == "nmr-api-topology"] != [self.identity["topology"]]):
+        if (
+            method != "GET"
+            or response.status != 401
+            or [value for key, value in response.getheaders() if key.lower() == "nmr-api-topology"] != [self.identity["topology"]]
+        ):
             return False
         try:
             problem = decode_strict_json(content.decode("utf-8"))
         except (ValueError, UnicodeError):
             return False
-        return (type(problem) is dict and problem.get("status") == 401
-                and problem.get("type") == "urn:nmr-api:problem:authentication-failed"
-                and problem.get("code") == "authentication_window_closed")
+        return (
+            type(problem) is dict
+            and problem.get("status") == 401
+            and problem.get("type") == "urn:nmr-api:problem:authentication-failed"
+            and problem.get("code") == "authentication_window_closed"
+        )
 
     def publication_grant(self, upload):
         """Keep authorization bodies transient on success, rejection and interruption."""
@@ -572,14 +578,17 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind, predi
         "Scientific qualification requires the explicitly requested max verbosity and 17 significant digits",
     )
     if case_kind == "pasted":
-        compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id)
+        compare_scientific_documents(
+            actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id
+        )
     elif case_kind == "sdf-zip":
         compare_sdf_scientific_documents(
             actual,
             retained,
             receipt,
             metadata,
-            interpreter=interpreter, prediction_image_id=prediction_image_id,
+            interpreter=interpreter,
+            prediction_image_id=prediction_image_id,
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
         )
     elif case_kind in ("smiles", "smiles-multiple"):
@@ -587,14 +596,23 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind, predi
         expected = next(
             case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == fixture_name
         )
-        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id, expected=expected)
+        compare_smiles_scientific_documents(
+            actual,
+            retained,
+            receipt,
+            metadata,
+            interpreter=interpreter,
+            prediction_image_id=prediction_image_id,
+            expected=expected,
+        )
     else:
         compare_upload_scientific_documents(
             actual,
             retained,
             receipt,
             metadata,
-            interpreter=interpreter, prediction_image_id=prediction_image_id,
+            interpreter=interpreter,
+            prediction_image_id=prediction_image_id,
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
             source=_fixture_bytes("/fixture/atom_order.xyz"),
             expected=json.loads(_fixture_bytes("/fixture/expected.json"))["geometries"]["chloromethane"],
@@ -612,12 +630,19 @@ def require_selected_interpretation(observation, interpreter, operation):
         observation["schema_id"] == "nmrnet.input_interpretation.v2"
         and observation["outcome"] == "selected"
         and 0 < len(visits) <= len(interpreter["endpoints"])
-        and all(type(visit["turns_started"]) is int and 0 < visit["turns_started"] <= 12
-                and type(visit["corrections"]) is int and 0 <= visit["corrections"] <= 3
-                for visit in visits)
-        and all(all(route["endpoint"] == endpoint for route in visit["routes"])
-                for visit, endpoint in zip(visits, interpreter["endpoints"], strict=False))
-        and operations and operations[-1] == operation,
+        and all(
+            type(visit["turns_started"]) is int
+            and 0 < visit["turns_started"] <= 12
+            and type(visit["corrections"]) is int
+            and 0 <= visit["corrections"] <= 3
+            for visit in visits
+        )
+        and all(
+            all(route["endpoint"] == endpoint for route in visit["routes"])
+            for visit, endpoint in zip(visits, interpreter["endpoints"], strict=False)
+        )
+        and operations
+        and operations[-1] == operation,
         "Selected interpretation differs from the admitted endpoints, turn budget or successful input operation",
     )
 
@@ -812,7 +837,9 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
     require_selected_interpretation(actual["interpretation"], interpreter, "prepare_smiles")
 
 
-def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload, source, expected, prediction_image_id):
+def compare_upload_scientific_documents(
+    actual, retained, receipt, metadata, *, interpreter, upload, source, expected, prediction_image_id
+):
     """Compare existing XYZ values exactly while retaining the actual wire digest."""
     require(
         actual["job_ref"] == receipt["job_ref"]
@@ -894,8 +921,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
     for key in ("selected_models", "runtime"):
         require(actual[key] == retained[key], f"SDF scientific {key} differs from R46")
     require(
-        actual["execution"]["image_id"] == prediction_image_id
-        and len(actual["geometries"]) == len(retained["geometries"]) == 2,
+        actual["execution"]["image_id"] == prediction_image_id and len(actual["geometries"]) == len(retained["geometries"]) == 2,
         "SDF prediction image or two-record population differs",
     )
     archive = {
@@ -967,7 +993,10 @@ def main():
     project_ref = require_project_ref("project_ref", args.project_ref)
     validate_user_credential_artifacts(artifacts=artifacts, profile=identity["profile"], user_id=user.user_id)
     case = json.loads(Path("/fixture/case.json").read_bytes())
-    require(re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None, "Expected prediction image pin is malformed")
+    require(
+        re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None,
+        "Expected prediction image pin is malformed",
+    )
     if args.case_kind == "sdf-zip":
         _retained_sdf_science()
     else:
@@ -983,10 +1012,18 @@ def main():
                 raw = stream.read(65537)
             require(len(raw) <= 65536, "Original Job receipt exceeds the readback ceiling")
             receipt = decode_strict_json(raw.decode("utf-8"))
-            require(isinstance(receipt, dict) and receipt.get("project_ref") == project_ref,
-                    "Original Job receipt must name the selected project")
+            require(
+                isinstance(receipt, dict) and receipt.get("project_ref") == project_ref,
+                "Original Job receipt must name the selected project",
+            )
             require_job_ref("Original Job receipt job_ref", receipt.get("job_ref"))
-        receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind, prediction_image_id=identity["prediction_image_id"])
+        receive(
+            client,
+            receipt,
+            readback_seconds=args.readback_seconds,
+            case_kind=args.case_kind,
+            prediction_image_id=identity["prediction_image_id"],
+        )
         (output / "passed.json").write_text(
             json.dumps(
                 {

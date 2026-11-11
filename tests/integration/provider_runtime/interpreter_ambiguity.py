@@ -56,13 +56,7 @@ def batch_budget(settings, *, probe="ambiguity"):
     """
     endpoint = settings.endpoints[0]
     try:
-        seconds = math.ceil(
-            _CASE_COUNTS[probe]
-            * (
-                settings.timeout_seconds + endpoint.retirement_seconds
-            )
-            + 60
-        )
+        seconds = math.ceil(_CASE_COUNTS[probe] * (settings.timeout_seconds + endpoint.retirement_seconds) + 60)
     except (ValueError, OverflowError) as cause:
         raise ConfigurationRejected("the selected interpreter batch must fit finite elapsed seconds.", cause=cause) from None
     if not 1 <= seconds <= 999979:
@@ -99,8 +93,10 @@ def admit_selection(fragment, *, selection, key_file, ca_file=None, probe="ambig
         return read_startup_file(grants[str(path)], **limits)
 
     try:
-        endpoint = _endpoint({**table, "configuration_id": "selected", "request_bytes": 65536,
-                              "response_bytes": 262144, "retirement_seconds": 5}, read_grant)
+        endpoint = _endpoint(
+            {**table, "configuration_id": "selected", "request_bytes": 65536, "response_bytes": 262144, "retirement_seconds": 5},
+            read_grant,
+        )
         settings = InterpreterSettings((endpoint,), 240)
     except ConfigurationRejected:
         raise
@@ -311,14 +307,22 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
         endpoint = settings.endpoints[0]
         carrier = ChatEndpoint(
             endpoint.spec,
-            transport=HttpTransport(trust=endpoint.trust, proxy_socket=endpoint.proxy_socket,
-                                    exchange_seconds=settings.timeout_seconds, retirement_seconds=endpoint.retirement_seconds),
+            transport=HttpTransport(
+                trust=endpoint.trust,
+                proxy_socket=endpoint.proxy_socket,
+                exchange_seconds=settings.timeout_seconds,
+                retirement_seconds=endpoint.retirement_seconds,
+            ),
             request_bytes=endpoint.request_bytes,
             response_bytes=endpoint.response_bytes,
         )
         interpreter = InputInterpreter if probe == "formats" else _ProblemOnlyInterpreter
-        chooser = interpreter((lambda *, exchange_seconds, connect_seconds, carrier=carrier: carrier,), timeout_seconds=settings.timeout_seconds,
-                              context_bytes=60000, secrets=secrets)
+        chooser = interpreter(
+            (lambda *, exchange_seconds, connect_seconds, carrier=carrier: carrier,),
+            timeout_seconds=settings.timeout_seconds,
+            context_bytes=60000,
+            secrets=secrets,
+        )
         observed = {
             "case_id": case["id"],
             "configuration_sha256": configuration_sha256,
@@ -345,21 +349,34 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
             observed["choice_refusal"] = str(cause)
             failures.append(("model argument choice", cause))
         except InterpretationFailed as exhausted:
-            reports = [cause.__cause__ for _, cause in exhausted.failures
-                       if isinstance(cause, ModelReportedInterpretationProblem)
-                       and isinstance(cause.__cause__, ModelReportedInputProblem)]
+            reports = [
+                cause.__cause__
+                for _, cause in exhausted.failures
+                if isinstance(cause, ModelReportedInterpretationProblem)
+                and isinstance(cause.__cause__, ModelReportedInputProblem)
+            ]
             if not reports:
                 failures.append(("input interpretation", exhausted))
                 reports = []
             report = reports[-1] if reports else None
             if report is not None:
-                observed.update(issue=report.issue, guidance=str(report), explanation=report.explanation,
-                                interpretation={"outcome": "model_reported_input_problem",
-                                                "corrections": len(exhausted.correction_failures)})
+                observed.update(
+                    issue=report.issue,
+                    guidance=str(report),
+                    explanation=report.explanation,
+                    interpretation={"outcome": "model_reported_input_problem", "corrections": len(exhausted.correction_failures)},
+                )
                 if probe == "formats" or report.issue != case["expected_issue"]:
-                    failures.append(("model decision", RuntimeError("The model reported a different category from the authored case.")))
+                    failures.append(
+                        ("model decision", RuntimeError("The model reported a different category from the authored case."))
+                    )
                 if exhausted.correction_failures:
-                    failures.append(("model decision", RuntimeError("A corrected conversation does not qualify an uncoached ambiguity decision.")))
+                    failures.append(
+                        (
+                            "model decision",
+                            RuntimeError("A corrected conversation does not qualify an uncoached ambiguity decision."),
+                        )
+                    )
         except ModelReportedInputProblem as report:
             observed.update(
                 issue=report.issue,
@@ -428,7 +445,6 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
         ),
     )
     return 0 if passed == _CASE_COUNTS[probe] else 1
-
 
 
 async def _run_signalled(operation):

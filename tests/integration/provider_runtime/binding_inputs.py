@@ -7,14 +7,14 @@ from urllib.parse import urlsplit
 import tomli_w
 
 
-def write_deployment_inputs(directory, document, *, api, api_route, routes, project, gid,
-                            maximum_startup_bytes, resolvers, shared_fixture=False):
+def write_deployment_inputs(
+    directory, document, *, api, api_route, routes, project, gid, maximum_startup_bytes, resolvers, shared_fixture=False
+):
     """Keep provider identity private and optionally author a disposable host."""
     document.pop("api")
     document["delivery"].pop("socket_path")
     document["delivery"].pop("socket_group_id")
-    settings = {"maximum_startup_bytes": maximum_startup_bytes,
-                "deployment": {"project": project, "gid": gid}, "routes": routes}
+    settings = {"maximum_startup_bytes": maximum_startup_bytes, "deployment": {"project": project, "gid": gid}, "routes": routes}
     if resolvers:
         settings["resolvers"] = resolvers
     private_api = dict(api)
@@ -33,13 +33,17 @@ def write_deployment_inputs(directory, document, *, api, api_route, routes, proj
         authority = f"{origin.hostname}:{origin.port if origin.port is not None else 443}"
         proxy_uid = 65534 if os.geteuid() != 65534 else 65533
         shared = {
-            "deployment": {"project": project, "uid": os.geteuid(), "proxy_uid": proxy_uid,
-                           "gid": gid, "request_seconds": 30},
-            "api_proxy": {"max_connections": 32, "log_level": "INFO",
-                          "allowed_authorities": [authority], "route": api_route},
-            "outbox": {"provider_items": 8, "provider_bytes": 16777216,
-                       "total_items": 8, "total_bytes": 16777216,
-                       "retry_initial_seconds": 0.01, "retry_max_seconds": 0.1, "log_level": "INFO"},
+            "deployment": {"project": project, "uid": os.geteuid(), "proxy_uid": proxy_uid, "gid": gid, "request_seconds": 30},
+            "api_proxy": {"max_connections": 32, "log_level": "INFO", "allowed_authorities": [authority], "route": api_route},
+            "outbox": {
+                "provider_items": 8,
+                "provider_bytes": 16777216,
+                "total_items": 8,
+                "total_bytes": 16777216,
+                "retry_initial_seconds": 0.01,
+                "retry_max_seconds": 0.1,
+                "log_level": "INFO",
+            },
         }
         shared_root = Path(directory) / "shared-settings"
         shared_root.mkdir(mode=0o750)

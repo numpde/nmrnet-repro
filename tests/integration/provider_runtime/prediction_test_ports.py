@@ -81,8 +81,7 @@ def scientific_documents():
         "schema_id": "nmrnet.input_interpretation.v2",
         "outcome": "selected",
         "operations": ["prepare_pasted"],
-        "visits": [{"turns_started": 1, "corrections": 0,
-                    "routes": [{"endpoint": dict(interpreter), "turns_started": 1}]}],
+        "visits": [{"turns_started": 1, "corrections": 0, "routes": [{"endpoint": dict(interpreter), "turns_started": 1}]}],
     }
     return actual, retained, receipt, metadata, {"endpoints": [interpreter], "timeout_seconds": 6}, source_text
 
@@ -457,7 +456,9 @@ def uploaded_documents():
         },
     )
     actual["interpretation"].update(
-        operations=["inspect_uploads", "prepare_upload"], turns_started=2, routes=[{"endpoint": interpreter["endpoints"][0], "turns_started": 2}]
+        operations=["inspect_uploads", "prepare_upload"],
+        turns_started=2,
+        routes=[{"endpoint": interpreter["endpoints"][0], "turns_started": 2}],
     )
     upload = {
         "upload_ref": "upload:sha256:" + "d" * 64,
