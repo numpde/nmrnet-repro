@@ -48,7 +48,9 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancelled_adoption_retires_the_allocated_native_child(self):
         operation = self.operation()
         original = asyncio.CancelledError("adoption interrupted")
-        original.__cause__ = OSError(5, "adoption cleanup failure")
+        original_cause = OSError(5, "adoption cleanup failure")
+        original.__cause__ = original_cause
+        original.__suppress_context__ = False
 
         async def cancel_adoption(**_options):
             raise original
@@ -59,6 +61,8 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         ):
             await operation.start()
         self.assertIs(caught.exception, original)
+        self.assertIs(caught.exception.__cause__, original_cause)
+        self.assertFalse(caught.exception.__suppress_context__)
         self.assertIsNotNone(operation.allocation)
         await operation.retire()
         self.assertTrue(operation.session.retirement.scratch_released)
