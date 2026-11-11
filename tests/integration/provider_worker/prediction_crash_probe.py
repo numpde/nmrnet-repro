@@ -184,16 +184,22 @@ async def controller():
         return admission
 
     async def read_attempt(reference, *, job_ref, owner):
+        if owner is not lifecycle.operation:
+            raise AssertionError("Synthetic observation changed its owning Attempt executor")
         if (reference, job_ref) != (admission.execution_attempt_ref, facts.job_ref):
             raise AssertionError("Synthetic observation changed its Attempt or Job")
         return AttemptObservation(reference, job_ref, "in_progress", "open")
 
     async def job_input(selected, *, analysis_kind_ref, owner):
+        if owner is not lifecycle.operation:
+            raise AssertionError("Synthetic input read changed its owning Attempt executor")
         if selected != facts or analysis_kind_ref != pending.analysis_kind_ref:
             raise AssertionError("Synthetic input read changed the selected scientific input")
         return VerifiedJobInput(facts, RAW)
 
     async def progress(reference, *, phase, condition_code, owner):
+        if owner is not lifecycle.operation:
+            raise AssertionError("Synthetic progress changed its owning Attempt executor")
         return AttemptProgress(reference, phase, condition_code, datetime(2026, 10, 23, tzinfo=UTC))
 
     async def retire(**_arguments):
