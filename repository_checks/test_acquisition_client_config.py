@@ -749,24 +749,60 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertTrue(Path(calls[-1]["client_config"]["path"]).is_dir())
         self.assertEqual({"1" * 64, "2" * 64, "3" * 64}, set(json.loads((self.root / "acquisition-containers.json").read_text())))
 
-    def test_failed_private_config_cleanup_preserves_primary_and_attempt_truth(self):
+    def test_scope_client_cleanup_failure_retains_config_after_success(self):
+        self._scope_client_cleanup_failure(0, "retain", 41)
+
+    def test_scope_client_cleanup_failure_retains_primary_worker_failure(self):
+        self._scope_client_cleanup_failure(37, "retain", 37)
+
+    def test_scope_client_cleanup_failure_reports_deleted_config_after_success(self):
+        self._scope_client_cleanup_failure(0, "delete", 41)
+
+    def test_scope_client_cleanup_failure_reports_deleted_config_after_worker_failure(self):
+        self._scope_client_cleanup_failure(37, "delete", 37)
+
+    def _scope_client_cleanup_failure(self, worker_status, effect, expected_status):
         self._intercept("rm")
-        for status, fault in ((0, "retain"), (37, "retain"), (0, "delete")):
-            with self.subTest(status=status, fault=fault):
-                result = self.caller(
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions={
-                        "NMRNET_FAKE_WORKER_STATUS": str(status),
-                        "NMRNET_ACQUISITION_RM_FAULT": fault,
-                    },
-                )
-                # silent-defaults: allow-contract -- A nonzero worker status wins; otherwise failed config removal returns 41, with actual retain/delete effects checked separately; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_failed_private_config_cleanup_preserves_primary_and_attempt_truth
-                self.assertEqual(status or 41, result.returncode)
-                self.assertIn("configuration removal; attempted path", result.stderr)
-                self.assertNotIn("configuration retained", result.stderr)
-                directory = Path(self.fixture.calls()[-1]["client_config"]["path"]).parent
-                self.assertEqual(fault == "retain", directory.exists())
+        receipt = self.root / "scope-retired"
+        result = self.fixture.run(
+            "acquisition_run.sh",
+            "--retired-receipt",
+            str(receipt),
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
+            additions=self.environment
+            | {
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                "NMRNET_FAKE_WORKER_STATUS": str(worker_status),
+                "NMRNET_ACQUISITION_RM_FAULT": effect,
+            },
+            timeout=30,
+        )
+        calls = self.fixture.calls()
+        directory = Path(calls[-1]["client_config"]["path"]).parent
+        create = next(call["arguments"] for call in calls if call["arguments"][:1] == ["create"])
+        scratch = Path(create[create.index("--cidfile") + 1]).parent.parent
+        self.retained.update((directory, scratch))
+        self.assertEqual(expected_status, result.returncode, result.stderr)
+        self.assertEqual(effect == "retain", directory.exists())
+        self.assertIn(f"Cannot confirm Docker client configuration removal for {directory} (status 41).", result.stderr)
+        self.assertNotIn("configuration retained", result.stderr)
+        self.assertEqual("retired\n", receipt.read_text())
+        self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
+        self.assertEqual(
+            [["rm", "--force", value * 64] for value in ("3", "2", "1")],
+            [call["arguments"] for call in calls if call["arguments"][:1] == ["rm"]],
+        )
+        report = scratch / "failure.stderr"
+        self.assertEqual(0o700, scratch.stat().st_mode & 0o777)
+        self.assertEqual(0o600, report.stat().st_mode & 0o777)
+        self.assertEqual(result.stderr.encode(), report.read_bytes())
 
     def _checker_inputs(self):
         # Download hands its supported PID to the same real controller exercised
