@@ -217,7 +217,7 @@ class ResultPlan:
         existing evidence ceiling. Future private warning growth remains unknown.
         """
         envelope = json.loads(self._envelope)
-        return tuple(
+        return [
             {
                 "request_sha256": geometry["request_sha256"],
                 "prediction": {"unit": "ppm", "predictions": _prediction_reservation(geometry)},
@@ -228,7 +228,7 @@ class ResultPlan:
                 "private_warnings": [],
             }
             for geometry in envelope["geometries"]
-        )
+        ]
 
     def finish(self, worker_results):
         """Validate and encode the complete result, or raise without returning bytes.
@@ -486,7 +486,7 @@ def _geometry_identity(geometry):
 
 
 def _positions(geometry):
-    return tuple((index, atom) for index, atom in enumerate(geometry["prepared_request"]["atoms"]) if atom in {"H", "C"})
+    return [(index, atom) for index, atom in enumerate(geometry["prepared_request"]["atoms"]) if atom in {"H", "C"}]
 
 
 def _located_warnings(geometry, warnings):
