@@ -200,6 +200,10 @@ class AcquisitionClientTests(unittest.TestCase):
 
     # silent-defaults: allow-contract -- Ordinary probes capture real stderr; full_stderr explicitly selects the unread-full-pipe stimulus; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
     def _start(self, additions, *, full_stderr=False):
+        command = ["bash", str(self.root / "tools/docker.sh"), "run", "sha256:" + "b" * 64]
+        return self._start_command(command, additions, full_stderr=full_stderr)
+
+    def _start_command(self, command, additions, *, full_stderr):
         read_descriptor = None
         prefill = b""
         stderr = subprocess.PIPE
@@ -215,7 +219,7 @@ class AcquisitionClientTests(unittest.TestCase):
                     break
             os.set_blocking(stderr, True)
         process = subprocess.Popen(
-            ["bash", str(self.root / "tools/docker.sh"), "run", "sha256:" + "b" * 64],
+            command,
             env=self.environment | additions,
             cwd=self.root,
             stdout=subprocess.PIPE,
@@ -700,6 +704,37 @@ class AcquisitionClientTests(unittest.TestCase):
             [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
             [call["arguments"] for call in self.fixture.calls() if call["arguments"][0] == "rm"],
         )
+
+    def test_scope_attach_interrupt_finishes_without_draining_full_stderr(self):
+        receipt = self.root / "scope-retired"
+        command = [
+            "bash", str(self.root / "tools/acquisition_run.sh"), "--retired-receipt", str(receipt),
+            "--image", self.worker_image, "--", "--read-only", "--", "python3", "-c", "pass",
+        ]
+        process, descriptor, prefill = self._start_command(
+            command,
+            {"NMRNET_FAKE_ACQUISITION_SCOPE": "1", "NMRNET_FAKE_HOLD_ATTACH": "1"},
+            full_stderr=True,
+        )
+        client = self._observe_client(process, self.root / "attach-ready")
+        group = os.getpgid(client)
+        calls = self.fixture.calls()
+        create = next(call["arguments"] for call in calls if call["arguments"][:1] == ["create"])
+        scratch = Path(create[create.index("--cidfile") + 1]).parent.parent
+        self.retained.add(scratch)
+        self._finish_full_pipe(process, descriptor, prefill, signal.SIGINT, 130)
+        self.assertEqual(str(client), (self.root / "attach-retired").read_text())
+        self.assertFalse(Path("/proc", str(client)).exists())
+        self.assertFalse(Path("/proc", str(group)).exists())
+        calls = self.fixture.calls()
+        self.assertEqual(
+            [["rm", "--force", value * 64] for value in ("3", "2", "1")],
+            [call["arguments"] for call in calls if call["arguments"][0] == "rm"],
+        )
+        self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
+        self.assertEqual("retired\n", receipt.read_text())
+        self.assertFalse(scratch.exists())
+        self.assertTrue(all(not Path(call["client_config"]["path"]).parent.exists() for call in calls))
 
     def test_actual_cleanup_report_signals_finish_before_stderr_drain(self):
         for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):

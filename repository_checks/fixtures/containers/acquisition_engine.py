@@ -7,6 +7,7 @@ require_container()
 import json
 import os
 import re
+import signal
 import socket
 import sys
 from pathlib import Path
@@ -79,6 +80,18 @@ class AcquisitionEngine:
         else:
             if arguments != ["--attach", identifier]:
                 reject("worker start must be attached")
+            if os.environ.get("NMRNET_FAKE_HOLD_ATTACH") == "1":
+                record["phase"] = "running"
+                self.save()
+
+                def retire_attach(signum, _frame):
+                    (self.root / "attach-retired").write_text(str(os.getpid()))
+                    raise SystemExit(128 + signum)
+
+                signal.signal(signal.SIGTERM, retire_attach)
+                (self.root / "attach-ready").write_text(str(os.getpid()))
+                while True:
+                    signal.pause()
             if "NMRNET_FAKE_WORKER_STDOUT" in os.environ:
                 sys.stdout.write(os.environ["NMRNET_FAKE_WORKER_STDOUT"])
                 sys.stdout.flush()
