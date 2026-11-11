@@ -84,7 +84,7 @@ class ImageSource:
         alternate_runtime = wheel(wheelhouse, "providerfixture", "2.0")
         unrelated = wheel(wheelhouse, "unrelated-project", "9.0")
         streamer = wheelhouse / "wheelhouse-tool-1.0.0.pyz"
-        streamer.write_text('''import hashlib, json, pathlib, sys, tarfile
+        streamer.write_text("""import hashlib, json, pathlib, sys, tarfile
 from urllib.parse import urlsplit
 args = sys.argv
 if args[1] == "report":
@@ -105,7 +105,7 @@ elif args[1] == "stream":
             tar.add(item["path"], arcname=item["destination"])
         for item in items:
             tar.add(pool / item["filename"], arcname=item["directory"] + "/" + item["filename"])
-''')
+""")
         pin = hashlib.sha256(streamer.read_bytes()).hexdigest()
         (self.repository / "requirements/wheelhouse-tool-assets.in").write_text(
             f"https://github.com/numpde/nmr-provider-tools/releases/download/v1/{streamer.name}#sha256={pin}\n"

@@ -16,9 +16,24 @@ from unittest.mock import patch
 from nmrnet_provider import native_child, worker_main
 from nmrnet_provider.worker_protocol import receive
 
-COMMON = ["--socket", "/runtime/runner.sock", "--scratch", "/tmp/operations",
-          "--io-seconds", "2", "--operation-seconds", "10", "--startup-seconds", "1",
-          "--terminate-seconds", "1", "--kill-seconds", "1", "--cleanup-seconds", "1"]
+COMMON = [
+    "--socket",
+    "/runtime/runner.sock",
+    "--scratch",
+    "/tmp/operations",
+    "--io-seconds",
+    "2",
+    "--operation-seconds",
+    "10",
+    "--startup-seconds",
+    "1",
+    "--terminate-seconds",
+    "1",
+    "--kill-seconds",
+    "1",
+    "--cleanup-seconds",
+    "1",
+]
 
 
 class RuntimeLoggingTests(unittest.TestCase):
@@ -74,9 +89,19 @@ class RunnerCompositionTests(unittest.TestCase):
             worker_main.main(["reader", *COMMON])
         (arguments,) = supervise.call_args.args
         split = arguments.index("--")
-        self.assertEqual(arguments[split + 1:], [
-            sys.executable, "-I", "-B", "-m", "nmrnet_provider.native_child", "reader", "--io-seconds", "2.0",
-        ])
+        self.assertEqual(
+            arguments[split + 1 :],
+            [
+                sys.executable,
+                "-I",
+                "-B",
+                "-m",
+                "nmrnet_provider.native_child",
+                "reader",
+                "--io-seconds",
+                "2.0",
+            ],
+        )
         self.assertEqual(arguments[arguments.index("--operation-seconds") + 1], "10.0")
         self.assertEqual(arguments[arguments.index("--role") + 1], "reader")
 
@@ -95,7 +120,8 @@ class RunnerCompositionTests(unittest.TestCase):
                     (root / leaf / name).write_bytes((name + " exact\n").encode())
             sender, receiver = socket.socketpair()
             with (
-                sender, receiver,
+                sender,
+                receiver,
                 patch.object(native_child, "INPUT_ROOT", root / "input"),
                 patch.object(native_child, "INFERENCE_ROOT", root / "embedded"),
                 patch("importlib.metadata.version", side_effect=lambda name: name + "-observed"),
@@ -103,12 +129,19 @@ class RunnerCompositionTests(unittest.TestCase):
             ):
                 native_child._prediction(SimpleNamespace(operation="a" * 32, io_seconds=2), sender)
                 startup = receive(receiver, 2)
-            self.assertEqual(startup, {
-                "kind": "startup", "allocation": "a" * 32,
-                "runtime": {"python": sys.version.split()[0], "installed_distributions": {
-                    name: name + "-observed" for name in ("torch", "numpy", "scikit-learn", "joblib")
-                }},
-            })
+            self.assertEqual(
+                startup,
+                {
+                    "kind": "startup",
+                    "allocation": "a" * 32,
+                    "runtime": {
+                        "python": sys.version.split()[0],
+                        "installed_distributions": {
+                            name: name + "-observed" for name in ("torch", "numpy", "scikit-learn", "joblib")
+                        },
+                    },
+                },
+            )
             self.assertEqual(serve.call_args.kwargs["allocation"], "a" * 32)
             self.assertEqual(serve.call_args.kwargs["declaration_path"], root / "input/prediction-models.json")
             self.assertFalse((root / "metadata.json").exists())

@@ -25,9 +25,12 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
             environment = Path(directory) / "environment"
             subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(environment)], check=True)
             python = environment / "bin/python"
-            site = Path(subprocess.check_output(
-                [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True,
-            ).strip())
+            site = Path(
+                subprocess.check_output(
+                    [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                    text=True,
+                ).strip()
+            )
             metadata = site / "example-1.dist-info"
             metadata.mkdir()
             original = b"Metadata-Version: 2.1\nName: example\nVersion: 1\n"

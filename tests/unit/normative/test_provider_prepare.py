@@ -21,8 +21,8 @@ class ProviderPreparationTests(unittest.TestCase):
         self.assertTrue((fixture.root / "retirement-called").exists())
         self.assertEqual(9, len(fixture.calls()), fixture.calls())
         self.assertEqual(
-            ['context inspect --format {{.Endpoints.docker.Host}} fixture-local'],
-            (fixture.root / 'context-calls').read_text().splitlines(),
+            ["context inspect --format {{.Endpoints.docker.Host}} fixture-local"],
+            (fixture.root / "context-calls").read_text().splitlines(),
         )
         self.assertFalse(sentinel.exists())
         self.assertNotIn("NEXT_FROM_CHILD", first.stdout + first.stderr)

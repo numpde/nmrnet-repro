@@ -39,10 +39,10 @@ class PreparationFixture:
         self.environment["FAKE_CONTEXT_CALLS"] = str(self.root / "context-calls")
         (self.root / "tools/image_retirement.sh").write_text(
             'touch "$TEST_PREPARE_ROOT/retirement-called"\n'
-            'if [[ ${TEST_WAIT_RETIRE:-0} == 1 ]]; then\n'
-            '  trap \'sleep 0.1; printf settled > "$TEST_PREPARE_ROOT/retirement-settled"; exit 143\' TERM INT\n'
+            "if [[ ${TEST_WAIT_RETIRE:-0} == 1 ]]; then\n"
+            "  trap 'sleep 0.1; printf settled > \"$TEST_PREPARE_ROOT/retirement-settled\"; exit 143' TERM INT\n"
             '  touch "$TEST_PREPARE_ROOT/retirement-ready"\n'
-            '  sleep 2\n'
+            "  sleep 2\n"
             'fi\nexit "${TEST_RETIRE_STATUS:-0}"\n'
         )
         for owner in ("wheelhouse.sh", "inference_image.sh", "container.sh"):

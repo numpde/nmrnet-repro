@@ -40,10 +40,15 @@ class ProviderPreparationRefusalTests(unittest.TestCase):
         fixture.environment["TEST_FAIL_PHASE"] = "container.sh:geometry/image/build"
         result = fixture.run("../cache")
         self.assertNotEqual(0, result.returncode)
-        self.assertEqual([call[0] for call in fixture.calls()], [
-            "wheelhouse.sh:download", "inference_image.sh:build",
-            "inference_image.sh:import", "container.sh:geometry/image/build",
-        ])
+        self.assertEqual(
+            [call[0] for call in fixture.calls()],
+            [
+                "wheelhouse.sh:download",
+                "inference_image.sh:build",
+                "inference_image.sh:import",
+                "container.sh:geometry/image/build",
+            ],
+        )
         self.assertNotIn("Preparation steps finished", result.stderr)
         self.assertFalse((fixture.root / "retirement-called").exists())
 
@@ -64,9 +69,13 @@ class ProviderPreparationRefusalTests(unittest.TestCase):
             process.communicate(timeout=8)
             self.assertNotEqual(0, process.returncode)
             self.assertEqual("settled", (fixture.root / "settled").read_text())
-            self.assertEqual([call[0] for call in fixture.calls()], [
-                "wheelhouse.sh:download", "inference_image.sh:build",
-            ])
+            self.assertEqual(
+                [call[0] for call in fixture.calls()],
+                [
+                    "wheelhouse.sh:download",
+                    "inference_image.sh:build",
+                ],
+            )
         finally:
             if process.poll() is None:
                 process.kill()
