@@ -61,6 +61,7 @@ class CallbackTests(unittest.TestCase):
         result, events = self.run_callback("3,0,3")
         self.assertEqual(result.returncode, 1)
         self.assertIn("remain missing", result.stderr)
+        self.assertEqual(events, ["offline", "select", "route:system", "online", "offline"])
 
     def test_worker_failure_is_preserved_without_recheck(self):
         result, events = self.run_callback("3,17")
