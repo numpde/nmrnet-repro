@@ -397,8 +397,11 @@ def publish_upload(client, source, *, case_kind, reservation=None):
             "operation_ref": "nmrnet-upload:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "byte_length": len(source),
+            # silent-defaults: allow-contract -- The selected XYZ or SDF ZIP profile names its pinned source file; source=preflight_upload and preflight_sdf_zip; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer.
             "filename": "butane_conformers.sdf.zip" if sdf else "atom_order.xyz",
+            # silent-defaults: allow-contract -- The selected XYZ or SDF ZIP profile declares its source media type before API request admission; source=preflight_upload, preflight_sdf_zip and parse_upload_create_request; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer.
             "media_type": "application/zip" if sdf else "chemical/x-xyz",
+            # silent-defaults: allow-contract -- These authored descriptions identify the pinned XYZ or two-record SDF source, units and population; source=preflight_upload and preflight_sdf_zip; publication-path proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer.
             "description": "butane_conformers.sdf; SDF, angstrom, both carbon-only records"
             if sdf
             else "atom_order.xyz; XYZ, angstrom, one record; supplied chloromethane",
