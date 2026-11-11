@@ -56,25 +56,27 @@ def reference_requests(test, reference):
             test.assertEqual([key.hex() for key in keys], [record["key_hex"] for record in records])
             database = Path(temporary) / (element + ".lmdb")
             database.write_bytes(read_receipted_bytes(root / "valid.lmdb", files["valid.lmdb"]))
-            with lmdb.open(str(database), subdir=False, readonly=True, lock=False) as environment:
-                with environment.begin() as transaction:
-                    test.assertEqual(transaction.stat()["entries"], len(records))
-                    for key, expected in zip(keys, records, strict=True):
-                        content = transaction.get(key)
-                        test.assertIsNotNone(content)
-                        test.assertEqual(hashlib.sha256(content).hexdigest(), expected["raw_sha256"])
-                        record = load_reference_pickle(content)
-                        requests.append(
-                            (
-                                element,
-                                key.hex(),
-                                {
-                                    "coordinate_unit": "angstrom",
-                                    "atoms": list(record["atoms"]),
-                                    "coordinates": np.asarray(record["coordinates"]).tolist(),
-                                },
-                            )
+            with (
+                lmdb.open(str(database), subdir=False, readonly=True, lock=False) as environment,
+                environment.begin() as transaction,
+            ):
+                test.assertEqual(transaction.stat()["entries"], len(records))
+                for key, expected in zip(keys, records, strict=True):
+                    content = transaction.get(key)
+                    test.assertIsNotNone(content)
+                    test.assertEqual(hashlib.sha256(content).hexdigest(), expected["raw_sha256"])
+                    record = load_reference_pickle(content)
+                    requests.append(
+                        (
+                            element,
+                            key.hex(),
+                            {
+                                "coordinate_unit": "angstrom",
+                                "atoms": list(record["atoms"]),
+                                "coordinates": np.asarray(record["coordinates"]).tolist(),
+                            },
                         )
+                    )
     test.assertEqual(len(requests), 4)
     return requests
 
@@ -370,9 +372,9 @@ class ReleasedPredictionTests(unittest.TestCase):
             mock.patch.object(prediction_model, "predict_element", side_effect=observe_prediction),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
+            self.assertRaises(RuntimeError) as raised,
         ):
-            with self.assertRaises(RuntimeError) as raised:
-                predict.predict_request(raw, loader.load_dictionary, fail_c_after_h)
+            predict.predict_request(raw, loader.load_dictionary, fail_c_after_h)
         self.assertIs(raised.exception, failure)
         self.assertIs(raised.exception.__cause__, cause)
         self.assertIn(sentinel, str(cause))
