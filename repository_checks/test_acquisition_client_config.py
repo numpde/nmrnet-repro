@@ -31,11 +31,23 @@ class AcquisitionClientTests(unittest.TestCase):
     def test_real_runner_preserves_worker_result_and_retires_its_three_roles(self):
         receipt = self.root / "scope-retired"
         result = self.fixture.run(
-            "acquisition_run.sh", "--retired-receipt", str(receipt), "--image", self.worker_image,
-            "--", "--read-only", "--", "python3", "-c", "pass",
-            additions=self.environment | {
-                "NMRNET_FAKE_ACQUISITION_SCOPE": "1", "NMRNET_FAKE_IDENTITY_OWNER": "1200 1300",
-                "NMRNET_FAKE_WORKER_STATUS": "17", "NMRNET_FAKE_WORKER_STDOUT": "worker bytes\n",
+            "acquisition_run.sh",
+            "--retired-receipt",
+            str(receipt),
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
+            additions=self.environment
+            | {
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                "NMRNET_FAKE_IDENTITY_OWNER": "1200 1300",
+                "NMRNET_FAKE_WORKER_STATUS": "17",
+                "NMRNET_FAKE_WORKER_STDOUT": "worker bytes\n",
                 "NMRNET_FAKE_WORKER_STDERR": "worker diagnostic\n",
             },
         )
@@ -46,19 +58,38 @@ class AcquisitionClientTests(unittest.TestCase):
         identity = (self.root / "identity-calls").read_bytes().split(b"\0")
         self.assertEqual(16, len(identity))
         self.assertEqual([b"", b""], identity[-2:])
-        self.assertEqual([
-            "-I", "-S", "-B", str(self.root / "tools/bootstrap/acquisition/acquisition_tool/identity.py"),
-            "--endpoint", "unix:///var/run/docker.sock", "--image", self.worker_image,
-            "--host-uid", "1000", "--host-gid", "1000", "--retired-receipt",
-        ], [value.decode() for value in identity[:-3]])
+        self.assertEqual(
+            [
+                "-I",
+                "-S",
+                "-B",
+                str(self.root / "tools/bootstrap/acquisition/acquisition_tool/identity.py"),
+                "--endpoint",
+                "unix:///var/run/docker.sock",
+                "--image",
+                self.worker_image,
+                "--host-uid",
+                "1000",
+                "--host-gid",
+                "1000",
+                "--retired-receipt",
+            ],
+            [value.decode() for value in identity[:-3]],
+        )
         self.assertEqual("retired", Path(identity[-3].decode()).name)
         self.assertFalse(Path(identity[-3].decode()).exists())
         calls = self.fixture.calls()
         creates = [call["arguments"] for call in calls if call["arguments"][:1] == ["create"]]
-        self.assertEqual(["gateway", "relay", "worker-1"], [Path(command[command.index("--cidfile") + 1]).parent.name for command in creates])
-        self.assertEqual(["host", "none", "container:" + "2" * 64], [command[command.index("--network") + 1] for command in creates])
+        self.assertEqual(
+            ["gateway", "relay", "worker-1"], [Path(command[command.index("--cidfile") + 1]).parent.name for command in creates]
+        )
+        self.assertEqual(
+            ["host", "none", "container:" + "2" * 64], [command[command.index("--network") + 1] for command in creates]
+        )
         self.assertTrue(all(command[command.index("--user") + 1] == "1200:1300" for command in creates))
-        self.assertEqual(["3" * 64, "2" * 64, "1" * 64], [call["arguments"][-1] for call in calls if call["arguments"][:1] == ["rm"]])
+        self.assertEqual(
+            ["3" * 64, "2" * 64, "1" * 64], [call["arguments"][-1] for call in calls if call["arguments"][:1] == ["rm"]]
+        )
         self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
         self.assertTrue(all(not Path(call["client_config"]["path"]).parent.exists() for call in calls))
 
@@ -362,9 +393,17 @@ class AcquisitionClientTests(unittest.TestCase):
         for status in (0, 37, 143):
             with self.subTest(status=status):
                 result = self.fixture.run(
-                    "acquisition_run.sh", "--image", self.worker_image,
-                    "--", "--read-only", "--", "python3", "-c", "pass",
-                    additions=self.environment | dict.fromkeys(forbidden, "private-poison")
+                    "acquisition_run.sh",
+                    "--image",
+                    self.worker_image,
+                    "--",
+                    "--read-only",
+                    "--",
+                    "python3",
+                    "-c",
+                    "pass",
+                    additions=self.environment
+                    | dict.fromkeys(forbidden, "private-poison")
                     | {
                         "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
                         "DOCKER_CONFIG": str(poison),
@@ -676,8 +715,13 @@ class AcquisitionClientTests(unittest.TestCase):
 
     def _checker_inputs(self):
         # Download hands its supported PID to the same real controller exercised
-        # above; only these three additional checker inputs need fixture copies.
-        for name in ("tools/checker.sh", "tools/checker.py", "requirements/checker-dependencies.json"):
+        # above; these additional checker inputs need fixture copies.
+        for name in (
+            "tools/checker.sh",
+            "tools/checker.py",
+            "tools/checker_acquisition.py",
+            "requirements/checker-dependencies.json",
+        ):
             (self.root / name).write_bytes((ROOT / name).read_bytes())
 
     def test_checker_download_signals_reach_controller_before_pipe_drain(self):
@@ -797,6 +841,7 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertIn(f"type=bind,src={self.root}/.work/checker,dst=/output", worker)
         for name, target in (
             ("checker.py", "/workspace/tools/checker.py"),
+            ("checker_acquisition.py", "/workspace/tools/checker_acquisition.py"),
             ("artifacts.py", "/workspace/tools/artifacts.py"),
             ("container_guard.py", "/workspace/tools/container_guard.py"),
         ):

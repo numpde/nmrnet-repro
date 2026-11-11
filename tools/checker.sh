@@ -85,6 +85,7 @@ worker=(--pull never --read-only --user "$caller_uid:$caller_gid" --cap-drop ALL
     --security-opt no-new-privileges:true --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --env NMRNET_IN_CONTAINER=1 --workdir /workspace)
 tool_mounts=(--mount "type=bind,src=$repository_root/tools/checker.py,dst=/workspace/tools/checker.py,readonly"
+    --mount "type=bind,src=$repository_root/tools/checker_acquisition.py,dst=/workspace/tools/checker_acquisition.py,readonly"
     --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
     --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
     --mount "type=bind,src=$repository_root/tools/wheelhouse_acquire.py,dst=/workspace/tools/wheelhouse_acquire.py,readonly"

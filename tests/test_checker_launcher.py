@@ -34,6 +34,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             (self.root / directory).mkdir(parents=True)
         for name in (
             "checker.py",
+            "checker_acquisition.py",
             "checker.sh",
             "artifacts.py",
             "container_guard.py",
@@ -50,14 +51,14 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
         (self.root / "tools/docker.sh").rename(self.root / "tools/docker-real.sh")
-        (self.root / "tools/docker.sh").write_text('''#!/bin/bash
+        (self.root / "tools/docker.sh").write_text("""#!/bin/bash
 if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
     if [[ ${CHECKER_FIXTURE_MAP_FAIL-} ]]; then exit 23; fi
     printf '%s\\n' "${CHECKER_FIXTURE_MAP_RESULT:-0:0}"
     exit
 fi
 exec bash "$(dirname "$0")/docker-real.sh" "$@"
-''')
+""")
         for name in ("Dockerfile", "Dockerfile.dockerignore"):
             (self.root / "containers/checker" / name).write_text("fixture recipe\n")
         self.document["base"] = (
@@ -74,7 +75,7 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
         wheel = next(item["file"] for item in self.document["packages"] if item["name"] == "ruff")
         shutil.copyfile(self.directory / wheel, pool / wheel)
         streamer = pool / "wheelhouse-tool-1.0.0.pyz"
-        streamer.write_text('''import json, pathlib, sys, tarfile
+        streamer.write_text("""import json, pathlib, sys, tarfile
 args = sys.argv
 sources = json.loads(pathlib.Path(args[args.index("--source-allowlist") + 1]).read_text())
 items = json.loads(pathlib.Path(args[args.index("--manifest") + 1]).read_text())
@@ -84,7 +85,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         tar.add(item["path"], arcname=item["destination"])
     for item in items:
         tar.add(pool / item["filename"], arcname=item["directory"] + "/" + item["filename"])
-''')
+""")
         pin = hashlib.sha256(streamer.read_bytes()).hexdigest()
         asset = f"https://github.com/numpde/nmr-provider-tools/releases/download/v1/{streamer.name}#sha256={pin}\n"
         (self.root / "requirements/wheelhouse-tool-assets.in").write_text(asset)
@@ -446,8 +447,11 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         evidence = json.loads((self.root / "state/build.json").read_text())
         self.assertEqual(expected, evidence["manifest"]["tools/checker.py"])
         declared = {item["file"] for item in self.document["packages"] if item["name"] != "ruff"}
-        streamed = {name.removeprefix("checker-dependencies/") for name in evidence["manifest"]
-                    if name.startswith("checker-dependencies/")}
+        streamed = {
+            name.removeprefix("checker-dependencies/")
+            for name in evidence["manifest"]
+            if name.startswith("checker-dependencies/")
+        }
         self.assertEqual(declared | {".complete"}, streamed)
         self.assertNotEqual(Path(evidence["context"]), self.root)
         self.assertFalse(Path(evidence["context"]).exists())
@@ -563,11 +567,12 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         download = self.launch("download", preview=True)
         self.assertEqual(0, download.returncode, msg=download.stderr)
-        worker = shlex.split(download.stdout.splitlines()[-1].split('Online worker: ', 1)[1])
+        worker = shlex.split(download.stdout.splitlines()[-1].split("Online worker: ", 1)[1])
         mounts = [worker[index + 1] for index, value in enumerate(worker) if value == "--mount"]
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
-        self.assertEqual([f"type=bind,src={self.root}/.work/checker,dst=/output",
-                          f"type=bind,src={self.root}/pool,dst=/wheelhouse"], writable)
+        self.assertEqual(
+            [f"type=bind,src={self.root}/.work/checker,dst=/output", f"type=bind,src={self.root}/pool,dst=/wheelhouse"], writable
+        )
         self.assertNotIn("/var/run/docker.sock", " ".join(mounts))
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
 
@@ -775,7 +780,11 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                 reader, writer = self._full_pipe()
                 process = self._start("build", {"CHECKER_FIXTURE_HOLD": "inspect"}, stderr=writer)
                 os.close(writer)
-                self._wait_path(ready, seconds=5)
+                try:
+                    self._wait_path(ready, seconds=5)
+                except AssertionError as failure:
+                    failure.add_note(f"Observed fixture calls: {self.calls()}; launcher status: {process.poll()}")
+                    raise
                 call = self.calls()[-1]
                 self.assertEqual(["image", "inspect"], call["arguments"][:2])
                 self.assertEqual(str(call["pid"]), ready.read_text())

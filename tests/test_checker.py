@@ -18,12 +18,14 @@ import threading
 import traceback
 import unittest
 import urllib.error
-from pathlib import Path
 from contextlib import redirect_stderr
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from tools import checker
+from tools import checker, checker_acquisition
+from tools.wheelhouse import WheelhouseNetworkError
+from tools.wheelhouse_acquire import pool_lock
 
 
 class CheckerDependencyFixture(unittest.TestCase):
@@ -80,29 +82,109 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         for name in ("checker.py", "artifacts.py", "container_guard.py"):
             shutil.copyfile(Path.cwd() / "tools" / name, tools_directory / name)
         environment = os.environ | {"PYTHONPATH": str(self.root)}
-        result = subprocess.run([sys.executable, "-B", "-m", "tools.checker", "--help"], cwd=self.root,
-                                env=environment, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            [sys.executable, "-B", "-m", "tools.checker", "--help"],
+            cwd=self.root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("install", result.stdout)
 
     def test_offline_install_does_not_import_wheelhouse(self):
-        argv = ["checker", "install", "--declaration", str(self.path), "--directory", str(self.directory),
-                "--base", self.document["base"], "--wheelhouse", str(self.root)]
-        with (patch.object(sys, "argv", argv), patch.dict(sys.modules, {"tools.wheelhouse": None}),
-              patch.object(checker, "install") as install):
+        argv = [
+            "checker",
+            "install",
+            "--declaration",
+            str(self.path),
+            "--directory",
+            str(self.directory),
+            "--base",
+            self.document["base"],
+            "--wheelhouse",
+            str(self.root),
+        ]
+        with (
+            patch.object(sys, "argv", argv),
+            patch.dict(sys.modules, {"tools.wheelhouse": None, "tools.checker_acquisition": None}),
+            patch.object(checker, "install") as install,
+        ):
             checker.main()
         install.assert_called_once()
 
-    def test_checker_download_reports_bounded_network_error(self):
-        from tools.wheelhouse import WheelhouseNetworkError
+    def test_stream_check_dispatches_to_acquisition_with_the_original_arguments(self):
+        pool = self.root / "pool"
+        pool.mkdir()
+        wheel = next(package["file"] for package in self.document["packages"] if package["name"] == "ruff")
+        shutil.copyfile(self.directory / wheel, pool / wheel)
+        stream = pool / "wheelhouse-tool-fixture.pyz"
+        stream.write_bytes(b"verified stream fixture")
+        pins = self.root / "stream.in"
+        pins.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + stream.name
+            + "#sha256="
+            + hashlib.sha256(stream.read_bytes()).hexdigest()
+            + "\n"
+        )
+        expected = checker.check(self.path, self.directory, self.document["base"], pool)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "tools.checker",
+                "check",
+                "--declaration",
+                str(self.path),
+                "--directory",
+                str(self.directory),
+                "--base",
+                self.document["base"],
+                "--wheelhouse",
+                str(pool),
+                "--stream-assets",
+                str(pins),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(expected["declaration_sha256"] + "\n", result.stdout)
+        self.assertEqual("", result.stderr)
 
-        argv = ["checker", "download", "--declaration", str(self.path), "--directory", str(self.directory),
-                "--base", self.document["base"], "--wheelhouse", str(self.root),
-                "--tool-assets", str(self.root / "tool"), "--stream-assets", str(self.root / "stream")]
+    def test_checker_download_reports_bounded_network_error(self):
+        argv = [
+            "checker",
+            "download",
+            "--declaration",
+            str(self.path),
+            "--directory",
+            str(self.directory),
+            "--base",
+            self.document["base"],
+            "--wheelhouse",
+            str(self.root),
+            "--tool-assets",
+            str(self.root / "tool"),
+            "--stream-assets",
+            str(self.root / "stream"),
+        ]
         output = io.StringIO()
-        with (patch.object(sys, "argv", argv), patch.object(checker, "download", side_effect=WheelhouseNetworkError("Cannot acquire tool: the server returned HTTP 503.")),
-              redirect_stderr(output), self.assertRaises(SystemExit) as stopped):
-            checker.main()
+        with (
+            patch.object(sys, "argv", argv),
+            patch.object(
+                checker_acquisition,
+                "download",
+                side_effect=WheelhouseNetworkError("Cannot acquire tool: the server returned HTTP 503."),
+            ),
+            redirect_stderr(output),
+            self.assertRaises(SystemExit) as stopped,
+        ):
+            checker_acquisition.main()
         self.assertEqual(1, stopped.exception.code)
         self.assertIn("HTTP 503", output.getvalue())
         self.assertNotIn("Traceback", output.getvalue())
@@ -113,20 +195,31 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         tool = pool / "wheelhouse-tool-1.0.0.pyz"
         tool.write_bytes(b"tool bytes")
         pins = self.root / "pins.in"
-        pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/" + tool.name
-                        + "#sha256=" + hashlib.sha256(tool.read_bytes()).hexdigest() + "\n")
+        pins.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + tool.name
+            + "#sha256="
+            + hashlib.sha256(tool.read_bytes()).hexdigest()
+            + "\n"
+        )
         failure = subprocess.CalledProcessError(7, ["tool", "https://secret.invalid/private"])
         output = io.StringIO()
-        with (patch.object(checker.subprocess, "run", side_effect=failure), patch.object(checker, "open_url") as network,
-              redirect_stderr(output), self.assertRaises(SystemExit) as stopped):
-            checker.download(self.path, self.root / "fresh", self.document["base"], pool, pins, pins)
+        with (
+            patch.object(checker.subprocess, "run", side_effect=failure),
+            patch.object(checker_acquisition, "open_url") as network,
+            redirect_stderr(output),
+            self.assertRaises(SystemExit) as stopped,
+        ):
+            checker_acquisition.download(self.path, self.root / "fresh", self.document["base"], pool, pins, pins)
         self.assertEqual(7, stopped.exception.code)
         self.assertIn("checker Ruff wheel", output.getvalue())
         self.assertNotIn("secret.invalid", output.getvalue())
         network.assert_not_called()
 
     def test_valid_exact_inputs_and_receipt_are_accepted(self):
-        self.assertEqual(checker.check(self.path, self.directory, self.document["base"]), checker.inventory(self.path, self.directory))
+        self.assertEqual(
+            checker.check(self.path, self.directory, self.document["base"]), checker.inventory(self.path, self.directory)
+        )
 
     def test_shared_wheel_validates_existing_receipt_without_private_wheel(self):
         wheel = next(package for package in self.document["packages"] if package["name"] == "ruff")
@@ -153,9 +246,11 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         (self.directory / self.document["packages"][0]["file"]).write_bytes(b"changed")
         pool = self.root / "pool"
         pool.mkdir()
-        with patch.object(checker, "acquire_ruff") as acquire:
-            with self.assertRaisesRegex(ValueError, "artifact bytes differ"):
-                checker.download(self.path, self.directory, self.document["base"], pool, None, None)
+        with (
+            patch.object(checker_acquisition, "acquire_ruff") as acquire,
+            self.assertRaisesRegex(ValueError, "artifact bytes differ"),
+        ):
+            checker_acquisition.download(self.path, self.directory, self.document["base"], pool, None, None)
         acquire.assert_not_called()
 
     def test_private_only_wheel_is_preserved_without_redownload(self):
@@ -163,14 +258,12 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         pool.mkdir()
         pins = self.root / "pins.in"
         pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/tool.pyz#sha256=" + "a" * 64 + "\n")
-        with patch.object(checker.subprocess, "run") as run:
-            with self.assertRaisesRegex(ValueError, "private cached wheel exists"):
-                checker.acquire_ruff(self.document, pool, pins, pins, self.directory)
+        with patch.object(checker.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "private cached wheel exists"):
+            checker_acquisition.acquire_ruff(self.document, pool, pins, pins, self.directory)
         run.assert_not_called()
         self.assertEqual([], list(pool.iterdir()))
 
     def test_warm_checker_assets_do_not_wait_for_another_shared_pool_reader(self):
-        from tools.wheelhouse_acquire import pool_lock
         wheel = self.document["packages"][-1]
         pool = self.root / "pool"
         pool.mkdir()
@@ -178,14 +271,21 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         tool = pool / "wheelhouse-tool-1.0.0.pyz"
         tool.write_bytes(b"cached tool")
         pins = self.root / "pins.in"
-        pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/" + tool.name
-                        + "#sha256=" + hashlib.sha256(tool.read_bytes()).hexdigest() + "\n")
+        pins.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + tool.name
+            + "#sha256="
+            + hashlib.sha256(tool.read_bytes()).hexdigest()
+            + "\n"
+        )
         failures = []
+
         def run():
             try:
-                checker.acquire_ruff(self.document, pool, pins, pins, self.directory)
+                checker_acquisition.acquire_ruff(self.document, pool, pins, pins, self.directory)
             except Exception as error:
                 failures.append(error)
+
         with pool_lock(pool, exclusive=False):
             worker = threading.Thread(target=run)
             worker.start()
@@ -206,9 +306,11 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         acquirer.write_text(prefix + "acquirer.pyz#sha256=" + "a" * 64 + "\n")
         stream.write_text(prefix + "stream.pyz#sha256=" + "b" * 64 + "\n")
         empty_legacy = self.root / "no-legacy"
-        with patch.object(checker, "checker_proxy") as proxy:
-            with self.assertRaisesRegex(ValueError, "cached bytes differ"):
-                checker.acquire_ruff(self.document, pool, acquirer, stream, empty_legacy)
+        with (
+            patch.object(checker_acquisition, "checker_proxy") as proxy,
+            self.assertRaisesRegex(ValueError, "cached bytes differ"),
+        ):
+            checker_acquisition.acquire_ruff(self.document, pool, acquirer, stream, empty_legacy)
         proxy.assert_not_called()
 
     def test_unknown_missing_and_wrong_container_fields_are_rejected(self):
@@ -335,23 +437,29 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             filename = request.full_url.rsplit("/", 1)[-1]
             return io.BytesIO((self.directory / filename).read_bytes() if body is None else body)
 
-        with patch.dict(os.environ, self.proxy, clear=True), patch.object(checker, "open_url", side_effect=opener or response):
-            checker.download(self.path, output, self.document["base"])
+        with (
+            patch.dict(os.environ, self.proxy, clear=True),
+            patch.object(checker_acquisition, "open_url", side_effect=opener or response),
+        ):
+            checker_acquisition.download(self.path, output, self.document["base"])
         return output
 
     def test_acquisition_publishes_only_exact_verified_artifacts(self):
         output = self.acquire()
-        self.assertEqual(checker.check(self.path, output, self.document["base"]), checker.check(self.path, self.directory, self.document["base"]))
+        self.assertEqual(
+            checker.check(self.path, output, self.document["base"]),
+            checker.check(self.path, self.directory, self.document["base"]),
+        )
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
 
     def test_debian_download_failure_is_bounded_and_retains_stage(self):
-        from tools.wheelhouse import WheelhouseNetworkError
-
         failure = urllib.error.HTTPError("https://secret.invalid/private", 503, "private response", {}, None)
-        with (patch.dict(os.environ, self.proxy, clear=True),
-              patch.object(checker, "open_url", side_effect=failure) as network,
-              self.assertRaises(WheelhouseNetworkError) as stopped):
-            checker.download(self.path, self.root / "acquired", self.document["base"])
+        with (
+            patch.dict(os.environ, self.proxy, clear=True),
+            patch.object(checker_acquisition, "open_url", side_effect=failure) as network,
+            self.assertRaises(WheelhouseNetworkError) as stopped,
+        ):
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
         network.assert_called_once()
         rendered = "".join(traceback.format_exception(stopped.exception))
         self.assertIn("HTTP 503", rendered)
@@ -361,15 +469,15 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         self.assertFalse((self.root / "acquired").exists())
 
     def test_debian_read_timeout_retains_partial_without_publishing(self):
-        from tools.wheelhouse import WheelhouseNetworkError
-
         response = unittest.mock.MagicMock()
         response.__enter__.return_value = response
         response.read.side_effect = [b"git", TimeoutError("private endpoint")]
-        with (patch.dict(os.environ, self.proxy, clear=True),
-              patch.object(checker, "open_url", return_value=response) as network,
-              self.assertRaises(WheelhouseNetworkError) as stopped):
-            checker.download(self.path, self.root / "acquired", self.document["base"])
+        with (
+            patch.dict(os.environ, self.proxy, clear=True),
+            patch.object(checker_acquisition, "open_url", return_value=response) as network,
+            self.assertRaises(WheelhouseNetworkError) as stopped,
+        ):
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
         network.assert_called_once()
         self.assertIn("connection timed out", str(stopped.exception))
         self.assertNotIn("private", "".join(traceback.format_exception(stopped.exception)))
@@ -387,13 +495,18 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         pool.mkdir()
         shutil.copyfile(self.directory / wheel["file"], pool / wheel["file"])
         requested = []
+
         def response(request, **kwargs):
             name = request.full_url.rsplit("/", 1)[-1]
             requested.append(name)
             return io.BytesIO((self.directory / name).read_bytes())
-        with (patch.dict(os.environ, self.proxy, clear=True), patch.object(checker, "acquire_ruff"),
-              patch.object(checker, "open_url", side_effect=response)):
-            checker.download(self.path, self.root / "acquired", self.document["base"], pool, None, None, stage)
+
+        with (
+            patch.dict(os.environ, self.proxy, clear=True),
+            patch.object(checker_acquisition, "acquire_ruff"),
+            patch.object(checker_acquisition, "open_url", side_effect=response),
+        ):
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], pool, None, None, stage)
         self.assertEqual([second["file"]], requested)
         checker.check(self.path, self.root / "acquired", self.document["base"], pool)
 
@@ -401,9 +514,12 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         stage = self.root / ".dependencies.pending-example"
         stage.mkdir(mode=0o700)
         (stage / self.document["packages"][0]["file"]).write_bytes(b"changed")
-        with (patch.object(checker, "acquire_ruff") as acquire, patch.object(checker, "open_url") as network):
-            with self.assertRaisesRegex(ValueError, "existing evidence preserved"):
-                checker.download(self.path, self.root / "acquired", self.document["base"], self.root, None, None, stage)
+        with (
+            patch.object(checker_acquisition, "acquire_ruff") as acquire,
+            patch.object(checker_acquisition, "open_url") as network,
+            self.assertRaisesRegex(ValueError, "existing evidence preserved"),
+        ):
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.root, None, None, stage)
         acquire.assert_not_called()
         network.assert_not_called()
         self.assertTrue(stage.is_dir())
@@ -419,14 +535,18 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         pool.mkdir()
         wheel = self.document["packages"][-1]["file"]
         shutil.copyfile(self.directory / wheel, pool / wheel)
-        with (patch.dict(os.environ, self.proxy, clear=True), patch.object(checker, "acquire_ruff"),
-              patch.object(checker, "open_url") as network):
-            checker.download(self.path, self.root / "acquired", self.document["base"], pool, None, None, stage)
+        with (
+            patch.dict(os.environ, self.proxy, clear=True),
+            patch.object(checker_acquisition, "acquire_ruff"),
+            patch.object(checker_acquisition, "open_url") as network,
+        ):
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], pool, None, None, stage)
         network.assert_not_called()
         checker.check(self.path, self.root / "acquired", self.document["base"], pool)
 
     def test_new_stage_is_locked_while_downloading(self):
         observed = []
+
         def response(request, **kwargs):
             stage = next(self.root.glob(".dependencies.pending-*"))
             descriptor = os.open(stage, os.O_RDONLY | os.O_DIRECTORY)
@@ -438,15 +558,16 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                 os.close(descriptor)
             name = request.full_url.rsplit("/", 1)[-1]
             return io.BytesIO((self.directory / name).read_bytes())
+
         self.acquire(opener=response)
         self.assertEqual(len(self.document["packages"]), len(observed))
 
     def test_invalid_declaration_and_proxy_fail_before_staging_or_network(self):
-        with patch.object(checker, "open_url") as network:
+        with patch.object(checker_acquisition, "open_url") as network:
             self.document["unreviewed"] = True
             self.write()
             with self.assertRaises(ValueError):
-                checker.download(self.path, self.root / "acquired", self.document["base"])
+                checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
             network.assert_not_called()
         del self.document["unreviewed"]
         self.write()
@@ -459,10 +580,10 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             with (
                 self.subTest(name=name),
                 patch.dict(os.environ, {**self.proxy, name: value}),
-                patch.object(checker, "open_url") as network,
+                patch.object(checker_acquisition, "open_url") as network,
             ):
                 with self.assertRaisesRegex(ValueError, "launcher-owned"):
-                    checker.download(self.path, self.root / "acquired", self.document["base"])
+                    checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
                 network.assert_not_called()
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
 
@@ -492,10 +613,10 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                 self.subTest(name=name, value=value),
                 patch.dict(os.environ, environment, clear=True),
                 patch.object(checker.tempfile, "mkdtemp") as stage,
-                patch.object(checker, "open_url") as network,
+                patch.object(checker_acquisition, "open_url") as network,
                 self.assertRaisesRegex(ValueError, "launcher-owned"),
             ):
-                checker.download(self.path, self.root / "acquired", self.document["base"])
+                checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
             stage.assert_not_called()
             network.assert_not_called()
 
@@ -511,15 +632,15 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                     self.subTest(name=name, value=value),
                     patch.dict(os.environ, environment, clear=True),
                     patch.object(checker.tempfile, "mkdtemp", side_effect=RuntimeError("stage reached")) as stage,
-                    patch.object(checker, "open_url") as network,
+                    patch.object(checker_acquisition, "open_url") as network,
                 ):
                     if value in (None, ""):
                         with self.assertRaisesRegex(RuntimeError, "stage reached"):
-                            checker.download(self.path, self.root / "acquired", self.document["base"])
+                            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
                         stage.assert_called_once()
                     else:
                         with self.assertRaisesRegex(ValueError, "launcher-owned"):
-                            checker.download(self.path, self.root / "acquired", self.document["base"])
+                            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
                         stage.assert_not_called()
                 network.assert_not_called()
 
@@ -551,9 +672,9 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         with (
             patch.dict(os.environ, {}, clear=True),
             patch.object(checker.tempfile, "mkdtemp") as stage,
-            patch.object(checker, "open_url") as network,
+            patch.object(checker_acquisition, "open_url") as network,
         ):
-            checker.download(self.path, self.directory, self.document["base"])
+            checker_acquisition.download(self.path, self.directory, self.document["base"])
         stage.assert_not_called()
         network.assert_not_called()
 
@@ -571,23 +692,26 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             return result
 
         with (
-            patch.object(checker, "admitted_declaration", side_effect=replace_authority),
-            patch.object(checker, "open_url") as network,
+            patch.object(checker_acquisition, "admitted_declaration", side_effect=replace_authority),
+            patch.object(checker_acquisition, "open_url") as network,
             self.assertRaisesRegex(ValueError, "completion receipt"),
         ):
-            checker.download(self.path, self.directory, base)
+            checker_acquisition.download(self.path, self.directory, base)
         network.assert_not_called()
 
     def test_concurrent_output_is_not_replaced_at_publication(self):
         output = self.root / "acquired"
-        publish = checker.publish_directory
+        publish = checker_acquisition.publish_directory
 
         def concurrent_publication(staged, destination):
             output.mkdir()
             (output / "predecessor").write_bytes(b"owned predecessor")
             publish(staged, destination)
 
-        with patch.object(checker, "publish_directory", side_effect=concurrent_publication), self.assertRaises(FileExistsError):
+        with (
+            patch.object(checker_acquisition, "publish_directory", side_effect=concurrent_publication),
+            self.assertRaises(FileExistsError),
+        ):
             self.acquire()
         self.assertEqual(b"owned predecessor", (output / "predecessor").read_bytes())
 
@@ -637,8 +761,8 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         self.assertEqual(calls[0], ["dpkg", "--install", *expected])
 
     def test_base_mismatch_blocks_acquisition_verification_and_installation(self):
-        with patch.object(checker, "open_url") as network, patch.object(checker.subprocess, "run") as command:
-            for action in (checker.download, checker.check, checker.install):
+        with patch.object(checker_acquisition, "open_url") as network, patch.object(checker.subprocess, "run") as command:
+            for action in (checker_acquisition.download, checker.check, checker.install):
                 with self.subTest(action=action.__name__), self.assertRaisesRegex(ValueError, "another base"):
                     action(self.path, self.directory, "wrong base")
         network.assert_not_called()
