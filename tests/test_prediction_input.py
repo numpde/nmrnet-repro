@@ -88,29 +88,35 @@ class PredictionInputTests(unittest.TestCase):
                 atoms=atoms,
                 coordinates=[[0.0, 0.0, 0.0]] * len(atoms),
             )
-            with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, qualified_units):
-                with self.assertRaisesRegex(
+            with (
+                mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, qualified_units),
+                self.assertRaisesRegex(
                     RuntimeError,
                     f"{unqualified_element} prediction: model coordinate unit has not been qualified",
-                ):
-                    self.parse(raw)
+                ),
+            ):
+                self.parse(raw)
 
         raw = encoded_request(coordinate_unit="angstrom")
         with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}):
             self.assertEqual("angstrom", self.parse(raw)["coordinate_unit"])
 
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}):
-            with self.assertRaisesRegex(ValueError, "coordinate_unit does not match the qualified model unit"):
-                self.parse(raw)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}),
+            self.assertRaisesRegex(ValueError, "coordinate_unit does not match the qualified model unit"),
+        ):
+            self.parse(raw)
 
     def test_context_atoms_do_not_select_heads_or_hide_a_present_head(self):
         context_only = encoded_request(atoms=["N"], coordinates=[[0.0, 0.0, 0.0]])
         self.assertEqual(["N"], self.parse(context_only)["atoms"])
 
         carbon_with_context = encoded_request(atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}):
-            with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
-                self.parse(carbon_with_context)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}),
+            self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"),
+        ):
+            self.parse(carbon_with_context)
 
     def test_different_head_units_only_admit_matching_single_head_requests(self):
         with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "nm"}):
@@ -298,9 +304,11 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         load_element = mock.Mock()
         raw = encoded_request(atoms=["C", "Xe"], coordinates=[[0, 0, 0], [1, 0, 0]])
 
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"C": "angstrom"}):
-            with self.assertRaisesRegex(ValueError, "no dedicated token.*input index 1"):
-                predict.predict_request(raw, load_dictionary, load_element)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"C": "angstrom"}),
+            self.assertRaisesRegex(ValueError, "no dedicated token.*input index 1"),
+        ):
+            predict.predict_request(raw, load_dictionary, load_element)
 
         load_dictionary.assert_called_once_with()
         load_element.assert_not_called()
