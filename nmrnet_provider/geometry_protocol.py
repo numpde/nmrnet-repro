@@ -279,7 +279,11 @@ def _prepared_record(record, number, expected_json_bytes, source_format, line_co
     ):
         raise WorkerProtocolError("Structure worker must return one integer source position for each atom.")
     if source_format == "json":
-        valid = raw == expected_json_bytes and positions == list(admitted.source_positions) and record["source_position_kind"] == "atom_index"
+        valid = (
+            raw == expected_json_bytes
+            and positions == list(admitted.source_positions)
+            and record["source_position_kind"] == "atom_index"
+        )
     elif source_format in ("mol", "sdf"):
         # Qualified native readers preserve MOL atom rows, numbered within each
         # selected record. Atom-map properties and source line numbers are not IDs.

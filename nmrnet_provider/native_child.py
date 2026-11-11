@@ -30,7 +30,9 @@ LOGGER = logging.getLogger("nmrnet_provider.native_child")
 def _prediction(options, connection):
     for name in ("inference.lock", "unicore-source.json"):
         if (INPUT_ROOT / name).read_bytes() != (INFERENCE_ROOT / name).read_bytes():
-            raise ValueError(f"Cannot start prediction: embedded {name} differs from its mounted declaration; rebuild the admitted image.")
+            raise ValueError(
+                f"Cannot start prediction: embedded {name} differs from its mounted declaration; rebuild the admitted image."
+            )
     from nmrnet_inference.worker import serve_released_connection  # noqa: PLC0415 -- Admit declarations before scientific wiring.
 
     runtime = {
@@ -41,8 +43,11 @@ def _prediction(options, connection):
     }
     send(connection, {"kind": "startup", "allocation": options.operation, "runtime": runtime}, options.io_seconds)
     serve_released_connection(
-        connection, allocation=options.operation, io_seconds=options.io_seconds,
-        declaration_path=INPUT_ROOT / "prediction-models.json", weight_root=Path("/weight"),
+        connection,
+        allocation=options.operation,
+        io_seconds=options.io_seconds,
+        declaration_path=INPUT_ROOT / "prediction-models.json",
+        weight_root=Path("/weight"),
         checkpoint_root=Path("/checkpoints"),
     )
 
@@ -93,8 +98,11 @@ def main(arguments=None):
         finally:
             # A failed observation must not replace the original scientific cause.
             try:
-                LOGGER.info("event=native_cgroup_observation operation=%s scope=persistent_container_cumulative facts=%s",
-                            options.operation, json.dumps(cgroup_snapshot(), sort_keys=True))
+                LOGGER.info(
+                    "event=native_cgroup_observation operation=%s scope=persistent_container_cumulative facts=%s",
+                    options.operation,
+                    json.dumps(cgroup_snapshot(), sort_keys=True),
+                )
             except Exception:
                 LOGGER.exception("Cannot observe native cumulative cgroup resources.")
 

@@ -238,6 +238,7 @@ _TOOLS = json.dumps(
     separators=(",", ":"),
 ).encode("ascii")
 
+
 @dataclass(frozen=True, slots=True)
 class _InputProblemReport:
     """Pair a provider-defined issue category with the private model explanation."""
@@ -283,15 +284,18 @@ class InputInterpreter:
         self._on_endpoint_failure = on_endpoint_failure
         self._secrets = secrets
         self._redact = operator_redactor(secrets=secrets)
-        self._conversation = Interpreter(endpoint_factories, timeout_seconds=timeout_seconds,
-                                         context_bytes=context_bytes, secrets=secrets)
+        self._conversation = Interpreter(
+            endpoint_factories, timeout_seconds=timeout_seconds, context_bytes=context_bytes, secrets=secrets
+        )
         self._tools = json.loads(_TOOLS)
         self._operations = []
         self._diagnostic_recipient = None
 
     async def run(self, instructions, capability):
         if self._diagnostic_recipient is not None and self._diagnostic_recipient is not capability:
-            raise ValueError("This interpreter already has its diagnostic recipient; create a new interpreter for another input owner.")
+            raise ValueError(
+                "This interpreter already has its diagnostic recipient; create a new interpreter for another input owner."
+            )
         self._diagnostic_recipient = capability
 
         async def dispatch(name, arguments, *, not_after):
@@ -307,15 +311,17 @@ class InputInterpreter:
                 if not deadline.expired() or not isinstance(cancellation, asyncio.CancelledError):
                     raise
                 retained = await capability.settle_interrupted_inspection()
-                failures = tuple(item for index, item in enumerate((cancellation.__cause__, retained))
-                                 if item is not None and (index == 0 or item is not cancellation.__cause__))
+                failures = tuple(
+                    item
+                    for index, item in enumerate((cancellation.__cause__, retained))
+                    if item is not None and (index == 0 or item is not cancellation.__cause__)
+                )
                 if failures:
                     cause = failures[0] if len(failures) == 1 else BaseExceptionGroup("Input inspection failures", failures)
                     raise InspectionUnavailable() from cause
                 raise ModelWindowExpired() from failure
 
-        messages = [{"role": "system", "content": PROMPT},
-                    {"role": "user", "content": instructions.specification_text}]
+        messages = [{"role": "system", "content": PROMPT}, {"role": "user", "content": instructions.specification_text}]
         try:
             result = await self._conversation.run(messages, self._tools, dispatch)
         finally:
@@ -332,8 +338,7 @@ class InputInterpreter:
             "operations": self._operations,
             "outcome": "selected",
         }
-        return json.dumps(observation, ensure_ascii=True, allow_nan=False,
-                          sort_keys=True, separators=(",", ":")).encode("ascii")
+        return json.dumps(observation, ensure_ascii=True, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("ascii")
 
     async def retire(self):
         try:
@@ -345,21 +350,20 @@ class InputInterpreter:
         if self._diagnostic_recipient is None:
             return
         from nmrnet_provider.process_reports import failure_evidence  # noqa: PLC0415
+
         history = [
             {"endpoint_index": visit - 1, "failure": failure_evidence(failure, secrets=self._secrets)}
             for visit, failure in self._conversation.failures
         ]
         history.extend(
-            {"endpoint_index": visit - 1, "turn_index": turn,
-             "failure": failure_evidence(failure, secrets=self._secrets)}
+            {"endpoint_index": visit - 1, "turn_index": turn, "failure": failure_evidence(failure, secrets=self._secrets)}
             for visit, turn, failure in self._conversation.correction_failures
         )
         if self._conversation.last_failure is not None:
             history.append({"failure": failure_evidence(self._conversation.last_failure, secrets=self._secrets)})
         if history:
             self._diagnostic_recipient.retain_interpreter_diagnostics(
-                json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True,
-                           separators=(",", ":")).encode("ascii")
+                json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
             )
 
     def _admit_arguments(self, name, arguments):

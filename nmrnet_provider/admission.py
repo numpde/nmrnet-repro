@@ -40,8 +40,13 @@ async def select_pending_start(config, api, *, policy, owner, claims):
     _require_context(config, api, policy, owner)
     cursor, seen = None, set()
     for _page_number in range(policy.maximum_pages):
-        page = await api.jobs(analysis_kind_ref=ANALYSIS_KIND_REF, has_provider_execution_attempt=False,
-                              limit=policy.page_size, cursor=cursor, owner=owner)
+        page = await api.jobs(
+            analysis_kind_ref=ANALYSIS_KIND_REF,
+            has_provider_execution_attempt=False,
+            limit=policy.page_size,
+            cursor=cursor,
+            owner=owner,
+        )
         for selected in page.jobs:
             if not claims.owns_job(config.lifecycle.scope, selected.input.job_ref):
                 body = start_body(selected.input.job_ref, secrets.token_hex(16))
@@ -55,6 +60,8 @@ async def select_pending_start(config, api, *, policy, owner, claims):
 def _next_cursor(cursor, seen, *, operation):
     if cursor is not None:
         if cursor in seen:
-            raise AdmissionIncomplete(f"Cannot finish {operation}: the API repeated a page cursor; investigate the incomplete observation.")
+            raise AdmissionIncomplete(
+                f"Cannot finish {operation}: the API repeated a page cursor; investigate the incomplete observation."
+            )
         seen.add(cursor)
     return cursor

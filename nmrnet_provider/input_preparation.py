@@ -595,8 +595,11 @@ class InputPreparation:
             self._worker_task = None
             return
         except asyncio.CancelledError:
-            if (not self._worker_task.done() or not self._worker_task.cancelled()
-                    or asyncio.current_task().cancelling() > cancellations):
+            if (
+                not self._worker_task.done()
+                or not self._worker_task.cancelled()
+                or asyncio.current_task().cancelling() > cancellations
+            ):
                 raise
             if self.allocation_failure is None:
                 self._record_allocation_failure(self._worker_task)

@@ -59,10 +59,7 @@ def route_provider_config(config, *, api, interpreter, store):
             api=replace(config.api, http=replace(config.api.http, proxy_socket=api)),
             interpreter=replace(
                 config.interpreter,
-                endpoints=tuple(
-                    replace(endpoint, proxy_socket=interpreter)
-                    for endpoint in config.interpreter.endpoints
-                ),
+                endpoints=tuple(replace(endpoint, proxy_socket=interpreter) for endpoint in config.interpreter.endpoints),
             ),
             uploads=replace(config.uploads, http=replace(config.uploads.http, proxy_socket=store)),
         )
@@ -436,10 +433,16 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 failure, {"event": "attempt_held", "job_ref": pending.input.job_ref}
             ),
             on_observed_crash=lambda crash: report_attempt_notice(
-                crash.acknowledged, crash,
-                {"event": "worker_crash_observed", "phase": crash.phase,
-                 "worker_role": crash.native_exit.role, "worker_generation": crash.native_exit.generation,
-                 "worker_operation": crash.native_exit.operation, "returncode": crash.native_exit.returncode},
+                crash.acknowledged,
+                crash,
+                {
+                    "event": "worker_crash_observed",
+                    "phase": crash.phase,
+                    "worker_role": crash.native_exit.role,
+                    "worker_generation": crash.native_exit.generation,
+                    "worker_operation": crash.native_exit.operation,
+                    "returncode": crash.native_exit.returncode,
+                },
             ),
         )
         await service.run(stop)

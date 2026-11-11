@@ -224,7 +224,9 @@ class PredictionClient(WorkerClient):
             raise WorkerProtocolError("Scientific worker returned an invalid preparation token or model declaration identity")
         if reply["declaration_sha256"] != self._declaration_sha256:
             self.close()
-            raise WorkerProtocolError("Scientific worker's model declaration differs from the admitted declaration; this worker's prediction was not dispatched")
+            raise WorkerProtocolError(
+                "Scientific worker's model declaration differs from the admitted declaration; this worker's prediction was not dispatched"
+            )
         handle = object()
         self._prepared = handle, reply["token"], len(raw_requests)
         return handle

@@ -198,7 +198,11 @@ def _configuration_document(path, read_file):
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
-    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service", "scientific_retry"}, "configuration")
+    _fields(
+        document,
+        {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service", "scientific_retry"},
+        "configuration",
+    )
     if document["schema_id"] != "nmrnet.provider.runtime_config.v4":
         raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v4.")
     retry = document["scientific_retry"]
@@ -225,7 +229,9 @@ def read_startup_file(path, *, maximum_bytes, label, secret=False):
         return core_read_startup_file(path, maximum_bytes=maximum_bytes, label=label, secret=secret)
     except StartupFileRejected as failure:
         raise ConfigurationRejected(
-            str(failure), cause=failure.cause, cleanup_failures=failure.cleanup_failures,
+            str(failure),
+            cause=failure.cause,
+            cleanup_failures=failure.cleanup_failures,
         ) from None
     except BaseException as interruption:
         # Preserve the original interruption identity and earlier cause while
@@ -233,7 +239,9 @@ def read_startup_file(path, *, maximum_bytes, label, secret=False):
         failure = interruption.__cause__
         if type(failure) is StartupFileRejected:
             raise interruption from ConfigurationRejected(
-                str(failure), cause=failure.cause, cleanup_failures=failure.cleanup_failures,
+                str(failure),
+                cause=failure.cause,
+                cleanup_failures=failure.cleanup_failures,
             )
         raise
 
@@ -280,8 +288,13 @@ def _interpreter(table, directory, read_file, digest):
         except (ValueError, UnicodeError) as cause:
             raise ConfigurationRejected("interpreter endpoint requires UTF-8 TOML.", cause=cause) from None
         _fields(document, {"url", "model", "key_file"}, "interpreter endpoint", {"ca_file", "reasoning_effort"})
-        endpoint = {**document, "configuration_id": path.stem, "request_bytes": 65536,
-                    "response_bytes": 262144, "retirement_seconds": 5}
+        endpoint = {
+            **document,
+            "configuration_id": path.stem,
+            "request_bytes": 65536,
+            "response_bytes": 262144,
+            "retirement_seconds": 5,
+        }
         endpoints.append(_endpoint(endpoint, read_file))
     return InterpreterSettings(tuple(endpoints), table["timeout_seconds"])
 
@@ -326,8 +339,7 @@ def _endpoint(table, read_file):
         trust = https_trust(raw_ca, label="interpreter")
     except ApiConfigurationRejected as failure:
         raise ConfigurationRejected(str(failure), cause=failure.cause) from None
-    return InterpreterEndpointSettings(spec, trust, table["request_bytes"], table["response_bytes"],
-                                       table["retirement_seconds"])
+    return InterpreterEndpointSettings(spec, trust, table["request_bytes"], table["response_bytes"], table["retirement_seconds"])
 
 
 def _uploads(table, read_file):
@@ -385,8 +397,9 @@ def _lifecycle(table, api_origin, provider_ref):
     return LifecycleSettings(
         RecoveryScope(api_origin, provider_ref, table["consumer_id"], table["generation_id"]),
         _path(table["lifetime_root"], "Provider lifetime directory"),
-        LiveAttemptLimits(table["maximum_live_attempts"], table["maximum_control_bytes"],
-                          table["maximum_pending_terminal_bytes"]),
+        LiveAttemptLimits(
+            table["maximum_live_attempts"], table["maximum_control_bytes"], table["maximum_pending_terminal_bytes"]
+        ),
         table["start_replays"],
         table["start_seconds"],
         states,
@@ -399,9 +412,11 @@ def _lifecycle(table, api_origin, provider_ref):
 def _delivery(table, api_origin, provider_ref):
     _fields(table, {"socket_path", "socket_group_id", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
     return DeliverySettings(
-        DeliveryEndpoint(api_origin, provider_ref, _path(table["socket_path"], "Delivery socket"),
-                         socket_group_id=table["socket_group_id"]),
-        table["retry_initial_seconds"], table["retry_max_seconds"],
+        DeliveryEndpoint(
+            api_origin, provider_ref, _path(table["socket_path"], "Delivery socket"), socket_group_id=table["socket_group_id"]
+        ),
+        table["retry_initial_seconds"],
+        table["retry_max_seconds"],
     )
 
 

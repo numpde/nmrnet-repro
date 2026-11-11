@@ -134,8 +134,12 @@ class NativeAttemptFactory:
                 selected_artifacts=self.selected_artifacts,
                 allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
                 on_prediction_failure=lambda failure, attempt: self.on_operator_notice(
-                    failure, {"event": "prediction_failed", "job_ref": pending.input.job_ref,
-                              "execution_attempt_ref": attempt.admission.execution_attempt_ref}
+                    failure,
+                    {
+                        "event": "prediction_failed",
+                        "job_ref": pending.input.job_ref,
+                        "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+                    },
                 ),
                 on_interpreter_failure=lambda index, failure: self.on_operator_notice(
                     failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
@@ -199,10 +203,7 @@ class NativeAttemptFactory:
             self._operation = None
 
     def _begin_setup(self):
-        if (
-            self._operation is not None
-            or self.allocations
-        ):
+        if self._operation is not None or self.allocations:
             raise RuntimeError(
                 "Cannot acquire new native work: await active setup and settle this factory's original obligations first."
             )
@@ -254,8 +255,7 @@ class NativeAttemptFactory:
         writer = None
         try:
             reader, writer = await allocation.start()
-            options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds,
-                       "native": allocation}
+            options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds, "native": allocation}
             if role == "prediction":
                 options["operation_seconds"] = self.policy.prediction_seconds
                 options["declaration_sha256"] = self.execution_identity["prediction_declaration_sha256"]

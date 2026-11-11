@@ -73,9 +73,7 @@ def _admit_request(raw):
     except ValueError as error:
         raise InputRejected(str(error)) from None
     if request["coordinate_unit"] != "angstrom":
-        raise InputRejected(
-            "Cannot admit executable coordinates: coordinate_unit must be exactly angstrom."
-        )
+        raise InputRejected("Cannot admit executable coordinates: coordinate_unit must be exactly angstrom.")
     return request
 
 

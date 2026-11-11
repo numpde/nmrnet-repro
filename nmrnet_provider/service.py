@@ -144,8 +144,18 @@ class ProviderService:
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
-                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered,
-                           on_observed_crash, factory_ready, on_held_attempt, prose_retry_seconds)
+                callable,
+                (
+                    open_attempt,
+                    current_announcement,
+                    on_started,
+                    on_api_retry,
+                    on_api_recovered,
+                    on_observed_crash,
+                    factory_ready,
+                    on_held_attempt,
+                    prose_retry_seconds,
+                ),
             )
         ):
             raise ValueError(
@@ -187,9 +197,14 @@ class ProviderService:
         """Keep pending reports alive even after their workers and I/O stop."""
         return (
             self._state not in (_State.RUNNING, _State.SETTLING)
-            and all(task is None or task.done() for task in (
-                self.work_task, self._hello_task, *self._settlement_tasks.values(),
-            ))
+            and all(
+                task is None or task.done()
+                for task in (
+                    self.work_task,
+                    self._hello_task,
+                    *self._settlement_tasks.values(),
+                )
+            )
             and all(controller.shutdown_ready for controller in self._owned_controllers())
             and self.api.retirement_confirmed
             and self.hello_api.retirement_confirmed
@@ -254,8 +269,7 @@ class ProviderService:
         return not self._stop.is_set()
 
     async def _select_job(self):
-        return await select_pending_start(self.config, self.api, policy=self.policy.admission,
-                                          owner=self, claims=self._claims)
+        return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self, claims=self._claims)
 
     async def _read_until_available(self, operation):
         """Repeat the supplied Job discovery in its original task.
@@ -284,8 +298,10 @@ class ProviderService:
                 result = await operation()
             except asyncio.CancelledError as cause:
                 if (
-                    api is self.api and cause.__cause__ is None
-                    and api.last_failure is not None and api.last_failure is not previous_failure
+                    api is self.api
+                    and cause.__cause__ is None
+                    and api.last_failure is not None
+                    and api.last_failure is not previous_failure
                 ):
                     # Startup reads now run in a retained child task. Preserve
                     # its new interruption; Hello has its own uncertainty output.
@@ -388,8 +404,11 @@ class ProviderService:
                 await self._observe_attempt(controller, pending)
             except ControllerFailed as failure:
                 execution = failure.cause
-                if (type(execution) is ExecutionFailed and type(execution.cause) in
-                        (UploadRecoveryExhausted, ObservationGapExpired, AnalysisOutcomeUnresolved)):
+                if type(execution) is ExecutionFailed and type(execution.cause) in (
+                    UploadRecoveryExhausted,
+                    ObservationGapExpired,
+                    AnalysisOutcomeUnresolved,
+                ):
                     controller.require_held_failure(pending, failure)
                     if not self._factory_ready():
                         raise
@@ -427,7 +446,8 @@ class ProviderService:
                     report_crash()
                 except (Exception, BaseExceptionGroup, SystemExit, KeyboardInterrupt) as notice:
                     raise BaseExceptionGroup(
-                        "Attempt failed and its crash diagnostic could not be reported.", (primary, notice),
+                        "Attempt failed and its crash diagnostic could not be reported.",
+                        (primary, notice),
                     ) from None
                 raise
             try:

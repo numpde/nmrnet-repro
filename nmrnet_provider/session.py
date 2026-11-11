@@ -204,8 +204,11 @@ class NMRNetSession:
             raise ValueError("Scientific session requires a prediction allocation owner.")
         if type(max_retries) is not int or max_retries not in (0, 1):
             raise ValueError("Scientific session permits zero or one prediction retry.")
-        if max_retries and (type(prediction_seconds) not in (int, float) or not 0 < prediction_seconds
-                            or not math.isfinite(2 * prediction_seconds)):
+        if max_retries and (
+            type(prediction_seconds) not in (int, float)
+            or not 0 < prediction_seconds
+            or not math.isfinite(2 * prediction_seconds)
+        ):
             raise ValueError("Prediction retry requires a finite positive prediction deadline.")
         self._max_retries = max_retries
         self._prediction_seconds = prediction_seconds
@@ -241,9 +244,7 @@ class NMRNetSession:
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
         self._acknowledged = acknowledged
         try:
-            prepared = await self._input_preparation.prepare(
-                instructions, require_execution=report_condition.require_execution
-            )
+            prepared = await self._input_preparation.prepare(instructions, require_execution=report_condition.require_execution)
         except (NativeWorkerExited, PreparationRetirementFailed) as cause:
             original = cause
             while type(original) is PreparationRetirementFailed:
@@ -369,7 +370,9 @@ class NMRNetSession:
             if self._on_prediction_failure is not None:
                 self._on_prediction_failure(cause, self._acknowledged)
             self._phase = _Phase.FINISHED
-            return AnalysisFailure("prediction_execution_failed", "Prediction did not return a complete verified result.", evidence)
+            return AnalysisFailure(
+                "prediction_execution_failed", "Prediction did not return a complete verified result.", evidence
+            )
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
@@ -486,9 +489,12 @@ class NMRNetSession:
             timeout = cause.__cause__
             if timeout is not None:
                 interruption = timeout.__cause__
-                if (type(timeout) is not TimeoutError or type(interruption) is not asyncio.CancelledError
-                        or interruption.__cause__ is not None
-                        or (interruption.__context__ is not None and interruption.__context__ is not first_failure)):
+                if (
+                    type(timeout) is not TimeoutError
+                    or type(interruption) is not asyncio.CancelledError
+                    or interruption.__cause__ is not None
+                    or (interruption.__context__ is not None and interruption.__context__ is not first_failure)
+                ):
                     raise
             raise AnalysisOutcomeUnresolved(
                 "Prediction was sent, but its response was not confirmed before the exchange deadline."
@@ -500,13 +506,13 @@ class NMRNetSession:
                 "Prediction returned a reply that could not be admitted as a complete result."
             ) from cause
         except (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError) as cause:
-            if (type(cause) not in (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError)
-                    or cause.__cause__ is not None
-                    or (cause.__context__ is not None and cause.__context__ is not first_failure)):
+            if (
+                type(cause) not in (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError)
+                or cause.__cause__ is not None
+                or (cause.__context__ is not None and cause.__context__ is not first_failure)
+            ):
                 raise
-            raise AnalysisOutcomeUnresolved(
-                "Prediction's connection ended before its response was confirmed."
-            ) from cause
+            raise AnalysisOutcomeUnresolved("Prediction's connection ended before its response was confirmed.") from cause
 
     def _worker_crash(self, failure, *, cause):
         if self._phase is _Phase.PREPARING:
@@ -521,9 +527,15 @@ class NMRNetSession:
             phase=phase,
             owner=self,
             runner=runner,
-            evidence=_evidence({"native_operation": {
-                "role": runner.role, "generation": runner.generation, "operation": runner.operation,
-            }}),
+            evidence=_evidence(
+                {
+                    "native_operation": {
+                        "role": runner.role,
+                        "generation": runner.generation,
+                        "operation": runner.operation,
+                    }
+                }
+            ),
             cause=cause,
         )
 
@@ -563,8 +575,12 @@ class NMRNetSession:
         worker, retirement = self._worker, self._retirement
         if retirement is not None:
             failures.extend(await self._retire_prediction(worker, retirement, retry=True))
-        if (self._prediction_pending or self._prediction_setup is not None
-                or self._worker is not worker or self._retirement is not retirement):
+        if (
+            self._prediction_pending
+            or self._prediction_setup is not None
+            or self._worker is not worker
+            or self._retirement is not retirement
+        ):
             failures.append(
                 (
                     "prediction_acquisition",
@@ -579,9 +595,7 @@ class NMRNetSession:
 
     async def _retire_prediction(self, worker, retirement, *, retry=False):
         task = self._prediction_retirement_task
-        failed = task is not None and task.done() and (
-            task.cancelled() or task.exception() is not None or bool(task.result())
-        )
+        failed = task is not None and task.done() and (task.cancelled() or task.exception() is not None or bool(task.result()))
         if task is None or (retry and failed):
             task = asyncio.create_task(contain_task_exit(retirement.retire_channel, worker))
             self._prediction_retirement_task = task
