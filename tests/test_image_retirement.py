@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -144,8 +145,6 @@ else: raise SystemExit(91)
         self.assertEqual(self.removed(), [])
 
     def test_recent_unselected_image_is_preserved(self):
-        from datetime import UTC, datetime
-
         self.state["created"] = {image("f"): datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")}
         self.save_state()
         result = self.retire()
