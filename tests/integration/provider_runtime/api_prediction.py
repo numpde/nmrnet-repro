@@ -72,6 +72,7 @@ class Client:
         self.proxy_socket = proxy_socket
         self.identity, self.project_ref, self.user = identity, project_ref, user
         origin = urlsplit(identity["origin"])
+        # silent-defaults: allow-contract -- The admitted HTTPS origin keeps its explicit port or uses the HTTPS port 443; source=http.client.HTTPSConnection.default_port and tools/provider_deployment.py::client_inputs; the existing transport regression checks an explicit port only.
         self.host, self.port = origin.hostname, origin.port if origin.port is not None else 443
         self.trust = ssl.create_default_context(cafile="/input/api-ca.crt")
 
@@ -105,6 +106,7 @@ class Client:
             json.dumps(
                 {
                     "status": response.status,
+                    # silent-defaults: allow-contract -- Capture a matching singleton topology or null evidence; signed requests separately reject mismatched original headers in _api_accepted, while unsigned store PUT accepts its status and size without API topology; source=_capture_head, request, publication_grant and publish_bytes.
                     "topology": self.identity["topology"] if topology == [self.identity["topology"]] else None,
                     "request_id": request_id,
                 }
@@ -126,6 +128,7 @@ class Client:
             connection._tunnel()
             connection.sock = self.trust.wrap_socket(outbound, server_hostname=self.host)
             phase = "request dispatch"
+            # silent-defaults: allow-contract -- HTTP request-target grammar appends a question mark only for a nonempty query; the same query is signed separately without that delimiter; source=_signed_response and _exchange.
             connection.request(method, path + ("?" + query if query else ""), body=body, headers=headers)
             phase = "response headers"
             response = connection.getresponse()
@@ -154,6 +157,7 @@ class Client:
             "The API did not identify the selected topology",
         )
 
+    # silent-defaults: allow-contract -- This API helper expects ordinary success 200; Job and Upload creation explicitly request 201 and _api_accepted checks the selected status; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiReadSigningTests.test_retention_window_refusal_refreshes_only_the_get_signature_and_keeps_both_replies and ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job.
     def request(self, label, method, path, query="", body=None, status=200):
         for signature_attempt in range(3):
             prefix, response, content = self._signed_response(label, method, path, query, body, 1048576)
@@ -310,6 +314,7 @@ class Client:
 
 
 def submit(client, case, *, case_kind, upload_receipt=None):
+    # silent-defaults: allow-contract -- Only the selected XYZ or SDF ZIP profile owns source bytes; other explicit case kinds submit without an Upload; source=main case-kind choices and submit; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer, test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_delayed_result_crosses_old_reader_and_process_limits_without_another_job.
     source = preflight_upload() if case_kind == "upload" else None
     if case_kind == "sdf-zip":
         source = preflight_sdf_zip()
@@ -320,6 +325,7 @@ def submit(client, case, *, case_kind, upload_receipt=None):
         any(item["provider_ref"] == client.identity["provider_ref"] for item in directory["providers"]),
         "The dedicated NMRNet offering was not discoverable",
     )
+    # silent-defaults: allow-contract -- Publish one Upload only for a profile with prepared source bytes; profiles without source proceed directly to Job submission and skip attachment; source=submit; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer, test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_delayed_result_crosses_old_reader_and_process_limits_without_another_job.
     upload = publish_upload(client, source, case_kind=case_kind, reservation=upload_receipt) if source is not None else None
     body = json.dumps(
         {
@@ -483,6 +489,7 @@ def receive(client, receipt, *, readback_seconds, case_kind, prediction_image_id
                 "Decoded result fingerprint differs",
             )
             (client.output / "scientific-result.json").write_bytes(content)
+            # silent-defaults: allow-contract -- The captured scripted profile requires exact retained source; real profiles pass their admitted interpreter for received-source and route checks; source=materialize_api_config.py and compare_scientific_documents; comparator proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_scripted_comparison_still_accepts_only_its_exact_source_and_science and test_real_whitespace_or_xyz_header_changes_only_received_source_evidence.
             compare_science(
                 content,
                 receipt,
@@ -595,6 +602,7 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind, predi
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
         )
     elif case_kind in ("smiles", "smiles-multiple"):
+        # silent-defaults: allow-contract -- These two explicit SMILES profiles select the authored CCl one-conformer or CCCC three-conformer fixture; source=tests/fixtures/preparation/smiles.json and compare_smiles_scientific_documents; multiple-profile selection proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_multiple_mode_selects_the_authored_three_conformer_case_and_describes_butane.
         fixture_name = "implicit_hydrogens" if case_kind == "smiles" else "flexible_multiple"
         expected = next(
             case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == fixture_name
