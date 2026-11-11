@@ -217,7 +217,7 @@ def _env_enabled(node):
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         return _env_enabled(node.right)  # Only a literal right-hand override wins.
     if isinstance(node, ast.Dict):
-        for key, value in reversed(list(zip(node.keys, node.values))):
+        for key, value in reversed(list(zip(node.keys, node.values, strict=True))):
             if key is None:
                 return False  # A later dictionary expansion may override it.
             if _value(key) == _ENV:

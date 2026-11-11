@@ -707,7 +707,7 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                     environment.begin() as transaction,
                 ):
                     self.assertEqual(transaction.stat()["entries"], len(keys))
-                    for key, record_receipt in zip(keys, record_receipts):
+                    for key, record_receipt in zip(keys, record_receipts, strict=True):
                         packed_record = transaction.get(key)
                         self.assertIsNotNone(packed_record)
                         self.assertEqual(hashlib.sha256(packed_record).hexdigest(), record_receipt["raw_sha256"])
@@ -718,7 +718,7 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                         self.assertEqual(len(label_mask), len(atoms))
                         labelled_fixture_indices = [
                             index
-                            for index, (atom, selected) in enumerate(zip(atoms, label_mask))
+                            for index, (atom, selected) in enumerate(zip(atoms, label_mask, strict=True))
                             if atom == fixture_element and selected == 1
                         ]
                         self.assertEqual(labelled_fixture_indices, record_receipt["selected_atom_indices"])
@@ -742,7 +742,7 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                                 )
                                 expected_label_indices = tuple(
                                     index
-                                    for index, (atom, selected) in enumerate(zip(atoms, label_mask))
+                                    for index, (atom, selected) in enumerate(zip(atoms, label_mask, strict=True))
                                     if atom == element and selected == 1
                                 )
                                 oracle_mask = torch.where(expected["select_atom"][0, 1 : len(atoms) + 1] == 1)[0].tolist()

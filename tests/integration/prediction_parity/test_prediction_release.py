@@ -49,7 +49,7 @@ def reference_requests(test, reference):
             records = reference["elements"][element]["records"]
             retained_records = receipt["elements"][element]["records"]
             test.assertEqual(len(retained_records), len(records))
-            for actual, expected in zip(retained_records, records):
+            for actual, expected in zip(retained_records, records, strict=True):
                 test.assertEqual({name: actual[name] for name in expected}, expected)
             files = receipt["elements"][element]["files"]
             keys = load_reference_pickle(read_receipted_bytes(root / "valid_dbid.pkl", files["valid_dbid.pkl"]))
@@ -59,7 +59,7 @@ def reference_requests(test, reference):
             with lmdb.open(str(database), subdir=False, readonly=True, lock=False) as environment:
                 with environment.begin() as transaction:
                     test.assertEqual(transaction.stat()["entries"], len(records))
-                    for key, expected in zip(keys, records):
+                    for key, expected in zip(keys, records, strict=True):
                         content = transaction.get(key)
                         test.assertIsNotNone(content)
                         test.assertEqual(hashlib.sha256(content).hexdigest(), expected["raw_sha256"])

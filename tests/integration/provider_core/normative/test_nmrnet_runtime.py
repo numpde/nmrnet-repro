@@ -312,7 +312,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             await fixture.wait_published()
             fail_bodies = [
                 body
-                for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies)
+                for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True)
                 if b"/fail HTTP/1.1" in request.split(b"\r\n", 1)[0]
             ]
             self.assertEqual(len(fail_bodies), 1)
