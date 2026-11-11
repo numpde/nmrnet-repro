@@ -43,6 +43,14 @@ class ProviderRuntimeTests(unittest.TestCase):
         self.assertIn(
             ("provider-core", self.core_wheel.removeprefix("provider_core-").removesuffix("-py3-none-any.whl")), expected
         )
+        installer = json.loads(Path("/opt/provider-tools/installer/release.json").read_bytes())
+        wheel = Path("/opt/provider-tools/installer/wheels") / installer["name"]
+        self.assertEqual(wheel.stat().st_size, installer["size"])
+        self.assertEqual(hashlib.sha256(wheel.read_bytes()).hexdigest(), installer["sha256"])
+        expected.append(("pip", installer["name"].split("-")[1]))
+        self.assertTrue(
+            Path(importlib.import_module("pip").__file__).resolve().is_relative_to(Path(sysconfig.get_path("purelib")).resolve())
+        )
         observed = sorted(
             (re.sub(r"[-_.]+", "-", item.metadata["Name"]).lower(), item.version) for item in importlib.metadata.distributions()
         )
@@ -74,7 +82,6 @@ class ProviderRuntimeTests(unittest.TestCase):
             "rdkit",
             "numpy",
             "lmdb",
-            "pip",
             "setuptools",
             "tests",
             "packages",

@@ -59,6 +59,16 @@ if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
 fi
 exec bash "$(dirname "$0")/docker-real.sh" "$@"
 """)
+        installer = Path("host/bootstrap/acquisition/acquisition_tool/installer")
+        for name in (
+            "tools/container_guard.py",
+            "tools/installer.py",
+            "requirements/installer-release.json",
+            "wheels/pip-26.2.2-py3-none-any.whl",
+        ):
+            destination = self.root / installer / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / installer / name, destination)
         for name in ("Dockerfile", "Dockerfile.dockerignore"):
             (self.root / "containers/checker" / name).write_text("fixture recipe\n")
         self.document["base"] = (
@@ -441,11 +451,24 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
     def test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture(self):
         selected = self.root / "tools/checker.py"
         expected = hashlib.sha256(selected.read_bytes()).hexdigest()
+        installer = Path("host/bootstrap/acquisition/acquisition_tool/installer")
+        installer_inputs = [
+            installer / name
+            for name in (
+                "tools/container_guard.py",
+                "tools/installer.py",
+                "requirements/installer-release.json",
+                "wheels/pip-26.2.2-py3-none-any.whl",
+            )
+        ]
+        installer_hashes = {str(path): hashlib.sha256((self.root / path).read_bytes()).hexdigest() for path in installer_inputs}
         result = self.launch("build", additions={"CHECKER_FIXTURE_MUTATE": str(selected), "CHECKER_FIXTURE_PROBE_LEASE": "1"})
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertTrue((self.root / "state/build-lease-held").exists())
         evidence = json.loads((self.root / "state/build.json").read_text())
         self.assertEqual(expected, evidence["manifest"]["tools/checker.py"])
+        for path, digest in installer_hashes.items():
+            self.assertEqual(digest, evidence["manifest"][path])
         declared = {item["file"] for item in self.document["packages"] if item["name"] != "ruff"}
         streamed = {
             name.removeprefix("checker-dependencies/")

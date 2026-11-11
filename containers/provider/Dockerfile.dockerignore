@@ -24,3 +24,10 @@ nmrnet_provider/smiles_worker.py
 !tools/container_resources.py
 !wheelhouse/
 !wheelhouse/**
+!host/
+!host/bootstrap/
+!host/bootstrap/acquisition/
+!host/bootstrap/acquisition/acquisition_tool/
+!host/bootstrap/acquisition/acquisition_tool/__init__.py
+!host/bootstrap/acquisition/acquisition_tool/installer/
+!host/bootstrap/acquisition/acquisition_tool/installer/**

@@ -7,11 +7,18 @@ FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4e
 # Build-time repository tools use the same admission marker as contained runtime lanes.
 ENV NMRNET_IN_CONTAINER=1 \
     PROVIDER_CORE_IN_CONTAINER=1 \
+    NMR_PROVIDER_TOOLS_IN_CONTAINER=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     OMP_NUM_THREADS=2 \
     MKL_NUM_THREADS=2
 
 WORKDIR /opt/build
+COPY host/bootstrap/acquisition/acquisition_tool/installer/tools/ /opt/installer-build/tools/
+COPY host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json /opt/provider-tools/installer/release.json
+COPY host/bootstrap/acquisition/acquisition_tool/installer/wheels/ /opt/provider-tools/installer/wheels/
+RUN cd /opt/installer-build \
+    && python3 -B -m tools.installer --record /opt/provider-tools/installer/release.json --pool /opt/provider-tools/installer/wheels \
+    && rm -rf /opt/installer-build
 COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/build_unicore.py ./tools/
 COPY requirements/inference.lock requirements/unicore-source.json /opt/inference/
 RUN --mount=type=bind,from=science_inputs,source=/wheels,target=/wheelhouse \

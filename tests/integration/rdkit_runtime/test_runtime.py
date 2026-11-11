@@ -7,6 +7,7 @@ require_container()
 import importlib
 import importlib.machinery
 import importlib.metadata
+import json
 import re
 import site
 import sys
@@ -23,6 +24,10 @@ class RDKitRuntimeNormativeTests(unittest.TestCase):
         native_lock = Path(__file__).with_name("native.lock")
         if native_lock.exists():
             expected.update(requirements(native_lock))
+        installer = json.loads(Path("/opt/provider-tools/installer/release.json").read_text())
+        pip_version = re.fullmatch(r"pip-([0-9]+\.[0-9]+(?:\.[0-9]+)?)-py3-none-any\.whl", installer["name"])
+        self.assertIsNotNone(pip_version)
+        expected.add(("pip", pip_version.group(1)))
         expected = sorted(expected)
         installed = sorted(
             (re.sub(r"[-_.]+", "-", distribution.metadata["Name"]).lower(), distribution.version)

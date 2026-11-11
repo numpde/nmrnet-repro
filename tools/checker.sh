@@ -268,7 +268,11 @@ else
 fi
 inputs=(containers/checker/Dockerfile containers/checker/Dockerfile.dockerignore
     tools/checker.py tools/checker.sh tools/artifacts.py tools/container_guard.py requirements/checker-dependencies.json
-    requirements/wheelhouse-tool-assets.in)
+    requirements/wheelhouse-tool-assets.in
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+    host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+    host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl)
 if ! "$print_command"; then
     for input in "${inputs[@]}"; do
         [[ -f "$repository_root/$input" && ! -L "$repository_root/$input" ]] || {

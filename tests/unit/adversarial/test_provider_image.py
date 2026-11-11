@@ -14,7 +14,7 @@ from unittest.mock import patch
 from tests.unit.provider_image_ports import ImageSource
 from tests.unit.wheel_pool_fixtures import locked, wheel
 
-from tools.provider_environment import install_provider, install_provider_into
+from tools.provider_environment import install_provider_into
 
 
 class ProviderDependencyAdmissionTests(unittest.TestCase):
@@ -163,10 +163,22 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 else:
                     candidate.write_bytes(b"PRIVATE changed wheel")
                 destination = Path(directory) / "installed"
+                subprocess.run(
+                    [
+                        "/usr/local/bin/python3",
+                        "-I",
+                        "-B",
+                        "-c",
+                        "from pathlib import Path; from acquisition_tool.installer.tools.installer import create_environment; "
+                        "import sys; create_environment(Path(sys.argv[1]))",
+                        str(destination),
+                    ],
+                    check=True,
+                )
                 with (
                     patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as calls,
                     self.assertRaises(subprocess.CalledProcessError),
                 ):
-                    install_provider(destination, source, lock, wheels)
+                    install_provider_into(destination / "bin/python", source, lock, wheels, destination)
                 self.assertFalse(any("wheel" in call.args[0] for call in calls.call_args_list))
                 self.assertFalse((destination / "dependency-inputs.json").exists())

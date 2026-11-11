@@ -1,4 +1,4 @@
-"""Install the complete verified RDKit lock into a pip-free environment offline."""
+"""Install the complete verified RDKit lock into an isolated environment offline."""
 
 from tools.container_guard import require_container
 
@@ -6,17 +6,15 @@ require_container()
 
 import argparse
 import subprocess
-import sys
 from pathlib import Path
+
+from acquisition_tool.installer.tools.installer import create_environment
 
 
 def install_runtime(root, wheels, lock):
-    # External pip keeps the installed distribution set equal to the lock.
-    # https://pip.pypa.io/en/stable/topics/python-option/
     runtime = root / "environment"
-    subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(runtime)], check=True)
-    python = runtime / "bin/python"
-    pip = [sys.executable, "-I", "-m", "pip", "--isolated", "--python", str(python)]
+    python = create_environment(runtime)
+    pip = [str(python), "-I", "-B", "-m", "pip", "--isolated"]
     subprocess.run(
         [
             *pip,

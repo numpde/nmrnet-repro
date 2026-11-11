@@ -37,6 +37,8 @@ class DockerClientTests(unittest.TestCase):
         (self.root / "bin").mkdir()
         (self.root / "Makefile").write_text("help:\n")
         (self.root / "requirements/provider-core-install.lock").touch()
+        (self.root / ".work/checker").mkdir(parents=True)
+        (self.root / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
         for name in (
             "container.sh",
             "docker.sh",
@@ -430,9 +432,9 @@ mktemp() {
         self.assertEqual(1, source.count(capture))
         birth = self.root / "birth"
         delayed = (
-            '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
+            '    if [[ $operation == "contained lane" ]]; then\n    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
             '    /bin/mv -- "$FAKE_BIRTH_RECEIPT.pending" "$FAKE_BIRTH_RECEIPT"\n'
-            "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n"
+            "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n    fi\n"
         ) + capture
         helper.write_text(source.replace(capture, delayed, 1))
         process = subprocess.Popen(
@@ -482,9 +484,9 @@ mktemp() {
                 }
                 if fault == "hold":
                     delayed = (
-                        '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
+                        '    if [[ $operation == "contained lane" ]]; then\n    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
                         '    /bin/mv -- "$FAKE_BIRTH_RECEIPT.pending" "$FAKE_BIRTH_RECEIPT"\n'
-                        "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n"
+                        "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n    fi\n"
                     ) + capture
                     helper.write_text(source.replace(capture, delayed, 1))
                 else:
@@ -687,7 +689,8 @@ mktemp() {
     def checker_inputs(self, program):
         """Supply finite inspection/preparation inputs without an engine or Git."""
         (self.root / "repository_checks").mkdir()
-        (self.root / ".work/checker").mkdir(parents=True)
+        self.environment["FAKE_RECORD_INSPECTION"] = "1"
+        (self.root / ".work/checker").mkdir(parents=True, exist_ok=True)
         (self.root / "Makefile").write_text("help:\n")
         image = "sha256:" + "a" * 64
         (self.root / ".work/checker/image-id").write_text(image + "\n")
@@ -1212,8 +1215,9 @@ def _fake_command():
         observed["action"] = "inspect"
         if behavior != "success":
             os.write(2, b"private inspection cause\n")
-        staged.write_text(json.dumps(observed))
-        staged.replace(observation)
+        if os.environ.get("FAKE_RECORD_INSPECTION") == "1" or behavior == "hold":
+            staged.write_text(json.dumps(observed))
+            staged.replace(observation)
         if behavior == "hold":
             while True:
                 time.sleep(60)

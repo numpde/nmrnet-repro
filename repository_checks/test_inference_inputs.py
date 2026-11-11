@@ -20,6 +20,25 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class CapturedInputTests(unittest.TestCase):
+    def test_installer_is_captured_and_precedes_scientific_installation(self):
+        root = Path(__file__).resolve().parents[1]
+        prefix = "host/bootstrap/acquisition/acquisition_tool/installer/"
+        selectors = set((root / "containers/inference/image-inputs.txt").read_text().splitlines())
+        inputs = {
+            prefix + "requirements/installer-release.json",
+            prefix + "tools/container_guard.py",
+            prefix + "tools/installer.py",
+            prefix + "wheels/pip-26.2.2-py3-none-any.whl",
+        }
+        self.assertTrue(inputs <= selectors)
+        rules = set((root / "containers/inference/Dockerfile.dockerignore").read_text().splitlines())
+        self.assertTrue({"!" + path for path in inputs} <= rules)
+        dockerfile = (root / "containers/inference/Dockerfile").read_text()
+        bootstrap = dockerfile.index("python3 -B -m tools.installer")
+        self.assertLess(bootstrap, dockerfile.index("python3 -m pip install"))
+        self.assertLess(bootstrap, dockerfile.index("python3 -B -m tools.provider_environment"))
+        self.assertIn("--python /usr/local/bin/python", dockerfile)
+
     def author_pool(self, fixture, pool):
         wheel = fixture_wheel(pool, "fixture", "1")
         locked(fixture.root / "requirements/inference.lock", [("fixture", "1", [wheel])])

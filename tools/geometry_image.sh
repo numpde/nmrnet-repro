@@ -3,6 +3,11 @@
 # owners. Committed-blob capture follows inference_inputs.sh; science stays offline.
 
 geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Dockerfile.dockerignore
+    host/bootstrap/acquisition/acquisition_tool/__init__.py
+    host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+    host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl
     requirements/preparation.lock tools/artifacts.py tools/container_guard.py
     tools/rdkit_environment.py tools/wheelhouse.py
     requirements/provider-core-native-install.lock requirements/wheelhouse-tool-assets.in tools/streamed_build.sh host/git_stream_sources.py

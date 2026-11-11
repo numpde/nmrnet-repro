@@ -495,12 +495,13 @@ case "$1" in
                     printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot test RDKit dependencies: requirements/preparation.lock must be a regular file without a symlink.'
                     exit 2
                 fi
+                checker_image
                 command+=(--init --tmpfs /runtime:rw,nosuid,nodev,exec,size=512m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
-                    "$image" python3 -B -m tools.rdkit_runtime_tests temporary)
+                    "$checker_image_id" python3 -B -m tools.rdkit_runtime_tests temporary)
                 ;;
             test/integration/wheelhouse/acquisition)
                 command+=(--init
@@ -603,13 +604,14 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly"
                         --mount "type=bind,src=$repository_root/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly")
                 fi
+                checker_image
                 command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
                     --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/input/provider-core-release.json,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
-                    "$image" python3 -B -m tools.provider_test_environment integration)
+                    "$checker_image_id" python3 -B -m tools.provider_test_environment integration)
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
                     command+=(test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py)
                 fi
@@ -671,11 +673,8 @@ case "$1" in
                 require_source_directory tests
                 require_source_directory nmrnet_inference
                 require_source_directory nmrnet_provider
-                unit_image=$image
                 if [[ "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider/deployment ]]; then
                     # Host composition fixtures need the checker-owned Make/Git tools.
-                    checker_image
-                    unit_image=$checker_image_id
                     if [[ ! -f $repository_root/Makefile || -L $repository_root/Makefile \
                         || ! -f $repository_root/requirements/provider-core-install.lock \
                         || -L $repository_root/requirements/provider-core-install.lock ]]; then
@@ -702,6 +701,8 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/tools/provider_api_qualification.sh,dst=/fixture/provider_api_qualification.sh,readonly"
                         --mount "type=bind,src=$repository_root/tools/operator_guidance.sh,dst=/fixture/operator_guidance.sh,readonly")
                 fi
+                checker_image
+                unit_image=$checker_image_id
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"

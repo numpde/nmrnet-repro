@@ -14,3 +14,15 @@
 !checker-wheels/*
 !checker-dependencies/
 !checker-dependencies/*
+!host/
+!host/bootstrap/
+!host/bootstrap/acquisition/
+!host/bootstrap/acquisition/acquisition_tool/
+!host/bootstrap/acquisition/acquisition_tool/installer/
+!host/bootstrap/acquisition/acquisition_tool/installer/tools/
+!host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+!host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+!host/bootstrap/acquisition/acquisition_tool/installer/requirements/
+!host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+!host/bootstrap/acquisition/acquisition_tool/installer/wheels/
+!host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl

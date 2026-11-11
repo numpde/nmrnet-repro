@@ -13,7 +13,6 @@ import argparse
 import json
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -38,7 +37,7 @@ def _install_core(python, lock, runtime_wheels, evidence_root):
             raise ValueError(
                 f"Cannot extend interpreter: installed {name}=={installed[name]} differs from core lock {version}; review the locks before changing installed versions."
             )
-    pip = [sys.executable, "-I", "-m", "pip", "--isolated", "--python", str(python)]
+    pip = [str(python), "-I", "-B", "-m", "pip", "--isolated"]
     with tempfile.TemporaryDirectory(prefix="provider-install-") as temporary:
         report = Path(temporary) / "runtime-install.json"
         subprocess.run(
@@ -86,8 +85,10 @@ def _install_binding(python, source):
 
 def install_provider(root, source, install_lock, runtime_wheels):
     root.mkdir(mode=0o755)
-    python = root / "environment/bin/python"
-    subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(python.parent.parent)], check=True)
+    # Existing scientific images extend their interpreter after build-only SDK files are removed.
+    from acquisition_tool.installer.tools.installer import create_environment  # noqa: PLC0415
+
+    python = create_environment(root / "environment")
     _install_core(python, install_lock, runtime_wheels, root)
     _install_binding(python, source)
     return python

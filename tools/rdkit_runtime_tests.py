@@ -12,8 +12,6 @@ import sysconfig
 import tempfile
 from pathlib import Path
 
-from tools.rdkit_environment import install_runtime
-
 
 def prepare_inputs(root):
     """Prepare test inputs while runtime installation reads the shared wheelhouse."""
@@ -60,6 +58,9 @@ def run_installed_tests(suite):
 
 
 def run_tests():
+    # Recorded-image checks do not retain the build-only SDK installer helper.
+    from tools.rdkit_environment import install_runtime  # noqa: PLC0415
+
     sys.stdout.write(f"RDKit dependency checks: Python {sys.version.split()[0]}, {sysconfig.get_platform()}\n")
     sys.stdout.flush()
     # Native extensions require executable mappings; the launcher grants only
