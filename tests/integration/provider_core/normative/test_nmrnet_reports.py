@@ -587,16 +587,18 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     elif refusal == "encoding":
                         headers += ((b"content-encoding", b"PRIVATE_ENCODING"),)
                     client.status, client.headers = status, headers
-                    with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client):
-                        with private_source_directory() as (root, directory):
-                            with self.assertRaises(UploadFailed) as caught:
-                                if file_output:
-                                    await owner.acquire_file(
-                                        api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1
-                                    )
-                                else:
-                                    await owner.acquire(api.member.upload_ref)
-                            self.assertEqual(list(Path(root).iterdir()), [])
+                    with (
+                        patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client),
+                        private_source_directory() as (root, directory),
+                    ):
+                        with self.assertRaises(UploadFailed) as caught:
+                            if file_output:
+                                await owner.acquire_file(
+                                    api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1
+                                )
+                            else:
+                                await owner.acquire(api.member.upload_ref)
+                        self.assertEqual(list(Path(root).iterdir()), [])
                     failure = caught.exception
                     rendered = json.dumps(self.receive(failure))
                     self.assertIsInstance(failure.cause, ExchangeFailed)

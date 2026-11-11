@@ -274,9 +274,11 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         reader, writer = await operation.start()
         client = GeometryClient(reader, writer, allocation=operation.allocation, operation_seconds=2, native=operation)
         try:
-            with patch.object(writer, "close", side_effect=OSError("Authored close failure")):
-                with self.assertRaises(NativeWorkerExited) as caught:
-                    await client.read(b"H 0 0 0\n", source_format="table", source_unit="angstrom", selection=None)
+            with (
+                patch.object(writer, "close", side_effect=OSError("Authored close failure")),
+                self.assertRaises(NativeWorkerExited) as caught,
+            ):
+                await client.read(b"H 0 0 0\n", source_format="table", source_unit="angstrom", selection=None)
             self.assertIs(caught.exception.native_operation, operation)
             self.assertEqual(17, operation.session.original_exit.returncode)
             self.assertIsInstance(caught.exception.__cause__, BaseExceptionGroup)
