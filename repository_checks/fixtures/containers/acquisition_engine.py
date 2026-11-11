@@ -124,6 +124,8 @@ class AcquisitionEngine:
     def remove(self, arguments):
         if len(arguments) != 2 or arguments[0] != "--force":
             reject("removal requires an exact forced identity")
+        if os.environ.get("NMRNET_FAKE_ACQ_REMOVE_FAIL") == self.containers[arguments[1]]["role"]:
+            return 37
         del self.containers[arguments[1]]
         self.save()
         return 0

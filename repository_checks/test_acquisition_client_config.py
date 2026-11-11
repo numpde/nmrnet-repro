@@ -368,6 +368,56 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertEqual(payload, result.stdout)
                 self.assertEqual(result.returncode == 0, note in result.stderr)
 
+    def test_scope_success_note_requires_worker_success_and_retirement(self):
+        note = "Next, build the image."
+        payload = '{"fixture":"complete"}\n'
+        for worker_status, failed_role, receipt_name in (
+            ("0", "", "success"),
+            ("37", "", "worker-failed"),
+            ("0", "worker-1", "removal-failed"),
+        ):
+            with self.subTest(worker=worker_status, removal=failed_role):
+                receipt = self.root / receipt_name
+                before = len(self.fixture.calls())
+                result = self.fixture.run(
+                    "acquisition_run.sh",
+                    "--retired-receipt",
+                    str(receipt),
+                    "--success-note",
+                    note,
+                    "--image",
+                    self.worker_image,
+                    "--",
+                    "--read-only",
+                    "--",
+                    "python3",
+                    "-c",
+                    "pass",
+                    additions=self.environment
+                    | {
+                        "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                        "NMRNET_FAKE_WORKER_STATUS": worker_status,
+                        "NMRNET_FAKE_ACQ_REMOVE_FAIL": failed_role,
+                        "NMRNET_FAKE_WORKER_STDOUT": payload,
+                    },
+                    timeout=30,
+                )
+                self._remember(result.stderr)
+                self.assertEqual(payload, result.stdout)
+                self.assertEqual(worker_status == "0" and not failed_role, result.returncode == 0)
+                self.assertEqual(result.returncode == 0, note in result.stderr)
+                self.assertEqual(not failed_role, receipt.exists())
+                if not failed_role:
+                    self.assertEqual("retired\n", receipt.read_text())
+                if failed_role:
+                    self.assertIn("Cannot confirm acquisition retirement", result.stderr)
+                    calls = self.fixture.calls()[before:]
+                    create = [call["arguments"] for call in calls if call["arguments"][:1] == ["create"]][-1]
+                    self.retained.add(Path(create[create.index("--cidfile") + 1]).parent.parent)
+                    registry = json.loads((self.root / "acquisition-containers.json").read_text())
+                    self.assertEqual({"1" * 64, "2" * 64, "3" * 64}, set(registry))
+                    self.assertEqual(1, sum(call["arguments"] == ["rm", "--force", "3" * 64] for call in calls))
+
     def test_every_engine_phase_uses_private_client_and_preserves_live_worker_bytes(self):
         poison = self.root / "poison"
         poison.mkdir()
