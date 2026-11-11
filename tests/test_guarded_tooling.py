@@ -89,7 +89,8 @@ class GuardedToolingTests(unittest.TestCase):
         for module in MODULES:
             with self.subTest(module=module):
                 result = subprocess.run(
-                    [sys.executable, "-B", "-c", f"import tools.{module}"],
+                    [str(Path(sys.base_prefix) / "bin/python") if module == "rdkit_environment" else sys.executable,
+                     "-B", "-c", f"import tools.{module}"],
                     env={**os.environ, "NMRNET_IN_CONTAINER": "1"},
                     text=True,
                     capture_output=True,

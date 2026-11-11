@@ -512,7 +512,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements,dst=/input,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
-                    "$checker_image_id" python3 -B -m unittest -v tests.test_shared_acquisition_real)
+                    "$checker_image_id" python3 -B -m unittest -v tests.integration.shared_acquisition)
                 ;;
             test/unit/packages|test/unit/packages/wheelhouse|test/unit/packages/images)
                 require_source_directory tools
