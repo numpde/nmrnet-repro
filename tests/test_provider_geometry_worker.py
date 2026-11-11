@@ -704,6 +704,22 @@ class GeometryFailureFramingTests(unittest.TestCase):
                     self.assertIn("[Batch reader diagnostics truncated]", actual["diagnostic"])
                     self.assertLess(len(actual["diagnostic"]), 8300)
 
+    def test_output_size_rejection_without_reader_sections_keeps_null_diagnostic(self):
+        request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        records = [
+            {"source_record_number": 3, "diagnostic": None, "request_base64": "x" * MAX_FRAME_BYTES},
+            {"source_record_number": 1, "diagnostic": ""},
+        ]
+        connection = RecordingConnection(frame(request | {"allocation": ALLOCATION}))
+        with patch("nmrnet_provider.geometry_worker.read_source", return_value=records):
+            serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
+        self.assertEqual(1, len(connection.sent))
+        reply = document(connection.sent[0][4:])
+        self.assertEqual("rejected", reply["kind"])
+        self.assertIsNone(reply["diagnostic"])
+        self.assertNotIn("records", reply)
+        self.assertIn("complete output", reply["message"])
+
     def test_output_size_rejection_keeps_ordered_private_reader_reasons(self):
         request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
         records = [

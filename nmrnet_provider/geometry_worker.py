@@ -31,12 +31,15 @@ def _reader_diagnostic_summary(records):
     JSON-escaped Unicode leaves room for the safe size error. Normal replies keep
     each reader diagnostic verbatim; this summary marks any omitted evidence.
     """
-    diagnostic = "\n".join(
+    sections = [
         f"Record {record['source_record_number']}:\n{record['diagnostic']}" for record in records if record["diagnostic"]
-    )
+    ]
+    if not sections:
+        return None
+    diagnostic = "\n".join(sections)
     if len(diagnostic) > 8192:
         return diagnostic[:8192] + "\n[Batch reader diagnostics truncated]"
-    return diagnostic or None
+    return diagnostic
 
 
 def serve_geometry_connection(connection, *, allocation, io_seconds):
