@@ -189,9 +189,7 @@ def shell_findings(path, source):
                     enabled = False
                 elif value.startswith(_ENV + "=") and (
                     (entrypoint and position > 0 and prefix[position - 1] == "--env")
-                    or (
-                        not entrypoint and (position == 0 or prefix[position - 1] != "--env")
-                    )
+                    or (not entrypoint and (position == 0 or prefix[position - 1] != "--env"))
                 ):
                     enabled = value == _ENV + "=1"
             isolated = _needs_flag(arguments, True)
