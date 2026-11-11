@@ -303,11 +303,20 @@ build=("${engine[@]}" build --builder default --quiet --network none --pull=fals
     --label "io.nmrnet-repro.checker-inputs=$input_id"
     --file containers/checker/Dockerfile -)
 if "$print_command"; then run "${build[@]}"; exit; fi
-python3 -I -S - "$capture/context" "$capture" "${inputs[@]}" <<'PY'
+tool_line=$(grep '^https://github.com/numpde/nmr-provider-tools/releases/download/' "$capture/context/requirements/wheelhouse-tool-assets.in")
+tool_url=${tool_line%%#sha256=*}; tool_hash=${tool_line##*#sha256=}; tool_name=${tool_url##*/}
+[[ $tool_name =~ ^wheelhouse-tool-[0-9]+\.[0-9]+\.[0-9]+\.pyz$ && $tool_hash =~ ^[0-9a-f]{64}$ ]] || exit 2
+[[ -f $wheelhouse_directory/$tool_name && ! -L $wheelhouse_directory/$tool_name ]] || {
+    printf '%s\n' 'Checker stream tool must be a regular file in the selected wheelhouse.' >&2; exit 2;
+}
+observed=$(sha256sum -- "$wheelhouse_directory/$tool_name")
+[[ ${observed%% *} == "$tool_hash" ]] || { printf '%s\n' 'Checker stream tool differs from its pin.' >&2; exit 2; }
+python3 -I -S - "$capture/context" "$capture" "$tool_name" "$tool_hash" "${inputs[@]}" <<'PY'
 import hashlib, json, pathlib, sys
 context, output = map(pathlib.Path, sys.argv[1:3])
+tool_name, tool_hash = sys.argv[3:5]
 sources = []
-for name in sys.argv[3:]:
+for name in sys.argv[5:]:
     path = context / name
     sources.append({'path': str(path), 'destination': name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                     'executable': bool(path.stat().st_mode & 0o111)})
@@ -323,16 +332,11 @@ sources.append({'path': str(path), 'destination': 'checker-dependencies/.complet
                 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'executable': bool(path.stat().st_mode & 0o111)})
 (output / 'sources.json').write_text(json.dumps(sources))
 wheel = next(package for package in declaration['packages'] if package['name'] == 'ruff')
-(output / 'manifest.json').write_text(json.dumps([{'directory': 'checker-wheels', 'filename': wheel['file'], 'sha256': wheel['sha256']}]))
+(output / 'manifest.json').write_text(json.dumps([
+    {'directory': 'checker-wheels', 'filename': wheel['file'], 'sha256': wheel['sha256']},
+    {'directory': 'checker-tools', 'filename': tool_name, 'sha256': tool_hash},
+]))
 PY
-tool_line=$(grep '^https://github.com/numpde/nmr-provider-tools/releases/download/' "$capture/context/requirements/wheelhouse-tool-assets.in")
-tool_url=${tool_line%%#sha256=*}; tool_hash=${tool_line##*#sha256=}; tool_name=${tool_url##*/}
-[[ $tool_name =~ ^wheelhouse-tool-[0-9]+\.[0-9]+\.[0-9]+\.pyz$ && $tool_hash =~ ^[0-9a-f]{64}$ ]] || exit 2
-[[ -f $wheelhouse_directory/$tool_name && ! -L $wheelhouse_directory/$tool_name ]] || {
-    printf '%s\n' 'Checker stream tool must be a regular file in the selected wheelhouse.' >&2; exit 2;
-}
-observed=$(sha256sum -- "$wheelhouse_directory/$tool_name")
-[[ ${observed%% *} == "$tool_hash" ]] || { printf '%s\n' 'Checker stream tool differs from its pin.' >&2; exit 2; }
 capture_borrowed=true
 if inference_native 'checker image build' "$build_seconds" image-id bash -o pipefail -c '
     tool=$1 pool=$2 sources=$3 manifest=$4; shift 4

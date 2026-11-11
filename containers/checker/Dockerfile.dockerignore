@@ -14,6 +14,8 @@
 !checker-wheels/*
 !checker-dependencies/
 !checker-dependencies/*
+!checker-tools/
+!checker-tools/*
 !host/
 !host/bootstrap/
 !host/bootstrap/acquisition/
