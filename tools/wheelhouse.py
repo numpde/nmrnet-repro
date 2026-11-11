@@ -354,8 +354,11 @@ def main():
         parser.error("locked wheel acquisition belongs to tools.wheelhouse_acquire; download accepts only --profile shared-tool")
     if args.action == "report":
         if (
-            args.profile is not None or args.source is not None or args.assets is not None
-            or args.lock is None or len(args.lock) != 1
+            args.profile is not None
+            or args.source is not None
+            or args.assets is not None
+            or args.lock is None
+            or len(args.lock) != 1
         ):
             parser.error("report requires one lock and no profile, source or assets")
         if args.lock_sha256 is None or not re.fullmatch(r"[0-9a-f]{64}", args.lock_sha256):

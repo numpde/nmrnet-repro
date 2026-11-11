@@ -151,16 +151,27 @@ class DeploymentBundleTests(unittest.TestCase):
             require_old_api_route(bundle, route)
             with self.assertRaises(ConfigurationRejected):
                 require_old_api_route(bundle, route.parent / "route-store")
-            for malformed in ([], {}, {"services": []}, {"services": {}}, {"services": {"api": []}},
-                              {"services": {"api": {}}}, {"services": {"api": {"volumes": ["invalid"]}}}):
+            for malformed in (
+                [],
+                {},
+                {"services": []},
+                {"services": {}},
+                {"services": {"api": []}},
+                {"services": {"api": {}}},
+                {"services": {"api": {"volumes": ["invalid"]}}},
+            ):
                 with self.subTest(plan=malformed):
                     (bundle / "compose.json").write_text(json.dumps(malformed))
                     with self.assertRaisesRegex(ConfigurationRejected, "selected recipe does not grant"):
                         require_old_api_route(bundle, route)
                     self.assertEqual("retained", sentinel.read_text())
             grant = {"type": "bind", "source": str(route), "target": "/route", "read_only": False}
-            for grants in ([grant | {"type": "volume"}], [grant | {"read_only": True}],
-                           [grant | {"read_only": None}], [grant, grant]):
+            for grants in (
+                [grant | {"type": "volume"}],
+                [grant | {"read_only": True}],
+                [grant | {"read_only": None}],
+                [grant, grant],
+            ):
                 with self.subTest(grants=grants):
                     (bundle / "compose.json").write_text(json.dumps({"services": {"api": {"volumes": grants}}}))
                     with self.assertRaises(ConfigurationRejected):

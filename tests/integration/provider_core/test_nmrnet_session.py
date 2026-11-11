@@ -256,7 +256,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["O"] * 128, "coordinates": [[0, 0, 0]] * 128}).encode()
         geometry = replace(
             # repo-check: allow-tuple-generator -- The fixture preserves tuple-valued source positions for each ordered geometry; proof=nmrnet_provider/input_geometry.py::PreparedGeometry.
-            prepare_json(raw), source_position_kind="atom_id", source_positions=tuple(2**53 - 1 - index for index in range(128))
+            prepare_json(raw),
+            source_position_kind="atom_id",
+            source_positions=tuple(2**53 - 1 - index for index in range(128)),
         )
         # repo-check: allow-tuple-generator -- PreparedJobInput freezes ordered geometries as a tuple; proof=nmrnet_provider/prepared_input.py::PreparedJobInput.
         geometries = tuple(replace(geometry, source_record_number=index) for index in range(1, 113))

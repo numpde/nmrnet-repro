@@ -35,19 +35,29 @@ class OperatorInputTests(unittest.TestCase):
         environment = dict(os.environ)
         environment["NMRNET_LOG_LEVEL_INPUT"] = "DEBUG"
         environment["LOG_LEVEL"] = "WARNING"
-        for name in ("MAKEFLAGS", "MAKEOVERRIDES", "MFLAGS"):
-            if name in environment:
-                del environment[name]
+        environment = {key: value for key, value in environment.items() if key not in {"MAKEFLAGS", "MAKEOVERRIDES", "MFLAGS"}}
         for selected in (None, "", "INFO", "DEBUG", "WARNING", "TRACE"):
             with self.subTest(selected=selected):
                 command = [
-                    "make", "--no-print-directory", "--file", "/workspace/Makefile",
-                    "--eval", recipe, "logging-probe", "MAKECMDGOALS=help",
+                    "make",
+                    "--no-print-directory",
+                    "--file",
+                    "/workspace/Makefile",
+                    "--eval",
+                    recipe,
+                    "logging-probe",
+                    "MAKECMDGOALS=help",
                 ]
                 if selected is not None:
                     command.append("LOG_LEVEL=" + selected)
                 result = subprocess.run(
-                    command, cwd="/workspace", env=environment, capture_output=True, text=True, timeout=5, check=False,
+                    command,
+                    cwd="/workspace",
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
                 )
                 if selected in ("", "TRACE"):
                     self.assertNotEqual(0, result.returncode)

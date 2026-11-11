@@ -11,6 +11,7 @@ import tempfile
 import threading
 import unittest
 from contextlib import contextmanager, redirect_stderr
+from functools import partial
 from pathlib import Path
 from unittest.mock import patch
 
@@ -114,30 +115,36 @@ class SharedAcquisitionTests(unittest.TestCase):
     def test_optional_declarations_keep_source_and_stream_snapshots_distinct(self):
         source = self.root / "scientific-source.json"
         source.write_bytes(b"scientific source identity")
+
+        def record_present(label, observations, path, _pool):
+            observations.append((label, path.read_bytes()))
+            return True
+
         for declarations in (None, [self.declaration]):
             with self.subTest(declarations=declarations):
                 observed = []
-
-                def scientific_present(path, pool):
-                    observed.append(("source", path.read_bytes()))
-                    return True
-
-                def stream_present(path, pool):
-                    observed.append(("stream", path.read_bytes()))
-                    return True
-
                 with (
                     patch.object(wheelhouse_acquire, "missing_wheel_locks", return_value=[]),
-                    patch.object(wheelhouse_acquire, "scientific_source_present", side_effect=scientific_present),
-                    patch.object(wheelhouse_acquire, "shared_asset_present", side_effect=stream_present),
+                    patch.object(
+                        wheelhouse_acquire, "scientific_source_present", side_effect=partial(record_present, "source", observed)
+                    ),
+                    patch.object(
+                        wheelhouse_acquire, "shared_asset_present", side_effect=partial(record_present, "stream", observed)
+                    ),
                     patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
                 ):
                     wheelhouse_acquire.acquire(
-                        [self.lock], self.pool, self.assets, self.tool_assets,
-                        source=source, declarations=declarations, stream_assets=self.tool_assets,
+                        [self.lock],
+                        self.pool,
+                        self.assets,
+                        self.tool_assets,
+                        source=source,
+                        declarations=declarations,
+                        stream_assets=self.tool_assets,
                     )
                 self.assertEqual(
-                    [("source", b"scientific source identity"), ("stream", self.tool_assets.read_bytes())], observed,
+                    [("source", b"scientific source identity"), ("stream", self.tool_assets.read_bytes())],
+                    observed,
                 )
                 prepare.assert_not_called()
 

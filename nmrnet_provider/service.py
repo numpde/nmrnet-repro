@@ -61,7 +61,7 @@ class ServicePolicy:
             self.settle_seconds,
             self.api_backoff_max_seconds,
         ):
-            if not (type(value) in (int, float) and math.isfinite(value) and 0 < value):
+            if not (type(value) in (int, float) and math.isfinite(value) and value > 0):
                 raise ValueError(
                     "Cannot configure NMRNet service: cadence, backoff, drain and settlement waits must be finite positive seconds."
                 )

@@ -24,7 +24,7 @@ class AdmissionPolicy:
 
     def __post_init__(self):
         paging_query(limit=self.page_size, cursor=None)
-        if not (type(self.maximum_pages) is int and 1 <= self.maximum_pages):
+        if not (type(self.maximum_pages) is int and self.maximum_pages >= 1):
             raise ValueError("Cannot configure service admission: maximum_pages must be a positive integer.")
 
 

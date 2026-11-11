@@ -89,7 +89,7 @@ def _selected_output(value):
 
 def require_preparation_settings(*, generation_settings, generation_seconds, max_worker_calls, seconds):
     """Admit trusted budgets before startup acquires source or worker resources."""
-    if not (type(max_worker_calls) is int and 0 < max_worker_calls):
+    if not (type(max_worker_calls) is int and max_worker_calls > 0):
         raise ValueError("Cannot configure input preparation: the worker call limit must be a positive integer.")
     require_seconds(seconds)
     require_generation_deadline(generation_settings, generation_seconds)

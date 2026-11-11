@@ -31,9 +31,7 @@ def _reader_diagnostic_summary(records):
     JSON-escaped Unicode leaves room for the safe size error. Normal replies keep
     each reader diagnostic verbatim; this summary marks any omitted evidence.
     """
-    sections = [
-        f"Record {record['source_record_number']}:\n{record['diagnostic']}" for record in records if record["diagnostic"]
-    ]
+    sections = [f"Record {record['source_record_number']}:\n{record['diagnostic']}" for record in records if record["diagnostic"]]
     if not sections:
         return None
     diagnostic = "\n".join(sections)

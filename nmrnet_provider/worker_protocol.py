@@ -25,7 +25,7 @@ class WorkerProtocolError(ValueError):
 
 
 def require_seconds(seconds):
-    if not (type(seconds) in (int, float) and math.isfinite(seconds) and 0 < seconds):
+    if not (type(seconds) in (int, float) and math.isfinite(seconds) and seconds > 0):
         raise ValueError("Worker operation duration must be finite and positive")
 
 

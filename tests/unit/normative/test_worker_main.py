@@ -68,13 +68,16 @@ sys.stdout.write(child.stdout)
             with self.subTest(level=level):
                 environment = dict(os.environ)
                 if level is None:
-                    if "NMRNET_LOG_LEVEL" in environment:
-                        del environment["NMRNET_LOG_LEVEL"]
+                    environment = {key: value for key, value in environment.items() if key != "NMRNET_LOG_LEVEL"}
                 else:
                     environment["NMRNET_LOG_LEVEL"] = level
                 result = subprocess.run(
-                    [sys.executable, "-B", "-c", script], env=environment,
-                    capture_output=True, text=True, timeout=5, check=False,
+                    [sys.executable, "-B", "-c", script],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
                 )
                 self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertEqual("", result.stderr)

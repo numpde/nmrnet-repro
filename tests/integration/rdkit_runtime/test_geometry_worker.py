@@ -98,7 +98,10 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
         # qualification.json. Matching these bytes reuses its native C-prediction
         # evidence without rerunning shift inference just to test ZIP packaging.
         self.assertEqual(
-            ['d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06', 'a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf'],
+            [
+                "d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06",
+                "a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf",
+            ],
             [hashlib.sha256(geometry.request_bytes).hexdigest() for geometry in geometries],
         )
         for geometry, name in zip(geometries, ("butane_supplied_a", "butane_supplied_b"), strict=True):
