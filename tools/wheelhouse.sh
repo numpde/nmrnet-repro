@@ -87,9 +87,13 @@ for input in "${inputs[@]}"; do
     fi
 done
 if [[ "$1" == download ]]; then
+    # This launcher owns deferred selection; only the normalized parent grant is inherited.
+    unset interface
     source "$repository_root/tools/acquisition_interface.sh"
     source "$repository_root/tools/inference_native.sh"
-    if "$print_command" || [[ -n ${NMRNET_NETWORK_INTERFACE_INPUT-} || ${NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN-} == 'command line' ]]; then
+    if "$print_command" \
+        || { [[ -v NMRNET_NETWORK_INTERFACE_INPUT ]] && [[ -n $NMRNET_NETWORK_INTERFACE_INPUT ]]; } \
+        || { [[ -v NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN ]] && [[ $NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN == 'command line' ]]; }; then
         select_acquisition_interface
     fi
     if ! "$print_command"; then

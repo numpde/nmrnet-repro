@@ -9,17 +9,34 @@ receipt=
 while [[ $# -gt 0 ]]; do
     case $1 in
         --print) print_command=true; shift ;;
-        --success-note) note=$2; shift 2 ;;
-        --retired-receipt) receipt=$2; shift 2 ;;
-        --image) image=$2; shift 2; break ;;
+        --success-note)
+            if (( $# < 2 )); then
+                printf '%s\n' 'Acquisition --success-note requires a value.' >&2
+                exit 2
+            fi
+            note=$2; shift 2 ;;
+        --retired-receipt)
+            if (( $# < 2 )); then
+                printf '%s\n' 'Acquisition --retired-receipt requires a value.' >&2
+                exit 2
+            fi
+            receipt=$2; shift 2 ;;
+        --image)
+            if (( $# < 2 )); then
+                printf '%s\n' 'Acquisition requires an explicit worker image.' >&2
+                exit 2
+            fi
+            image=$2; shift 2; break ;;
         *) printf '%s\n' 'Acquisition requires an explicit worker image.' >&2; exit 2 ;;
     esac
 done
-[[ -n ${image-} && ${1-} == -- ]] || exit 2
+(( $# > 0 )) || exit 2
+[[ -n $image && $1 == -- ]] || exit 2
 shift
 grants=()
 while [[ $# -gt 0 && $1 != -- ]]; do grants+=("$1"); shift; done
-[[ ${1-} == -- ]] || exit 2
+(( $# > 0 )) || exit 2
+[[ $1 == -- ]] || exit 2
 shift
 app=("$@")
 [[ ${#app[@]} -gt 0 ]] || exit 2
