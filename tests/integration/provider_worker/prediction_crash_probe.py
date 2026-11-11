@@ -315,7 +315,9 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["controller"]:
         asyncio.run(controller())
     elif sys.argv[1:] == ["oom-kills"]:
-        print(oom_kills())
+        count = str(oom_kills())
+        sys.stdout.write(count)
+        sys.stdout.write("\n")
     elif sys.argv[1:2] == ["worker"]:
         parser = argparse.ArgumentParser()
         parser.add_argument("--session-fd", type=int, required=True)

@@ -5,6 +5,7 @@ import os
 import sys
 
 if sys.argv[1:] == ["-u", "+%s"]:
-    print("978393600")
+    sys.stdout.write("978393600")
+    sys.stdout.write("\n")
 else:
     os.execv("/bin/date", ["date", *sys.argv[1:]])

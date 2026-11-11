@@ -21,7 +21,9 @@ def fake_docker():
     with Path(os.environ["FAKE_CONTEXT_CALLS"]).open("a") as stream:
         stream.write(" ".join(arguments) + "\n")
     if arguments[:2] == ["context", "ls"]:
-        print(os.environ.get("FAKE_CONTEXT_NAMES", "default\nlocal-a\nlocal-b\nremote"))
+        names = os.environ.get("FAKE_CONTEXT_NAMES", "default\nlocal-a\nlocal-b\nremote")
+        sys.stdout.write(names)
+        sys.stdout.write("\n")
         return 0
     if (
         arguments[:2] != ["context", "inspect"]
@@ -42,7 +44,8 @@ def fake_docker():
         endpoint = "ssh://example.invalid"
     else:
         return 1
-    print(endpoint)
+    sys.stdout.write(endpoint)
+    sys.stdout.write("\n")
     return 0
 
 

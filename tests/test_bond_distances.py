@@ -6,6 +6,7 @@ require_container()
 
 import json
 import math
+import sys
 import unittest
 from pathlib import Path
 
@@ -34,11 +35,13 @@ class SmallMoleculeBondDistanceTests(unittest.TestCase):
                     distance = math.dist(coordinates[left], coordinates[right])
                     expected = experimental_angstrom[molecule["name"]][atoms[right]]
                     tolerance = tolerance_angstrom[atoms[right]]
-                    print(
+                    message = (
                         f"{molecule['name']} {left}:{atoms[left]}–{right}:{atoms[right]} "
-                        f"{distance:.6f}; experimental {expected:.3f} ± {tolerance:.2f} Å",
-                        flush=True,
+                        f"{distance:.6f}; experimental {expected:.3f} ± {tolerance:.2f} Å"
                     )
+                    sys.stdout.write(message)
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
                     self.assertAlmostEqual(
                         distance,
                         expected,

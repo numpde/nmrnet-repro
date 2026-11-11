@@ -463,7 +463,9 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
         self.assertEqual(facts["pids.max"], "64")
         self.assertGreater(int(facts["memory.peak"]), 0)
         self.assertLessEqual(int(facts["memory.peak"]), int(facts["memory.max"]))
-        print("Observed release-model qualification resources: " + json.dumps(facts, sort_keys=True))
+        message = "Observed release-model qualification resources: " + json.dumps(facts, sort_keys=True)
+        sys.stdout.write(message)
+        sys.stdout.write("\n")
         return facts
 
     def test_real_models_match_all_64_reference_positions_without_task_setup(self):
