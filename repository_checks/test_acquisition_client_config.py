@@ -160,7 +160,7 @@ class AcquisitionClientTests(unittest.TestCase):
         identifier = int(path.read_text().splitlines()[-1])
         group = os.getpgid(identifier)
         self.assertIsNotNone(self._anchor(group, process.pid))
-        # silent-defaults: allow-contract -- Initialize a caller registry only after its live native anchor matches; rescue rechecks each recorded anchor before admitting it; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_attach_interrupt_finishes_without_draining_full_stderr
+        # silent-defaults: allow-contract -- Initialize a caller registry only after its live native anchor matches; rescue rechecks each recorded anchor before admitting it; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_scope_attach_interrupt_finishes_without_draining_full_stderr
         self.observed.setdefault(process.pid, set()).add(group)
         return identifier
 
@@ -177,7 +177,7 @@ class AcquisitionClientTests(unittest.TestCase):
             time.sleep(0.01)
         admitted = set()
         paths = set()
-        # silent-defaults: allow-contract -- An absent caller entry supplies no previously observed anchors to admit; each recorded anchor is rechecked before rescue; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_attach_interrupt_finishes_without_draining_full_stderr
+        # silent-defaults: allow-contract -- An absent caller entry supplies no previously observed anchors to admit; each recorded anchor is rechecked before rescue; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_scope_attach_interrupt_finishes_without_draining_full_stderr
         for group in self.observed.get(process.pid, set()):
             arguments = self._anchor(group, process.pid)
             if arguments is not None:
@@ -245,17 +245,6 @@ class AcquisitionClientTests(unittest.TestCase):
             drained += chunk
         self.assertEqual(prefill, drained, msg="actual cancellation started another public reporter")
         self._remember()
-
-    def _wait_report(self, process, scratch):
-        source = (self.root / "tools/docker.sh").read_text()
-        start = "if inference_native 'acquisition cleanup reporting' untimed stdio bash -eu -c '"
-        self.assertEqual(1, source.count(start))
-        program = source.split(start)[1].split("' bash ", 1)[0].encode()
-        pending = (
-            f"Cannot confirm acquisition worker removal: its container ID was not admitted; evidence remains in {scratch}.\n"
-        )
-        expected = [b"bash", b"-eu", b"-c", program, b"bash", pending.encode(), b"", b"0", str(scratch).encode(), b"0", b""]
-        return self._observe_reporter(process, expected)
 
     def _observe_reporter(self, process, expected):
         deadline = time.monotonic() + 5
@@ -356,25 +345,6 @@ class AcquisitionClientTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([["image", "pull", self.worker_image]], [call["arguments"] for call in self.fixture.calls()])
-
-    def test_next_action_keeps_json_stdout_and_requires_successful_cleanup(self):
-        note = "Next, build the image."
-        payload = '{"fixture":"complete"}\n'
-        for worker_status, remove_status in (("0", "0"), ("37", "0"), ("0", "37")):
-            with self.subTest(worker=worker_status, removal=remove_status):
-                result = self.caller(
-                    "--success-note",
-                    note,
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions={
-                        "NMRNET_FAKE_WORKER_STATUS": worker_status,
-                        "NMRNET_FAKE_REMOVE_STATUS": remove_status,
-                        "NMRNET_FAKE_WORKER_STDOUT": payload,
-                    },
-                )
-                self.assertEqual(payload, result.stdout)
-                self.assertEqual(result.returncode == 0, note in result.stderr)
 
     def test_scope_success_note_requires_worker_success_and_retirement(self):
         note = "Next, build the image."
@@ -678,18 +648,6 @@ class AcquisitionClientTests(unittest.TestCase):
                 scratch = Path((self.root / "proxy-cid-path").read_text()).parent
                 self.assertEqual(b"private native fixture output\n", (scratch / "readiness/logs.stderr").read_bytes())
 
-    def test_unknown_removal_startup_retains_all_state_and_starts_no_next_owner(self):
-        self._intercept("mv")
-        result = self.caller("run", "sha256:" + "b" * 64, additions={"NMRNET_ACQUISITION_READY_FAULT": "1"})
-        self.assertEqual(1, result.returncode, msg=result.stderr)
-        self.assertTrue((self.root / "ready-fault").is_file())
-        self.assertIn("Cannot confirm acquisition native client retirement", result.stderr)
-        self.assertFalse(any(call["arguments"][0] == "rm" for call in self.fixture.calls()))
-        scratch = Path((self.root / "worker-cid-path").read_text()).parent
-        self.assertEqual(b"c" * 64 + b"\n", (scratch / "proxy.cid").read_bytes())
-        self.assertEqual(b"d" * 64 + b"\n", (scratch / "worker.cid").read_bytes())
-        self.assertTrue(Path(self.fixture.calls()[-1]["client_config"]["path"]).is_dir())
-
     def test_scope_removal_startup_failure_retains_all_roles(self):
         self._intercept("mv")
         receipt = self.root / "scope-retired"
@@ -753,17 +711,6 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual(b"damaged-started-worker\n", receipt.read_bytes())
         self.assertTrue(receipt.parent.is_dir())
 
-    def test_actual_attach_interrupt_finishes_without_draining_full_stderr(self):
-        process, descriptor, prefill = self._start({"NMRNET_FAKE_HOLD_ATTACH": "1"}, full_stderr=True)
-        client = self._observe_client(process, self.root / "attach-ready")
-        self._finish_full_pipe(process, descriptor, prefill, signal.SIGINT, 130)
-        self.assertEqual(str(client), (self.root / "attach-retired").read_text())
-        self.assertFalse(Path("/proc", str(client)).exists())
-        self.assertEqual(
-            [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
-            [call["arguments"] for call in self.fixture.calls() if call["arguments"][0] == "rm"],
-        )
-
     def test_scope_attach_interrupt_finishes_without_draining_full_stderr(self):
         receipt = self.root / "scope-retired"
         command = [
@@ -804,27 +751,6 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual("retired\n", receipt.read_text())
         self.assertFalse(scratch.exists())
         self.assertTrue(all(not Path(call["client_config"]["path"]).parent.exists() for call in calls))
-
-    def test_actual_cleanup_report_signals_finish_before_stderr_drain(self):
-        for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
-            with self.subTest(interrupt=interrupt):
-                (self.root / "attach-completed").unlink(missing_ok=True)
-                process, descriptor, prefill = self._start(
-                    {
-                        "NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT": "damaged-started-worker",
-                    },
-                    full_stderr=True,
-                )
-                deadline = time.monotonic() + 5
-                while not (self.root / "attach-completed").exists() and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                self.assertTrue((self.root / "attach-completed").exists())
-                scratch = Path((self.root / "worker-cid-path").read_text()).parent
-                publisher = self._wait_report(process, scratch)
-                self._finish_full_pipe(process, descriptor, prefill, interrupt, status)
-                self.assertFalse(Path("/proc", str(publisher)).exists())
-                self.assertEqual(b"damaged-started-worker\n", (scratch / "worker.cid").read_bytes())
-                self.assertFalse(Path(self.fixture.calls()[-1]["client_config"]["path"]).parent.exists())
 
     def test_scope_cleanup_report_sighup_before_stderr_drain(self):
         self._scope_cleanup_report_signal(signal.SIGHUP)
@@ -961,52 +887,6 @@ class AcquisitionClientTests(unittest.TestCase):
             "requirements/checker-dependencies.json",
         ):
             (self.root / name).write_bytes((ROOT / name).read_bytes())
-
-    def test_checker_download_signals_reach_controller_before_pipe_drain(self):
-        self._checker_inputs()
-        for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
-            with self.subTest(interrupt=interrupt):
-                for name in ("attach-ready", "attach-retired"):
-                    (self.root / name).unlink(missing_ok=True)
-                before_calls = len(self.fixture.calls())
-                descriptor, writer = os.pipe()
-                self.addCleanup(os.close, descriptor)
-                prefill = b""
-                os.set_blocking(writer, False)
-                while True:
-                    try:
-                        count = os.write(writer, b"z" * 4096)
-                        prefill += b"z" * count
-                    except BlockingIOError:
-                        break
-                os.set_blocking(writer, True)
-                try:
-                    process = subprocess.Popen(
-                        ["bash", str(self.root / "tools/checker.sh"), "download"],
-                        env=self.environment | {"NMRNET_FAKE_HOLD_ATTACH": "1"},
-                        cwd=self.root,
-                        stdout=subprocess.PIPE,
-                        stderr=writer,
-                        start_new_session=True,
-                    )
-                finally:
-                    os.close(writer)
-                self.addCleanup(self._rescue, process)
-                client = self._observe_client(process, self.root / "attach-ready")
-                group = os.getpgid(client)
-                arguments = Path("/proc", str(process.pid), "cmdline").read_bytes().split(b"\0")
-                self.assertEqual([b"bash", str(self.root / "tools/docker.sh").encode(), b"run"], arguments[:3])
-                self._finish_full_pipe(process, descriptor, prefill, interrupt, status)
-                self.assertEqual(str(client), (self.root / "attach-retired").read_text())
-                self.assertFalse(Path("/proc", str(client)).exists())
-                self.assertFalse(Path("/proc", str(group)).exists())
-                calls = self.fixture.calls()[before_calls:]
-                self.assertEqual(
-                    [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
-                    [call["arguments"] for call in calls if call["arguments"][0] == "rm"],
-                )
-                for call in calls:
-                    self.assertFalse(Path(call["client_config"]["path"]).parent.exists())
 
     def test_scope_checker_sighup_before_stderr_drain(self):
         self._scope_checker_signal(signal.SIGHUP, 129)
