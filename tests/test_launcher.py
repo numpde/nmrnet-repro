@@ -126,13 +126,13 @@ class LauncherTests(unittest.TestCase):
         (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (checkout / "tools/image_lifecycle.sh").write_bytes(Path("tools/image_lifecycle.sh").read_bytes())
         (checkout / "tools/docker-real.sh").write_bytes(Path("tools/docker.sh").read_bytes())
-        (checkout / "tools/docker.sh").write_text('''#!/bin/bash
+        (checkout / "tools/docker.sh").write_text("""#!/bin/bash
 if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
     printf '0:0\\n'
     exit
 fi
 exec bash "$(dirname "$0")/docker-real.sh" "$@"
-''')
+""")
         (checkout / ".work/checker").mkdir(parents=True)
         (checkout / ".work/wheelhouse").mkdir()
         (checkout / "bin").mkdir()
@@ -189,7 +189,28 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
         self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--read-only", arguments)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
-        self.assertEqual(7, len(mounts))
+        self.assertEqual(12, len(mounts))
+        self.assertEqual(
+            {
+                "/workspace/Makefile",
+                "/workspace/requirements",
+                "/workspace/tools",
+                "/workspace/tests",
+                "/workspace/host",
+                "/workspace/nmrnet_inference",
+                "/workspace/nmrnet_provider",
+                "/consumer/nmrnet_provider",
+                "/consumer/nmrnet_inference",
+                "/consumer/tools",
+                "/input/provider-core-install.lock",
+                "/wheelhouse",
+            },
+            {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+        )
+        self.assertCountEqual(
+            ["/tmp:rw,nosuid,nodev,noexec,size=64m", "/runtime:rw,nosuid,nodev,exec,size=128m"],
+            [arguments[index + 1] for index, value in enumerate(arguments) if value == "--tmpfs"],
+        )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("docker.sock", " ".join(mounts))
 
@@ -202,7 +223,26 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
         self.assertIn("--init", arguments)
         self.assertIn("--read-only", arguments)
         mounts = [arguments[i + 1] for i, value in enumerate(arguments) if value == "--mount"]
-        self.assertEqual(4, len(mounts))
+        self.assertEqual(10, len(mounts))
+        self.assertEqual(
+            {
+                "/workspace/tools",
+                "/workspace/tests",
+                "/workspace/host",
+                "/workspace/nmrnet_inference",
+                "/workspace/nmrnet_provider",
+                "/consumer/nmrnet_provider",
+                "/consumer/nmrnet_inference",
+                "/consumer/tools",
+                "/input/provider-core-install.lock",
+                "/wheelhouse",
+            },
+            {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+        )
+        self.assertCountEqual(
+            ["/tmp:rw,nosuid,nodev,noexec,size=64m", "/runtime:rw,nosuid,nodev,exec,size=128m"],
+            [arguments[index + 1] for index, value in enumerate(arguments) if value == "--tmpfs"],
+        )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("docker.sock", " ".join(mounts))
 
@@ -216,7 +256,26 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
                 self.assertEqual("none", arguments[arguments.index("--network") + 1])
                 self.assertIn("--read-only", arguments)
                 mounts = [arguments[i + 1] for i, argument in enumerate(arguments) if argument == "--mount"]
-                self.assertEqual(4, len(mounts))
+                self.assertEqual(10, len(mounts))
+                self.assertEqual(
+                    {
+                        "/workspace/tools",
+                        "/workspace/tests",
+                        "/workspace/host",
+                        "/workspace/nmrnet_inference",
+                        "/workspace/nmrnet_provider",
+                        "/consumer/nmrnet_provider",
+                        "/consumer/nmrnet_inference",
+                        "/consumer/tools",
+                        "/input/provider-core-install.lock",
+                        "/wheelhouse",
+                    },
+                    {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+                )
+                self.assertCountEqual(
+                    ["/tmp:rw,nosuid,nodev,noexec,size=64m", "/runtime:rw,nosuid,nodev,exec,size=128m"],
+                    [arguments[index + 1] for index, value in enumerate(arguments) if value == "--tmpfs"],
+                )
                 self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
                 self.assertNotIn("docker.sock", " ".join(mounts))
 
