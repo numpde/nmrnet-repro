@@ -21,7 +21,7 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 class CapturedInputTests(unittest.TestCase):
     def test_installer_is_captured_and_precedes_scientific_installation(self):
-        root = Path(__file__).resolve().parents[1]
+        root = Path("/workspace")
         prefix = "host/bootstrap/acquisition/acquisition_tool/installer/"
         selectors = set((root / "containers/inference/image-inputs.txt").read_text().splitlines())
         inputs = {
@@ -329,7 +329,7 @@ class CapturedInputTests(unittest.TestCase):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 result = fixture.run("inference_image.sh", "build", additions=additions)
-                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual(status == 0, "make packages/import" in result.stderr)
 
     def test_cleanup_failure_preserves_primary_and_reports_its_owned_capture(self):

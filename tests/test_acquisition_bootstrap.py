@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path("/workspace")
 spec = importlib.util.spec_from_file_location("acquisition_bootstrap", ROOT / "host/acquisition_bootstrap.py")
 bootstrap = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bootstrap)
@@ -89,7 +89,7 @@ class AcquisitionBootstrapTests(unittest.TestCase):
         os.link(other, target)
         with self.assertRaisesRegex(ValueError, "hardlinked"):
             self.install()
-        self.assertEqual(other.read_text(), "preserve")
+        self.assertEqual("preserve", other.read_text())
 
     def test_refresh_preserves_modified_previous_release_and_record(self):
         self.install()

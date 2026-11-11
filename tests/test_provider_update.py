@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path("/workspace")
 
 
 class ProviderUpdateTests(unittest.TestCase):
@@ -44,37 +44,37 @@ class ProviderUpdateTests(unittest.TestCase):
 
     def test_update_uses_one_selected_endpoint_and_existing_lifecycle_order(self):
         result = self.run_update()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(
-            self.record.read_text().splitlines(),
             [
                 "container.sh|provider/image/build|unix:///selected.sock",
                 "provider_deployment.sh|update|unix:///selected.sock",
                 "image_retirement.sh||unix:///selected.sock",
             ],
+            self.record.read_text().splitlines(),
         )
 
     def test_update_stops_after_a_failed_phase_and_reports_partial_effects(self):
         result = self.run_update(NMRNET_FAIL_PHASE="update")
-        self.assertEqual(result.returncode, 13)
+        self.assertEqual(13, result.returncode)
         self.assertEqual(
-            self.record.read_text().splitlines(),
             [
                 "container.sh|provider/image/build|unix:///selected.sock",
                 "provider_deployment.sh|update|unix:///selected.sock",
             ],
+            self.record.read_text().splitlines(),
         )
         self.assertIn("Earlier effects may remain", result.stderr)
 
     def test_update_can_retain_existing_images(self):
         result = self.run_update(NMRNET_RETAIN_PRIOR_INPUT="1")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(
-            self.record.read_text().splitlines(),
             [
                 "container.sh|provider/image/build|unix:///selected.sock",
                 "provider_deployment.sh|update|unix:///selected.sock",
             ],
+            self.record.read_text().splitlines(),
         )
 
     def test_image_lease_spans_build_and_install_but_not_retirement(self):
@@ -87,16 +87,16 @@ class ProviderUpdateTests(unittest.TestCase):
                 f"[[ $observed == {expected} ]]\n"
             )
         result = self.run_update()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_update_refuses_invalid_retention_before_effects(self):
         result = self.run_update(NMRNET_RETAIN_PRIOR_INPUT="yes")
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(2, result.returncode)
         self.assertFalse(self.record.exists())
 
     def test_update_requires_an_explicit_safe_deployment_name(self):
         result = self.run_update(NMRNET_DEPLOYMENT_INPUT="../other")
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(2, result.returncode)
         self.assertFalse(self.record.exists())
 
 

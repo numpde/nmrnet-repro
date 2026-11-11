@@ -95,12 +95,12 @@ override export NMRNET_ACQUISITION_ISSUER_INPUT := $(if $(filter command line,$(
 unexport ACQUISITION_ISSUER
 
 packages/acquisition-bootstrap/check:
-	python3 -B host/acquisition_bootstrap.py
+	python3 -B host/acquisition_bootstrap.py --root "$(CURDIR)"
 
 packages/acquisition-bootstrap/refresh:
 	@test -n "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ARCHIVE=<release archive> on the make command line.' >&2; exit 2; }
 	@test -n "$$NMRNET_ACQUISITION_ISSUER_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ISSUER=<incoming release record> on the make command line.' >&2; exit 2; }
-	python3 -B host/acquisition_bootstrap.py --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" --issuer "$$NMRNET_ACQUISITION_ISSUER_INPUT"
+	python3 -B host/acquisition_bootstrap.py --root "$(CURDIR)" --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" --issuer "$$NMRNET_ACQUISITION_ISSUER_INPUT"
 
 packages/images/retire:
 	bash tools/image_retirement.sh

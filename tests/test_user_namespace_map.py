@@ -6,7 +6,7 @@ import time
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path("/workspace")
 
 
 class UserNamespaceMapTests(unittest.TestCase):
@@ -31,13 +31,13 @@ class UserNamespaceMapTests(unittest.TestCase):
 
     def test_maps_host_caller_inside_rootless_subordinate_range(self):
         result = self.resolve("0 1042 1\n1 100000 65536\n", 100417)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "418\n")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("418\n", result.stdout)
 
     def test_maps_identity_range_for_rootful_engine(self):
         result = self.resolve("0 0 4294967295\n", 2001)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "2001\n")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("2001\n", result.stdout)
 
     def test_refuses_unmapped_or_ambiguous_host_id(self):
         self.assertNotEqual(self.resolve("0 100000 65536\n", 999).returncode, 0)
@@ -61,7 +61,7 @@ class UserNamespaceMapTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_probe_identity_requires_exact_token_and_stable_starttime(self):
         token = "nmrnet-probe-test-token"
@@ -80,7 +80,7 @@ class UserNamespaceMapTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             starttime = subprocess.run(
                 [
                     "bash",
@@ -108,7 +108,7 @@ class UserNamespaceMapTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(still_running.returncode, 1)
+            self.assertEqual(1, still_running.returncode)
         finally:
             process.terminate()
             process.wait(timeout=5)
@@ -126,7 +126,7 @@ class UserNamespaceMapTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(retired.returncode, 0, retired.stderr)
+        self.assertEqual(0, retired.returncode, msg=retired.stderr)
 
     def test_zombie_probe_process_counts_as_retired(self):
         process = subprocess.Popen(["bash", "-c", "exit 0"])
@@ -168,7 +168,7 @@ class UserNamespaceMapTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
         finally:
             process.wait(timeout=5)
 
@@ -190,8 +190,8 @@ class UserNamespaceMapTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout, "100999\n")
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual("100999\n", result.stdout)
 
             root = subprocess.run(
                 [
@@ -206,8 +206,8 @@ class UserNamespaceMapTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(root.returncode, 0, root.stderr)
-            self.assertEqual(root.stdout, "1000\n")
+            self.assertEqual(0, root.returncode, msg=root.stderr)
+            self.assertEqual("1000\n", root.stdout)
 
 
 if __name__ == "__main__":

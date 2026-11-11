@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path("/workspace")
 
 
 def image(letter):
@@ -101,7 +101,7 @@ else: raise SystemExit(91)
 
     def test_only_obsolete_owned_images_are_removed_with_no_parent_pruning(self):
         result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(self.removed(), [image("f")])
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
         self.assertEqual([call for call in calls if call[:2] == ["image", "rm"]], [["image", "rm", "--no-prune", image("f")]])
@@ -120,21 +120,21 @@ else: raise SystemExit(91)
                     self.save_state()
                 result = self.retire()
                 self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(self.removed(), [])
+                self.assertEqual([], self.removed())
 
     def test_retained_unselected_generation_protects_its_images(self):
         retained = self.deployment / "bundles/generation-retained"
         retained.mkdir()
         (retained / "compose.json").write_text(json.dumps({"services": {"provider": {"image": image("f")}}}))
         result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.removed(), [])
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual([], self.removed())
 
     def test_checker_record_is_protected_and_older_unreferenced_checker_is_retired(self):
         self.state["images"]["checker"].append(image("8"))
         self.save_state()
         result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertCountEqual(self.removed(), [image("f"), image("8")])
 
     def test_incomplete_retained_generation_blocks_every_removal(self):
@@ -142,20 +142,20 @@ else: raise SystemExit(91)
         result = self.retire()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("provider/deployment/retire-generations", result.stderr)
-        self.assertEqual(self.removed(), [])
+        self.assertEqual([], self.removed())
 
     def test_recent_unselected_image_is_preserved(self):
         self.state["created"] = {image("f"): datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")}
         self.save_state()
         result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.removed(), [])
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual([], self.removed())
 
     def test_engine_creation_time_accepts_explicit_utc_offset(self):
         self.state["created"] = {image("f"): "2001-01-01T03:00:00.123456789+03:00"}
         self.save_state()
         result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(self.removed(), [image("f")])
 
     def test_fractional_creation_time_is_not_rounded_down_at_day_boundary(self):
@@ -167,8 +167,8 @@ else: raise SystemExit(91)
         self.save_state()
         with mock.patch.dict(os.environ, {"PATH": str(binary) + os.pathsep + os.environ["PATH"]}):
             result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.removed(), [])
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual([], self.removed())
 
     def test_unknown_or_future_creation_time_never_removes_image(self):
         for created in ("not-a-time", "2001-01-01T00:00:00+24:00", "2001-01-01T00:00Z", "2999-01-01T00:00:00Z"):
@@ -177,14 +177,14 @@ else: raise SystemExit(91)
                 self.save_state()
                 result = self.retire()
                 self.assertEqual(result.returncode == 0, created.startswith("2999"))
-                self.assertEqual(self.removed(), [])
+                self.assertEqual([], self.removed())
 
     def test_alias_added_after_inventory_is_preserved(self):
         self.state["tagged_on_recheck"] = image("f")
         self.save_state()
         result = self.retire()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.removed(), [])
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual([], self.removed())
 
     def test_checkout_lease_protects_the_build_to_record_publication_gap(self):
         publisher = subprocess.Popen(
@@ -214,13 +214,13 @@ mv "$repository_root/new-image" "$repository_root/.work/provider/image-id"
                 time.sleep(0.01)
             self.assertTrue((self.root / "ready").exists())
             result = self.retire()
-            self.assertEqual(result.returncode, 75, result.stderr)
+            self.assertEqual(75, result.returncode, msg=result.stderr)
             self.assertFalse((self.root / "calls.jsonl").exists())
             (self.root / "release").touch()
             _, stderr = publisher.communicate(timeout=2)
-            self.assertEqual(publisher.returncode, 0, stderr)
+            self.assertEqual(0, publisher.returncode, msg=stderr)
             result = self.retire()
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(self.removed(), [image("a")])
         finally:
             if publisher.poll() is None:
@@ -234,6 +234,6 @@ mv "$repository_root/new-image" "$repository_root/.work/provider/image-id"
                 try:
                     result = self.retire()
                     self.assertNotEqual(result.returncode, 0)
-                    self.assertEqual(self.removed(), [])
+                    self.assertEqual([], self.removed())
                 finally:
                     directory.chmod(0o700)

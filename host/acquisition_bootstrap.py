@@ -12,10 +12,6 @@ import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
 
-ROOT = Path(__file__).resolve().parents[1]
-RECORD = ROOT / "requirements/provider-core-release.json"
-SNAPSHOT = ROOT / "host/bootstrap/acquisition"
-
 
 def inventory(record):
     files = record["acquisition_source_files"]
@@ -155,20 +151,23 @@ def refresh(archive_path, snapshot, record, entries, record_output, record_bytes
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, required=True, help="repository root owned by the invoking launcher")
     parser.add_argument("--archive", type=Path, help="refresh from the pinned release archive")
     parser.add_argument("--issuer", type=Path, help="incoming release record for an explicit refresh")
     args = parser.parse_args()
+    record_path = args.root / "requirements/provider-core-release.json"
+    snapshot = args.root / "host/bootstrap/acquisition"
     if args.archive is None:
         if args.issuer is not None:
             raise ValueError("an incoming issuer requires an acquisition archive")
-        record = json.loads(RECORD.read_bytes())
-        verify_snapshot(SNAPSHOT, inventory(record))
+        record = json.loads(record_path.read_bytes())
+        verify_snapshot(snapshot, inventory(record))
         return
     if args.issuer is None:
         raise ValueError("refresh requires the incoming release record")
     record_bytes = args.issuer.read_bytes()
     record = json.loads(record_bytes)
-    refresh(args.archive, SNAPSHOT, record, inventory(record), RECORD, record_bytes)
+    refresh(args.archive, snapshot, record, inventory(record), record_path, record_bytes)
 
 
 if __name__ == "__main__":

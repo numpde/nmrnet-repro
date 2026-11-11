@@ -19,7 +19,7 @@ import time
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path("/workspace")
 IMAGE = "sha256:" + "a" * 64
 CID = "b" * 64
 
@@ -316,7 +316,7 @@ esac
             with self.subTest(name=name):
                 result = self.run_command("up", changes={"NMRNET_DEPLOYMENT_INPUT": name})
                 self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(self.calls(), [])
+                self.assertEqual([], self.calls())
                 self.assertFalse((self.root / "sentinel").exists())
 
     def test_direct_commands_keep_literal_recipe_project_and_finite_options(self):
@@ -330,7 +330,7 @@ esac
             for action, suffix in expected.items():
                 with self.subTest(role=role, action=action):
                     result = self.run_command(action, role)
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(0, result.returncode, msg=result.stderr)
                     calls = self.calls()
                     call = (
                         next((item for item in calls if item[0] == "compose" and "up" in item), calls[-1])
@@ -358,7 +358,7 @@ esac
                     if action == "up":
                         self.assertIn("Verified running image IDs for all 6 provider services.", result.stdout)
                         self.assertEqual(
-                            len([item for item in calls if item[0] == "inspect" and ".Config.Labels" in " ".join(item)]), 6
+                            6, len([item for item in calls if item[0] == "inspect" and ".Config.Labels" in " ".join(item)])
                         )
                     self.assertTrue((bundle / "compose.json").exists())
         self.assertFalse(any("--volumes" in call or "-v" in call for call in self.calls()))
@@ -382,7 +382,7 @@ esac
                 "TEST_GEOMETRY_IMAGE": geometry_image,
             },
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Verified running image IDs for all 6 provider services.", result.stdout)
         self.assertIn("Provider image update completed", result.stdout)
         calls = self.calls()
@@ -411,7 +411,7 @@ esac
         self.assertNotIn("CHOWN", check_call)
         self.assertEqual(freeze_call[freeze_call.index("--image-id") + 1], scientific_image)
         self.assertEqual(freeze_call[freeze_call.index("--geometry-image-id") + 1], geometry_image)
-        self.assertEqual(probe_create[probe_create.index("--pull") + 1], "never")
+        self.assertEqual("never", probe_create[probe_create.index("--pull") + 1])
         self.assertNotEqual(self.current_target(), "bundles/generation-original")
 
     def test_update_admits_every_recorded_scientific_image_before_draining(self):
@@ -423,7 +423,7 @@ esac
         result = self.run_command("update", changes={"TEST_IMAGE_INSPECT_FAILURE": inference_image})
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(call[0] == "stop" for call in self.calls()))
-        self.assertEqual(self.current_target(), "bundles/generation-original")
+        self.assertEqual("bundles/generation-original", self.current_target())
         self.assertTrue(any(call[0:5] == ["image", "inspect", "--format", "{{.Id}}", inference_image] for call in self.calls()))
 
     def test_running_image_verification_rejects_partial_stdout_from_failed_engine_client(self):
@@ -455,12 +455,12 @@ esac
             self.assertTrue((self.root / "stop-entered").exists())
             before = len(self.calls())
             competing = self.run_command("status")
-            self.assertEqual(competing.returncode, 2)
+            self.assertEqual(2, competing.returncode)
             self.assertIn("another command is active", competing.stderr)
             self.assertEqual(len(self.calls()), before)
             (self.root / "stop-release").touch()
             stdout, stderr = process.communicate(timeout=5)
-            self.assertEqual(process.returncode, 0, stderr)
+            self.assertEqual(0, process.returncode, msg=stderr)
             self.assertIn("Provider image update completed", stdout)
         finally:
             (self.root / "stop-release").touch()
@@ -470,10 +470,10 @@ esac
 
     def test_down_confirms_exact_provider_exit_before_stopping_dependencies(self):
         result = self.run_command("down")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         calls = self.calls()
         stops = [index for index, call in enumerate(calls) if call[0] == "stop"]
-        self.assertEqual(len(stops), 1)
+        self.assertEqual(1, len(stops))
         self.assertEqual(calls[stops[0]], ["stop", "--signal", "SIGTERM", "--timeout", "-1", CID])
         teardown = next(index for index, call in enumerate(calls) if "down" in call)
         self.assertLess(stops[0], teardown)
@@ -486,9 +486,9 @@ esac
             with self.subTest(status=status):
                 before = len(self.calls())
                 result = self.run_command("down", changes={"TEST_STOP_STATUS": str(status)})
-                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(result.returncode, status, msg=result.stderr)
                 calls = self.calls()[before:]
-                self.assertEqual(len([call for call in calls if call[0] == "stop"]), 1)
+                self.assertEqual(1, len([call for call in calls if call[0] == "stop"]))
                 self.assertFalse(any("down" in call or call[0] == "rm" for call in calls))
                 self.assertTrue(self.bundle.exists())
                 self.assertIn("no dependencies were stopped", result.stderr)
@@ -514,7 +514,7 @@ esac
     def test_stopped_provider_and_repeated_down_need_no_stop_signal(self):
         for _ in range(2):
             result = self.run_command("down", changes={"TEST_PROVIDER_STATE": "exited 0 false"})
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertFalse(any(call[0] == "stop" for call in self.calls()))
 
     def test_absent_provider_does_not_authorize_teardown_of_remaining_containers(self):
@@ -534,7 +534,7 @@ esac
     def test_unretired_query_prevents_following_engine_calls(self):
         result = self.run_command("down", changes={"TEST_RETIRED": "false"})
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(1, len(self.calls()))
         self.assertFalse((self.root / "cleanup").exists())
 
     def test_interrupting_stop_preserves_dependencies(self):
@@ -555,7 +555,7 @@ esac
             process.send_signal(signal.SIGTERM)
             (self.root / "stop-release").touch()
             _stdout, stderr = process.communicate(timeout=2)
-            self.assertEqual(process.returncode, 143, stderr)
+            self.assertEqual(143, process.returncode, msg=stderr)
             self.assertFalse(any("down" in call or call[0] == "rm" for call in self.calls()))
         finally:
             (self.root / "stop-release").touch()
@@ -565,25 +565,25 @@ esac
 
     def test_failed_compose_preserves_original_status_and_selected_configuration_without_retry(self):
         result = self.run_command("up", changes={"TEST_COMPOSE_STATUS": "7"})
-        self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual(len([call for call in self.calls() if call[0] == "compose"]), 1)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
+        self.assertEqual(1, len([call for call in self.calls() if call[0] == "compose"]))
         self.assertIn("actual Compose cause", result.stderr)
         self.assertIn("No automatic retry", result.stderr)
-        self.assertEqual(self.current_target(), "bundles/generation-original")
+        self.assertEqual("bundles/generation-original", self.current_target())
 
     def test_up_rejects_a_running_service_with_an_image_other_than_its_frozen_plan(self):
         result = self.run_command("up", changes={"TEST_RUNNING_IMAGE": "sha256:" + "b" * 64})
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("started provider container does not use its installed immutable image", result.stderr)
         self.assertIn("Inspect Docker Compose status/logs", result.stderr)
         self.assertFalse(any("down" in call for call in self.calls()))
 
     def test_up_refuses_existing_project_before_initialization_or_compose(self):
         result = self.run_command("up", changes={"TEST_CONTAINERS": CID + "\n"})
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("down", result.stderr)
-        self.assertEqual(len(self.calls()), 1)
-        self.assertEqual(self.calls()[0][0:3], ["ps", "--all", "--quiet"])
+        self.assertEqual(1, len(self.calls()))
+        self.assertEqual(["ps", "--all", "--quiet"], self.calls()[0][0:3])
         self.assertRegex(self.calls()[0][4], r"^label=com\.docker\.compose\.project=nmrnet-[0-9a-f]{20}$")
 
     def test_up_refuses_failed_or_unretired_project_inspection(self):
@@ -592,11 +592,11 @@ esac
                 before = len(self.calls())
                 result = self.run_command("up", changes=changes)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(len(self.calls()[before:]), 1)
+                self.assertEqual(1, len(self.calls()[before:]))
 
     def test_up_refuses_lifetime_volume_borrowers_before_initialization(self):
         result = self.run_command("up", changes={"TEST_VOLUME_BORROWERS": CID + "\n"})
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("lifetime volume is attached", result.stderr)
         volume = "nmr-api-delivery-control-" + "0" * 63 + "1"
         self.assertIn(["ps", "--all", "--quiet", "--filter", f"volume={volume}"], self.calls())
@@ -625,7 +625,7 @@ esac
                 changed.write('\nprintf replayed > "$repository_root/sentinel"\n')
             (self.root / "release").touch()
             _stdout, stderr = process.communicate(timeout=2)
-            self.assertEqual(process.returncode, 0, stderr)
+            self.assertEqual(0, process.returncode, msg=stderr)
             self.assertFalse((self.root / "sentinel").exists())
         finally:
             if process.poll() is None:
@@ -634,15 +634,15 @@ esac
 
     def test_install_refuses_live_project_without_shutdown_or_replacement(self):
         result = self.run_command("install", changes={"TEST_LIVE": "true"})
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(self.calls()[0][0:2], ["ps", "--quiet"])
-        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
+        self.assertEqual(["ps", "--quiet"], self.calls()[0][0:2])
+        self.assertEqual(1, len(self.calls()))
         self.assertIn("stop this deployment", result.stderr)
-        self.assertEqual(self.current_target(), "bundles/generation-original")
+        self.assertEqual("bundles/generation-original", self.current_target())
 
     def test_install_reuses_the_current_generation_shared_runtime_image(self):
         result = self.run_command("install", changes={"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": ""})
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         calls = self.calls()
         self.assertTrue(any(call[0:5] == ["image", "inspect", "--format", "{{.Id}}", IMAGE] for call in calls))
         self.assertTrue(any("--shared-image-id" in call and IMAGE in call for call in calls))
@@ -652,30 +652,30 @@ esac
         obsolete = self.provider / "bundles/generation-obsolete"
         obsolete.mkdir()
         result = self.run_command("install", changes={"NMRNET_RETAIN_PRIOR_INPUT": "1"})
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertTrue(original.is_dir())
         self.assertTrue(obsolete.is_dir())
         self.assertIn("Retained previous configuration generations.", result.stdout)
 
     def test_identity_probe_create_failure_does_not_remove_an_unadmitted_name(self):
         result = self.run_command("install", changes={"TEST_CREATE_STATUS": "7"})
-        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
         self.assertFalse(any(call[0] == "rm" for call in self.calls()))
         self.assertIn("Identity probe, if still present:", result.stderr)
         self.remove_retained_identity_metadata(result)
 
     def test_identity_probe_removal_is_not_retried_after_an_uncertain_attempt(self):
         result = self.run_command("install", changes={"TEST_MAP_RM_STATUS": "9"})
-        self.assertEqual(result.returncode, 9, result.stderr)
+        self.assertEqual(9, result.returncode, msg=result.stderr)
         removals = [call for call in self.calls() if call[0] == "rm"]
-        self.assertEqual(len(removals), 1)
+        self.assertEqual(1, len(removals))
         self.assertRegex(removals[0][2], r"^[0-9a-f]{64}$")
         self.assertIn("Identity probe ID:", result.stderr)
         self.remove_retained_identity_metadata(result)
 
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command("install")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("shared proxy and outbox are running", result.stdout)
         call = next(call for call in self.calls() if "freeze" in call)
         for pair in (
@@ -745,7 +745,7 @@ fi
                 "TEST_MAPPED_GID": str(mapped_gid),
             },
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Installed provider configuration.", result.stdout)
 
     def test_retirement_preserves_current_stopped_borrowers_and_original_inputs(self):
@@ -767,7 +767,7 @@ fi
                 "TEST_MOUNTS": str(borrowed / "config.toml") + "\n",
             },
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertFalse(obsolete.exists())
         self.assertTrue(borrowed.exists())
         self.assertTrue(self.bundle.exists())
@@ -786,7 +786,7 @@ fi
                 "TEST_MOUNTS": str(self.provider) + "\n",
             },
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertTrue(unselected.exists())
         self.assertIn("Retired 0 unused", result.stdout)
 
@@ -800,7 +800,7 @@ fi
                 "TEST_INSPECT_STATUS": "7",
             },
         )
-        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
         self.assertTrue(unselected.exists())
         self.assertTrue(self.bundle.exists())
 
@@ -811,7 +811,7 @@ fi
         neighbor = self.provider / "runtime/route-store"
         neighbor.mkdir(mode=0o700)
         result = self.run_command("retire-api-route")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertFalse(route.exists())
         self.assertTrue(neighbor.exists())
         self.assertTrue(self.bundle.exists())
@@ -825,7 +825,7 @@ fi
         self.assertIn("retire the old API route", result.stderr)
         self.assertTrue(route.exists())
         self.assertTrue(self.bundle.exists())
-        self.assertEqual(self.current_target(), "bundles/generation-original")
+        self.assertEqual("bundles/generation-original", self.current_target())
         self.assertFalse(any("freeze" in call for call in self.calls()))
 
     def test_unretired_install_preflight_retains_client_and_recipe(self):
@@ -859,7 +859,7 @@ fi
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("still mounts", result.stderr)
         self.assertTrue(self.bundle.exists())
-        self.assertEqual(self.current_target(), "bundles/generation-original")
+        self.assertEqual("bundles/generation-original", self.current_target())
         self.assertFalse(any("freeze" in call for call in self.calls()))
 
     def test_retire_api_route_refuses_any_overlapping_container_mount(self):
@@ -916,19 +916,19 @@ fi
                 self.assertNotIn("directory is absent", result.stdout)
                 self.assertFalse((self.root / "cleanup").exists())
         result = self.run_command("retire-api-route")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("directory is absent", result.stdout)
 
     def test_native_lifetime_locks_are_created_private_and_keep_their_inode(self):
         result = self.run_command("install")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         locks = [self.provider / "runtime" / role / ".owner-session.lock" for role in ("prediction", "reader", "smiles")]
         before = [path.stat().st_ino for path in locks]
         for path in locks:
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(path.stat().st_uid, os.getuid())
         result = self.run_command("install")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([path.stat().st_ino for path in locks], before)
 
     def test_native_lifetime_lock_symlink_is_refused_before_freeze(self):
@@ -941,26 +941,26 @@ fi
         result = self.run_command("install")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("native lifetime locks", result.stderr)
-        self.assertEqual(target.read_text(), "keep original bytes")
+        self.assertEqual("keep original bytes", target.read_text())
         self.assertFalse(any("freeze" in call for call in self.calls()))
 
     def test_local_deployment_settings_are_passed_to_the_provider_freezer(self):
         result = self.run_command("install")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         call = next(call for call in self.calls() if "freeze" in call)
         self.assertEqual(call[call.index("--settings") + 1], str(self.root / "config/deployments/fixture/deployment.toml"))
         self.assertNotIn("--shared-settings", call)
 
     def test_failed_helper_is_removed_by_its_original_name_without_reexecution(self):
         result = self.run_command("install", changes={"TEST_RUN_STATUS": "7"})
-        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
         calls = self.calls()
         runs = [call for call in calls if call[0] == "run"]
-        self.assertEqual(len(runs), 1)
+        self.assertEqual(1, len(runs))
         name = runs[0][runs[0].index("--name") + 1]
         self.assertEqual(calls[-1], ["rm", "--force", name])
         self.assertIn("actual helper cause", result.stderr)
-        self.assertEqual(self.current_target(), "bundles/generation-original")
+        self.assertEqual("bundles/generation-original", self.current_target())
 
     def test_unretired_local_helper_never_dispatches_a_new_cleanup_client(self):
         result = self.run_command(
@@ -972,7 +972,7 @@ fi
                 "TEST_PROJECT_RETIRED": "true",
             },
         )
-        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
         self.assertEqual(
             [call[0] for call in self.calls()], ["ps", "ps", "image", "image", "create", "start", "inspect", "rm", "ps", "run"]
         )
@@ -981,8 +981,8 @@ fi
 
     def test_helper_removal_failure_preserves_the_original_command_failure(self):
         result = self.run_command("install", changes={"TEST_RUN_STATUS": "7", "TEST_RM_STATUS": "9"})
-        self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual(self.calls()[-1][0], "rm")
+        self.assertEqual(7, result.returncode, msg=result.stderr)
+        self.assertEqual("rm", self.calls()[-1][0])
 
     def test_helper_cleanup_preserves_primary_and_separate_cleanup_diagnostics(self):
         for cleanup_status in ("0", "9"):
@@ -997,24 +997,24 @@ fi
                         "TEST_CLEANUP_DIAGNOSTIC": "separate retirement diagnostic",
                     },
                 )
-                self.assertEqual(result.returncode, 7, result.stderr)
-                self.assertEqual(result.stderr.count("original native client diagnostic"), 1)
+                self.assertEqual(7, result.returncode, msg=result.stderr)
+                self.assertEqual(1, result.stderr.count("original native client diagnostic"))
                 self.assertEqual(result.stderr.count("separate retirement diagnostic"), int(cleanup_status != "0"))
                 self.assertIn("actual helper cause", result.stderr)
                 calls = self.calls()[before:]
                 runs = [call for call in calls if call[0] == "run"]
-                self.assertEqual(len(runs), 1)
+                self.assertEqual(1, len(runs))
                 name = runs[0][runs[0].index("--name") + 1]
                 self.assertEqual(calls[-1], ["rm", "--force", name])
-                self.assertEqual(self.current_target(), "bundles/generation-original")
+                self.assertEqual("bundles/generation-original", self.current_target())
 
     def test_client_inputs_uses_selected_prediction_image_and_readonly_bundle(self):
         output = Path(self.temporary.name) / "client"
         result = self.run_command("client-inputs", changes={"NMRNET_OUTPUT_INPUT": str(output)})
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         calls = self.calls()
-        self.assertEqual(calls[0][-4:], ["ps", "--all", "--quiet", "prediction"])
-        self.assertEqual(calls[1][0:3], ["inspect", "--type", "container"])
+        self.assertEqual(["ps", "--all", "--quiet", "prediction"], calls[0][-4:])
+        self.assertEqual(["inspect", "--type", "container"], calls[1][0:3])
         call = next(call for call in calls if "client-inputs" in call)
         self.assertIn(f"type=bind,src={self.bundle},dst={self.bundle},readonly", call)
         self.assertEqual(
@@ -1033,7 +1033,7 @@ fi
                 timeout=3,
                 check=False,
             )
-            self.assertEqual(result.returncode, status, result.stderr)
+            self.assertEqual(result.returncode, status, msg=result.stderr)
             self.assertEqual(result.stdout, f"started\t{operation}\t14\nretired\t{operation}\t-15\towner_lost\n")
             self.assertNotIn("PRIVATE", result.stdout)
             self.assertIn("PRIVATE_APPLICATION_OUTPUT", result.stderr)
