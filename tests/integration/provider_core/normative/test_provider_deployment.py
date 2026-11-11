@@ -52,7 +52,7 @@ class DeploymentBundleTests(unittest.TestCase):
                 [sorted(path.name for path in (runtime / name).iterdir()) for name in ("prediction", "reader", "smiles")],
                 [["runner.sock"], ["runner.sock"], ["runner.sock"]],
             )
-            prepare_runtime(runtime, os.getuid(), os.getgid())
+            prepare_runtime(runtime, os.getuid(), os.getgid(), check_only=False)
             self.assertTrue(
                 all((runtime / name / ".owner-session.lock").is_file() for name in ("prediction", "reader", "smiles"))
             )
@@ -87,7 +87,7 @@ class DeploymentBundleTests(unittest.TestCase):
                 finally:
                     listener.close()
                 (leaf / "proxy.sock").chmod(0o600)
-            prepare_runtime(runtime, os.getuid(), os.getgid())
+            prepare_runtime(runtime, os.getuid(), os.getgid(), check_only=False)
             for leaf in runtime.iterdir():
                 self.assertEqual((leaf.stat().st_uid, stat.S_IMODE(leaf.stat().st_mode)), (os.getuid(), 0o700))
                 for entry in leaf.iterdir():
@@ -105,7 +105,7 @@ class DeploymentBundleTests(unittest.TestCase):
                 patch("tools.provider_deployment.os.chown") as chown,
                 self.assertRaisesRegex(ConfigurationRejected, "unowned entry"),
             ):
-                prepare_runtime(runtime, os.getuid(), os.getgid())
+                prepare_runtime(runtime, os.getuid(), os.getgid(), check_only=False)
             chown.assert_not_called()
             self.assertEqual("preserve", unexpected.read_text())
 
@@ -125,7 +125,7 @@ class DeploymentBundleTests(unittest.TestCase):
                 patch("tools.provider_deployment.os.chown") as chown,
                 self.assertRaisesRegex(ConfigurationRejected, "another hard link"),
             ):
-                prepare_runtime(runtime, os.getuid(), os.getgid())
+                prepare_runtime(runtime, os.getuid(), os.getgid(), check_only=False)
             chown.assert_not_called()
             self.assertEqual((external.stat().st_uid, external.stat().st_mode & 0o777), (original.st_uid, 0o600))
             self.assertEqual("retained", external.read_text())

@@ -109,8 +109,10 @@ def freeze_deployment(
             "deployment.toml requires maximum_startup_bytes, routes and shared deployment grants; only external routing accepts resolvers."
         )
     grant_input = local["deployment"]
-    project = grant_input.get("project") if type(grant_input) is dict else None
-    group_id = grant_input.get("gid") if type(grant_input) is dict else None
+    if type(grant_input) is not dict:
+        raise ConfigurationRejected("deployment.toml [deployment] requires the shared project name and nonzero socket group ID.")
+    project = grant_input.get("project")
+    group_id = grant_input.get("gid")
     if (
         type(project) is not str
         or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,48}", project) is None
@@ -364,7 +366,7 @@ def initialize_lifetime(uid, gid):
         os.close(descriptor)
 
 
-def prepare_runtime(runtime_root, uid, gid, *, check_only=False):
+def prepare_runtime(runtime_root, uid, gid, *, check_only):
     """Validate or give each mounted runtime leaf its mapped service identity."""
     if type(uid) is not int or type(gid) is not int or not 1 <= uid <= 4294967294 or not 1 <= gid <= 4294967294:
         raise ConfigurationRejected("provider runtime ownership requires nonzero mapped service UID and GID values.")
