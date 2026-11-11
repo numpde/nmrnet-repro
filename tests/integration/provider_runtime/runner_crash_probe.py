@@ -61,7 +61,7 @@ def main(operation, seconds):
         pid = int(entry.name)
         try:
             observed = identity(pid)
-            if observed[1] == supervisor and os.readlink(entry / "cwd") == work:
+            if observed[1] == supervisor and str((entry / "cwd").readlink()) == work:
                 candidates.append((pid, observed[2]))
         except (FileNotFoundError, ProcessLookupError):
             continue
@@ -70,7 +70,7 @@ def main(operation, seconds):
     child_fd = os.pidfd_open(child, 0)
     live(child_fd)
     assert identity(child)[1:] == (supervisor, child_ticks)
-    assert os.readlink(f"/proc/{child}/cwd") == work
+    assert str(Path(f"/proc/{child}/cwd").readlink()) == work
     observed = Path("/native/reader/.owner-session.lock").stat()
     lease = observed.st_dev, observed.st_ino
     inherited = []

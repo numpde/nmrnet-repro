@@ -686,7 +686,7 @@ esac
         self.assertIn("freeze", call)
         self.assertIn("--source-root", call)
         self.assertIn("/opt/provider/environment/bin/python", call)
-        selected = self.provider / os.readlink(self.provider / "current")
+        selected = self.provider / (self.provider / "current").readlink()
         self.assertNotEqual(selected, self.bundle)
         self.assertEqual(selected.stat().st_mode & 0o777, 0o555)
         self.assertEqual((selected / "compose.json").stat().st_mode & 0o777, 0o444)

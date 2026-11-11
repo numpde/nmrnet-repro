@@ -18,6 +18,7 @@ import select
 import socket
 import time
 from contextlib import ExitStack
+from pathlib import Path
 
 from provider_core.response_json import read_document
 from provider_core.runner_session import RunnerSession
@@ -75,7 +76,7 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
                 "Reader crash probe must transfer exactly one child pidfd."
             )
             (child_fd,) = descriptors
-            assert os.readlink(f"/proc/self/fd/{child_fd}") == "anon_inode:[pidfd]", (
+            assert str(Path(f"/proc/self/fd/{child_fd}").readlink()) == "anon_inode:[pidfd]", (
                 "Reader probe did not transfer a process handle."
             )
             facts = read_document(payload, 4096)
