@@ -83,7 +83,7 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
         pool = self.root / "pool"
         pool.mkdir()
         wheel = next(item["file"] for item in self.document["packages"] if item["name"] == "ruff")
-        shutil.copyfile(self.directory / wheel, pool / wheel)
+        shutil.copyfile(self.shared / wheel, pool / wheel)
         streamer = pool / "wheelhouse-tool-1.0.0.pyz"
         streamer.write_text("""import json, pathlib, sys, tarfile
 args = sys.argv
