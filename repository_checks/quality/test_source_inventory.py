@@ -17,6 +17,7 @@ require_container()
 # have separate rendering and deployment checks; this inventory owns image sources.
 import ast
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -358,7 +359,13 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
 
     def test_repository_checker_grants_complete_read_only_source_trees(self):
         result = subprocess.run(
-            ["bash", str(ROOT / "tools/container.sh"), "--print", "test/repository"], text=True, capture_output=True, check=True
+            ["bash", str(ROOT / "tools/container.sh"), "--print", "test/repository"],
+            env=os.environ | {
+                "NMRNET_DOCKER_CONTEXT_INPUT": "fixture-local",
+                "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///tmp/test-docker.sock",
+            },
+            text=True, capture_output=True, check=True,
         )
         arguments = shlex.split(result.stdout)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]

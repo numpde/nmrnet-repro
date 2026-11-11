@@ -9,11 +9,13 @@ from tools.container_guard import require_container
 
 require_container()
 
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 import unittest
 from pathlib import Path
@@ -302,18 +304,23 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             identity = "sha256:" + "b" * 64
             self.assertEqual(identity, fixture.environment["NMRNET_FAKE_BUILD_RESULT"])
-            dockerfile = fixture.root / "metadata.Dockerfile"
-            dockerfile.write_text("FROM scratch\nCOPY requirements/inference.lock /input.lock\n")
-            arguments = [
-                "build",
-                "--file",
-                str(dockerfile),
-                "--build-context",
-                "wheelhouse=" + str(fixture.root / ".work/wheelhouse"),
-                "--build-context",
-                "runtime-wheels=" + str(fixture.root / ".work/wheelhouse"),
-                str(fixture.root),
-            ]
+            capture = fixture.root / ".work/inference/.build.metadata/context"
+            capture.mkdir(parents=True)
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w"):
+                pass
+            payload = stream.getvalue()
+            arguments = ["build", "--file", "containers/inference/Dockerfile", "-"]
+
+            def build(additions):
+                return subprocess.run(
+                    [str(fixture.root / "bin/docker"), *arguments],
+                    env=fixture.environment | additions,
+                    input=payload,
+                    capture_output=True,
+                    check=False,
+                )
+
             registry = fixture.root / "containers.json"
             before = (registry.read_bytes(), registry.stat().st_ino)
             cases = (
@@ -326,20 +333,20 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             )
             for additions, expected, status in cases:
                 with self.subTest(additions=additions):
-                    result = self.inspect(fixture, arguments, additions)
+                    result = build(additions)
                     self.assertEqual(status, result.returncode, msg=result.stderr)
                     self.assertEqual((expected + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
             del fixture.environment["NMRNET_FAKE_BUILD_RESULT"]
             evidence = fixture.root / "build-evidence.json"
             evidence.unlink()
-            missing = self.inspect(fixture, arguments, {})
+            missing = build({})
             self.assertEqual(1, missing.returncode)
             self.assertEqual(b"", missing.stdout)
             self.assertIn(b"KeyError: 'NMRNET_FAKE_BUILD_RESULT'", missing.stderr)
             # Evidence is written before identity output consumes its result.
             self.assertTrue(evidence.is_file())
-            selected_bytes = self.inspect(fixture, arguments, {"NMRNET_FAKE_BUILD_BYTES": "3"})
+            selected_bytes = build({"NMRNET_FAKE_BUILD_BYTES": "3"})
             self.assertEqual(0, selected_bytes.returncode, msg=selected_bytes.stderr)
             self.assertEqual(b"xxx\n", selected_bytes.stdout)
             self.assertEqual(b"", selected_bytes.stderr)
