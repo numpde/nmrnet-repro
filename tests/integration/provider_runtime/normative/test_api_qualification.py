@@ -290,7 +290,14 @@ api_witness_stop_deployment 0
         self.assertEqual("", result.stdout)
 
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
-        for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent", "missing-volume"):
+        for scenario, expected_status in (
+            ("normal", 0),
+            ("query-failure", 7),
+            ("existing-output", 2),
+            ("ignored-output", 0),
+            ("missing-parent", 0),
+            ("missing-volume", 2),
+        ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 repository, records, output = root / "repository", root / "records", root / "output"
@@ -361,16 +368,12 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     check=False,
                 )
                 if scenario == "existing-output":
-                    self.assertEqual(2, result.returncode, msg=result.stderr)
+                    self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                     self.assertIn("Use fresh client output", result.stderr)
                     self.assertFalse((records / "query").exists())
                     self.assertFalse((records / "creates").exists())
                     continue
-                self.assertEqual(
-                    result.returncode,
-                    7 if scenario == "query-failure" else 2 if scenario == "missing-volume" else 0,
-                    msg=result.stderr,
-                )
+                self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                 self.assertEqual("client-inputs\n", (records / "query").read_text())
                 self.assertFalse((records / "deployments").exists())
                 if scenario == "query-failure":
@@ -393,6 +396,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertIn(b"fixture-proxy-socket", grants)
                     self.assertIn(b"--group-add\x001001\x00", grants)
 
+    # silent-defaults: allow-contract -- This fixture starts with an unchanged successful ambiguity probe; explicit switches select formats or probe/source failures; proof=ApiQualificationCompositionTests.test_ambiguity_mode_has_one_external_route_and_no_api_native_or_state_grants, test_format_choice_mode_reuses_the_same_route_retirement_and_metadata_only_grants and test_ambiguity_failure_or_changed_sources_still_retires_original_helpers.
     def _ambiguity(self, root, *, missing=None, failed=False, changed=False, probe="ambiguity"):
         repository, records, output = root / "repository", root / "records", root / "output"
         records.mkdir()
@@ -533,25 +537,116 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
 
     def test_actual_script_delegates_scripted_and_real_profiles_without_cross_grants(self):
         deployment_names = set()
-        for profile, clocks in (
-            ("scripted-pasted", (180, 240, 260)),
-            ("real-pasted", (900, 960, 980)),
-            ("real-smiles", (900, 960, 980)),
-            ("real-smiles-multiple", (900, 960, 980)),
-            ("real-upload", (900, 1020, 1040)),
-            ("real-sdf-zip", (900, 1200, 1220)),
-            ("resume-sdf-zip", (900, 1200, 1220)),
-            ("failed-install", (180, 240, 260)),
-            ("failed-up", (180, 240, 260)),
-            ("failed-down", (180, 240, 260)),
+        for case in (
+            {
+                "profile": "scripted-pasted",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "pasted",
+                "roles": ["grants", "peer", "stage", "client"],
+                "fixture": "api_pasted.json",
+            },
+            {
+                "profile": "real-pasted",
+                "clocks": (900, 960, 980),
+                "mode": "real-pasted",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "pasted",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_pasted.json",
+            },
+            {
+                "profile": "real-smiles",
+                "clocks": (900, 960, 980),
+                "mode": "real-smiles",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "smiles",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_smiles.json",
+            },
+            {
+                "profile": "real-smiles-multiple",
+                "clocks": (900, 960, 980),
+                "mode": "real-smiles-multiple",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "smiles-multiple",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_smiles_multiple.json",
+            },
+            {
+                "profile": "real-upload",
+                "clocks": (900, 1020, 1040),
+                "mode": "real-upload",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "upload",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_upload.json",
+            },
+            {
+                "profile": "real-sdf-zip",
+                "clocks": (900, 1200, 1220),
+                "mode": "real-sdf-zip",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "sdf-zip",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_sdf_zip.json",
+            },
+            {
+                "profile": "resume-sdf-zip",
+                "clocks": (900, 1200, 1220),
+                "mode": "real-sdf-zip",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "sdf-zip",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_sdf_zip.json",
+            },
+            {
+                "profile": "failed-install",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": "install",
+                "status": 7,
+                "deployment_calls": ["install"],
+            },
+            {
+                "profile": "failed-up",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": "up",
+                "status": 7,
+                "deployment_calls": ["install", "up", "down"],
+            },
+            {
+                "profile": "failed-down",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": "down",
+                "status": 7,
+                "deployment_calls": ["install", "up", "down", "down"],
+            },
         ):
+            profile, clocks = case["profile"], case["clocks"]
             with self.subTest(mode=profile), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repository, records, output = root / "repository", root / "records", root / "output"
                 records.mkdir()
                 resumed = profile == "resume-sdf-zip"
-                failed = profile.removeprefix("failed-") if profile.startswith("failed-") else None
-                mode = "scripted-pasted" if failed else "real-sdf-zip" if resumed else profile
+                failed, mode = case["failed"], case["mode"]
                 script = repository / "tools/provider_api_qualification.sh"
                 script.parent.mkdir(parents=True)
                 shutil.copyfile("/fixture/provider_api_qualification.sh", script)
@@ -677,14 +772,13 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 result = subprocess.run(
                     ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
-                expected_status = 7 if failed else 0
-                self.assertEqual(result.returncode, expected_status, msg=result.stderr)
+                self.assertEqual(case["status"], result.returncode, msg=result.stderr)
                 calls = [row.split("|") for row in (records / "deployments").read_text().splitlines()]
                 if failed:
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("qualified;", result.stdout)
                     if failed == "down":
-                        self.assertEqual([row[0] for row in calls], ["install", "up", "down", "down"])
+                        self.assertEqual(case["deployment_calls"], [row[0] for row in calls])
                         self.assertEqual(1, (records / "creates").read_text().count("client|"))
                         events = (records / "events").read_text().splitlines()
                         self.assertNotIn("signal-peer", events)
@@ -693,13 +787,13 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         self.assertIn("DEPLOYMENT=" + calls[0][1], result.stderr)
                     else:
                         self.assertNotIn("client|", (records / "creates").read_text())
-                        self.assertEqual([row[0] for row in calls], ["install", "up", "down"] if failed == "up" else ["install"])
+                        self.assertEqual(case["deployment_calls"], [row[0] for row in calls])
                     if failed == "up":
                         events = (records / "events").read_text().splitlines()
                         self.assertLess(events.index("down"), events.index("peer"))
                     continue
                 self.assertEqual(0, result.returncode, msg=result.stderr)
-                self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
+                self.assertEqual(case["deployment_calls"], [row[0] for row in calls])
                 self.assertEqual({row[1] for row in calls}, {(output / "deployment-name").read_text().strip()})
                 self.assertNotIn(calls[0][1], deployment_names)
                 deployment_names.add(calls[0][1])
@@ -728,7 +822,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         "--process-seconds",
                         str(clocks[1]),
                         "--case-kind",
-                        mode.removeprefix("real-") if mode != "scripted-pasted" else "pasted",
+                        case["client_kind"],
                     ],
                 )
                 self.assertEqual(
@@ -737,10 +831,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 )
                 creates = (records / "creates").read_text().splitlines()
                 self.assertEqual(
+                    case["roles"],
                     [line.split("|")[0] for line in creates],
-                    ["grants", "peer", "stage", "client"]
-                    if mode == "scripted-pasted"
-                    else ["grants", "selection", "stage", "client"],
                 )
                 self.assertTrue(all(line.endswith("|true") for line in creates))
                 self.assertIn(f"stage|none|{image}|true", creates)
@@ -765,13 +857,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertTrue(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in stage_grants))
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))
-                expected_fixture = (
-                    "api_sdf_zip.json"
-                    if mode == "real-sdf-zip"
-                    else "api_smiles_multiple.json"
-                    if mode == "real-smiles-multiple"
-                    else "api_" + mode.rsplit("-", 1)[-1] + ".json"
-                )
+                expected_fixture = case["fixture"]
                 source_root = output / "qualification-source" if mode == "real-sdf-zip" else repository
                 self.assertTrue(
                     any(
