@@ -36,7 +36,7 @@ class SmallMoleculeBondDistanceTests(unittest.TestCase):
                     expected = experimental_angstrom[molecule["name"]][atoms[right]]
                     tolerance = tolerance_angstrom[atoms[right]]
                     message = (
-                        f"{molecule['name']} {left}:{atoms[left]}–{right}:{atoms[right]} "
+                        f"{molecule['name']} {left}:{atoms[left]}\u2013{right}:{atoms[right]} "
                         f"{distance:.6f}; experimental {expected:.3f} ± {tolerance:.2f} Å"
                     )
                     sys.stdout.write(message)
