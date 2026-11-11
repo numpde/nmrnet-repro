@@ -255,9 +255,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         """Inject a planned batch at the binding seam; this does not qualify batch execution."""
         raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["O"] * 128, "coordinates": [[0, 0, 0]] * 128}).encode()
         geometry = replace(
-            # repo-check: allow-tuple-generator -- The fixture preserves tuple-valued source positions for each ordered geometry; proof=nmrnet_provider/input_geometry.py::PreparedGeometry.
             prepare_json(raw),
             source_position_kind="atom_id",
+            # repo-check: allow-tuple-generator -- The fixture preserves tuple-valued source positions for each ordered geometry; proof=nmrnet_provider/input_geometry.py::PreparedGeometry.
             source_positions=tuple(2**53 - 1 - index for index in range(128)),
         )
         # repo-check: allow-tuple-generator -- PreparedJobInput freezes ordered geometries as a tuple; proof=nmrnet_provider/prepared_input.py::PreparedJobInput.
