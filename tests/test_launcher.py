@@ -48,9 +48,7 @@ class LauncherTests(unittest.TestCase):
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         self.assertNotIn("docker.sock", " ".join(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
-        self.assertEqual(
-            arguments[-2:], ["test_nmrnet_process.py", "test_nmrnet_reports.py"]
-        )
+        self.assertEqual(arguments[-2:], ["test_nmrnet_process.py", "test_nmrnet_reports.py"])
 
     def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/worker-startup")
@@ -93,9 +91,17 @@ class LauncherTests(unittest.TestCase):
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
         self.assertEqual(9, len(mounts))
         self.assertEqual(
-            {"/workspace/tools", "/workspace/tests", "/workspace/nmrnet_inference", "/workspace/nmrnet_provider",
-             "/consumer/tools", "/consumer/nmrnet_inference", "/consumer/nmrnet_provider",
-             "/input/provider-core-install.lock", "/wheelhouse"},
+            {
+                "/workspace/tools",
+                "/workspace/tests",
+                "/workspace/nmrnet_inference",
+                "/workspace/nmrnet_provider",
+                "/consumer/tools",
+                "/consumer/nmrnet_inference",
+                "/consumer/nmrnet_provider",
+                "/input/provider-core-install.lock",
+                "/wheelhouse",
+            },
             {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
         )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
@@ -153,8 +159,13 @@ class LauncherTests(unittest.TestCase):
             checkout, environment = self.checker_checkout(temporary, run_status=0)
             (checkout / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
             environment["FAKE_CHECK_LEASE_DIR"] = str(checkout)
-            result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "test/repository"],
-                                    env=environment, text=True, capture_output=True, timeout=5)
+            result = subprocess.run(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository"],
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=5,
+            )
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual(2, len((checkout / "engine-log").read_text().splitlines()))
 
@@ -211,7 +222,10 @@ class LauncherTests(unittest.TestCase):
             )
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "test/repository"],
-                env=environment, text=True, capture_output=True, check=False,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             arguments = shlex.split(result.stdout)
@@ -243,15 +257,20 @@ class LauncherTests(unittest.TestCase):
             (checkout / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
             ready = checkout / "mapping-ready"
             settled = checkout / "mapping-settled"
-            (checkout / "tools/docker.sh").write_text('''#!/bin/bash
+            (checkout / "tools/docker.sh").write_text("""#!/bin/bash
 trap 'sleep 3; : > "$MAPPING_SETTLED"; exit 143' TERM
 : > "$MAPPING_READY"
 while :; do sleep 0.1; done
-''')
+""")
             environment.update(MAPPING_READY=str(ready), MAPPING_SETTLED=str(settled))
-            process = subprocess.Popen(["bash", str(checkout / "tools/container.sh"), "test/repository/documentation"],
-                                       env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       text=True, start_new_session=True)
+            process = subprocess.Popen(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository/documentation"],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
             try:
                 deadline = time.monotonic() + 8
                 while not ready.exists() and time.monotonic() < deadline:

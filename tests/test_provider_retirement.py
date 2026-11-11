@@ -35,7 +35,9 @@ class WorkerRetirementTests(unittest.TestCase):
         (self.root / "inspection").write_text(self.cid + " exited false 0 false\n")
 
     # silent-defaults: allow-contract -- Normal retirement succeeds; each fault test explicitly selects the failing operation or prior ownership state.
-    def run_retirement(self, *, stop_status=0, inspect_status=0, remove_status=0, log_status=0, retired="true", cancel="", cap=""):
+    def run_retirement(
+        self, *, stop_status=0, inspect_status=0, remove_status=0, log_status=0, retired="true", cancel="", cap=""
+    ):
         return subprocess.run(
             [
                 "bash",

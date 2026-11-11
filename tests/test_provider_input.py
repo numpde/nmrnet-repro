@@ -45,8 +45,9 @@ class ProviderInputTests(unittest.TestCase):
 
     def test_json_file_unit_is_required_and_cannot_be_overridden(self):
         source = b'{"coordinate_unit":"nm","atoms":["C"],"coordinates":[[0.1,0,0]]}'
-        self.assertEqual(input_geometry.prepare_json(source).request_bytes,
-                         input_geometry.prepare_json(source, source_unit="nm").request_bytes)
+        self.assertEqual(
+            input_geometry.prepare_json(source).request_bytes, input_geometry.prepare_json(source, source_unit="nm").request_bytes
+        )
         with self.assertRaisesRegex(input_geometry.InputRejected, "conflict"):
             input_geometry.prepare_json(source, source_unit="angstrom")
         for unit in (None, "unknown", ""):

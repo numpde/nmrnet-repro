@@ -20,20 +20,26 @@ class ConsumerLauncherTests(unittest.TestCase):
                 with self.subTest(selection=name):
                     result = subprocess.run(
                         ["bash", "tools/container.sh", "--print", "test/integration/provider-core/" + name],
-                        env={**os.environ,
-                             "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
-                             "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
-                             "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
-                             "NMRNET_WHEELHOUSE_INPUT": pool,
-                             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line"},
-                        capture_output=True, text=True, check=False,
+                        env={
+                            **os.environ,
+                            "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                            "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                            "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                            "NMRNET_WHEELHOUSE_INPUT": pool,
+                            "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
+                        },
+                        capture_output=True,
+                        text=True,
+                        check=False,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     command = shlex.split(result.stdout.splitlines()[-1])
                     self.assertEqual(command[command.index("--network") + 1], "none")
-                    self.assertEqual(command[command.index("tools.provider_test_environment") + 1:], ["integration", *patterns])
+                    self.assertEqual(command[command.index("tools.provider_test_environment") + 1 :], ["integration", *patterns])
                     mounts = [command[index + 1] for index, word in enumerate(command) if word == "--mount"]
                     self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
                     self.assertTrue(any(mount.endswith(",dst=/input/provider-core-install.lock,readonly") for mount in mounts))
                     self.assertTrue(any(mount.endswith(",dst=/input/provider-core-release.json,readonly") for mount in mounts))
-                    self.assertFalse(any("packages/provider-core" in mount or "dst=/workspace/provider_core" in mount for mount in mounts))
+                    self.assertFalse(
+                        any("packages/provider-core" in mount or "dst=/workspace/provider_core" in mount for mount in mounts)
+                    )

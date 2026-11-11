@@ -121,11 +121,7 @@ class BaselineRunTests(unittest.TestCase):
         self.assertEqual(report["repository_revision"], self.options["repository_revision"])
         self.assertEqual(
             report["tool_sources"],
-            {
-                "tools/baseline_run.py": baseline_run.baseline_prepare.file_identity(
-                    Path("/workspace/tools/baseline_run.py")
-                )
-            },
+            {"tools/baseline_run.py": baseline_run.baseline_prepare.file_identity(Path("/workspace/tools/baseline_run.py"))},
         )
         attempt = json.loads((self.output / "attempt.json").read_text())
         self.assertEqual(attempt["tool_sources"], report["tool_sources"])

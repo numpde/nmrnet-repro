@@ -75,8 +75,7 @@ class PredictionWorkerTests(unittest.IsolatedAsyncioTestCase):
         worker.start()
         child.close()
         reader, writer = await asyncio.open_unix_connection(sock=parent)
-        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1,
-                                  declaration_sha256="e" * 64)
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1, declaration_sha256="e" * 64)
         try:
             with self.assertRaisesRegex(WorkerProtocolError, "model declaration"):
                 await client.prepare((b"request",))
@@ -215,8 +214,10 @@ class WorkerFramingTests(unittest.TestCase):
         connection = RecordingConnection(prepare_frame() + execute_frame(token))
         prediction = RecordingPrediction()
         cause = prediction_model.ModelCallFailed("model failure")
-        with (patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
-              patch.object(prediction, "execute", side_effect=cause)):
+        with (
+            patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
+            patch.object(prediction, "execute", side_effect=cause),
+        ):
             serve_connection(connection, prediction, allocation="test-allocation", io_seconds=1)
         reply = document(connection.sent[-1][4:])
         self.assertEqual(reply["kind"], "model_call_failed")
@@ -390,9 +391,11 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
                     prediction = ReleasedPredictionSession(models)
                     prediction._prediction.prepare = Mock(side_effect=lambda _requests: (models._selection(), object())[1])
                     connection = RecordingConnection(prepare_frame())
-                    with (patch("nmrnet_inference.worker.secrets.token_hex", return_value="a" * 32),
-                          patch("nmrnet_inference.release.importlib.metadata.version", return_value="fixture"),
-                          suppress(EOFError)):
+                    with (
+                        patch("nmrnet_inference.worker.secrets.token_hex", return_value="a" * 32),
+                        patch("nmrnet_inference.release.importlib.metadata.version", return_value="fixture"),
+                        suppress(EOFError),
+                    ):
                         serve_connection(connection, prediction, allocation="test-allocation", io_seconds=1)
                     client, writer = self.client(connection.sent[0], declaration_sha256=expected)
                     if changed:
@@ -404,8 +407,7 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(writer.sent), 1)
 
     async def test_changed_model_declaration_blocks_prediction_before_execute(self):
-        reply = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32,
-                       "declaration_sha256": "e" * 64})
+        reply = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "e" * 64})
         client, writer = self.client(reply)
         with self.assertRaisesRegex(WorkerProtocolError, "this worker's prediction was not dispatched") as failure:
             await client.prepare((b"request",))
@@ -416,9 +418,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(writer.sent), 1)
 
     async def test_model_failure_frame_is_distinct_from_general_execution_failure(self):
-        replies = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}) + frame(
-            {"kind": "model_call_failed", "allocation": "test-allocation", "diagnostic": "private cause"}
-        )
+        replies = frame(
+            {"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}
+        ) + frame({"kind": "model_call_failed", "allocation": "test-allocation", "diagnostic": "private cause"})
         client, writer = self.client(replies)
         handle = await client.prepare((b"request",))
         with self.assertRaises(ModelCallFailed) as caught:
@@ -429,9 +431,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_result_count_or_shape_preserves_private_reply(self):
         for result in ([], [{"private": "PRIVATE_RESULT"}] * 2, {"private": "PRIVATE_RESULT"}):
             with self.subTest(shape=type(result).__name__):
-                replies = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}) + frame(
-                    {"kind": "result", "allocation": "test-allocation", "result": result}
-                )
+                replies = frame(
+                    {"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}
+                ) + frame({"kind": "result", "allocation": "test-allocation", "result": result})
                 client, writer = self.client(replies)
                 handle = await client.prepare((b"request",))
                 with self.assertRaises(WorkerResultRejected) as failure:
@@ -472,8 +474,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         reader.feed_data(reply_bytes)
         reader.feed_eof()
         writer = BufferedWriter()
-        return PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=seconds,
-                                declaration_sha256=declaration_sha256), writer
+        return PredictionClient(
+            reader, writer, allocation="test-allocation", operation_seconds=seconds, declaration_sha256=declaration_sha256
+        ), writer
 
     async def test_oversized_input_is_rejected_before_base64_encoding(self):
         client, writer = self.client(b"")
@@ -505,7 +508,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_admitted_execution_failure_is_distinct_from_generic_worker_refusal(self):
         for kind, error in (("execution_failed", PredictionExecutionFailed), ("failure", WorkerReportedFailure)):
             with self.subTest(kind=kind):
-                replies = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64})
+                replies = frame(
+                    {"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}
+                )
                 replies += frame({"kind": kind, "allocation": "test-allocation", "diagnostic": "private cause"})
                 client, writer = self.client(replies)
                 handle = await client.prepare((b"request",))
@@ -518,7 +523,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_owned_exchange_deadline_is_distinct_from_a_foreign_timeout(self):
         reader, writer = asyncio.StreamReader(), BufferedWriter()
-        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64)
+        client = PredictionClient(
+            reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64
+        )
         with self.assertRaises(WorkerExchangeTimedOut) as expired:
             await client.prepare((b"request",))
         self.assertTrue(expired.exception.send_started)
@@ -546,7 +553,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_timeout_and_channel_close_failure_remain_independent(self):
         reader, writer = asyncio.StreamReader(), BufferedWriter()
-        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64)
+        client = PredictionClient(
+            reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64
+        )
         cleanup = OSError("PRIVATE_CLOSE_FAILURE")
         with patch.object(writer, "close", side_effect=cleanup):
             with self.assertRaises(ExceptionGroup) as caught:
@@ -598,8 +607,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         interruption = asyncio.CancelledError()
         cleanup = OSError("PRIVATE_CLOSE_FAILURE")
         native = Mock(observe_failure=AsyncMock(side_effect=interruption))
-        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1,
-                                  declaration_sha256="d" * 64, native=native)
+        client = PredictionClient(
+            reader, writer, allocation="test-allocation", operation_seconds=1, declaration_sha256="d" * 64, native=native
+        )
         with patch.object(writer, "close", side_effect=cleanup):
             with self.assertRaises(asyncio.CancelledError) as caught:
                 await client.prepare((b"request",))
@@ -622,7 +632,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(caught.exception, foreign)
 
     async def test_elapsed_buffered_reply_deadline_does_not_return_a_handle(self):
-        reply_bytes = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64})
+        reply_bytes = frame(
+            {"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}
+        )
         client, writer = self.client(reply_bytes)
         loop = asyncio.get_running_loop()
         current = loop.time()
@@ -637,7 +649,9 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         reader = asyncio.StreamReader()
         reader.feed_data(b"\0\0")
         writer = BufferedWriter()
-        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64)
+        client = PredictionClient(
+            reader, writer, allocation="test-allocation", operation_seconds=0.01, declaration_sha256="d" * 64
+        )
         with self.assertRaises(TimeoutError):
             await client.prepare((b"request",))
         self.assertTrue(writer.closed)
@@ -652,14 +666,18 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         task = asyncio.create_task(client.prepare((b"request",)))
         await asyncio.sleep(0)
         client.close()
-        reader.feed_data(frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}))
+        reader.feed_data(
+            frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64})
+        )
         with self.assertRaises(WorkerProtocolError):
             await task
         with self.assertRaises(ValueError):
             await client.execute(object())
 
     async def test_rejected_replacement_revokes_previous_handle_without_sending(self):
-        client, writer = self.client(frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}))
+        client, writer = self.client(
+            frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64})
+        )
         handle = await client.prepare((b"original",))
         with self.assertRaises(ValueError):
             await client.prepare((b"x" * (MAX_INPUT_BYTES + 1),))

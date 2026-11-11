@@ -26,17 +26,17 @@ class ImageRetirementTests(unittest.TestCase):
         tools.mkdir()
         for name in ("image_retirement.sh", "image_lifecycle.sh"):
             shutil.copyfile(ROOT / "tools" / name, tools / name)
-        (tools / "docker_client.sh").write_text('''docker_client_prepare() {
+        (tools / "docker_client.sh").write_text("""docker_client_prepare() {
     engine=(python3 "$repository_root/tools/engine.py" "$repository_root")
 }
 docker_client_cleanup() { :; }
-''')
-        (tools / "inference_native.sh").write_text('''inference_native() {
+""")
+        (tools / "inference_native.sh").write_text("""inference_native() {
     shift 3
     "$@"
 }
-''')
-        (tools / "engine.py").write_text('''import json,sys
+""")
+        (tools / "engine.py").write_text("""import json,sys
 from pathlib import Path
 root=Path(sys.argv[1]); args=sys.argv[2:]
 state=json.loads((root/"state.json").read_text())
@@ -64,7 +64,7 @@ elif args[:2]==["image","rm"]:
     assert args[2]=="--no-prune" and len(args)==4
     with (root/"removed").open("a") as stream: stream.write(args[-1]+"\\n")
 else: raise SystemExit(91)
-''')
+""")
         for role, letter in (("provider", "a"), ("preparation", "b"), ("inference", "c"), ("checker", "9")):
             path = self.root / ".work" / role
             path.mkdir(parents=True)
@@ -75,8 +75,14 @@ else: raise SystemExit(91)
         (bundle / "compose.json").write_text(json.dumps({"services": {"provider": {"image": image("d")}}}))
         (self.deployment / "current").symlink_to("bundles/generation-selected")
         self.state = {
-            "images": {"provider": [image(x) for x in "adef0"], "geometry": [image("b")], "inference": [image("c")], "checker": [image("9")]},
-            "used": image("e"), "tagged": image("0"),
+            "images": {
+                "provider": [image(x) for x in "adef0"],
+                "geometry": [image("b")],
+                "inference": [image("c")],
+                "checker": [image("9")],
+            },
+            "used": image("e"),
+            "tagged": image("0"),
         }
         self.save_state()
 
@@ -84,8 +90,7 @@ else: raise SystemExit(91)
         (self.root / "state.json").write_text(json.dumps(self.state))
 
     def retire(self):
-        return subprocess.run(["bash", str(self.root / "tools/image_retirement.sh")],
-                              capture_output=True, text=True, timeout=5)
+        return subprocess.run(["bash", str(self.root / "tools/image_retirement.sh")], capture_output=True, text=True, timeout=5)
 
     def removed(self):
         path = self.root / "removed"
@@ -96,8 +101,7 @@ else: raise SystemExit(91)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.removed(), [image("f")])
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
-        self.assertEqual([call for call in calls if call[:2] == ["image", "rm"]],
-                         [["image", "rm", "--no-prune", image("f")]])
+        self.assertEqual([call for call in calls if call[:2] == ["image", "rm"]], [["image", "rm", "--no-prune", image("f")]])
 
     def test_failed_inventory_and_broken_selected_recipe_remove_nothing(self):
         for fault in ("inspect", "compose", "image", "broken_selection"):
@@ -139,6 +143,7 @@ else: raise SystemExit(91)
 
     def test_recent_unselected_image_is_preserved(self):
         from datetime import datetime, timezone
+
         self.state["created"] = {image("f"): datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
         self.save_state()
         result = self.retire()
@@ -181,15 +186,27 @@ else: raise SystemExit(91)
         self.assertEqual(self.removed(), [])
 
     def test_checkout_lease_protects_the_build_to_record_publication_gap(self):
-        publisher = subprocess.Popen([
-            "bash", "-eu", "-c", '''repository_root=$1
+        publisher = subprocess.Popen(
+            [
+                "bash",
+                "-eu",
+                "-c",
+                """repository_root=$1
 source "$repository_root/tools/image_lifecycle.sh"
 image_lifecycle_lock shared
 printf '%s\\n' "$2" > "$repository_root/new-image"
 touch "$repository_root/ready"
 until [[ -f $repository_root/release ]]; do sleep 0.01; done
 mv "$repository_root/new-image" "$repository_root/.work/provider/image-id"
-''', "publication", str(self.root), image("f")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+""",
+                "publication",
+                str(self.root),
+                image("f"),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         try:
             deadline = time.monotonic() + 2
             while not (self.root / "ready").exists() and time.monotonic() < deadline:

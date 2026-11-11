@@ -23,8 +23,9 @@ class ComposeImageIdsTests(unittest.TestCase):
         self.path.write_text(json.dumps({"services": services}))
 
     def run_command(self, *arguments):
-        return subprocess.run([sys.executable, str(SCRIPT), *arguments, str(self.path)],
-                              capture_output=True, text=True, check=False)
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *arguments, str(self.path)], capture_output=True, text=True, check=False
+        )
 
     def test_services_prints_the_complete_immutable_mapping(self):
         self.write_services()
@@ -46,9 +47,11 @@ class ComposeImageIdsTests(unittest.TestCase):
         self.assertIn("do not share one runtime image", result.stderr)
 
     def test_incomplete_service_set_or_mutable_image_refuses(self):
-        for services in ({"provider": {"image": IMAGE}},
-                         {**{role: {"image": IMAGE} for role in SERVICES}, "unexpected": {"image": IMAGE}},
-                         {**{role: {"image": IMAGE} for role in SERVICES}, "provider": {"image": "local:latest"}}):
+        for services in (
+            {"provider": {"image": IMAGE}},
+            {**{role: {"image": IMAGE} for role in SERVICES}, "unexpected": {"image": IMAGE}},
+            {**{role: {"image": IMAGE} for role in SERVICES}, "provider": {"image": "local:latest"}},
+        ):
             with self.subTest(services=services):
                 self.write_services(services)
                 result = self.run_command("services")

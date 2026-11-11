@@ -96,9 +96,7 @@ class PredictionInputTests(unittest.TestCase):
                     self.parse(raw)
 
         raw = encoded_request(coordinate_unit="angstrom")
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
-        ):
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}):
             self.assertEqual("angstrom", self.parse(raw)["coordinate_unit"])
 
         with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}):
@@ -109,32 +107,20 @@ class PredictionInputTests(unittest.TestCase):
         context_only = encoded_request(atoms=["N"], coordinates=[[0.0, 0.0, 0.0]])
         self.assertEqual(["N"], self.parse(context_only)["atoms"])
 
-        carbon_with_context = encoded_request(
-            atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
-        )
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}
-        ):
+        carbon_with_context = encoded_request(atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}):
             with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
                 self.parse(carbon_with_context)
 
     def test_different_head_units_only_admit_matching_single_head_requests(self):
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "nm"}
-        ):
-            hydrogen = encoded_request(
-                coordinate_unit="angstrom", atoms=["H"], coordinates=[[0.0, 0.0, 0.0]]
-            )
-            carbon = encoded_request(
-                coordinate_unit="nm", atoms=["C"], coordinates=[[0.0, 0.0, 0.0]]
-            )
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "nm"}):
+            hydrogen = encoded_request(coordinate_unit="angstrom", atoms=["H"], coordinates=[[0.0, 0.0, 0.0]])
+            carbon = encoded_request(coordinate_unit="nm", atoms=["C"], coordinates=[[0.0, 0.0, 0.0]])
             self.assertEqual("angstrom", self.parse(hydrogen)["coordinate_unit"])
             self.assertEqual("nm", self.parse(carbon)["coordinate_unit"])
 
             combined = encoded_request(coordinate_unit="angstrom")
-            with self.assertRaisesRegex(
-                ValueError, "C prediction: coordinate_unit does not match the qualified model unit"
-            ):
+            with self.assertRaisesRegex(ValueError, "C prediction: coordinate_unit does not match the qualified model unit"):
                 self.parse(combined)
 
     def test_non_angstrom_model_input_blocks_tensor_composition(self):
@@ -154,16 +140,12 @@ class PredictionInputTests(unittest.TestCase):
                 prediction_model.compose_net_input(request, object(), "C")
 
             request["coordinate_unit"] = "angstrom"
-            with self.assertRaisesRegex(
-                ValueError, "H prediction: coordinate_unit does not match the qualified model unit"
-            ):
+            with self.assertRaisesRegex(ValueError, "H prediction: coordinate_unit does not match the qualified model unit"):
                 prediction_model.compose_net_input(request, object(), "H")
 
     def test_valid_request_preserves_atom_order_and_float32_coordinates(self):
         raw = encoded_request()
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
-        ):
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}):
             parsed = self.parse(raw)
         self.assertEqual(["C", "H"], parsed["atoms"])
         self.assertEqual(1.090000033378601, parsed["coordinates"][1][0])
@@ -215,11 +197,7 @@ class PredictionInputTests(unittest.TestCase):
             self.parse(raw)
 
     def test_integer_digit_limit_has_an_input_diagnostic(self):
-        raw = (
-            b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[['
-            + b"9" * 5000
-            + b",0,0]]}"
-        )
+        raw = b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[' + b"9" * 5000 + b",0,0]]}"
         with self.assertRaisesRegex(ValueError, "integer literal exceeds the supported digit limit"):
             self.parse(raw)
 
@@ -595,7 +573,9 @@ class SelectedReleaseTests(unittest.TestCase):
         self.specification["dictionary"] = {**dictionary_source, **dictionary}
         for element in ("H", "C"):
             self.specification["elements"][element] = {
-                role: self.add_member("checkpoints", self.specification["checkpoint_archive"], f"{element}/{role}", (element + role).encode())
+                role: self.add_member(
+                    "checkpoints", self.specification["checkpoint_archive"], f"{element}/{role}", (element + role).encode()
+                )
                 for role in ("checkpoint", "scaler")
             }
         self.declaration.write_text(json.dumps(self.specification))
@@ -624,8 +604,9 @@ class SelectedReleaseTests(unittest.TestCase):
         self.declaration.write_text("{}")
         self.assertIs(self.loader._selection(), selected)
         self.assertEqual(self.loader.declaration_sha256, hashlib.sha256(original).hexdigest())
-        replacement = SelectedReleaseModels(declaration_path=self.declaration,
-                                             weight_root=self.root / "weight", checkpoint_root=self.root / "checkpoints")
+        replacement = SelectedReleaseModels(
+            declaration_path=self.declaration, weight_root=self.root / "weight", checkpoint_root=self.root / "checkpoints"
+        )
         replacement._selection()
         self.assertNotEqual(replacement.declaration_sha256, self.loader.declaration_sha256)
 
@@ -651,7 +632,11 @@ class SelectedReleaseTests(unittest.TestCase):
         decoder.assert_not_called()
 
     def test_altered_member_and_matching_receipt_cannot_replace_declared_bytes(self):
-        for tree, role, name in (("weight", "dictionary", "weight/dict.txt"), ("checkpoints", "checkpoint", "H/checkpoint"), ("checkpoints", "scaler", "H/scaler")):
+        for tree, role, name in (
+            ("weight", "dictionary", "weight/dict.txt"),
+            ("checkpoints", "checkpoint", "H/checkpoint"),
+            ("checkpoints", "scaler", "H/scaler"),
+        ):
             with self.subTest(role=role):
                 source = self.receipts[tree]
                 original = (self.root / tree / name).read_bytes()

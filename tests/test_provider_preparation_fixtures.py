@@ -62,7 +62,7 @@ class PreparationFixtureNormativeTests(unittest.TestCase):
         for filename, unit, distance in (("scale_nm.xyz", "nm", 1.25), ("scale_bohr.xyz", "bohr", 1.058354421088)):
             with self.subTest(unit=unit):
                 source = (FIXTURES / "normative" / filename).read_bytes()
-                prepared, = prepare_xyz(source, source_unit=unit, selection="all")
+                (prepared,) = prepare_xyz(source, source_unit=unit, selection="all")
                 request = json.loads(prepared.request_bytes)
                 self.assertEqual(["C", "H"], request["atoms"])
                 self.assertEqual("angstrom", request["coordinate_unit"])

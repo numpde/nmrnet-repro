@@ -30,6 +30,7 @@ from nmrnet_provider.xyz import prepare_xyz
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 ALLOCATION = "geometry-test"
 
+
 class PDBContainerExpectationTests(unittest.TestCase):
     def test_pdb_reply_preserves_independent_b_coordinates_and_serials(self):
         source = (FIXTURES / "normative/alternate_locations.pdb").read_bytes()
@@ -38,8 +39,10 @@ class PDBContainerExpectationTests(unittest.TestCase):
         geometries = prepared_reply(
             {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))}, source, **options
         )
-        expected = json.loads((FIXTURES / "expected.json").read_bytes())["native_files"]["normative/alternate_locations.pdb"]["selection_B"]
-        geometry, = geometries
+        expected = json.loads((FIXTURES / "expected.json").read_bytes())["native_files"]["normative/alternate_locations.pdb"][
+            "selection_B"
+        ]
+        (geometry,) = geometries
         request = json.loads(geometry.request_bytes)
         self.assertEqual(request["atoms"], expected["atoms"])
         self.assertEqual(request["coordinates"], expected["coordinates_angstrom"])
@@ -345,8 +348,9 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
 
     async def test_json_units_and_source_identity_cross_direct_and_zip_reader_processes(self):
         for unit, value, expected in (("nm", 0.100000001, 1.00000001), ("bohr", 2, 1.058354421088)):
-            source = json.dumps({"coordinate_unit": unit, "atoms": ["H", "C"],
-                                 "coordinates": [[value, 0, 0], [0, 0, 0]]}).encode()
+            source = json.dumps(
+                {"coordinate_unit": unit, "atoms": ["H", "C"], "coordinates": [[value, 0, 0], [0, 0, 0]]}
+            ).encode()
             for archived in (False, True):
                 for option in (None, unit):
                     with self.subTest(unit=unit, archived=archived, option=option):
@@ -361,7 +365,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
                             geometries = member.geometries
                         else:
                             geometries = await client.read(source, **options)
-                        geometry, = geometries
+                        (geometry,) = geometries
                         self.assertEqual(json.loads(geometry.request_bytes)["coordinates"], [[expected, 0, 0], [0, 0, 0]])
                         self.assertEqual(geometry.source_sha256, hashlib.sha256(source).hexdigest())
                         self.assertEqual((geometry.source_positions, geometry.source_position_kind), ((0, 1), "atom_index"))
@@ -482,8 +486,18 @@ class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
         source = b'{"coordinate_unit":"nm","atoms":["C"],"coordinates":[[0.100000001,0,0]]}'
         original = read_source(source_request(source, source_format="json", source_unit=None, selection=None))[0]
         baseline = json.loads(json.dumps(original))
-        self.assertEqual(len(prepared_reply({"kind": "geometries", "allocation": ALLOCATION, "records": [baseline]},
-                                            source, source_format="json", source_unit=None, selection=None)), 1)
+        self.assertEqual(
+            len(
+                prepared_reply(
+                    {"kind": "geometries", "allocation": ALLOCATION, "records": [baseline]},
+                    source,
+                    source_format="json",
+                    source_unit=None,
+                    selection=None,
+                )
+            ),
+            1,
+        )
         for changed in ({"coordinates": [[10.0000001, 0, 0]]}, {"atoms": ["H"]}, {"coordinate_unit": "nm"}):
             raw = json.loads(base64.b64decode(original["request_base64"])) | changed
             record = baseline | {"request_base64": base64.b64encode(json.dumps(raw, separators=(",", ":")).encode()).decode()}

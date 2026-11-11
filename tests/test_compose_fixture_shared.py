@@ -12,7 +12,7 @@ import unittest
 import uuid
 from pathlib import Path
 
-CHECKER = r'''#!/usr/bin/env bash
+CHECKER = r"""#!/usr/bin/env bash
 checker_begin() {
     operation_directory=$TEST_ROOT/operation
     mkdir -p "$operation_directory"
@@ -72,7 +72,7 @@ checker_call() {
         *) return 1 ;;
     esac
 }
-'''
+"""
 
 
 class DisposableSharedFixtureTests(unittest.TestCase):
@@ -94,9 +94,19 @@ class DisposableSharedFixtureTests(unittest.TestCase):
 
     def invoke(self, action, **changes):
         return subprocess.run(
-            ["bash", "/workspace/tools/compose_fixture_shared.sh", action, str(self.scratch),
-             self.project, self.image, str(self.root)],
-            env=self.env | changes, text=True, capture_output=True, check=False,
+            [
+                "bash",
+                "/workspace/tools/compose_fixture_shared.sh",
+                action,
+                str(self.scratch),
+                self.project,
+                self.image,
+                str(self.root),
+            ],
+            env=self.env | changes,
+            text=True,
+            capture_output=True,
+            check=False,
         )
 
     def start(self):
@@ -138,7 +148,7 @@ class DisposableSharedFixtureTests(unittest.TestCase):
         self.assertTrue((self.root / (self.project + "-queue")).exists())
 
     def test_release_uses_captured_source_after_main_locals_are_gone(self):
-        command = r'''set -eu
+        command = r"""set -eu
 source /workspace/tools/compose_qualification.sh
 scratch=$TEST_SCRATCH
 qualification_delivery_project=$TEST_PROJECT
@@ -148,10 +158,12 @@ controller_native() {
     [[ $4 == bash && $5 == "$scratch/source/tools/compose_fixture_shared.sh" && $6 == retire ]]
 }
 qualification_delivery_release
-'''
+"""
         result = subprocess.run(
-            ["bash", "-c", command], env=self.env | {"TEST_SCRATCH": str(self.scratch),
-                "TEST_PROJECT": self.project, "TEST_IMAGE": self.image},
-            text=True, capture_output=True, check=False,
+            ["bash", "-c", command],
+            env=self.env | {"TEST_SCRATCH": str(self.scratch), "TEST_PROJECT": self.project, "TEST_IMAGE": self.image},
+            text=True,
+            capture_output=True,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

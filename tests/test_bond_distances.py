@@ -40,7 +40,9 @@ class SmallMoleculeBondDistanceTests(unittest.TestCase):
                         flush=True,
                     )
                     self.assertAlmostEqual(
-                        distance, expected, delta=tolerance,
+                        distance,
+                        expected,
+                        delta=tolerance,
                         msg="Released bond distance disagrees with the angstrom-scale reference",
                     )
 
