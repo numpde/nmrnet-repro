@@ -187,11 +187,13 @@ def shell_findings(path, source):
                     value == "-u" and position + 1 < len(prefix) and prefix[position + 1] == _ENV
                 ):
                     enabled = False
-                elif value.startswith(_ENV + "="):
-                    if (entrypoint and position > 0 and prefix[position - 1] == "--env") or (
+                elif value.startswith(_ENV + "=") and (
+                    (entrypoint and position > 0 and prefix[position - 1] == "--env")
+                    or (
                         not entrypoint and (position == 0 or prefix[position - 1] != "--env")
-                    ):
-                        enabled = value == _ENV + "=1"
+                    )
+                ):
+                    enabled = value == _ENV + "=1"
             isolated = _needs_flag(arguments, True)
             if entrypoint and any("[@]" in value for value in prefix) and not isolated:
                 continue  # Shared creation/env argv is not visible at this site.
