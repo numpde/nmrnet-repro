@@ -122,6 +122,14 @@ class LauncherTests(unittest.TestCase):
         (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (checkout / "tools/image_lifecycle.sh").write_bytes(Path("tools/image_lifecycle.sh").read_bytes())
+        (checkout / "tools/docker-real.sh").write_bytes(Path("tools/docker.sh").read_bytes())
+        (checkout / "tools/docker.sh").write_text('''#!/bin/bash
+if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
+    printf '0:0\\n'
+    exit
+fi
+exec bash "$(dirname "$0")/docker-real.sh" "$@"
+''')
         (checkout / ".work/checker").mkdir(parents=True)
         (checkout / ".work/wheelhouse").mkdir()
         (checkout / "bin").mkdir()
@@ -342,7 +350,7 @@ while :; do sleep 0.1; done
             self.assertEqual(2, result.returncode, msg=result.stderr)
             self.assertIn("identity differs", result.stderr)
             self.assertEqual(1, len((checkout / "engine-log").read_text().splitlines()))
-            self.assertEqual([checkout / ".work/checker"], list((checkout / ".work").iterdir()))
+            self.assertEqual({checkout / ".work/checker", checkout / ".work/wheelhouse"}, set((checkout / ".work").iterdir()))
 
     def test_repository_failure_keeps_status_and_removes_owned_metadata(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -360,7 +368,7 @@ while :; do sleep 0.1; done
             invocations = (checkout / "engine-log").read_text().splitlines()
             self.assertEqual(2, len(invocations))
             self.assertIn(image + " bash -eu -c", invocations[-1])
-            self.assertEqual([checkout / ".work/checker"], list((checkout / ".work").iterdir()))
+            self.assertEqual({checkout / ".work/checker", checkout / ".work/wheelhouse"}, set((checkout / ".work").iterdir()))
 
     def test_repository_worker_requires_declared_status_despite_ambient_success(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"FAKE_RUN_STATUS": "0"}):
@@ -545,6 +553,7 @@ while :; do sleep 0.1; done
             (checkout / "tools/acquisition_interface.sh").write_bytes(Path("tools/acquisition_interface.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+            (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "check"],
                 env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"},
@@ -575,6 +584,7 @@ while :; do sleep 0.1; done
             (checkout / "tools/acquisition_interface.sh").write_bytes(Path("tools/acquisition_interface.sh").read_bytes())
             (checkout / ".work").symlink_to(checkout / "elsewhere", target_is_directory=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+            (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "download"],
                 env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
@@ -593,6 +603,7 @@ while :; do sleep 0.1; done
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+            (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             (checkout / "artifacts").mkdir()
             (checkout / "artifacts/weight.selection.json").write_text("{}")
             result = subprocess.run(
