@@ -84,7 +84,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         ports, claims = SessionPorts(), AttemptClaims.live()
         runner = RunningSupervisor(role="prediction", worker_argv=[sys.executable, "-c", MODEL_FAILURE_CHILD])
         self.addCleanup(runner.close)
-        factory = self.factory(ports, claims, Mock())
+        factory = self.factory(ports, claims)
         factory.execution_identity["prediction_declaration_sha256"] = "d" * 64
         operations = []
 
@@ -111,7 +111,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(item._retirement.done() for item in operations))
         self.assertTrue(factory.shutdown_ready)
 
-    def factory(self, ports, claims, retry):
+    def factory(self, ports, claims):
         return NativeAttemptFactory(
             admission_stopping=asyncio.Event(),
             config=SimpleNamespace(),
@@ -128,7 +128,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             on_delivery_retry=Mock(),
         )
 
-    def controller(self, ports, session, claims, stopping):
+    def controller(self, ports, session, claims, stopping, retry):
         transport = Transport(
             reply(start_response()),
             reply(observation()),
@@ -142,7 +142,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             session,
             scope=ports.pending.scope,
             stopping=stopping,
-            start_policy=LiveStartPolicy(cadence_seconds=1, on_retry=Mock(), on_recovered=Mock()),
+            start_policy=LiveStartPolicy(cadence_seconds=1, on_retry=retry, on_recovered=Mock()),
             allow_active_start_replay=True,
             delivery=delivery,
             on_delivery_retry=Mock(),
@@ -174,14 +174,14 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             operations.append(owned)
             return owned
 
-        factory = self.factory(ports, claims, retry)
+        factory = self.factory(ports, claims)
         session = NMRNetSession(
             allocate_prediction=partial(factory.allocate_prediction, job_ref=ports.instructions.job_ref),
             execution_identity={"image_id": "fixture"},
             selected_artifacts=ports.worker.artifacts,
             input_preparation=ports.preparation,
         )
-        controller, transport, delivery = self.controller(ports, session, claims, stopping)
+        controller, transport, delivery = self.controller(ports, session, claims, stopping, retry)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
             task = asyncio.create_task(controller.run(ports.pending))
             try:
@@ -224,7 +224,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
         ports.pending = replace(ports.pending, input=ports.instructions.identity)
         runner = RunningSupervisor(role="reader", worker_argv=[sys.executable, "-c", PARTIAL_REPLY_CHILD])
         self.addCleanup(runner.close)
-        factory = self.factory(ports, claims, retry)
+        factory = self.factory(ports, claims)
         cleanup_entered, release = asyncio.Event(), asyncio.Event()
 
         class HeldCleanup(NativeOperation):
@@ -247,7 +247,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             selected_artifacts=ports.worker.artifacts,
             input_preparation=preparation,
         )
-        controller, transport, delivery = self.controller(ports, session, claims, stopping)
+        controller, transport, delivery = self.controller(ports, session, claims, stopping, retry)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
             task = asyncio.create_task(controller.run(ports.pending))
             try:
