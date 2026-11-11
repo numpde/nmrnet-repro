@@ -299,6 +299,9 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 help:
 	@printf '%s\n' \
 		'make help                              List maintained commands; also the default goal.' \
+		'make packages/acquisition-bootstrap/check Verify the pinned acquisition bootstrap snapshot.' \
+		'make packages/acquisition-bootstrap/refresh ACQUISITION_ARCHIVE=<path> ACQUISITION_ISSUER=<path> Refresh the bootstrap from a release.' \
+		'make packages/provider-core/test-support/check Verify the shared provider test-support wheels.' \
 		'Every Docker-using command needs DOCKER_CONTEXT=<name> on the make command line, or an interactive local Unix-socket context selection.' \
 		'Without a command-line context, unattended Docker commands fail; no current/default context is assumed.' \
 		'make test                              Run the offline unit and repository suites.' \

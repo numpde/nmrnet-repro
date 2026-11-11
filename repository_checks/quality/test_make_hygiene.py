@@ -23,7 +23,7 @@ from unittest.mock import patch
 from .sources import is_skipped, iter_repo_text_files, read_text, repo_path
 
 MAKE_TARGET_RE = re.compile(r"^(?P<names>[A-Za-z0-9_/-]+(?:[ \t]+[A-Za-z0-9_/-]+)*)[ \t]*:(?!:*=)[ \t]*(?P<prereqs>.*)$")
-MAKE_HELP_TARGET_RE = re.compile(r"\bmake\s+(?P<name>[A-Za-z0-9_/-]+)\b")
+MAKE_HELP_TARGET_RE = re.compile(r"'make\s+(?P<name>[A-Za-z0-9_/-]+)(?=\s|')")
 MAKE_PHONY_RE = re.compile(r"^\.PHONY:\s*(?P<names>.*)$", re.MULTILINE)
 # Dapp requires explicit safe discovery; API additionally requires caller-proof
 # ownership. Accept that modifier without admitting a second default authority.
@@ -76,8 +76,8 @@ class RepositoryHygieneTest(unittest.TestCase):
                             timeout=5,
                             check=False,
                         )
-                        self.assertEqual(result.returncode == 0, build_status == 0, result.stderr)
-                        self.assertEqual((root / "tools/cleanup-called").exists(), build_status == 0)
+                        self.assertEqual(build_status == 0, result.returncode == 0, msg=result.stderr)
+                        self.assertEqual(build_status == 0, (root / "tools/cleanup-called").exists())
                         if build_status == 0:
                             self.assertIn("Image build succeeded; retirement is incomplete", result.stderr)
 
@@ -102,8 +102,8 @@ class RepositoryHygieneTest(unittest.TestCase):
                         timeout=5,
                         check=False,
                     )
-                    self.assertEqual(result.returncode == 0, up_status == 0, result.stderr)
-                    self.assertEqual((root / "tools/cleanup-called").exists(), up_status == 0)
+                    self.assertEqual(up_status == 0, result.returncode == 0, msg=result.stderr)
+                    self.assertEqual(up_status == 0, (root / "tools/cleanup-called").exists())
                     if up_status == 0:
                         self.assertIn("Deployment is healthy; image retirement is incomplete", result.stderr)
 
@@ -261,7 +261,7 @@ class RepositoryHygieneTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(["echo input", "echo first/one", "echo second/two"], result.stdout.splitlines())
 
     def test_target_parser_excludes_assignments_and_recipe_text(self):
@@ -290,6 +290,7 @@ class RepositoryHygieneTest(unittest.TestCase):
             "\t@echo 'make help'\n"
             "\t@echo 'make real/one'\n"
             "\t@echo 'make real/two'\n"
+            "\t@echo 'Choose the make command from this list.'\n"
             "real/one real/two:\n"
             "\t@echo $@\n"
         )

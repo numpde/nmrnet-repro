@@ -113,19 +113,19 @@ class DisposableSharedFixtureTests(unittest.TestCase):
         for name in ("proxy", "init", self.project + "-proxy-socket", self.project + "-outbox-socket", self.project + "-queue"):
             (self.root / name).touch()
         result = self.invoke("capture")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_preflight_rejects_existing_project_or_volume(self):
         for collision in ("project", "volume"):
             with self.subTest(collision=collision):
                 self.assertNotEqual(self.invoke("preflight", COLLISION=collision).returncode, 0)
                 self.assertFalse((self.root / "mutations").exists())
-        self.assertEqual(self.invoke("preflight").returncode, 0)
+        self.assertEqual(0, self.invoke("preflight").returncode)
 
     def test_retirement_removes_only_original_fixture_sockets_and_containers(self):
         self.start()
         result = self.invoke("retire")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertTrue((self.root / (self.project + "-queue")).exists())
         self.assertFalse((self.root / (self.project + "-proxy-socket")).exists())
         self.assertFalse((self.root / (self.project + "-outbox-socket")).exists())
@@ -144,7 +144,7 @@ class DisposableSharedFixtureTests(unittest.TestCase):
         result = self.invoke("retire", FAIL_OPERATION="stop disposable proxy container")
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue((self.root / "reservation").exists())
-        self.assertEqual(len((self.root / "mutations").read_text().splitlines()), 1)
+        self.assertEqual(1, len((self.root / "mutations").read_text().splitlines()))
         self.assertTrue((self.root / (self.project + "-queue")).exists())
 
     def test_release_uses_captured_source_after_main_locals_are_gone(self):
@@ -166,4 +166,4 @@ qualification_delivery_release
             capture_output=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
