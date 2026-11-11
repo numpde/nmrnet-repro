@@ -317,11 +317,11 @@ class InputInterpreter:
                 if not deadline.expired() or not isinstance(cancellation, asyncio.CancelledError):
                     raise
                 retained = await capability.settle_interrupted_inspection()
-                failures = tuple(
+                failures = [
                     item
                     for index, item in enumerate((cancellation.__cause__, retained))
                     if item is not None and (index == 0 or item is not cancellation.__cause__)
-                )
+                ]
                 if failures:
                     cause = failures[0] if len(failures) == 1 else BaseExceptionGroup("Input inspection failures", failures)
                     raise InspectionUnavailable() from cause

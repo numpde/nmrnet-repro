@@ -270,7 +270,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     """Keep unresolved owners alive until the deployment retires their containers."""
     lifetime = transport = factory = service = None
     failures = []
-    secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
+    secrets = [endpoint.spec.api_key for endpoint in config.interpreter.endpoints]
     redact = operator_redactor(secrets=secrets)
     notice_failure = None
     process_status = ProcessStatus(diagnostics, "provider")

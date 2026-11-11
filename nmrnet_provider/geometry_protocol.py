@@ -221,7 +221,7 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
         raise WorkerProtocolError("Structure worker must return between 1 and 128 geometry records.")
     expected_numbers = tuple(range(1, len(records) + 1)) if selection == "all" else selection
     if source_format == "pdb" and selection == "all":
-        expected_numbers = tuple(record.get("source_record_number") if type(record) is dict else None for record in records)
+        expected_numbers = [record.get("source_record_number") if type(record) is dict else None for record in records]
         if any(type(number) is not int or not 1 <= number <= 9999 for number in expected_numbers) or len(
             set(expected_numbers)
         ) != len(records):
