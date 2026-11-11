@@ -304,6 +304,7 @@ class NativeAttemptFactory:
                 if isinstance(cleanup, asyncio.CancelledError):
                     interruption = cleanup
                     break
+        # silent-defaults: allow-contract -- Cancellation retains its original cause when setup and cleanup fail independently; proof=tests/integration/provider_core/adversarial/test_nmrnet_native_factory.py::NativeFactoryTests.test_cancellation_during_cleanup_remains_interruption_after_ordinary_setup_failure.
         failure = NativeSetupFailed(
             cause,
             tuple(failures),
@@ -312,6 +313,7 @@ class NativeAttemptFactory:
         )
         # Resolved failures belong to the caller receiving this exception. Keep
         # factory diagnostics only while their original cleanup remains held.
+        # silent-defaults: allow-contract -- Factory diagnostics follow unresolved allocation cleanup ownership; settled failures transfer to the caller; proof=tests/integration/provider_core/adversarial/test_nmrnet_native_factory.py::NativeFactoryTests.test_unsettled_allocation_io_keeps_the_original_grant_until_settlement.
         self.last_failure = failure if self.allocations else None
         if interruption is not None:
             raise interruption from failure

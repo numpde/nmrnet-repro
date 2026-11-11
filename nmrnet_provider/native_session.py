@@ -75,6 +75,7 @@ class NativeOperation:
 
     @property
     def allocation(self):
+        # silent-defaults: allow-contract -- Reporting an allocation before session creation must not allocate a replacement child; proof=tests/integration/provider_core/normative/test_nmrnet_runner_session.py::NativeOperationTests.test_stop_before_connect_does_not_allocate_a_retirement_child.
         return None if self.session is None else self.session.operation
 
     @property
@@ -83,6 +84,7 @@ class NativeOperation:
 
     @property
     def _control_retirement(self):
+        # silent-defaults: allow-contract -- Retirement observes only the existing control owner's reader and cannot create a replacement owner; proof=tests/integration/provider_core/normative/test_nmrnet_runner_session.py::NativeOperationTests.test_observed_channel_failure_while_child_lives_stops_and_joins_original_reader.
         return None if self._control is None else self._control.reader
 
     def _observe(self, task):
@@ -101,6 +103,7 @@ class NativeOperation:
 
     @property
     def last_failure(self):
+        # silent-defaults: allow-contract -- A retained lifecycle failure remains reportable after its original resources retire; proof=tests/integration/provider_core/normative/test_nmrnet_runner_session.py::NativeOperationTests.test_lost_control_uses_one_retired_proof_session_without_scientific_commands.
         failures = [] if self._stop_failure is None else [self._stop_failure]
         if self._opening_interruption is not None:
             failures.append(self._opening_interruption)

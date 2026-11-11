@@ -89,6 +89,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             diagnostic = "".join(traceback.format_exception(cause))
             # The distinct model-call fact requires a consumed execution token;
             # it does not by itself authorize another calculation.
+            # silent-defaults: allow-contract -- Wire kind records whether execution began and whether the failure is exactly model-only; proof=tests/test_provider_worker.py::WorkerFramingTests.test_model_failure_with_failed_evidence_recording_is_not_model_only.
             kind = (
                 "model_call_failed"
                 if execution_entered and type(cause) is ModelCallFailed
