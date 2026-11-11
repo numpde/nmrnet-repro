@@ -588,9 +588,69 @@ while :; do sleep 0.1; done
         self.assertNotEqual(self.command("download", "../weight.zip").returncode, 0)
         result = self.command("download", "weight.zip")
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        arguments = shlex.split(result.stdout.splitlines()[-2])
-        self.assertEqual("host", arguments[arguments.index("--network") + 1])
+        self.assertIn("acquisition route: lo", result.stdout)
+        arguments = shlex.split(result.stdout.split("Online worker: ", 1)[1])
+        self.assertEqual(
+            "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+            arguments[0],
+        )
+        self.assertEqual(
+            [
+                "--pull",
+                "never",
+                "--read-only",
+                "--env",
+                "NMRNET_IN_CONTAINER=1",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges:true",
+                "--cpus",
+                "2",
+                "--memory",
+                "512m",
+                "--memory-swap",
+                "512m",
+                "--pids-limit",
+                "64",
+                "--tmpfs",
+                "/tmp:rw,nosuid,nodev,noexec,size=64m",
+                "--workdir",
+                "/workspace",
+            ],
+            arguments[1:22],
+        )
+        self.assertNotIn("--network", arguments)
+        self.assertNotIn("--user", arguments)
+        self.assertEqual(30, arguments.index("--"))
+        self.assertEqual(
+            [
+                "python3",
+                "-B",
+                "-m",
+                "tools.artifacts",
+                "download",
+                "--declaration",
+                "/inputs/release.json",
+                "--directory",
+                "/downloads",
+                "--name",
+                "weight.zip",
+            ],
+            arguments[arguments.index("--") + 1 :],
+        )
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
+        self.assertEqual(
+            {
+                f"type=bind,src={Path.cwd()}/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly",
+                f"type=bind,src={Path.cwd()}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly",
+                f"type=bind,src={Path.cwd()}/artifacts/release.json,dst=/inputs/release.json,readonly",
+                f"type=bind,src={Path.cwd()}/.work/downloads,dst=/downloads",
+            },
+            set(mounts),
+        )
+        self.assertEqual(4, len(mounts))
+        self.assertNotIn("docker.sock", " ".join(mounts))
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
         self.assertEqual([f"type=bind,src={Path.cwd()}/.work/downloads,dst=/downloads"], writable)
 
