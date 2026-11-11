@@ -19,9 +19,11 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
     async def test_unconfirmed_relay_retirement_retains_live_fixture_resources(self):
         fixture = await RuntimePeers(UploadPorts(), "upload").__aenter__()
         try:
-            with patch.object(fixture, "close_relay", new=AsyncMock(side_effect=TimeoutError("relay did not retire"))):
-                with self.assertRaises(TimeoutError):
-                    await fixture.__aexit__(None, None, None)
+            with (
+                patch.object(fixture, "close_relay", new=AsyncMock(side_effect=TimeoutError("relay did not retire"))),
+                self.assertRaises(TimeoutError),
+            ):
+                await fixture.__aexit__(None, None, None)
             self.assertIn(fixture, HELD_FIXTURES)
             self.assertFalse(fixture.relay_task.done())
             self.assertTrue(fixture.proxy_thread.is_alive())

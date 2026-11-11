@@ -32,9 +32,11 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
             failure = FileNotFoundError("packaged offering is missing")
-            with patch.object(Path, "read_text", side_effect=failure):
-                with self.assertRaisesRegex(ConfigurationRejected, "packaged offering") as raised:
-                    load_provider_config(files.path)
+            with (
+                patch.object(Path, "read_text", side_effect=failure),
+                self.assertRaisesRegex(ConfigurationRejected, "packaged offering") as raised,
+            ):
+                load_provider_config(files.path)
             self.assertIs(raised.exception.cause, failure)
             self.assertFalse(files.state.exists())
 

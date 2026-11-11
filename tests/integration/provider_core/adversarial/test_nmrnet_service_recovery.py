@@ -223,9 +223,9 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     patch.object(
                         JobUploads, "_retire_recovery", retire_with_failure if source_problem == "retirement" else original_retire
                     ),
+                    self.assertRaises(ServiceFailed) as caught,
                 ):
-                    with self.assertRaises(ServiceFailed) as caught:
-                        await asyncio.wait_for(service.run(fixture.stop), 8)
+                    await asyncio.wait_for(service.run(fixture.stop), 8)
                 evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
                 self.assertIn("UploadFailed" if source_problem == "retirement" else "UploadRecoveryExhausted", evidence)
                 if source_problem == "retirement":
@@ -277,9 +277,11 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             owners = [Owner(), Owner()]
             owners[0].settle = AsyncMock(side_effect=failure)
             owners[1].settle = AsyncMock()
-            with patch.object(service, "_owned_controllers", return_value=owners):
-                with self.assertRaises(BaseExceptionGroup) as caught:
-                    await service._settle_controller(retry=False)
+            with (
+                patch.object(service, "_owned_controllers", return_value=owners),
+                self.assertRaises(BaseExceptionGroup) as caught,
+            ):
+                await service._settle_controller(retry=False)
             self.assertIs(caught.exception.exceptions[0], failure)
             owners[1].settle.assert_awaited_once()
             self.assertIn(owners[0], service._settlement_tasks)
