@@ -32,15 +32,15 @@ nmrnet_acquire_wheelhouse
 class CallbackTests(unittest.TestCase):
     def run_callback(self, outcomes):
         with tempfile.TemporaryDirectory() as directory:
-            event_path = os.path.join(directory, "events")
+            event_path = Path(directory) / "events"
             process = subprocess.run(
                 ["bash", "-c", HARNESS, "bash", CALLBACK],
-                env={**os.environ, "OUTCOMES": outcomes, "EVENTS": event_path},
+                env={**os.environ, "OUTCOMES": outcomes, "EVENTS": str(event_path)},
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            with open(event_path, encoding="utf-8") as receipt:
+            with event_path.open(encoding="utf-8") as receipt:
                 events = receipt.read().splitlines()
         return process, events
 
