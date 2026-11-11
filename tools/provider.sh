@@ -54,7 +54,6 @@ provider_host_create() {
         --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit "$pids" \
         --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=$temporary" \
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics" \
-        --env "NMRNET_LOG_LEVEL=$provider_log_level" \
         --entrypoint /bin/bash "${component_grants[@]}" "$image" -eu -c \
         'umask 077; ulimit -f 65536; exec "$@"' \
         service-component "${component_command[@]}"; then :; else create_status=$?; fi

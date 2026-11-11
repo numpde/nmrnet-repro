@@ -23,8 +23,8 @@ def _routine_record(record):
 
 
 def configure_logging(level):
-    """Keep dependency defaults at WARNING, with explicit owned INFO or DEBUG."""
-    if level not in ("INFO", "DEBUG", "WARNING"):
+    """Use owned INFO unless an explicit override selects INFO, DEBUG or WARNING."""
+    if level is not None and level not in ("INFO", "DEBUG", "WARNING"):
         raise ValueError("Cannot configure routine logging: choose INFO, DEBUG or WARNING.")
     handler = logging.StreamHandler(sys.stdout)
     handler.addFilter(_routine_record)
@@ -35,4 +35,7 @@ def configure_logging(level):
         force=True,
     )
     for name in _OWNED_LOGGERS:
-        logging.getLogger(name).setLevel(level)
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.INFO)
+        if level is not None:
+            logger.setLevel(level)

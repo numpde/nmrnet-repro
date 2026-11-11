@@ -28,13 +28,47 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_make_preserves_optional_override_identity_and_rejects_ambient_input(self):
+        recipe = """logging-probe:
+	@bash -eu -c 'source /workspace/tools/provider_logging.sh; provider_logging_configure; printf "%s\\n" "$${provider_logging_options[@]}"'
+"""
+        environment = dict(os.environ)
+        environment["NMRNET_LOG_LEVEL_INPUT"] = "DEBUG"
+        environment["LOG_LEVEL"] = "WARNING"
+        for name in ("MAKEFLAGS", "MAKEOVERRIDES", "MFLAGS"):
+            if name in environment:
+                del environment[name]
+        for selected in (None, "", "INFO", "DEBUG", "WARNING", "TRACE"):
+            with self.subTest(selected=selected):
+                command = [
+                    "make", "--no-print-directory", "--file", "/workspace/Makefile",
+                    "--eval", recipe, "logging-probe", "MAKECMDGOALS=help",
+                ]
+                if selected is not None:
+                    command.append("LOG_LEVEL=" + selected)
+                result = subprocess.run(
+                    command, cwd="/workspace", env=environment, capture_output=True, text=True, timeout=5, check=False,
+                )
+                if selected in ("", "TRACE"):
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("LOG_LEVEL must be INFO, DEBUG or WARNING", result.stderr)
+                else:
+                    self.assertEqual(0, result.returncode, msg=result.stderr)
+                    options = result.stdout.splitlines()
+                    self.assertIn("json-file", options)
+                    self.assertIn("max-size=10m", options)
+                    if selected is None:
+                        self.assertNotIn("--env", options)
+                    else:
+                        self.assertIn("NMRNET_LOG_LEVEL=" + selected, options)
+
     def test_ambiguity_qualification_requires_an_explicit_fragment_before_engine_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             result = fixture.make(
                 "provider/qualify/interpreter/ambiguity", additions={"INTERPRETER_CONFIG": "/ambient/private.toml"}
             )
-            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(2, result.returncode, msg=result.stderr)
             self.assertIn("Missing explicit ambiguity qualification selector: INTERPRETER_CONFIG", result.stderr)
             self.assertFalse(fixture.calls())
 
@@ -46,7 +80,7 @@ class OperatorInputTests(unittest.TestCase):
                     result = fixture.make(
                         target, additions={"API_ORIGIN": "https://ambient.example", "INTERPRETER_CONFIG": "/ambient/private.toml"}
                     )
-                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(2, result.returncode, msg=result.stderr)
                     self.assertIn("Missing explicit command-line selector: API_ORIGIN", result.stderr)
                     self.assertIn("creates a persistent Job", result.stderr)
                     self.assertFalse(fixture.calls())
@@ -62,7 +96,7 @@ class OperatorInputTests(unittest.TestCase):
                 (("STAGE=$(shell touch " + str(sentinel) + ")",), {}),
             ):
                 result = fixture.make("packages/preparation/lock/apply", *arguments, additions=additions)
-                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertFalse(sentinel.exists())
                 self.assertFalse(fixture.calls())
             stage = fixture.root / ".work/packages-stage/lock.fixture"
@@ -71,7 +105,7 @@ class OperatorInputTests(unittest.TestCase):
             result = fixture.run(
                 "packages.sh", "--print", "apply", "preparation", additions={"NMRNET_STAGE_INPUT": "lock.fixture"}
             )
-            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             arguments = shlex.split(result.stdout)
             mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
             inputs = [mount for mount in mounts if ",dst=/input/" in mount]
@@ -88,11 +122,11 @@ class OperatorInputTests(unittest.TestCase):
                 if linked:
                     intent.symlink_to(fixture.root / "requirements/inference.in")
                 result = fixture.run("packages.sh", "apply", "preparation")
-                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("regular file", result.stderr)
                 self.assertFalse(fixture.calls())
             result = fixture.run("packages.sh", "stage", "../preparation")
-            self.assertEqual(2, result.returncode, result.stderr)
+            self.assertEqual(2, result.returncode, msg=result.stderr)
             self.assertIn("profile", result.stderr)
             self.assertFalse(fixture.calls())
 

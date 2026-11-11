@@ -61,5 +61,5 @@ def main(arguments=None):
 if __name__ == "__main__":
     from nmrnet_provider.runtime_logging import configure_logging
 
-    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
+    configure_logging(os.environ.get("NMRNET_LOG_LEVEL"))
     main()

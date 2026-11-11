@@ -82,7 +82,6 @@ def _service(image, interpreter, module, *, uid, gid, labels, stop_seconds, memo
         "stop_grace_period": f"{math.ceil(stop_seconds)}s",
         "network_mode": "none",
         "labels": dict(labels),
-        "environment": {"NMRNET_LOG_LEVEL": "INFO"},
         "tmpfs": [f"/{name}:rw,nosuid,nodev,noexec,size=64m,mode=0700,uid={uid},gid={gid}" for name in ("tmp", "run")],
         "logging": {
             "driver": "json-file",

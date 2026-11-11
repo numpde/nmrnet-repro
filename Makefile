@@ -266,7 +266,11 @@ override export NMRNET_EXECUTION_ATTEMPT_REF_INPUT := $(if $(filter command line
 override export NMRNET_BODY_SHA256_INPUT := $(if $(filter command line,$(origin BODY_SHA256)),$(value BODY_SHA256))
 override export NMRNET_JOB_RECEIPT_INPUT := $(if $(filter command line,$(origin JOB_RECEIPT)),$(value JOB_RECEIPT))
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
-override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
+ifeq ($(origin LOG_LEVEL),command line)
+override export NMRNET_LOG_LEVEL_INPUT := $(value LOG_LEVEL)
+else
+unexport NMRNET_LOG_LEVEL_INPUT
+endif
 unexport LOCAL_NETWORK LOCAL_INTERFACE EXTERNAL_INTERFACE RESOLVERS
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
