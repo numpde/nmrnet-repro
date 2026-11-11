@@ -27,64 +27,65 @@ docker_client_prepare() {
         printf -v docker_client_diagnostic '%s\n' 'Docker client preparation requires the explicit print or run mode.'
         return 2
     fi
-    local mode=$1 preparation_status config receipt context endpoint context_origin
-    context=${NMRNET_DOCKER_CONTEXT_INPUT-}
-    context_origin=${NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN-}
-    endpoint=${NMRNET_DOCKER_ENDPOINT_INPUT-}
-    if [[ -z $endpoint ]]; then
-        if [[ $context_origin == 'command line' ]]; then
-            if [[ -z $context || $context =~ [[:cntrl:]] ]]; then
-                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: command-line DOCKER_CONTEXT must name a context.'
-                return 2
-            fi
-        else
-            local -a contexts=() endpoints=()
-            local candidate candidate_endpoint selection
-            if [[ ! -t 0 ]]; then
-                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: pass DOCKER_CONTEXT=<local-context> on the make command line, or run this command in a terminal to choose a local Unix-socket context.'
-                return 2
-            fi
-            local context_names
-            if ! context_names=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-                -u DOCKER_CONTEXT docker context ls --format '{{.Name}}' 2>/dev/null); then
-                printf -v docker_client_diagnostic '%s\n' 'Cannot list Docker contexts from the caller Docker configuration.'
-                return 2
-            fi
-            while IFS= read -r candidate; do
-                [[ -n $candidate && ! $candidate =~ [[:space:]\|] ]] || continue
-                if candidate_endpoint=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-                    -u DOCKER_CONTEXT docker context inspect --format '{{.Endpoints.docker.Host}}' "$candidate" 2>/dev/null) \
-                    && [[ $candidate_endpoint == unix:///* && ! $candidate_endpoint =~ [[:space:]\|] ]]; then
-                    contexts+=("$candidate")
-                    endpoints+=("$candidate_endpoint")
-                fi
-            done <<< "$context_names"
-            if (( ${#contexts[@]} == 0 )); then
-                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: the caller Docker configuration has no contexts with local Unix-socket endpoints.'
-                return 2
-            fi
-            printf '%s\n' 'Choose a local Docker context:' >&2
-            local index
-            for index in "${!contexts[@]}"; do printf '  %s) %s\n' "$((index + 1))" "${contexts[index]}" >&2; done
-            printf 'Context number: ' >&2
-            if ! IFS= read -r selection || [[ ! $selection =~ ^[1-9][0-9]*$ ]] \
-                || (( selection > ${#contexts[@]} )); then
-                printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: enter one of the listed local context numbers.'
-                return 2
-            fi
-            index=$((selection - 1))
-            context=${contexts[index]}
-            endpoint=${endpoints[index]}
+    local mode=$1 preparation_status config receipt context endpoint
+    if [[ -v NMRNET_DOCKER_ENDPOINT_INPUT ]] && [[ -n $NMRNET_DOCKER_ENDPOINT_INPUT ]]; then
+        if [[ ! -v NMRNET_DOCKER_CONTEXT_INPUT ]]; then
+            printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: the inherited endpoint requires its selected context name.'
+            return 2
         fi
-        if [[ -z $endpoint ]]; then
-            if ! endpoint=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-                -u DOCKER_CONTEXT docker context inspect --format '{{.Endpoints.docker.Host}}' "$context" 2>/dev/null); then
-                printf -v docker_client_diagnostic 'Cannot select Docker context %q: inspect the caller Docker configuration.\n' "$context"
-                return 2
-            fi
+        context=$NMRNET_DOCKER_CONTEXT_INPUT
+        endpoint=$NMRNET_DOCKER_ENDPOINT_INPUT
+    elif [[ -v NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN ]] && [[ $NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN == 'command line' ]]; then
+        if [[ ! -v NMRNET_DOCKER_CONTEXT_INPUT ]] || [[ -z $NMRNET_DOCKER_CONTEXT_INPUT || $NMRNET_DOCKER_CONTEXT_INPUT =~ [[:cntrl:]] ]]; then
+            printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: command-line DOCKER_CONTEXT must name a context.'
+            return 2
         fi
+        context=$NMRNET_DOCKER_CONTEXT_INPUT
+        if ! endpoint=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+            -u DOCKER_CONTEXT docker context inspect --format '{{.Endpoints.docker.Host}}' "$context" 2>/dev/null); then
+            printf -v docker_client_diagnostic 'Cannot select Docker context %q: inspect the caller Docker configuration.\n' "$context"
+            return 2
+        fi
+    else
+        local -a contexts=() endpoints=()
+        local candidate candidate_endpoint selection
+        if [[ ! -t 0 ]]; then
+            printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: pass DOCKER_CONTEXT=<local-context> on the make command line, or run this command in a terminal to choose a local Unix-socket context.'
+            return 2
+        fi
+        local context_names
+        if ! context_names=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+            -u DOCKER_CONTEXT docker context ls --format '{{.Name}}' 2>/dev/null); then
+            printf -v docker_client_diagnostic '%s\n' 'Cannot list Docker contexts from the caller Docker configuration.'
+            return 2
+        fi
+        while IFS= read -r candidate; do
+            [[ -n $candidate && ! $candidate =~ [[:space:]\|] ]] || continue
+            if candidate_endpoint=$(env -u DOCKER_HOST -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+                -u DOCKER_CONTEXT docker context inspect --format '{{.Endpoints.docker.Host}}' "$candidate" 2>/dev/null) \
+                && [[ $candidate_endpoint == unix:///* && ! $candidate_endpoint =~ [[:space:]\|] ]]; then
+                contexts+=("$candidate")
+                endpoints+=("$candidate_endpoint")
+            fi
+        done <<< "$context_names"
+        if (( ${#contexts[@]} == 0 )); then
+            printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: the caller Docker configuration has no contexts with local Unix-socket endpoints.'
+            return 2
+        fi
+        printf '%s\n' 'Choose a local Docker context:' >&2
+        local index
+        for index in "${!contexts[@]}"; do printf '  %s) %s\n' "$((index + 1))" "${contexts[index]}" >&2; done
+        printf 'Context number: ' >&2
+        if ! IFS= read -r selection || [[ ! $selection =~ ^[1-9][0-9]*$ ]] \
+            || (( selection > ${#contexts[@]} )); then
+            printf -v docker_client_diagnostic '%s\n' 'Cannot select Docker: enter one of the listed local context numbers.'
+            return 2
+        fi
+        index=$((selection - 1))
+        context=${contexts[index]}
+        endpoint=${endpoints[index]}
     fi
-    if [[ -z $context || $context =~ [[:space:]\|] || $endpoint != unix:///* || $endpoint =~ [[:space:]\|] ]]; then
+    if [[ -z $context || $context =~ [[:space:][:cntrl:]\|] || $endpoint != unix:///* || $endpoint =~ [[:space:]\|] ]]; then
         printf -v docker_client_diagnostic 'Cannot select Docker context %q: this workflow requires a named local Unix-socket context.\n' "$context"
         return 2
     fi

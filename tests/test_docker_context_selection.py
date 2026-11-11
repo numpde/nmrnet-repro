@@ -142,6 +142,21 @@ class DockerContextSelectionTests(unittest.TestCase):
         self.assertNotIn("default", result.stdout + result.stderr)
         self.assertFalse(self.context_calls.exists())
 
+    def test_inherited_snapshot_refuses_control_characters_before_context_or_engine_effects(self):
+        for control in ("\x1b", "\x7f"):
+            context = "inherited" + control + "context"
+            with self.subTest(control=control):
+                environment = self.environment | {
+                    "NMRNET_DOCKER_CONTEXT_INPUT": context,
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///run/user/1000/docker-a.sock",
+                }
+                result = self.command(environment)
+                self.assertEqual(2, result.returncode)
+                self.assertIn("named local Unix-socket context", result.stderr)
+                self.assertNotIn(context, result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertFalse(self.context_calls.exists())
+
     def test_nested_launcher_keeps_endpoint_snapshot_after_context_metadata_changes(self):
         environment = self.environment | {
             "NMRNET_DOCKER_CONTEXT_INPUT": "local-a",

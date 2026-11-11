@@ -5,8 +5,12 @@
 
 select_wheelhouse() {
     local tty_fd directory
-    if [[ ${NMRNET_WHEELHOUSE_INPUT_ORIGIN-} == 'command line' ]]; then
-        wheelhouse_directory=${NMRNET_WHEELHOUSE_INPUT-}
+    if [[ -v NMRNET_WHEELHOUSE_INPUT_ORIGIN ]] && [[ $NMRNET_WHEELHOUSE_INPUT_ORIGIN == 'command line' ]]; then
+        if [[ ! -v NMRNET_WHEELHOUSE_INPUT ]]; then
+            printf '%s\n' 'WHEELHOUSE cannot be empty; select a cache path. There is no default.' >&2
+            return 2
+        fi
+        wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT
     else
         if ! { exec {tty_fd}<>/dev/tty; } 2>/dev/null; then
             printf '%s\n' 'WHEELHOUSE must be set on the make command line when no interactive terminal is available: WHEELHOUSE=/absolute/cache/root' >&2
@@ -62,7 +66,8 @@ require_wheelhouse_pool() {
 # download and hash verification finish. This relies on local Linux flock
 # semantics for the selected wheelhouse filesystem.
 lock_wheelhouse() {
-    local mode=${1-}
+    if (( $# == 0 )); then return 2; fi
+    local mode=$1
     [[ $mode == shared || $mode == exclusive ]] || return 2
     [[ -d $wheelhouse_directory ]] || {
         printf 'Cannot lock WHEELHOUSE=%q: the shared pool directory is missing.\n' "$wheelhouse_directory" >&2
