@@ -285,7 +285,7 @@ api_deployment_active=false
 qualification_delivery_down() { printf 'unexpected shared shutdown\n'; return 7; }
 api_witness_stop_deployment 0
 """
-        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3)
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
 

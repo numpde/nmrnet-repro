@@ -112,7 +112,9 @@ class QualificationContextTests(unittest.TestCase):
         if identity:
             values["JOB_IDENTITY"] = str(self.original)
         environment.update({"NMRNET_" + key + "_INPUT": value for key, value in values.items()})
-        result = subprocess.run(["bash", str(self.script)], env=environment, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            ["bash", str(self.script)], env=environment, capture_output=True, text=True, timeout=5, check=False
+        )
         return result, output
 
     def test_old_job_readback_preserves_original_pin_without_consulting_replacement_deployment(self):

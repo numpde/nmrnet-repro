@@ -38,7 +38,9 @@ else:
     raise AssertionError('A FIFO must not admit a native session')
 assert operation.session is None
 """
-            result = subprocess.run([sys.executable, "-c", code, str(root)], capture_output=True, text=True, timeout=3)
+            result = subprocess.run(
+                [sys.executable, "-c", code, str(root)], capture_output=True, text=True, timeout=3, check=False
+            )
             self.assertEqual(result.returncode, 0, result.stderr)
 
 

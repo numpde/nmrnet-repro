@@ -248,12 +248,16 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
 """
         environment = os.environ.copy()
         environment.pop("NMRNET_IN_CONTAINER", None)
-        result = subprocess.run([sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True, check=False
+        )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("maintained Make target", result.stderr)
 
         environment["NMRNET_IN_CONTAINER"] = "1"
-        result = subprocess.run([sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True, check=False
+        )
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_non_angstrom_request_rejects_before_any_model_artifact_load(self):
