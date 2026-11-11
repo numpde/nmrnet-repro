@@ -477,7 +477,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         failures.append(("final process readiness publication", cause))
     if released and status_task is not None:
         status_task.cancel()
-        try:
+        # suppress() can split exception groups; this handler catches only the whole exception.
+        try:  # noqa: SIM105
             await status_task
         except asyncio.CancelledError:
             pass
@@ -491,7 +492,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 ("first operator notice cause", outage),
                 ("operator notice output", output_failure),
             )
-            try:
+            # suppress() can split exception groups; this handler catches only the whole exception.
+            try:  # noqa: SIM105
                 report_operator_notice(
                     outage,
                     {

@@ -191,7 +191,9 @@ class NativeOperation:
         except asyncio.CancelledError:
             if self._opening.cancelled() and asyncio.current_task().cancelling() == cancellations:
                 self._observe_opening(self._opening)
-                raise self._opening_interruption
+                # Explicit chaining would overwrite the retained interruption's
+                # cause or suppress its context, losing opening failure evidence.
+                raise self._opening_interruption  # noqa: B904
             raise
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as cause:
             await self.observe_failure(cause)

@@ -613,7 +613,9 @@ class InputPreparation:
                     elif previous is not child:
                         observed_failure.__cause__ = BaseExceptionGroup("Allocation interruption observations", (previous, child))
                 else:
-                    raise child
+                    # Explicit chaining would overwrite the retained child's cause
+                    # or suppress its context, losing allocation failure evidence.
+                    raise child  # noqa: B904
             return
         except (Exception, BaseExceptionGroup) as failure:
             if not self._worker_task.done() or self._worker_task.cancelled():
