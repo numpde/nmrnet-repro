@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from tools import artifacts, baseline_model, baseline_output, baseline_prepare, baseline_result
@@ -93,7 +93,7 @@ def run(
     try:
         started = time.monotonic()
         report = {
-            "started_utc": datetime.now(timezone.utc).isoformat(),
+            "started_utc": datetime.now(UTC).isoformat(),
             **identity,
             "upstream_revision": upstream_revision,
             "runtime": runtime_facts(),
@@ -189,7 +189,7 @@ def run(
 
         report["pending_review"] = sorted(pending)
         report["elapsed_seconds"] = time.monotonic() - started
-        report["finished_utc"] = datetime.now(timezone.utc).isoformat()
+        report["finished_utc"] = datetime.now(UTC).isoformat()
         report["resources"] = {
             "runner_max_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "children_max_rss_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,

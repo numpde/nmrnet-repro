@@ -15,7 +15,7 @@ import sys
 import tempfile
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # These three inference inputs bind its staged and applied lock/report pair.
@@ -180,7 +180,7 @@ def stage(profile_name):
     lock_bytes = lock.encode()
     (output / profile.lock).write_bytes(lock_bytes)
     report = {
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(UTC).isoformat(),
         "scope": "PyPI exact-version advisory metadata; not a complete security audit",
         "inputs_sha256": before,
         "lock_sha256": sha256(lock_bytes),

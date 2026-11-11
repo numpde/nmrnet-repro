@@ -142,9 +142,9 @@ else: raise SystemExit(91)
         self.assertEqual(self.removed(), [])
 
     def test_recent_unselected_image_is_preserved(self):
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
 
-        self.state["created"] = {image("f"): datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        self.state["created"] = {image("f"): datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")}
         self.save_state()
         result = self.retire()
         self.assertEqual(result.returncode, 0, result.stderr)
