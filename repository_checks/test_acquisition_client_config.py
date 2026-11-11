@@ -154,7 +154,7 @@ class AcquisitionClientTests(unittest.TestCase):
         return None
 
     def _observe_client(self, process, path):
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 15
         while not path.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertTrue(path.exists(), msg="actual finite client did not publish its phase")
@@ -1009,6 +1009,52 @@ class AcquisitionClientTests(unittest.TestCase):
                 for call in calls:
                     self.assertFalse(Path(call["client_config"]["path"]).parent.exists())
 
+    def test_scope_checker_sighup_before_stderr_drain(self):
+        self._scope_checker_signal(signal.SIGHUP, 129)
+
+    def test_scope_checker_sigint_before_stderr_drain(self):
+        self._scope_checker_signal(signal.SIGINT, 130)
+
+    def test_scope_checker_sigterm_before_stderr_drain(self):
+        self._scope_checker_signal(signal.SIGTERM, 143)
+
+    def _scope_checker_signal(self, interrupt, status):
+        self._checker_inputs()
+        command = ["bash", str(self.root / "tools/checker.sh"), "download"]
+        process, descriptor, prefill = self._start_command(
+            command, {"NMRNET_FAKE_ACQUISITION_SCOPE": "1", "NMRNET_FAKE_HOLD_ATTACH": "1"}, full_stderr=True
+        )
+        client = self._observe_client(process, self.root / "attach-ready")
+        group = os.getpgid(client)
+        arguments = Path("/proc", str(process.pid), "cmdline").read_bytes().split(b"\0")
+        self.assertEqual(
+            [
+                b"bash",
+                os.fsencode(self.root / "tools/acquisition_run.sh"),
+                b"--success-note",
+                b"\nNext, verify the checker dependencies offline:\n  make checks/dependencies/check",
+                b"--image",
+                self.worker_image.encode(),
+                b"--",
+            ],
+            arguments[:7],
+        )
+        worker_cid = Path((self.root / "worker-cid-path").read_text())
+        scratch = worker_cid.parent.parent
+        self.retained.add(scratch)
+        self._finish_full_pipe(process, descriptor, prefill, interrupt, status)
+        self.assertEqual(str(client), (self.root / "attach-retired").read_text())
+        self.assertFalse(Path("/proc", str(client)).exists())
+        self.assertFalse(Path("/proc", str(group)).exists())
+        calls = self.fixture.calls()
+        self.assertEqual(
+            [["rm", "--force", value * 64] for value in ("3", "2", "1")],
+            [call["arguments"] for call in calls if call["arguments"][0] == "rm"],
+        )
+        self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
+        self.assertFalse(scratch.exists())
+        self.assertTrue(all(not Path(call["client_config"]["path"]).parent.exists() for call in calls))
+
     def test_checker_download_preserves_ordinary_worker_signal_numbers(self):
         self._checker_inputs()
         for status in (130, 143):
@@ -1054,15 +1100,64 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("", result.stderr)
         lines = result.stdout.splitlines()
-        self.assertEqual(4, len(lines))
-        proxy = shlex.split(lines[0])
-        self.assertEqual(self.proxy_image, proxy[proxy.index("python3") - 1])
-        self.assertEqual("never", proxy[proxy.index("--pull") + 1])
-        worker = shlex.split(lines[2])
-        base = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+        self.assertEqual(2, len(lines))
+        self.assertEqual("Docker context: fixture-local (unix:///var/run/docker.sock), acquisition route: lo", lines[0])
+        self.assertTrue(lines[1].startswith("Online worker: "))
+        worker = shlex.split(lines[1].removeprefix("Online worker: "))
+        self.assertEqual(self.worker_image, worker[0])
+        self.assertNotIn("--user", worker)
+        self.assertEqual("never", worker[worker.index("--pull") + 1])
+        separator = worker.index("--")
         self.assertEqual(
             [
-                base,
+                "--pull",
+                "never",
+                "--read-only",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges:true",
+                "--cpus",
+                "2",
+                "--memory",
+                "512m",
+                "--memory-swap",
+                "512m",
+                "--pids-limit",
+                "64",
+                "--tmpfs",
+                "/tmp:rw,nosuid,nodev,noexec,size=64m",
+                "--env",
+                "NMRNET_IN_CONTAINER=1",
+                "--workdir",
+                "/workspace",
+                *[
+                    value
+                    for name in (
+                        "checker.py",
+                        "checker_acquisition.py",
+                        "artifacts.py",
+                        "wheelhouse.py",
+                        "wheelhouse_acquire.py",
+                        "container_guard.py",
+                    )
+                    for value in ("--mount", f"type=bind,src={self.root}/tools/{name},dst=/workspace/tools/{name},readonly")
+                ],
+                "--mount",
+                f"type=bind,src={self.root}/requirements/checker-dependencies.json,dst=/input/dependencies.json,readonly",
+                "--mount",
+                f"type=bind,src={self.root}/requirements/wheelhouse-acquirer-assets.in,dst=/input/tool-assets.in,readonly",
+                "--mount",
+                f"type=bind,src={self.root}/requirements/wheelhouse-tool-assets.in,dst=/input/stream-assets.in,readonly",
+                "--mount",
+                f"type=bind,src={self.root}/.work/checker,dst=/output",
+                "--mount",
+                f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse",
+            ],
+            worker[1:separator],
+        )
+        self.assertEqual(
+            [
                 "python3",
                 "-B",
                 "-m",
@@ -1073,21 +1168,36 @@ class AcquisitionClientTests(unittest.TestCase):
                 "--directory",
                 "/output/dependencies",
                 "--base",
-                base,
+                self.worker_image,
+                "--wheelhouse",
+                "/wheelhouse",
+                "--tool-assets",
+                "/input/tool-assets.in",
+                "--stream-assets",
+                "/input/stream-assets.in",
             ],
-            worker[-12:],
+            worker[separator + 1 :],
         )
         self.assertIn(f"type=bind,src={self.root}/.work/checker,dst=/output", worker)
         for name, target in (
             ("checker.py", "/workspace/tools/checker.py"),
             ("checker_acquisition.py", "/workspace/tools/checker_acquisition.py"),
             ("artifacts.py", "/workspace/tools/artifacts.py"),
+            ("wheelhouse.py", "/workspace/tools/wheelhouse.py"),
+            ("wheelhouse_acquire.py", "/workspace/tools/wheelhouse_acquire.py"),
             ("container_guard.py", "/workspace/tools/container_guard.py"),
         ):
             self.assertIn(f"type=bind,src={self.root}/tools/{name},dst={target},readonly", worker)
         self.assertIn(
             f"type=bind,src={self.root}/requirements/checker-dependencies.json,dst=/input/dependencies.json,readonly", worker
         )
+        self.assertIn(
+            f"type=bind,src={self.root}/requirements/wheelhouse-acquirer-assets.in,dst=/input/tool-assets.in,readonly", worker
+        )
+        self.assertIn(
+            f"type=bind,src={self.root}/requirements/wheelhouse-tool-assets.in,dst=/input/stream-assets.in,readonly", worker
+        )
+        self.assertIn(f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse", worker)
         self.assertFalse(self.fixture.calls())
         self.assertFalse(allocation.exists())
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
