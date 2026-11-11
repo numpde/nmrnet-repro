@@ -10,7 +10,7 @@ from tests.fakes.conversation import call, endpoint
 from nmrnet_provider.config import _interpreter
 
 
-def settings(root, *, exchange_seconds=45, retirement_seconds=45):
+def settings(root, *, exchange_seconds=45):
     key = root / "model.key"
     key.write_bytes(b"PRIVATE_PROBE_KEY\n")
     key.chmod(0o600)

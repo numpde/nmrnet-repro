@@ -194,7 +194,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
 
-    async def check_attempt_reference_redaction(self, *, recovery_kind, failed_sink, original_returncode=-9):
+    async def check_attempt_reference_redaction(self, *, recovery_kind, failed_sink):
         async with ProcessPeers() as fixture:
             pending = record()
             attempt = acknowledge_start(pending, admission())
