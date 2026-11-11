@@ -45,11 +45,11 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         }
         self.assertLessEqual(len(encode(legacy)), MAX_EVIDENCE_BYTES)
         self.assertEqual(reservation["preparation_diagnostics"][0]["diagnostic"], diagnostic)
-        self.assertEqual(len(reservation["geometries"]), 2)
+        self.assertEqual(2, len(reservation["geometries"]))
         for item in reservation["geometries"]:
             self.assertTrue(all(row["shift_ppm"] == "x" * 32 for row in item["prediction"]["predictions"]))
         self.assertIsNotNone(caught.exception.__cause__)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         ports.generator_host.retire.assert_awaited_once()
 
     async def test_preparation_diagnostic_overflow_keeps_full_evidence_before_worker_dispatch(self):
@@ -63,7 +63,7 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.document["preparation_diagnostics"][0]["diagnostic"], diagnostic)
         self.assertIsNotNone(caught.exception.__cause__)
         self.assertNotIn("coordinates", json.dumps(caught.exception.document))
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         ports.generator_host.retire.assert_awaited_once()
 
     async def test_combined_terminal_overflow_keeps_exact_worker_and_prepared_evidence(self):
@@ -72,6 +72,7 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         ports.batch = replace(ports.batch, diagnostic="PRIVATE_GENERATOR_" * 8000)
         ports.generator.generate.return_value = ports.batch
         handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         outcomes[0]["private_warnings"] = [
             {

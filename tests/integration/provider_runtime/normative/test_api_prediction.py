@@ -119,7 +119,7 @@ class QualificationContextTests(unittest.TestCase):
 
     def test_old_job_readback_preserves_original_pin_without_consulting_replacement_deployment(self):
         result, output = self.coordinate(receipt=True, identity=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         captured = output / "source/identity.json"
         self.assertEqual(captured.read_bytes(), self.original.read_bytes())
         self.assertEqual(captured.stat().st_mode & 0o777, 0o600)
@@ -128,7 +128,7 @@ class QualificationContextTests(unittest.TestCase):
 
     def test_fresh_submission_still_uses_the_actual_deployment_identity(self):
         result, output = self.coordinate()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(json.loads((output / "source/identity.json").read_bytes()), self.new_identity)
         self.assertTrue(self.marker.exists())
 
@@ -136,7 +136,7 @@ class QualificationContextTests(unittest.TestCase):
         for receipt, identity, missing in ((True, False, "JOB_IDENTITY"), (False, True, "JOB_RECEIPT")):
             with self.subTest(missing=missing):
                 result, output = self.coordinate(receipt=receipt, identity=identity)
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(2, result.returncode)
                 self.assertIn(missing, result.stderr)
                 self.assertFalse(output.exists())
                 self.assertFalse(self.marker.exists())
@@ -165,13 +165,13 @@ class ApiReadSigningTests(unittest.TestCase):
             root = Path(temporary)
             client = self.client(root, [self.refusal(), (UploadResponse(200, topology="dev-local"), b'{"ok":true}')])
             with patch("api_prediction.sign_request", side_effect=synthetic_signer) as signer:
-                self.assertEqual(client.request("readback", "GET", "/v1/jobs/job:test/analysis-results"), {"ok": True})
-            self.assertEqual(signer.call_count, 2)
+                self.assertEqual({"ok": True}, client.request("readback", "GET", "/v1/jobs/job:test/analysis-results"))
+            self.assertEqual(2, signer.call_count)
             self.assertEqual([call.args[1] for call in client._exchange.call_args_list], ["GET", "GET"])
             self.assertEqual(
-                json.loads((root / "001-readback.response.json").read_bytes())["code"], "authentication_window_closed"
+                "authentication_window_closed", json.loads((root / "001-readback.response.json").read_bytes())["code"]
             )
-            self.assertEqual(json.loads((root / "002-readback.response.json").read_bytes()), {"ok": True})
+            self.assertEqual({"ok": True}, json.loads((root / "002-readback.response.json").read_bytes()))
 
     def test_repeated_window_refusal_is_bounded_and_other_refusals_or_mutations_are_not_retried(self):
         for method, code, topology, expected in (
@@ -272,10 +272,10 @@ class ApiPredictionTests(unittest.TestCase):
                 receipt = submit(
                     client, {"specification": "Both SDF records, angstrom."}, case_kind="sdf-zip", upload_receipt=path
                 )
-            self.assertEqual(receipt["job_ref"], "job:upload-new")
+            self.assertEqual("job:upload-new", receipt["job_ref"])
             self.assertFalse(any(method == "POST" and target == "/v1/uploads" for method, target, _body, _headers in calls))
-            self.assertEqual(sum(method == "POST" and target == "/v1/jobs" for method, target, _body, _headers in calls), 1)
-            self.assertEqual(sum(target.startswith("/upload/v1/") for _method, target, _body, _headers in calls), 1)
+            self.assertEqual(1, sum(method == "POST" and target == "/v1/jobs" for method, target, _body, _headers in calls))
+            self.assertEqual(1, sum(target.startswith("/upload/v1/") for _method, target, _body, _headers in calls))
             self.assertEqual(json.loads((root / "upload-created.json").read_bytes()), original)
             self.assertEqual(json.loads((root / "upload.json").read_bytes())["upload_ref"], original["upload_ref"])
 
@@ -288,7 +288,7 @@ class ApiPredictionTests(unittest.TestCase):
             archive = preflight_sdf_zip()
             self.assertEqual(preflight_sdf_zip(), archive)
         with zipfile.ZipFile(io.BytesIO(archive)) as source:
-            self.assertEqual(source.namelist(), ["butane_conformers.sdf"])
+            self.assertEqual(["butane_conformers.sdf"], source.namelist())
             self.assertEqual(source.read("butane_conformers.sdf"), Path("/fixture/butane_conformers.sdf").read_bytes())
         with tempfile.TemporaryDirectory() as temporary:
             client, calls, _source, canary = upload_client(Path(temporary), fault=None, source=archive)
@@ -297,8 +297,8 @@ class ApiPredictionTests(unittest.TestCase):
                 patch("api_prediction.sign_request", side_effect=synthetic_signer),
             ):
                 receipt = submit(client, {"specification": "Read both SDF records from the ZIP; angstrom."}, case_kind="sdf-zip")
-            self.assertEqual(receipt["job_ref"], "job:upload-new")
-            self.assertEqual(len([call for call in calls if call[0] != "GET"]), 8)
+            self.assertEqual("job:upload-new", receipt["job_ref"])
+            self.assertEqual(8, len([call for call in calls if call[0] != "GET"]))
             reservation = json.loads(
                 next(body for method, path, body, _headers in calls if method == "POST" and path == "/v1/uploads")
             )
@@ -307,14 +307,14 @@ class ApiPredictionTests(unittest.TestCase):
                 ("butane_conformers.sdf.zip", "application/zip", len(archive)),
             )
             transfers = [call for call in calls if call[1].startswith("/upload/v1/")]
-            self.assertEqual(len(transfers), 1)
+            self.assertEqual(1, len(transfers))
             self.assertEqual(transfers[0][2], archive)
             self.assertEqual([call[1].rsplit("/", 1)[-1] for call in calls[-3:]], ["uploads", "providers", "state"])
             self.assertFalse(any(canary.encode() in item.read_bytes() for item in client.output.iterdir()))
 
     def test_qualification_accepts_explicit_seventeen_digit_output_with_the_existing_oracle(self):
         actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
-        self.assertEqual(actual["output"], {"shift_significant_digits": 17, "verbosity": "max"})
+        self.assertEqual({"shift_significant_digits": 17, "verbosity": "max"}, actual["output"])
         self.assertNotIn("output", retained)
         with patch("api_prediction._retained_science", return_value=retained):
             compare_science(
@@ -338,19 +338,19 @@ class ApiPredictionTests(unittest.TestCase):
                 patch("api_prediction.compare_science") as compare,
             ):
                 receipt = submit(client, {"specification": "Use attached XYZ, angstrom, record 1."}, case_kind="upload")
-                self.assertEqual(clock.seconds, 90)
+                self.assertEqual(90, clock.seconds)
                 upload_bytes, job_bytes = (
                     (client.output / "upload.json").read_bytes(),
                     (client.output / "created.json").read_bytes(),
                 )
                 mutations = [call for call in calls if call[0] != "GET"]
                 receive(client, receipt, readback_seconds=900, case_kind="upload", prediction_image_id="sha256:" + "c" * 64)
-            self.assertEqual(clock.seconds, 970)
+            self.assertEqual(970, clock.seconds)
             self.assertGreater(clock.seconds, 960)
             self.assertLess(clock.seconds, 990)
             self.assertLess(clock.seconds, 1020)
             self.assertEqual([call for call in calls if call[0] != "GET"], mutations)
-            self.assertEqual(len(mutations), 8)
+            self.assertEqual(8, len(mutations))
             self.assertEqual((client.output / "upload.json").read_bytes(), upload_bytes)
             self.assertEqual((client.output / "created.json").read_bytes(), job_bytes)
             compare.assert_called_once()
@@ -366,11 +366,11 @@ class ApiPredictionTests(unittest.TestCase):
                 receipt = submit(
                     client, {"specification": "Use attached atom_order.xyz, XYZ, angstrom, record 1."}, case_kind="upload"
                 )
-            self.assertEqual(receipt["job_ref"], "job:upload-new")
-            self.assertEqual(len(calls), 9)
-            self.assertEqual(signer.call_count, 8)
+            self.assertEqual("job:upload-new", receipt["job_ref"])
+            self.assertEqual(9, len(calls))
+            self.assertEqual(8, signer.call_count)
             byte_requests = [call for call in calls if call[1].startswith("/upload/v1/")]
-            self.assertEqual(len(byte_requests), 1)
+            self.assertEqual(1, len(byte_requests))
             method, _path, sent, headers = byte_requests[0]
             self.assertEqual((method, sent), ("PUT", source))
             self.assertEqual(
@@ -405,7 +405,7 @@ class ApiPredictionTests(unittest.TestCase):
 
     def test_ccl_one_conformer_checks_observed_generation_without_a_numerical_golden(self):
         actual, retained, receipt, metadata, interpreter, expected = generated_documents()
-        self.assertEqual(expected["requested_conformers"], 1)
+        self.assertEqual(1, expected["requested_conformers"])
         observed = copy.deepcopy(actual)
         compare_smiles_scientific_documents(
             actual,
@@ -423,7 +423,7 @@ class ApiPredictionTests(unittest.TestCase):
     def test_three_cccc_conformers_check_each_observation_without_requiring_distinct_numerical_values(self):
         actual, retained, receipt, metadata, interpreter, expected = generated_multiple_documents()
         observed = copy.deepcopy(actual)
-        self.assertEqual(expected["requested_conformers"], 3)
+        self.assertEqual(3, expected["requested_conformers"])
         self.assertEqual([geometry["source"]["conformer_id"] for geometry in actual["geometries"]], [2, 7, 11])
         self.assertEqual(actual["geometries"][0]["prepared_request"], actual["geometries"][1]["prepared_request"])
         self.assertEqual(actual["geometries"][0]["predictions"], actual["geometries"][2]["predictions"])
@@ -453,7 +453,7 @@ class ApiPredictionTests(unittest.TestCase):
             client, _clock, calls = clocked_client(Path(temporary), ready_at=0)
             submit(client, {"specification": "Generate three CCCC conformers separately."}, case_kind="smiles-multiple")
             create = next(call for call in calls if call[0] == "create")
-            self.assertEqual(json.loads(create[4])["description"], "NMRNet butane; real interpreter qualification")
+            self.assertEqual("NMRNet butane; real interpreter qualification", json.loads(create[4])["description"])
 
     def test_real_whitespace_or_xyz_header_changes_only_received_source_evidence(self):
         for source_format in ("table", "xyz"):
@@ -496,7 +496,7 @@ class ApiPredictionTests(unittest.TestCase):
                 patch("api_prediction.compare_science") as compare,
             ):
                 receive(client, receipt, readback_seconds=900, case_kind="pasted", prediction_image_id="sha256:" + "c" * 64)
-            self.assertEqual(clock.seconds, 601)
+            self.assertEqual(601, clock.seconds)
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertEqual(json.loads(created), receipt)
             self.assertTrue((client.output / "scientific-result.json").exists())

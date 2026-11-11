@@ -102,7 +102,7 @@ class WheelhouseTests(unittest.TestCase):
             patch.object(wheelhouse, "select_wheels", side_effect=select),
         ):
             wheelhouse.main()
-        self.assertEqual(json.loads(output.getvalue()), {"version": "1"})
+        self.assertEqual({"version": "1"}, json.loads(output.getvalue()))
 
     def test_report_rejects_other_input_authorities(self):
         common = [
@@ -240,7 +240,7 @@ class WheelhouseTests(unittest.TestCase):
         with patch.object(wheelhouse, "open_url", return_value=io.BytesIO(self.source_bytes)) as network:
             wheelhouse.prepare_source(self.source, self.pool)
             wheelhouse.prepare_source(self.source, self.pool)
-        self.assertEqual(network.call_count, 1)
+        self.assertEqual(1, network.call_count)
         source = wheelhouse.source_cache_file(self.pool, wheelhouse.source_identity(self.source))
         self.assertEqual(self.source_bytes, source.read_bytes())
         self.assertFalse(source.is_symlink())

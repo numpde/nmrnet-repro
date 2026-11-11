@@ -92,7 +92,7 @@ exit "$status"
                     timeout=5,
                     check=False,
                 )
-                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual(f"warm={str(warm).lower()}\n", result.stdout)
                 self.assertEqual(events, log.read_text().splitlines())
                 if name == "final-still-missing":
@@ -135,7 +135,7 @@ exit "$status"
                         "NETWORK_INTERFACE": "lo",
                     },
                 )
-                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("supply NETWORK_INTERFACE=", result.stderr)
                 self.assertFalse(self.fixture.calls())
 
@@ -153,7 +153,7 @@ exit "$status"
             },
             timeout=30,
         )
-        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("supply NETWORK_INTERFACE=", result.stderr)
         calls = self.fixture.calls()
         creates = [call["arguments"] for call in calls if call["arguments"][:1] == ["create"]]
@@ -169,7 +169,7 @@ exit "$status"
 
     def test_explicit_empty_interface_is_refused_without_prompting(self):
         result = self.fixture.make("packages/wheelhouse", "NETWORK_INTERFACE=")
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("not an available network interface", result.stderr)
         self.assertNotIn("interactive terminal", result.stderr)
         self.assertFalse(self.fixture.calls())
@@ -196,7 +196,7 @@ exit "$status"
                     },
                     timeout=45,
                 )
-                self.assertEqual(expected_status, result.returncode, result.stderr)
+                self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                 calls = self.fixture.calls()[before:]
                 creates = [call["arguments"] for call in calls if call["arguments"][:1] == ["create"]]
                 self.assertEqual(expected_roles, [Path(call[call.index("--cidfile") + 1]).parent.name for call in creates])
@@ -232,7 +232,7 @@ exit "$status"
                     self.read_prompt(process, master, bytearray(), b"]: ")
                     os.write(master, answer + b"\n")
                     stdout, stderr = process.communicate(timeout=3)
-                    self.assertEqual(process.returncode, 2, stdout + stderr)
+                    self.assertEqual(2, process.returncode, msg=stdout + stderr)
                     self.assertIn("selection must be one listed number", stderr)
                     self.assertFalse((self.root / "sentinel").exists())
                     self.assertFalse(self.fixture.calls())
@@ -302,8 +302,8 @@ exit "$status"
             os.write(master, choice + b"\n")
             # One online worker and the final offline recheck each own a full lifecycle.
             stdout, stderr = process.communicate(timeout=45)
-            self.assertEqual(process.returncode, 0, stdout + stderr + bytes(received).decode())
-            self.assertEqual(bytes(received).count(b"Select NETWORK_INTERFACE"), 1)
+            self.assertEqual(0, process.returncode, msg=stdout + stderr + bytes(received).decode())
+            self.assertEqual(1, bytes(received).count(b"Select NETWORK_INTERFACE"))
             self.assertNotIn("Select NETWORK_INTERFACE", stdout + stderr)
             creates = [call["arguments"] for call in self.fixture.calls() if call["arguments"][:1] == ["create"]]
             self.assertEqual(
@@ -313,7 +313,7 @@ exit "$status"
             self.assertEqual(
                 ["none", "host", "none", "container:" + "2" * 64, "none"], [call[call.index("--network") + 1] for call in creates]
             )
-            self.assertEqual(creates[1][creates[1].index("--interface") + 1], "lo")
+            self.assertEqual("lo", creates[1][creates[1].index("--interface") + 1])
             self.assertIn(f"type=bind,src={self.root}/shared wheels,dst=/wheelhouse", creates[3])
             self.assertNotIn("--probe", creates[3])
             self.assertIn("--probe", creates[4])

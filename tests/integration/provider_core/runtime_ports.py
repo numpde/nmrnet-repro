@@ -102,7 +102,7 @@ class RuntimePeers:
         try:
             self.api_peer = await self.resources.enter_async_context(api_tls_peer("success", response_factory=self.api_reply))
             self.model_peer = await self.resources.enter_async_context(TlsPeer("success", response_factory=self.model_reply))
-            headers = tuple((name, value) for name, value in store_headers(self.ports.source) if name != b"content-length")
+            headers = [(name, value) for name, value in store_headers(self.ports.source) if name != b"content-length"]
             self.store_peer = await self.resources.enter_async_context(
                 TlsPeer("success", response_body=self.ports.source, response_headers=headers)
             )

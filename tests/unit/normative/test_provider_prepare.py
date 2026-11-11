@@ -17,9 +17,9 @@ class ProviderPreparationTests(unittest.TestCase):
         selection = f"../shared wheels $(touch {sentinel})"
         expected = str((fixture.root / selection).resolve())
         first = fixture.run(selection)
-        self.assertEqual(0, first.returncode, first.stderr)
+        self.assertEqual(0, first.returncode, msg=first.stderr)
         self.assertTrue((fixture.root / "retirement-called").exists())
-        self.assertEqual(9, len(fixture.calls()), fixture.calls())
+        self.assertEqual(9, len(fixture.calls()), msg=fixture.calls())
         self.assertEqual(
             ["context inspect --format {{.Endpoints.docker.Host}} fixture-local"],
             (fixture.root / "context-calls").read_text().splitlines(),
@@ -41,7 +41,7 @@ class ProviderPreparationTests(unittest.TestCase):
         original = [(path.read_bytes(), path.stat().st_ino) for path in receipts]
         fixture.journal.unlink()
         second = fixture.run(selection)
-        self.assertEqual(0, second.returncode, second.stderr)
+        self.assertEqual(0, second.returncode, msg=second.stderr)
         self.assertEqual(5, len(fixture.calls()))
         self.assertEqual(original, [(path.read_bytes(), path.stat().st_ino) for path in receipts])
 
@@ -50,5 +50,5 @@ class ProviderPreparationTests(unittest.TestCase):
         self.addCleanup(fixture.close)
         fixture.environment["TEST_RETIRE_STATUS"] = "7"
         result = fixture.run("../cache")
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Provider preparation succeeded; image retirement is incomplete", result.stderr)

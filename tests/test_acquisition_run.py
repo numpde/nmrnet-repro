@@ -64,7 +64,7 @@ acquisition_worker() {
 
     def test_separates_application_arguments_and_reports_after_success(self):
         result = self.run_worker()
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("worker data\n", result.stdout)
         self.assertIn("next", result.stderr)
         self.assertIn("app:tool --network argument", self.events.read_text())
@@ -76,7 +76,7 @@ acquisition_worker() {
 
     def test_suppressed_guidance_stays_suppressed(self):
         result = self.run_worker(NMRNET_SUPPRESS_NEXT_ACTIONS="1")
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertNotIn("next", result.stderr)
 
 

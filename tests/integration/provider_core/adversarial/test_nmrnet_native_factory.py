@@ -26,8 +26,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(NativeSetupFailed) as failure:
                 await factory(record(), stopping=asyncio.Event())
             self.assertIs(failure.exception.cause, primary)
-            self.assertEqual(failure.exception.cleanup_failures, ())
-            self.assertEqual(failure.exception.job_ref, "job:example")
+            self.assertEqual((), failure.exception.cleanup_failures)
+            self.assertEqual("job:example", failure.exception.job_ref)
             self.assertNotIn("PRIVATE_", str(failure.exception))
             self.assertIsNone(factory.last_failure)
             self.assertTrue(factory.shutdown_ready)
@@ -78,7 +78,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(failure.exception.cause, primary)
             self.assertEqual(failure.exception.cleanup_failures, (("allocation I/O", pending_io),))
             self.assertEqual(factory.allocations, [allocation])
-            self.assertEqual(factory.clients, {})
+            self.assertEqual({}, factory.clients)
             self.assertFalse(factory.shutdown_ready)
             with self.assertRaisesRegex(RuntimeError, "original obligations"):
                 await factory(record(), stopping=asyncio.Event())
@@ -87,8 +87,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             await factory.settle()
             created.assert_called_once()
         allocation.start.assert_awaited_once()
-        self.assertEqual(allocation.retire.await_count, 2)
-        self.assertEqual(allocation.settle.await_count, 2)
+        self.assertEqual(2, allocation.retire.await_count)
+        self.assertEqual(2, allocation.settle.await_count)
         self.assertIsNone(factory.last_failure)
         self.assertTrue(factory.shutdown_ready)
 
@@ -115,7 +115,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 ("allocation I/O", pending_io),
             ),
         )
-        self.assertEqual(failure.exception.job_ref, "job:example")
+        self.assertEqual("job:example", failure.exception.job_ref)
         self.assertEqual(factory.allocations, [allocation])
         self.assertFalse(factory.shutdown_ready)
         self.assertNotIn("PRIVATE_", str(failure.exception))
@@ -135,8 +135,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertIs(await factory(record(), stopping=asyncio.Event()), controller)
         opened.assert_not_called()
-        self.assertEqual(factory.allocations, [])
-        self.assertEqual(factory.clients, {})
+        self.assertEqual([], factory.allocations)
+        self.assertEqual({}, factory.clients)
         failure = RuntimeError("Fixture model refusal")
         assembly.call_args.kwargs["on_interpreter_failure"](1, failure)
         factory.on_operator_notice.assert_called_once_with(
@@ -277,7 +277,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(factory.last_failure.cause, primary)
         self.assertIs(factory.last_failure.interruption_cause, prior)
         self.assertEqual(factory.last_failure.cleanup_failures, (("native retirement", observed[0]),))
-        self.assertEqual(factory.last_failure.job_ref, "job:example")
+        self.assertEqual("job:example", factory.last_failure.job_ref)
 
     def factory(self, *, seconds):
         return NativeAttemptFactory(
@@ -327,7 +327,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(factory.last_failure.interruption_cause, original)
         self.assertEqual(factory.last_failure.cleanup_failures, (("native retirement", cleanup),))
         self.assertNotIn("PRIVATE_", str(factory.last_failure))
-        self.assertEqual(factory.last_failure.job_ref, "job:example")
+        self.assertEqual("job:example", factory.last_failure.job_ref)
         with self.assertRaises(asyncio.CancelledError):
             await factory.settle()
-        self.assertEqual(factory.last_failure.job_ref, "job:example")
+        self.assertEqual("job:example", factory.last_failure.job_ref)

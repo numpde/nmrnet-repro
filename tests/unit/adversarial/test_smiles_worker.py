@@ -89,6 +89,7 @@ class SmilesWorkerAdversarialTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_output_limit_crosses_the_channel_as_failure_without_usable_coordinates(self):
         batch = collection()
+        # repo-check: allow-tuple-generator -- GeneratedConformers freezes its ordered conformers as a tuple; proof=nmrnet_provider/smiles.py::GeneratedConformers.
         expanded = tuple(
             replace(item, request_bytes=item.request_bytes + b" " * (1024 * 1024 - len(item.request_bytes)))
             for item in batch.conformers
@@ -101,12 +102,12 @@ class SmilesWorkerAdversarialTests(unittest.IsolatedAsyncioTestCase):
         client, writer = self.client(document(connection.sent[0][4:]))
         with self.assertRaises(ConformerOutputLimit) as caught:
             await client.generate(SOURCE, 2)
-        self.assertEqual(caught.exception.actual_count, 2)
+        self.assertEqual(2, caught.exception.actual_count)
         self.assertNotIsInstance(caught.exception, InputRejected)
         self.assertNotIsInstance(caught.exception, ConformerShortfall)
         generate.assert_called_once()
         writer.close.assert_called()
-        self.assertEqual(writer.write.call_count, 1)
+        self.assertEqual(1, writer.write.call_count)
 
     async def test_malformed_result_closes_and_cannot_be_retried_on_the_same_allocation(self):
         reply = conformer_reply(collection(), allocation=ALLOCATION)
@@ -115,7 +116,7 @@ class SmilesWorkerAdversarialTests(unittest.IsolatedAsyncioTestCase):
             await client.generate(SOURCE, 2)
         with self.assertRaises(ValueError):
             await client.generate(SOURCE, 2)
-        self.assertEqual(writer.write.call_count, 1)
+        self.assertEqual(1, writer.write.call_count)
         writer.close.assert_called()
 
     def test_wrong_allocation_and_wire_budget_fields_never_call_the_generator(self):
@@ -131,7 +132,7 @@ class SmilesWorkerAdversarialTests(unittest.IsolatedAsyncioTestCase):
                     serve_smiles_connection(
                         connection, allocation=ALLOCATION, settings=GenerationSettings(**SETTINGS), io_seconds=2
                     )
-                    self.assertEqual(document(connection.sent[0][4:])["kind"], "failure")
+                    self.assertEqual("failure", document(connection.sent[0][4:])["kind"])
             generate.assert_not_called()
 
     def test_send_failure_cannot_trigger_a_second_frame_or_another_generation(self):

@@ -12,23 +12,23 @@ from provider_core.producer_checkpoint import checkpoint_volume_name
 class ComposePlanTests(ComposeFixture, unittest.TestCase):
     def test_fixed_roles_have_exact_images_resources_logging_and_private_grants(self):
         plan = self.plan()
-        self.assertEqual(set(plan["services"]), {"provider", "prediction", "reader", "smiles", "interpreter", "store"})
+        self.assertEqual({"provider", "prediction", "reader", "smiles", "interpreter", "store"}, set(plan["services"]))
         for role, service in plan["services"].items():
             self.assertTrue(service["read_only"])
             self.assertTrue(service["init"])
-            self.assertEqual(service["user"], "1000:1001")
-            self.assertEqual(service["cap_drop"], ["ALL"])
-            self.assertEqual(service["security_opt"], ["no-new-privileges:true"])
-            self.assertEqual(service["cpus"], 2)
-            self.assertEqual(service["pids_limit"], 64)
-            self.assertEqual(service["restart"], "unless-stopped")
+            self.assertEqual("1000:1001", service["user"])
+            self.assertEqual(["ALL"], service["cap_drop"])
+            self.assertEqual(["no-new-privileges:true"], service["security_opt"])
+            self.assertEqual(2, service["cpus"])
+            self.assertEqual(64, service["pids_limit"])
+            self.assertEqual("unless-stopped", service["restart"])
             self.assertGreater(int(service["stop_grace_period"].removesuffix("s")), 0)
             self.assertEqual(
-                service["logging"],
                 {
                     "driver": "json-file",
                     "options": {"max-size": "10m", "max-file": "3", "mode": "non-blocking", "max-buffer-size": "1m"},
                 },
+                service["logging"],
             )
             self.assertEqual(service["mem_limit"], "4g" if role == "prediction" else "512m")
             self.assertEqual(service["memswap_limit"], service["mem_limit"])
@@ -39,7 +39,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         self.assertEqual(services["reader"]["image"], self.execution["geometry_image_id"])
         for role in ("prediction", "reader", "smiles"):
             service = services[role]
-            self.assertEqual(service["network_mode"], "none")
+            self.assertEqual("none", service["network_mode"])
             grants = {item["target"]: item for item in service["volumes"]}
             self.assertFalse(grants[f"/native/{role}"]["read_only"])
             self.assertTrue(grants[f"/native/{role}"]["source"].endswith(f"/runtime/{role}"))
@@ -49,7 +49,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         grants = {item["target"]: item for item in provider["volumes"]}
         for role in ("prediction", "reader", "smiles"):
             self.assertTrue(grants[f"/native/{role}"]["read_only"])
-        self.assertEqual(provider["network_mode"], "none")
+        self.assertEqual("none", provider["network_mode"])
         control = grants[str(self.root / "attempts")]
         self.assertEqual(
             control,
@@ -96,7 +96,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
         changed = self.plan()["services"]["prediction"]["command"]
         self.assertEqual(float(changed[changed.index("--io-seconds") + 1]), io)
         self.assertEqual(io, lifetime)
-        self.assertEqual(self.config.service.native.prediction_seconds, 5)
+        self.assertEqual(5, self.config.service.native.prediction_seconds)
 
     def test_project_identity_survives_bundle_refresh_with_shared_grants(self):
         first = self.plan()

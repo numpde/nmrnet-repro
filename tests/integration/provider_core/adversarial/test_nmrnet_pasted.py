@@ -43,7 +43,7 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
                     await ports.preparation.prepare(ports.instructions, require_execution=lambda: None)
                 self.assertNotIn("PRIVATE", str(caught.exception))
                 ports.reader_host.retire.assert_awaited_once()
-                self.assertEqual(ports.reader.read.await_args.kwargs["selection"], "all")
+                self.assertEqual("all", ports.reader.read.await_args.kwargs["selection"])
 
     async def test_reader_rejection_keeps_cleanup_failure_as_the_operational_outcome(self):
         ports = PastedPorts(b"PRIVATE invalid\n", source_format="table", source_unit="nm")

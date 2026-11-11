@@ -100,7 +100,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     identities["repository_revision"] = "invalid-revision"
                 with self.assertRaises((ConfigurationRejected, OSError)):
                     capture_execution(source_root, destination, names, **identities)
-                self.assertEqual(list(destination.iterdir()), [])
+                self.assertEqual([], list(destination.iterdir()))
 
     def test_authority_admission_keeps_canonical_url_refusal_for_explicit_default_ports(self):
         for role in ("model", "store"):
@@ -332,7 +332,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                         load_provider_config(files.path)
                     self.assertNotIn("PRIVATE_MODEL_KEY", str(caught.exception))
             files.key.write_bytes(b"PRIVATE_MODEL_KEY\r\n")
-            self.assertEqual(load_provider_config(files.path).interpreter.endpoints[0].spec.api_key, "PRIVATE_MODEL_KEY")
+            self.assertEqual("PRIVATE_MODEL_KEY", load_provider_config(files.path).interpreter.endpoints[0].spec.api_key)
 
     def test_ambient_trust_overrides_cannot_change_configured_trust(self):
         with tempfile.TemporaryDirectory() as directory:

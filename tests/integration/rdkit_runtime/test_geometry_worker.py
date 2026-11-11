@@ -59,9 +59,9 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
                 worker.kill()
                 worker.join(1)
             try:
-                self.assertEqual(0, worker.exitcode, "Native reader did not exit cleanly after its one reply.")
-                self.assertNotIn("rdkit", sys.modules, "Controller imported the native parser.")
-                self.assertNotIn("torch", sys.modules, "Structure reading imported model dependencies.")
+                self.assertEqual(0, worker.exitcode, msg="Native reader did not exit cleanly after its one reply.")
+                self.assertNotIn("rdkit", sys.modules, msg="Controller imported the native parser.")
+                self.assertNotIn("torch", sys.modules, msg="Structure reading imported model dependencies.")
             finally:
                 worker.close()
 
@@ -92,17 +92,14 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
             archive.writestr("butane_conformers.sdf", source)
         zipped = stream.getvalue()
         geometries = await self.read(zipped, member="butane_conformers.sdf", source_format="sdf", selection="all")
-        self.assertEqual((1, 2), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual([1, 2], [geometry.source_record_number for geometry in geometries])
         # Retained raw-SDF production requests, note003 R46 / revision7cc0617:
         # provider-service-nmrnet-native-service-UXc3mVpW/formats/sdf-carbon-only/
         # qualification.json. Matching these bytes reuses its native C-prediction
         # evidence without rerunning shift inference just to test ZIP packaging.
         self.assertEqual(
-            (
-                "d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06",
-                "a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf",
-            ),
-            tuple(hashlib.sha256(geometry.request_bytes).hexdigest() for geometry in geometries),
+            ['d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06', 'a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf'],
+            [hashlib.sha256(geometry.request_bytes).hexdigest() for geometry in geometries],
         )
         for geometry, name in zip(geometries, ("butane_supplied_a", "butane_supplied_b"), strict=True):
             self.check_geometry(geometry, source, name)
@@ -124,7 +121,7 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(selection=selection):
                 geometries = await self.read(source, source_format="sdf", selection=selection)
-                self.assertEqual(numbers, tuple(geometry.source_record_number for geometry in geometries))
+                self.assertEqual(list(numbers), [geometry.source_record_number for geometry in geometries])
                 for geometry, name in zip(geometries, names, strict=True):
                     self.check_geometry(geometry, source, name)
 
@@ -136,7 +133,7 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_unselected_invalid_sdf_record_does_not_block_selected_records(self):
         source = (self.fixtures / "adversarial/invalid_last.sdf").read_bytes()
         geometries = await self.read(source, source_format="sdf", selection=(3, 1))
-        self.assertEqual((3, 1), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual([3, 1], [geometry.source_record_number for geometry in geometries])
         for geometry in geometries:
             self.check_geometry(geometry, source, "chloromethane")
 

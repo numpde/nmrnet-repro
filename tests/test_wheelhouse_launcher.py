@@ -103,7 +103,7 @@ acquisition_worker() {
                 (self.root / "state/count").unlink(missing_ok=True)
                 (self.root / "state/events").unlink(missing_ok=True)
                 result = self.launch(profile)
-                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertIn("already available", result.stdout)
                 self.assertEqual(1, len(self.events()))
                 self.assertTrue(self.events()[0].startswith("offline "))
@@ -111,7 +111,7 @@ acquisition_worker() {
 
     def test_missing_runs_one_acquisition_and_rechecks(self):
         result = self.launch(statuses=(3, 0), additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         events = self.events()
         self.assertEqual(["offline", "online", "offline"], [event.split()[0] for event in events])
 
@@ -124,7 +124,7 @@ acquisition_worker() {
             text=True,
             check=False,
         )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("fixture (unix:///fixture.sock)", result.stdout)
         self.assertIn("route: lo", result.stdout)
         self.assertIn("Offline probe:", result.stdout)
@@ -143,7 +143,7 @@ acquisition_worker() {
                 (self.root / "state/count").unlink(missing_ok=True)
                 (self.root / "state/events").unlink(missing_ok=True)
                 result = self.launch(statuses=(status,))
-                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual(1, len(self.events()))
 
     def test_invalid_explicit_interface_does_not_create_pool(self):
@@ -171,7 +171,7 @@ acquisition_worker() {
             self.assertTrue((self.root / "state/probe-ready").exists())
             process.send_signal(signal.SIGTERM)
             _stdout, stderr = process.communicate(timeout=8)
-            self.assertEqual(143, process.returncode, stderr)
+            self.assertEqual(143, process.returncode, msg=stderr)
             self.assertTrue((self.root / "state/probe-done").exists())
             self.assertEqual(1, len(self.events()))
         finally:

@@ -170,13 +170,13 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(geometry["source"]["sha256"], self.digest)
             self.assertEqual(geometry["source"]["upload_ref"], UPLOAD_REF)
             self.assertEqual(geometry["source"]["byte_length"], len(self.source))
-            self.assertEqual(geometry["preparation"]["method"], "xyz")
-            self.assertEqual(geometry["preparation"]["source_unit"], "angstrom")
-            self.assertEqual(geometry["preparation"]["scale_to_angstrom"], 1)
+            self.assertEqual("xyz", geometry["preparation"]["method"])
+            self.assertEqual("angstrom", geometry["preparation"]["source_unit"])
+            self.assertEqual(1, geometry["preparation"]["scale_to_angstrom"])
 
     async def allocate_reader(self):
         self.counts["reader"] += 1
-        self.assertEqual(self.counts["reader"], 1)
+        self.assertEqual(1, self.counts["reader"])
         return self.reader, self.reader_host
 
     async def reply(self, request, body):
@@ -212,7 +212,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.confirmed and self.reader_host.confirmed)
         self.assertTrue(self.reader.closed and self.reader.observed)
         self.assertTrue(all(transport.retirement_confirmed for transport in self.source_transports))
-        self.assertEqual(self.claims.live_owners(), ())
+        self.assertEqual((), self.claims.live_owners())
         self.assertEqual(body, self.delivery.items[0].body)
         content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
         result = json.loads(content)
@@ -232,7 +232,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
         await self.run_lifecycle()
 
     async def run_lifecycle(self):
-        headers = tuple((name, value) for name, value in store_headers(self.source) if name != b"content-length")
+        headers = [(name, value) for name, value in store_headers(self.source) if name != b"content-length"]
         async with (
             api_tls_peer("success", response_factory=self.reply) as peer,
             TlsPeer("success", response_body=self.source, response_headers=headers) as self.store_peer,
@@ -307,9 +307,9 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     accepted = await controller.run(replace(record(), scope=recovery_scope, input=facts(INSTRUCTIONS)))
                 self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
-                self.assertEqual(self.claims.live_owners(), ())
+                self.assertEqual((), self.claims.live_owners())
                 self.assertTrue(controller.shutdown_ready)
-                self.assertEqual(len(self.delivery.items), 1)
+                self.assertEqual(1, len(self.delivery.items))
                 item = self.delivery.items[0]
                 self.assertEqual(item.body_sha256, accepted.selection.body_sha256)
                 evidence = json.loads(self.scientific_evidence.content)
@@ -323,9 +323,9 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                 await session.retire()
                 for transport in (lifecycle, *self.source_transports):
                     await transport.retire()
-            self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
-            self.assertEqual(self.chooser.calls, 1)
+            self.assertEqual(["prepare", "execute", "close", "closed"], self.worker.events)
+            self.assertEqual(1, self.chooser.calls)
             self.assertEqual(self.counts, Counter(membership=2, grant=1, reader=1, complete=1))
-            self.assertEqual(len(self.store_peer.requests), 1)
+            self.assertEqual(1, len(self.store_peer.requests))
             self.assertIn(b"authorization: bearer ", self.store_peer.requests[0].lower())
             self.assertNotIn(b"signature:", self.store_peer.requests[0].lower())

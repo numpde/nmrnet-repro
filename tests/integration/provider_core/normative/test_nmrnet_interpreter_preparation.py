@@ -44,7 +44,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(entered.is_set())
         self.assertTrue(ports.generator_host.confirmed)
         self.assertIsInstance(outcome, AnalysisFailure)
-        self.assertEqual(outcome.code, "input_selection_time_limit")
+        self.assertEqual("input_selection_time_limit", outcome.code)
 
     async def test_deadline_waits_for_late_generation_before_selecting_failure(self):
         ports = SessionPorts()
@@ -75,8 +75,8 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
             outcome = await asyncio.wait_for(task, 1)
             self.assertTrue(ports.generator_host.confirmed)
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual(outcome.code, "input_selection_time_limit")
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual("input_selection_time_limit", outcome.code)
+            self.assertEqual([], ports.worker.events)
         finally:
             release.set()
             if not task.done():
@@ -86,7 +86,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
     def test_only_upload_tool_can_derive_unit_from_its_json_file(self):
         tools = {item["function"]["name"]: item["function"]["parameters"] for item in json.loads(_TOOLS)}
         self.assertNotIn("source_unit", tools["prepare_upload"]["required"])
-        self.assertEqual(tools["prepare_upload"]["properties"]["source_unit"]["type"], ["string", "null"])
+        self.assertEqual(["string", "null"], tools["prepare_upload"]["properties"]["source_unit"]["type"])
         self.assertIn("source_unit", tools["prepare_pasted"]["required"])
 
     async def test_owned_input_deadline_during_model_post_returns_job_failure_with_final_diagnostics(self):
@@ -101,19 +101,19 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
                 2,
             )
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual(outcome.code, "input_selection_time_limit")
+            self.assertEqual("input_selection_time_limit", outcome.code)
             self.assertIn("0.5", outcome.message)
             self.assertIn("operator", outcome.message)
             evidence = json.loads(outcome.evidence.content)
-            self.assertEqual(evidence["input_selection_time_limit"], {"seconds": 0.5})
+            self.assertEqual({"seconds": 0.5}, evidence["input_selection_time_limit"])
             diagnostics = json.dumps(evidence["interpreter_diagnostics"])
             for fact in ("request:input-time-limit", "request_cancelled", "may have been processed"):
                 self.assertIn(fact, diagnostics)
             self.assertNotIn("PRIVATE_MODEL_KEY", diagnostics)
-            self.assertEqual(len(peer.requests), 1)
+            self.assertEqual(1, len(peer.requests))
             ports.allocate_reader.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             for transport in ports.transports:
                 transport.retire.assert_awaited_once()
 
@@ -132,7 +132,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual(outcome.code, "input_selection_time_limit")
+            self.assertEqual("input_selection_time_limit", outcome.code)
             diagnostics = json.dumps(json.loads(outcome.evidence.content)["interpreter_diagnostics"])
             self.assertIn('"status": 503', diagnostics)
             self.assertIn("request:after-fallback", diagnostics)
@@ -140,7 +140,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("PRIVATE_MODEL_KEY", diagnostics)
             self.assertNotIn("PRIVATE_MODEL_BODY", diagnostics)
             self.assertEqual((len(unavailable.requests), len(waiting.requests)), (2, 1))
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
 
     async def test_each_prepare_capability_freezes_the_shared_output_fragment(self):
         for route in ("pasted", "smiles", "upload"):
@@ -199,7 +199,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
                 session = ports.make_session(preparation)
                 self.addAsyncCleanup(session.retire)
                 handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-                self.assertEqual(ports.worker.events, [])
+                self.assertEqual([], ports.worker.events)
                 chooser.retire.assert_awaited_once()
                 self.assertEqual(json.loads(handle.identity.content)["interpretation"], json.loads(OBSERVATION))
                 outcome = await session.execute(handle, report_condition=unexpected_condition)

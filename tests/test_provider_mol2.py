@@ -48,7 +48,7 @@ class MOL2NormativeTests(unittest.TestCase):
         for selection, numbers in (("all", (1, 2, 3)), ((3, 1), (3, 1))):
             with self.subTest(selection=selection):
                 geometries = prepare_mol2(source, source_unit="angstrom", selection=selection)
-                self.assertEqual(numbers, tuple(g.source_record_number for g in geometries))
+                self.assertEqual(list(numbers), [g.source_record_number for g in geometries])
                 for geometry, number in zip(geometries, numbers, strict=True):
                     name = "water" if number == 2 else "chloromethane"
                     self.assertEqual(expected[name]["atoms"], json.loads(geometry.request_bytes)["atoms"])

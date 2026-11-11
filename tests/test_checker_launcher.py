@@ -654,7 +654,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_checker_uses_mapped_owner_and_refuses_unverified_mapping(self):
         result = self.launch("check", additions={"CHECKER_FIXTURE_MAP_RESULT": "42:43"})
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = self.calls()[-1]["arguments"]
         self.assertEqual("42:43", arguments[arguments.index("--user") + 1])
         for additions in ({"CHECKER_FIXTURE_MAP_FAIL": "1"}, {"CHECKER_FIXTURE_MAP_RESULT": "bad"}):
@@ -666,7 +666,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_failed_captured_verification_retains_borrowed_inputs(self):
         result = self.launch("build", additions={"CHECKER_FIXTURE_RUN_STATUS": "37", "CHECKER_FIXTURE_RUN_STATUS_CALL": "2"})
-        self.assertEqual(37, result.returncode, result.stderr)
+        self.assertEqual(37, result.returncode, msg=result.stderr)
         self.assertIn("operation retirement is unconfirmed", result.stderr)
         captures = list((self.root / ".work/checker").glob(".build.*"))
         self.assertEqual(1, len(captures))

@@ -37,7 +37,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
             callbacks[signal.SIGTERM]()
             await cleaning.wait()
             callbacks[signal.SIGINT]()
-            self.assertEqual(task.cancelling(), 1)
+            self.assertEqual(1, task.cancelling())
             self.assertFalse(task.done())
             release.set()
             with self.assertRaises(asyncio.CancelledError):
@@ -54,10 +54,10 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
                 (selected.timeout_seconds, selected.endpoints[0].retirement_seconds),
                 (240, 5),
             )
-            self.assertEqual(selected.endpoints[0].spec.api_key, "PRIVATE_PROBE_KEY")
-            self.assertEqual(profile["authority"], "model.example:443")
-            self.assertEqual(profile["process_seconds"], 1040)
-            self.assertEqual(profile["host_seconds"], 1060)
+            self.assertEqual("PRIVATE_PROBE_KEY", selected.endpoints[0].spec.api_key)
+            self.assertEqual("model.example:443", profile["authority"])
+            self.assertEqual(1040, profile["process_seconds"])
+            self.assertEqual(1060, profile["host_seconds"])
             self.assertEqual(profile["configuration_sha256"], json.loads(selection.read_bytes())["configuration_sha256"])
             self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(profile))
             self.assertFalse((root / "unmounted/model.key").exists())
@@ -65,7 +65,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
     def test_deadline_covers_every_exchange_close_and_final_retirement(self):
         with tempfile.TemporaryDirectory() as directory:
             selected = settings(Path(directory))
-            self.assertEqual(batch_budget(selected), {"process_seconds": 260, "host_seconds": 280})
+            self.assertEqual({"process_seconds": 260, "host_seconds": 280}, batch_budget(selected))
 
     async def test_fixed_batch_records_attributed_categories_without_preparation_or_transcripts(self):
         cases = load_cases(Path("/fixture/interpreter_ambiguity.json"))
@@ -79,13 +79,13 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result, 0)
             summary = json.loads((output / "result.json").read_bytes())
             self.assertFalse(summary["authenticated_api_jobs"])
-            self.assertEqual(summary["cases_passed"], 4)
+            self.assertEqual(4, summary["cases_passed"])
             for case, carrier in zip(cases, carriers, strict=True):
                 observed = json.loads((output / (case["id"] + ".json")).read_bytes())
                 self.assertEqual(observed["issue"], case["expected_issue"])
                 self.assertEqual(observed["expected_issue"], case["expected_issue"])
-                self.assertEqual(observed["preparation_attempts"], [])
-                self.assertEqual(observed["interpretation"]["outcome"], "model_reported_input_problem")
+                self.assertEqual([], observed["preparation_attempts"])
+                self.assertEqual("model_reported_input_problem", observed["interpretation"]["outcome"])
                 self.assertFalse(observed["independently_verified"])
                 self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
                 self.assertNotIn("DISTINCT_REPORT_CANARY", json.dumps(observed))
@@ -106,7 +106,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
                             "members": [],
                         },
                     )
-                    self.assertEqual(observed["interpretation"]["corrections"], 0)
+                    self.assertEqual(0, observed["interpretation"]["corrections"])
 
 
 class InterpreterFormatChoiceProbeTests(unittest.IsolatedAsyncioTestCase):
@@ -124,28 +124,28 @@ class InterpreterFormatChoiceProbeTests(unittest.IsolatedAsyncioTestCase):
                 result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="formats")
             self.assertEqual(result, 0)
             summary = json.loads((output / "result.json").read_bytes())
-            self.assertEqual(summary["cases_passed"], 3)
-            self.assertEqual(summary["evidence_scope"], "prepare_upload_arguments")
+            self.assertEqual(3, summary["cases_passed"])
+            self.assertEqual("prepare_upload_arguments", summary["evidence_scope"])
             self.assertFalse(summary["scientific_work_performed"])
             for case, carrier in zip(cases, carriers, strict=True):
                 observed = json.loads((output / (case["id"] + ".json")).read_bytes())
                 arguments = json.loads(observed["tool_arguments_json"])
                 self.assertEqual(arguments["source_format"], case["source_format"])
                 self.assertEqual(arguments["selection"], case["selection"])
-                self.assertEqual(arguments["source_unit"], "angstrom")
-                self.assertEqual(observed["interpretation"]["visits"][-1]["turns_started"], 3)
+                self.assertEqual("angstrom", arguments["source_unit"])
+                self.assertEqual(3, observed["interpretation"]["visits"][-1]["turns_started"])
                 self.assertTrue(observed["passed"])
                 self.assertFalse(observed["scientific_preparation_performed"])
                 self.assertNotIn("messages", observed)
                 self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
                 carrier.retire.assert_awaited()
-                self.assertEqual(carrier.complete.await_count, 3)
+                self.assertEqual(3, carrier.complete.await_count)
 
     def test_three_case_budget_and_admission_profile_cannot_be_mistaken_for_ambiguity(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fragment, key, selection = selected_files(root)
             selected, profile = admit_selection(fragment, selection=selection, key_file=key, probe="formats")
-            self.assertEqual(batch_budget(selected, probe="formats"), {"process_seconds": 795, "host_seconds": 815})
-            self.assertEqual(profile["probe"], "formats")
-            self.assertEqual(profile["case_count"], 3)
+            self.assertEqual({"process_seconds": 795, "host_seconds": 815}, batch_budget(selected, probe="formats"))
+            self.assertEqual("formats", profile["probe"])
+            self.assertEqual(3, profile["case_count"])

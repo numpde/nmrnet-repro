@@ -109,6 +109,7 @@ class ResultTests(unittest.TestCase):
         source = (Path(__file__).parent / "fixtures/preparation/normative/mixed_records.xyz").read_bytes()
         geometries = prepare_xyz(source, source_unit="angstrom", selection=(2, 1, 3))
         plan = self.batch_plan(geometries, "xyz")
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(self.outcome(geometry, value) for geometry, value in zip(geometries, (1.2, 42.5, 43.5), strict=True))
         document = json.loads(plan.finish(outcomes))
         identity = json.loads(plan.prepared_identity)
@@ -127,6 +128,7 @@ class ResultTests(unittest.TestCase):
         other = prepare_json(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,0]]}')
         geometries = (self.geometry, other)
         plan = self.batch_plan(geometries, "direct_coordinate_json")
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(self.outcome(geometry, 1.2) for geometry in geometries)
         bad = copy.deepcopy(outcomes[1])
         bad["prediction"]["predictions"][0]["element"] = "H"
@@ -141,6 +143,7 @@ class ResultTests(unittest.TestCase):
         other = prepare_json(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,0]]}')
         geometries = (self.geometry, other)
         plan = self.batch_plan(geometries, "direct_coordinate_json")
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(self.outcome(geometry, 1.2) for geometry in geometries)
         warning = {
             "category": "builtins.UserWarning",
@@ -196,6 +199,7 @@ class ResultTests(unittest.TestCase):
         width = len(json.dumps(text, ensure_ascii=True)) - 2
         self.execution["fixture_metadata"] = text * ((MAX_RESULT_BYTES - base) // width)
         plan = self.batch_plan(geometries, "direct_coordinate_json")
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(self.outcome(geometry, -1.7976931348623157e308) for geometry in geometries)
         for outcome in outcomes:
             outcome["private_warnings"] = [
@@ -247,11 +251,11 @@ class ResultTests(unittest.TestCase):
 
     def test_result_preserves_prepared_and_float32_coordinates_and_source_mapping(self):
         result = json.loads(self.plan.finish((self.result,)))
-        self.assertEqual(result["schema_id"], "nmrnet.coordinate_shifts.result.v2")
+        self.assertEqual("nmrnet.coordinate_shifts.result.v2", result["schema_id"])
         geometry = result["geometries"][0]
         self.assertEqual(geometry["prepared_request"], json.loads(self.raw))
         self.assertNotEqual(geometry["float32_coordinates"][1][0], 1.09)
-        self.assertEqual(geometry["source"]["positions"], [0, 1, 2])
+        self.assertEqual([0, 1, 2], geometry["source"]["positions"])
         self.assertEqual(geometry["predictions"], self.result["prediction"]["predictions"])
         self.assertEqual(geometry["request_sha256"], hashlib.sha256(self.raw).hexdigest())
 
@@ -310,7 +314,7 @@ class ResultTests(unittest.TestCase):
         self.runtime["python"] = "substituted"
         result = json.loads(self.plan.finish((self.result,)))
         self.assertEqual(result["execution"]["image_id"], "sha256:" + "c" * 64)
-        self.assertEqual(result["runtime"]["python"], "3.12.12")
+        self.assertEqual("3.12.12", result["runtime"]["python"])
 
     def test_missing_duplicate_reordered_wrong_element_or_nonfinite_shifts_fail(self):
         rows = self.result["prediction"]["predictions"]
@@ -365,17 +369,17 @@ class ResultTests(unittest.TestCase):
         ]
         content = self.plan.finish((self.result,))
         self.assertNotIn(b"private-canary", content)
-        self.assertEqual(json.loads(content)["warnings"][0]["code"], "scaler_version_mismatch")
-        self.assertEqual(json.loads(content)["warnings"][0]["head"], "H")
-        self.assertEqual(json.loads(content)["warnings"][0]["geometry_id"], "geometry-1")
-        self.assertEqual(json.loads(content)["warnings"][0]["versions"], {"original": "1.5.2", "current": "1.8.0"})
+        self.assertEqual("scaler_version_mismatch", json.loads(content)["warnings"][0]["code"])
+        self.assertEqual("H", json.loads(content)["warnings"][0]["head"])
+        self.assertEqual("geometry-1", json.loads(content)["warnings"][0]["geometry_id"])
+        self.assertEqual({"original": "1.5.2", "current": "1.8.0"}, json.loads(content)["warnings"][0]["versions"])
         self.result["private_warnings"][0]["category"] = "unknown.private-canary"
         self.result["private_warnings"][0]["versions"] = None
         content = self.plan.finish((self.result,))
         self.assertNotIn(b"private-canary", content)
         result = json.loads(content)
-        self.assertEqual(result["warnings"][0]["code"], "additional_scaler_warnings")
-        self.assertEqual(result["warnings"][0]["heads"], ["H"])
+        self.assertEqual("additional_scaler_warnings", result["warnings"][0]["code"])
+        self.assertEqual(["H"], result["warnings"][0]["heads"])
         self.assertEqual(result["geometries"][0]["predictions"], self.result["prediction"]["predictions"])
 
     def test_warning_projection_is_bounded_without_discarding_private_observations(self):
@@ -388,8 +392,8 @@ class ResultTests(unittest.TestCase):
             "versions": {"original": "1.5.2", "current": "1.8.0"},
         }
         self.result["private_warnings"] = [copy.deepcopy(warning) for _ in range(20)]
-        self.assertEqual(len(json.loads(self.plan.finish((self.result,)))["warnings"]), 1)
-        self.assertEqual(len(self.result["private_warnings"]), 20)
+        self.assertEqual(1, len(json.loads(self.plan.finish((self.result,)))["warnings"]))
+        self.assertEqual(20, len(self.result["private_warnings"]))
         self.result["private_warnings"][0]["versions"]["original"] = "private-canary"
         content = self.plan.finish((self.result,))
         self.assertNotIn(b"private-canary", content)
@@ -446,7 +450,7 @@ class ResultTests(unittest.TestCase):
         self.result["request_sha256"] = hashlib.sha256(self.raw).hexdigest()
         self.result["prediction"]["predictions"] = []
         self.result["provenance"]["artifacts"]["elements"] = {}
-        self.assertEqual(json.loads(plan.finish((self.result,)))["geometries"][0]["predictions"], [])
+        self.assertEqual([], json.loads(plan.finish((self.result,)))["geometries"][0]["predictions"])
         self.result["provenance"]["artifacts"]["elements"]["H"] = self.artifacts["elements"]["H"]
         with self.assertRaises(ResultRejected):
             plan.finish((self.result,))

@@ -29,7 +29,7 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
                 (geometry,) = await client.read(source, source_format="table", source_unit="angstrom", selection=None)
                 packet = json.loads(geometry.request_bytes)
                 self.assertEqual(packet["atoms"], [row.split()[0].decode() for row in source.splitlines()])
-                self.assertEqual(geometry.source_positions, (1, 2))
+                self.assertEqual((1, 2), geometry.source_positions)
                 self.assertEqual(packet["coordinates"][1], [1.09, 0, 0] if source.startswith(b"H") else [0, 1.09, 0])
                 identities.append(operation.allocation)
             except Exception as primary:
@@ -43,4 +43,4 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(failures, [])
             await operation.settle()
         self.assertNotEqual(*identities)
-        self.assertEqual(list(runner.scratch.iterdir()), [])
+        self.assertEqual([], list(runner.scratch.iterdir()))

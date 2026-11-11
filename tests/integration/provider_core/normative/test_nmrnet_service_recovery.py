@@ -29,11 +29,11 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await fixture.wait_published(3)
         self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
         self.assertEqual(
-            fixture.relay.queue.inventory(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref),
             [],
+            fixture.relay.queue.inventory(fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref),
         )
-        self.assertEqual(len(fixture.start_bodies), 3)
-        self.assertEqual(len(fixture.allocations), 3)
+        self.assertEqual(3, len(fixture.start_bodies))
+        self.assertEqual(3, len(fixture.allocations))
         fixture.require_retired_science(3)
 
     async def test_unconfirmed_phase_labels_do_not_stop_later_jobs_or_repeat_science(self):
@@ -68,18 +68,18 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 [(fixture.attempt_refs[0], "preparing", 503), (fixture.attempt_refs[1], "running", 503)],
             )
             self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
-            self.assertEqual(len(fixture.complete_bodies), 4)
+            self.assertEqual(4, len(fixture.complete_bodies))
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
     async def test_time_limited_first_job_fails_then_later_jobs_finish_in_one_active_slot(self):
         async with InputTimeLimitPeers() as fixture:
             await self.finish(fixture, fixture.service())
-            self.assertEqual(len(fixture.failure_bodies), 1)
+            self.assertEqual(1, len(fixture.failure_bodies))
             first = json.loads(fixture.failure_bodies[0])
-            self.assertEqual(first["failure_code"], "input_selection_time_limit")
+            self.assertEqual("input_selection_time_limit", first["failure_code"])
             self.assertEqual(first["execution_attempt_ref"], fixture.attempt_refs[0])
             self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
-            self.assertEqual(len(fixture.complete_bodies), 3)
+            self.assertEqual(3, len(fixture.complete_bodies))
             self.assertTrue(any(facts["event"] == "delivery_retry" for _, facts in fixture.delivery_notices))
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
@@ -119,13 +119,13 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             await fixture.settle_service(service)
             await fixture.wait_published()
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            self.assertEqual(len(sent), 2)
+            self.assertEqual(2, len(sent))
             self.assertEqual(sent[0][1], sent[1][1])
             self.assertNotEqual(sent[0][0], sent[1][0])
-            self.assertEqual(len(fixture.model_peer.requests), 1)
-            self.assertEqual(len(fixture.allocations), 1)
-            self.assertEqual(fixture.events.count("start"), 1)
-            self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+            self.assertEqual(1, len(fixture.model_peer.requests))
+            self.assertEqual(1, len(fixture.allocations))
+            self.assertEqual(1, fixture.events.count("start"))
+            self.assertEqual(["prepare", "execute", "close", "closed"], fixture.allocations[0].worker.events)
             self.assertEqual([notice[0] for notice in notices], ["retry", "recovered"])
             self.assertTrue(notices[1][1].admission.replayed)
             self.assertEqual(notices[1][1].start.body, sent[0][1])
@@ -136,12 +136,12 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_call_limited_first_job_fails_then_later_jobs_finish_without_repeating_science(self):
         async with InputCallLimitPeers() as fixture:
             await self.finish(fixture, fixture.service())
-            self.assertEqual(len(fixture.failure_bodies), 1)
+            self.assertEqual(1, len(fixture.failure_bodies))
             first = json.loads(fixture.failure_bodies[0])
-            self.assertEqual(first["failure_code"], "input_worker_call_limit")
+            self.assertEqual("input_worker_call_limit", first["failure_code"])
             self.assertEqual(first["execution_attempt_ref"], fixture.attempt_refs[0])
             self.assertEqual(fixture.model_jobs, [fixture.jobs[index].job_ref for index in (0, 0, 1, 2)])
-            self.assertEqual(len(fixture.complete_bodies), 3)
+            self.assertEqual(3, len(fixture.complete_bodies))
             self.assertTrue(any(facts["event"] == "delivery_retry" for _, facts in fixture.delivery_notices))
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
@@ -151,7 +151,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             for index, verbosity in enumerate(("low", "medium", "max")):
                 body = fixture.accepted_outcomes[index]
                 public = json.loads(base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True))
-                self.assertEqual(public["schema_id"], "nmrnet.coordinate_shifts.result.v2")
+                self.assertEqual("nmrnet.coordinate_shifts.result.v2", public["schema_id"])
                 self.assertEqual(public["output"]["verbosity"], verbosity)
                 identity = json.loads(fixture.allocations[index].preparation_outcome.identity.content)
                 self.assertEqual(identity["output"], public["output"])
@@ -160,7 +160,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
             self.assertEqual(fixture.complete_bodies, [fixture.accepted_outcomes[index] for index in (0, 1, 1, 2)])
             retry = [(error, facts) for error, facts in fixture.delivery_notices if facts["event"] == "delivery_retry"]
-            self.assertEqual(len(retry), 1)
+            self.assertEqual(1, len(retry))
             self.assertEqual(retry[0][1]["execution_attempt_ref"], fixture.attempt_refs[1])
             self.assertTrue(retry[0][0].attempt_mutation_may_have_committed)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
@@ -187,7 +187,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(task, 2)
                 await fixture.settle_service(first)
                 self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-                self.assertEqual(len(fixture.allocations), 2)
+                self.assertEqual(2, len(fixture.allocations))
                 fixture.require_retired_science(2)
                 retained = fixture.relay.queue.next_pending_handoff(
                     fixture.config.lifecycle.scope.api_origin, fixture.config.lifecycle.scope.provider_ref
@@ -202,7 +202,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 await self.finish(fixture, replacement)
                 self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
                 self.assertEqual(fixture.complete_bodies, [fixture.accepted_outcomes[index] for index in (0, 1, 1, 2)])
-                self.assertEqual(len(fixture.hellos), 2)
+                self.assertEqual(2, len(fixture.hellos))
             finally:
                 fixture.stop.set()
                 fixture.recovery_release.set()

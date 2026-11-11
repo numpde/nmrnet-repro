@@ -206,7 +206,7 @@ class SuccessiveServicePeers(ServicePeers):
         super().__init__(maximum_live_attempts=maximum_live_attempts)
         self.lose_second_completion = lose_second_completion
         self.stop_after_complete = False
-        self.jobs = tuple(
+        self.jobs = [
             verify_job_input(
                 response(raw, job_ref=f"job:successive-{index}"),
                 feed=replace(facts(raw), job_ref=f"job:successive-{index}"),
@@ -219,8 +219,8 @@ class SuccessiveServicePeers(ServicePeers):
                 ),
                 1,
             )
-        )
-        self.attempt_refs = tuple("execution_attempt:sha256:" + digit * 64 for digit in "123")
+        ]
+        self.attempt_refs = ["execution_attempt:sha256:" + digit * 64 for digit in "123"]
         self.start_bodies = []
         self.complete_bodies = []
         self.accepted_outcomes = {}

@@ -18,7 +18,7 @@ class SmilesProtocolNormativeTests(unittest.TestCase):
     def test_source_bytes_and_count_round_trip_without_work_budget_options(self):
         source = b" C "
         request = smiles_request(source, 2)
-        self.assertEqual(set(request), {"operation", "smiles_utf8", "requested_count"})
+        self.assertEqual({"operation", "smiles_utf8", "requested_count"}, set(request))
         self.assertEqual(read_smiles_request(document(frame(request)[4:])), (source, 2))
         self.assertNotIn("rdkit", sys.modules)
         self.assertNotIn("torch", sys.modules)

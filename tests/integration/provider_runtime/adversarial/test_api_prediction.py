@@ -305,9 +305,9 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 mutations = [call for call in calls if call[0] != "GET"]
                 with self.assertRaisesRegex(TimeoutError, "no mutation was retried"):
                     receive(client, receipt, readback_seconds=900, case_kind="upload", prediction_image_id="sha256:" + "c" * 64)
-            self.assertEqual(clock.seconds, 990)
+            self.assertEqual(990, clock.seconds)
             self.assertEqual([call for call in calls if call[0] != "GET"], mutations)
-            self.assertEqual(len(mutations), 8)
+            self.assertEqual(8, len(mutations))
             self.assertEqual((client.output / "upload.json").read_bytes(), upload_bytes)
             self.assertEqual((client.output / "created.json").read_bytes(), job_bytes)
 
@@ -342,7 +342,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             self.assertIn("connection close: OSError, errno=5", rendered)
             self.assertNotIn(canary, rendered)
             self.assertFalse(any(canary.encode() in path.read_bytes() for path in client.output.iterdir()))
-            self.assertEqual(len([call for call in calls if call[1].startswith("/upload/v1/")]), 1)
+            self.assertEqual(1, len([call for call in calls if call[1].startswith("/upload/v1/")]))
             self.assertFalse(any(path.endswith("/finalize") or path.startswith("/v1/jobs") for _method, path, *_rest in calls))
             head = json.loads(next(client.output.glob("*-upload-bytes.head.json")).read_bytes())
             self.assertEqual((head["status"], head["request_id"]), (201, "synthetic-request-id"))
@@ -351,7 +351,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             bound.return_value.connect.assert_called_once_with("/run/nmr-api-proxy/proxy.sock")
             connection.set_tunnel.assert_called_once_with("api.example", 9443)
             connection._tunnel.assert_called_once_with()
-            self.assertEqual(client.trust.wrap_socket.call_args.kwargs["server_hostname"], "api.example")
+            self.assertEqual("api.example", client.trust.wrap_socket.call_args.kwargs["server_hostname"])
             connection.close.assert_called_once()
 
     def test_carrier_keeps_primary_and_close_failures_including_interruption_without_secret_text(self):
@@ -705,7 +705,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 self.assertRaisesRegex(TimeoutError, "no mutation was retried"),
             ):
                 receive(client, receipt, readback_seconds=900, case_kind="pasted", prediction_image_id="sha256:" + "c" * 64)
-            self.assertEqual(clock.seconds, 900)
+            self.assertEqual(900, clock.seconds)
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertFalse((client.output / "scientific-result.json").exists())
             self.assertEqual([method for _label, method, *_rest in calls if method != "GET"], ["POST", "PUT", "PUT"])

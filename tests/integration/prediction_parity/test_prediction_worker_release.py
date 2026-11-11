@@ -100,9 +100,9 @@ class ReleasedWorkerTests(unittest.TestCase):
         with self.assertRaises(ModelCallFailed) as failed:
             asyncio.run(self.worker_prediction((requests[0],), "failed-post-hook", released_worker_with_failed_post_hook))
         self.assertIn("authored post-hook failure", failed.exception.diagnostic)
-        expected = tuple(predict_request(raw, loader.load_dictionary, loader.load_selected_element) for raw in requests)
+        expected = [predict_request(raw, loader.load_dictionary, loader.load_selected_element) for raw in requests]
         actual = asyncio.run(self.worker_prediction(requests, "ordered-batch"))
-        self.assertEqual(expected, tuple(item["prediction"] for item in actual))
+        self.assertEqual(expected, [item["prediction"] for item in actual])
         self.assertEqual([{"H", "C"}, {"C"}, set()], [set(item["provenance"]["artifacts"]["elements"]) for item in actual])
         self.assertEqual([hashlib.sha256(raw).hexdigest() for raw in requests], [item["request_sha256"] for item in actual])
         self.assertEqual([], actual[2]["private_warnings"])
@@ -137,6 +137,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             },
         }
         return ResultPlan(
+            # repo-check: allow-tuple-generator -- PreparedJobInput freezes ordered geometries as a tuple; proof=nmrnet_provider/prepared_input.py::PreparedJobInput.
             PreparedJobInput(tuple(prepare_json(raw) for raw in raw_requests), "direct_coordinate_json"),
             job_ref="job:" + allocation,
             execution_attempt_ref="execution_attempt:sha256:" + hashlib.sha256(allocation.encode()).hexdigest(),
@@ -160,11 +161,11 @@ class ReleasedWorkerTests(unittest.TestCase):
         raw = b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}'
         plan = self.result_plan((raw,), "no-eligible-heads")
         (result,) = asyncio.run(self.worker_prediction((raw,), "no-eligible-heads"))
-        self.assertEqual(json.loads(plan.finish((result,)))["geometries"][0]["predictions"], [])
-        self.assertEqual(result["prediction"], {"unit": "ppm", "predictions": []})
+        self.assertEqual([], json.loads(plan.finish((result,)))["geometries"][0]["predictions"])
+        self.assertEqual({"unit": "ppm", "predictions": []}, result["prediction"])
         self.assertIsNotNone(result["provenance"]["artifacts"]["dictionary"])
-        self.assertEqual(result["provenance"]["artifacts"]["elements"], {})
-        self.assertEqual(result["private_warnings"], [])
+        self.assertEqual({}, result["provenance"]["artifacts"]["elements"])
+        self.assertEqual([], result["private_warnings"])
 
     async def worker_prediction(self, raw_requests, allocation, worker_target=released_worker):
         parent, child = socket.socketpair()
@@ -195,10 +196,10 @@ class ReleasedWorkerTests(unittest.TestCase):
                     if forced:
                         worker.kill()
                         await asyncio.to_thread(worker.join, 5)
-                    self.assertFalse(worker.is_alive(), "Scientific qualification worker did not stop")
+                    self.assertFalse(worker.is_alive(), msg="Scientific qualification worker did not stop")
                     exitcode = worker.exitcode
                     worker.close()
-                    self.assertFalse(forced, "Scientific qualification worker required forced cleanup")
+                    self.assertFalse(forced, msg="Scientific qualification worker required forced cleanup")
                     self.assertEqual(exitcode, 0)
 
     def test_four_released_worker_results_match_direct_and_reference(self):
@@ -207,7 +208,7 @@ class ReleasedWorkerTests(unittest.TestCase):
         reference = json.loads(reference_bytes)
         self.assertEqual(os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"], reference["provenance"]["upstream_revision"])
         requests = release_reference.reference_requests(self, reference)
-        self.assertEqual(len({(element, key) for element, key, _ in requests}), 4)
+        self.assertEqual(4, len({(element, key) for element, key, _ in requests}))
         loader = SelectedReleaseModels(
             declaration_path=Path("/input/prediction-models.json"),
             weight_root=Path("/weight"),
@@ -221,7 +222,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             plan = self.result_plan((raw,), f"fixture-{index}")
             direct = predict_request(raw, loader.load_dictionary, loader.load_selected_element)
             (worker_result,) = asyncio.run(self.worker_prediction((raw,), f"fixture-{index}"))
-            self.assertEqual(set(worker_result), {"request_sha256", "prediction", "provenance", "private_warnings"})
+            self.assertEqual({"request_sha256", "prediction", "provenance", "private_warnings"}, set(worker_result))
             result_bytes = plan.finish((worker_result,))
             result = json.loads(result_bytes)
             self.assertEqual(result["geometries"][0]["prepared_request"], request)
@@ -247,7 +248,7 @@ class ReleasedWorkerTests(unittest.TestCase):
                     },
                 )
             runtime = worker_result["provenance"]["runtime"]
-            self.assertEqual(runtime["installed_distributions"]["scikit-learn"], "1.8.0")
+            self.assertEqual("1.8.0", runtime["installed_distributions"]["scikit-learn"])
             self.assertEqual(runtime["python"], sys.version.split()[0])
             self.assertTrue(
                 any(
@@ -257,7 +258,7 @@ class ReleasedWorkerTests(unittest.TestCase):
                     for item in worker_result["private_warnings"]
                 )
             )
-            self.assertEqual(actual["unit"], "ppm")
+            self.assertEqual("ppm", actual["unit"])
             self.assertEqual(
                 [row["atom_index"] for row in actual["predictions"]],
                 [i for i, atom in enumerate(request["atoms"]) if atom in ("H", "C")],
@@ -287,7 +288,7 @@ class ReleasedWorkerTests(unittest.TestCase):
                     },
                 }
             )
-        self.assertEqual(len(compared_positions), 64)
+        self.assertEqual(64, len(compared_positions))
         evidence = {
             "scope": "Released-model parity across spawned worker/socket boundaries; no container-retirement claim.",
             "execution": baseline_prepare.execution_identity(

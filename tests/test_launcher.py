@@ -40,23 +40,23 @@ class LauncherTests(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
         self.assertIn("--init", arguments)
-        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+        self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--read-only", arguments)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         self.assertNotIn("docker.sock", " ".join(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
-        self.assertEqual(arguments[-2:], ["test_nmrnet_process.py", "test_nmrnet_reports.py"])
+        self.assertEqual(["test_nmrnet_process.py", "test_nmrnet_reports.py"], arguments[-2:])
 
     def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/worker-startup")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
         self.assertIn("--init", arguments)
-        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
-        self.assertEqual(arguments[-3:], ["-p", "test_worker_main.py", "-v"])
+        self.assertEqual("none", arguments[arguments.index("--network") + 1])
+        self.assertEqual(["-p", "test_worker_main.py", "-v"], arguments[-3:])
 
     def command(self, lane, archive=None):
         environment = dict(os.environ)
@@ -178,7 +178,7 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
                 timeout=5,
                 check=False,
             )
-            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(2, len((checkout / "engine-log").read_text().splitlines()))
 
     def test_provider_lane_keeps_aggregate_offline_with_required_public_inputs(self):
@@ -250,7 +250,7 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
         for source_format in ("pdb", "mol2"):
             with self.subTest(source_format=source_format):
                 result = self.command(f"test/unit/provider/{source_format}")
-                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 arguments = shlex.split(result.stdout)
                 self.assertEqual(["-p", f"test_provider_{source_format}.py", "-v"], arguments[-3:])
                 self.assertEqual("none", arguments[arguments.index("--network") + 1])
@@ -298,7 +298,7 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             arguments = shlex.split(result.stdout)
             mounts = [arguments[i + 1] for i, value in enumerate(arguments) if value == "--mount"]
             self.assertIn(f"type=bind,src={public},dst=/workspace/config/deployments/example/provider.toml,readonly", mounts)
@@ -349,10 +349,10 @@ while :; do sleep 0.1; done
                 self.assertTrue(ready.exists())
                 process.send_signal(signal.SIGTERM)
                 time.sleep(2.3)
-                self.assertIsNone(process.poll(), "mapping owner was not allowed to finish cleanup")
+                self.assertIsNone(process.poll(), msg="mapping owner was not allowed to finish cleanup")
                 self.assertTrue(list((checkout / ".work").glob("repository-check-inputs.*")))
                 _stdout, stderr = process.communicate(timeout=8)
-                self.assertEqual(143, process.returncode, stderr)
+                self.assertEqual(143, process.returncode, msg=stderr)
                 self.assertTrue(settled.exists())
                 self.assertFalse(list((checkout / ".work").glob("repository-check-inputs.*")))
             finally:

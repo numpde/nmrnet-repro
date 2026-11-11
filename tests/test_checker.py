@@ -92,7 +92,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
             text=True,
             check=False,
         )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("install", result.stdout)
 
     def test_offline_install_does_not_import_wheelhouse(self):
@@ -154,7 +154,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
             text=True,
             check=False,
         )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(expected["declaration_sha256"] + "\n", result.stdout)
         self.assertEqual("", result.stderr)
 
@@ -305,7 +305,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
             worker.join(timeout=2)
             completed = not worker.is_alive()
         worker.join(timeout=5)
-        self.assertTrue(completed, "warm checker assets waited for an exclusive pool lease")
+        self.assertTrue(completed, msg="warm checker assets waited for an exclusive pool lease")
         self.assertFalse(worker.is_alive())
         self.assertEqual([], failures)
 

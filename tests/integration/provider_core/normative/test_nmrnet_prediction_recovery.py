@@ -45,8 +45,8 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(outcome, AnalysisSuccess)
         self.assertTrue(original_host.confirmed)
         self.assertEqual(original_worker.requests, replacement.requests)
-        self.assertEqual(replacement.events.count("execute"), 1)
-        self.assertEqual(len(notices), 1)
+        self.assertEqual(1, replacement.events.count("execute"))
+        self.assertEqual(1, len(notices))
         self.assertIs(notices[0][1], ports.acknowledged)
         await session.retire()
         self.assertTrue(replacement_host.confirmed)
@@ -79,7 +79,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             await session.execute(prepared, report_condition=unexpected_condition)
         self.assertIs(caught.exception.__cause__, lost)
         self.assertIs(lost.__context__, first)
-        self.assertEqual(allocation.await_count, 2)
+        self.assertEqual(2, allocation.await_count)
         replacement.execute.assert_awaited_once()
         await session.retire()
         self.assertTrue(replacement_host.confirmed)
@@ -109,7 +109,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "replacement runtime") as caught:
             await session.execute(prepared, report_condition=unexpected_condition)
         self.assertIs(caught.exception.__cause__, first)
-        self.assertEqual(replacement.events, [])
+        self.assertEqual([], replacement.events)
         replacement.execute.assert_not_awaited()
         await session.retire()
         self.assertTrue(replacement_host.confirmed)
@@ -379,7 +379,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
                 if isinstance(failure, PredictionExecutionFailed):
                     outcome = await session.execute(prepared, report_condition=unexpected_condition)
                     self.assertIsInstance(outcome, AnalysisFailure)
-                    self.assertEqual(outcome.message, "Prediction did not return a complete verified result.")
+                    self.assertEqual("Prediction did not return a complete verified result.", outcome.message)
                     self.assertNotIn(failure.diagnostic, outcome.message)
                     self.assertNotIn(failure.diagnostic.encode(), outcome.evidence.content)
                 elif type(failure) is asyncio.IncompleteReadError:

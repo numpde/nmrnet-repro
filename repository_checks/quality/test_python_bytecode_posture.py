@@ -83,9 +83,9 @@ class PythonBytecodePostureTests(unittest.TestCase):
             "subprocess.run([executable, *arguments])",
         ]
         for source in bad:
-            self.assertEqual(1, len(findings(Path("driver.py"), source)), source)
+            self.assertEqual(1, len(findings(Path("driver.py"), source)), msg=source)
         for source in good:
-            self.assertEqual([], findings(Path("driver.py"), source), source)
+            self.assertEqual([], findings(Path("driver.py"), source), msg=source)
 
     def test_inventory_is_automatic_and_diagnostics_do_not_echo_payload(self):
         with tempfile.TemporaryDirectory() as directory:

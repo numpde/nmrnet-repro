@@ -21,7 +21,7 @@ class ProviderHostAdversarialTests(unittest.TestCase):
             timeout=5,
             check=False,
         )
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("Run make help", result.stderr)
 
     def test_failed_log_delivery_retains_the_stopped_helper_and_original_receipts(self):
@@ -43,7 +43,7 @@ if provider_host_remove helper; then exit 99; fi
 [[ -d $provider_host_root/components/helper/retirement ]]
 printf '%s\n' "$provider_host_diagnostic" >&2
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Docker log delivery failed", result.stderr)
         self.assertIn("fixture stopped-container diagnostic", result.stderr)
         self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"start", b"stop", b"inspect", b"logs"])
@@ -63,7 +63,7 @@ if provider_host_create controller none "$FAKE_IMAGE" launch_grants launch_comma
 [[ ${provider_host_ids[controller]} == "$FAKE_CID" && -n $provider_host_diagnostic ]]
 provider_host_remove controller
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_posture_mismatch_prevents_start_and_preserves_the_exact_cleanup_handle_for_both_commands(self):
@@ -92,7 +92,7 @@ if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command "
 provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertEqual(
                     [row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"logs", b"rm"]
                 )
@@ -114,7 +114,7 @@ if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command t
 provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(
             [row[0] for row in host.commands()], [b"create", b"inspect", b"inspect", b"stop", b"inspect", b"logs", b"rm"]
         )
@@ -136,7 +136,7 @@ if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command t
 provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"logs", b"rm"])
 
     def test_mismatched_create_receipts_hold_uncertain_ownership_without_guessed_cleanup(self):
@@ -156,7 +156,7 @@ if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command t
 if provider_host_remove helper; then exit 98; fi
 [[ -v provider_host_ids[helper] && -n $provider_host_diagnostic ]]
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([row[0] for row in host.commands()], [b"create"])
 
     def test_failed_exact_retirement_is_retained_without_an_automatic_repeat(self):
@@ -175,7 +175,7 @@ if provider_host_remove api; then exit 97; fi
 if provider_host_remove api; then exit 98; fi
 [[ ${provider_host_ids[api]} == "$FAKE_CID" && -n $provider_host_diagnostic ]]
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([row[0] for row in host.commands()], [b"stop"])
 
     def test_noncanonical_paths_and_overlapping_roots_refuse_without_engine_effects(self):
@@ -201,4 +201,4 @@ provider_host_disjoint /private/one /private/two
                     timeout=5,
                     check=False,
                 )
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)

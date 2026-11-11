@@ -93,7 +93,7 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                     self.assertNotIn("controller built-image admission", calls)
                     self.assertNotIn("controller image-input admission", calls)
                 if form == "failed":
-                    self.assertEqual(result.returncode, 7)
+                    self.assertEqual(7, result.returncode)
 
     def test_missing_local_base_or_changed_label_never_replaces_image_record(self):
         for failure in ("base", "label"):
@@ -122,10 +122,10 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(record.read_bytes(), previous)
-                self.assertEqual(sorted(path.name for path in directory.iterdir()), ["image-id"])
+                self.assertEqual(["image-id"], sorted(path.name for path in directory.iterdir()))
                 if failure == "base":
-                    self.assertEqual(result.returncode, 42)
-                    self.assertEqual(result.stdout, "local-base-inspection-only\n")
+                    self.assertEqual(42, result.returncode)
+                    self.assertEqual("local-base-inspection-only\n", result.stdout)
 
     def test_changed_missing_linked_mode_or_untracked_module_refuses_committed_capture(self):
         for change in ("bytes", "missing", "linked", "mode", "untracked", "ignored"):

@@ -24,7 +24,7 @@ class PreparationFixtureNormativeTests(unittest.TestCase):
         source = (FIXTURES / "normative" / "butane_conformers.xyz").read_bytes()
         expected = json.loads((FIXTURES / "expected.json").read_text())
         frames = prepare_xyz(source, source_unit="angstrom", selection="all")
-        self.assertEqual((1, 2), tuple(frame.source_record_number for frame in frames))
+        self.assertEqual([1, 2], [frame.source_record_number for frame in frames])
         for frame, name in zip(frames, ("butane_supplied_a", "butane_supplied_b"), strict=True):
             with self.subTest(record=frame.source_record_number):
                 request = json.loads(frame.request_bytes)
@@ -53,7 +53,7 @@ class PreparationFixtureNormativeTests(unittest.TestCase):
     def test_reordered_selection_keeps_original_record_and_atom_locations(self):
         source = (FIXTURES / "normative" / "mixed_records.xyz").read_bytes()
         frames = prepare_xyz(source, source_unit="angstrom", selection=(3, 1))
-        self.assertEqual((3, 1), tuple(frame.source_record_number for frame in frames))
+        self.assertEqual([3, 1], [frame.source_record_number for frame in frames])
         self.assertEqual((15, 16, 17, 18, 19), frames[0].source_positions)
         self.assertEqual((3, 4, 5, 6, 7), frames[1].source_positions)
         self.assertEqual(frames[0].request_bytes, frames[1].request_bytes)
@@ -75,7 +75,7 @@ class PreparationFixtureNormativeTests(unittest.TestCase):
     def test_good_selection_does_not_interpret_unselected_malformed_coordinates(self):
         source = (FIXTURES / "adversarial" / "invalid_last.xyz").read_bytes()
         frames = prepare_xyz(source, source_unit="angstrom", selection=(3, 1))
-        self.assertEqual((3, 1), tuple(frame.source_record_number for frame in frames))
+        self.assertEqual([3, 1], [frame.source_record_number for frame in frames])
         self.assertEqual(frames[0].request_bytes, frames[1].request_bytes)
 
 

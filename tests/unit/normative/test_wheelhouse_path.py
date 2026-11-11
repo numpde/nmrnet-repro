@@ -59,7 +59,7 @@ class WheelhousePathTests(unittest.TestCase):
                         timeout=3,
                         check=False,
                     )
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(0, result.returncode, msg=result.stderr)
                     self.assertEqual(result.stdout, str(expected))
                     self.assertFalse((working / "sentinel").exists())
 
@@ -75,10 +75,10 @@ class WheelhousePathTests(unittest.TestCase):
                 timeout=3,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(result.stdout, selected)
             self.assertFalse(Path("sentinel").exists())
-            self.assertFalse(Path(selected).exists(), "Selection alone must not create the cache.")
+            self.assertFalse(Path(selected).exists(), msg="Selection alone must not create the cache.")
 
     def test_omitted_value_accepts_a_relative_path_from_the_controlling_terminal(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -105,17 +105,17 @@ class WheelhousePathTests(unittest.TestCase):
             try:
                 deadline = time.monotonic() + 3
                 while b"WHEELHOUSE" not in received:
-                    self.assertLess(time.monotonic(), deadline, "The cache prompt did not appear.")
+                    self.assertLess(time.monotonic(), deadline, msg="The cache prompt did not appear.")
                     if select.select([master], [], [], 0.1)[0]:
                         received += os.read(master, 4096)
-                self.assertIsNone(process.poll(), "The caller must await an explicit path, without a default.")
+                self.assertIsNone(process.poll(), msg="The caller must await an explicit path, without a default.")
                 os.write(master, os.path.relpath(selected).encode() + b"\n")
                 expected = ("SELECTED=" + selected).encode()
                 while expected not in received:
-                    self.assertLess(time.monotonic(), deadline, "The selected path was not returned.")
+                    self.assertLess(time.monotonic(), deadline, msg="The selected path was not returned.")
                     if select.select([master], [], [], 0.1)[0]:
                         received += os.read(master, 4096)
-                self.assertEqual(process.wait(timeout=2), 0)
+                self.assertEqual(0, process.wait(timeout=2))
             finally:
                 if process.poll() is None:
                     process.kill()

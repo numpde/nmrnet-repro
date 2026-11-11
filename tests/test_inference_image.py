@@ -190,7 +190,7 @@ class ImageLauncherTests(unittest.TestCase):
             shutil.rmtree(self.root / ".work/wheelhouse")
             self.git_environment["NMRNET_WHEELHOUSE_INPUT"] = str(shared_root)
             result = self.command("build")
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertIn("--network none", result.stdout)
 
     def test_missing_selection_has_no_implicit_checkout_wheelhouse(self):
@@ -198,7 +198,7 @@ class ImageLauncherTests(unittest.TestCase):
         result = self.command("build")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("WHEELHOUSE", result.stderr)
-        self.assertEqual(result.stdout, "")
+        self.assertEqual("", result.stdout)
 
     def test_missing_or_dangling_selected_pool_is_rejected(self):
         (self.root / ".work/wheelhouse").rmdir()
@@ -348,9 +348,9 @@ class NativeClientTests(unittest.TestCase):
             timeout=10,
             check=False,
         )
-        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
         match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", result.stderr)
-        self.assertIsNotNone(match, result.stderr)
+        self.assertIsNotNone(match, msg=result.stderr)
         evidence = Path(match.group(1))
         self.addCleanup(shutil.rmtree, evidence.parent)
         self.assertIn("Cannot complete delivery image build:", result.stderr)

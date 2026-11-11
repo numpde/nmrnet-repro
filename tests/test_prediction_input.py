@@ -334,7 +334,8 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         def run_element(request, element, model, dictionary, scaler):
             events.append(("predict", element))
             self.assertEqual((element, dictionary, f"{element}-scaler"), (model, dictionary, scaler))
-            indices = tuple(index for index, atom in enumerate(request["atoms"]) if atom == element)
+            indices = [index for index, atom in enumerate(request["atoms"]) if atom == element]
+            # repo-check: allow-tuple-generator -- This prediction port preserves the real predictor's immutable atom-indexed row result; proof=nmrnet_inference/model.py::predict_composed_element.
             return tuple((index, float(index + 1)) for index in indices)
 
         with (
@@ -449,7 +450,7 @@ class PredictionSessionTests(unittest.TestCase):
         self.assertIs(caught.exception, cause)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(handle)
-        self.assertEqual(loader.call_count, 2)
+        self.assertEqual(2, loader.call_count)
 
     def test_preparation_owns_current_handle_and_loads_no_model(self):
         dictionary = PredictionDictionary()
@@ -459,13 +460,13 @@ class PredictionSessionTests(unittest.TestCase):
             first = session.prepare((encoded_request(),))
             second = session.prepare((encoded_request(),))
         loader.assert_not_called()
-        self.assertEqual(compose.call_count, 4)
+        self.assertEqual(4, compose.call_count)
         for invalid in (None, object(), first):
             with self.assertRaisesRegex(ValueError, "current prepared"):
                 session.execute(invalid)
         with mock.patch.object(prediction_model, "predict_composed_element", return_value=()):
-            self.assertEqual(tuple(session.execute(second)), ({"unit": "ppm", "predictions": []},))
-        self.assertEqual(loader.call_count, 2)
+            self.assertEqual(({"unit": "ppm", "predictions": []},), tuple(session.execute(second)))
+        self.assertEqual(2, loader.call_count)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(second)
         with self.assertRaisesRegex(ValueError, "already entered execution"):
@@ -702,7 +703,7 @@ class SelectedReleaseTests(unittest.TestCase):
                 encoded_request(atoms=["H", "O"]), self.loader.load_dictionary, self.loader.load_selected_element
             )
         self.assertIs(raised.exception, error)
-        self.assertEqual(decoder.call_args.args[0], b"Hcheckpoint")
+        self.assertEqual(b"Hcheckpoint", decoder.call_args.args[0])
         scaler_decoder.assert_not_called()
 
     def test_observed_artifacts_are_decoded_members_not_the_whole_selection(self):
@@ -716,7 +717,7 @@ class SelectedReleaseTests(unittest.TestCase):
             self.loader.load_selected_element("H", dictionary)
         observed = self.loader.observed_artifacts()
         self.assertEqual(observed["dictionary"]["sha256"], self.specification["dictionary"]["sha256"])
-        self.assertEqual(set(observed["elements"]), {"H"})
+        self.assertEqual({"H"}, set(observed["elements"]))
         self.assertEqual(observed["elements"]["H"]["checkpoint"]["archive_sha256"], "a" * 64)
         self.assertEqual(observed["elements"]["H"]["scaler"]["sha256"], self.specification["elements"]["H"]["scaler"]["sha256"])
         observed["elements"]["H"]["scaler"]["sha256"] = "changed"
@@ -731,7 +732,7 @@ class SelectedReleaseTests(unittest.TestCase):
         ):
             self.loader.load_selected_element("C", PredictionDictionary())
         self.assertIs(raised.exception, failure)
-        self.assertEqual(self.loader.observed_artifacts()["elements"], {})
+        self.assertEqual({}, self.loader.observed_artifacts()["elements"])
 
     def test_scaler_warning_is_retained_and_emitted_without_overriding_policy(self):
         def decode(_content):
@@ -753,9 +754,9 @@ class SelectedReleaseTests(unittest.TestCase):
                 observed = self.loader.observed_warnings()
                 self.assertEqual(len(observed) - before, expected_count)
                 if expected_count:
-                    self.assertEqual(observed[-1]["message"], "scaler compatibility observation")
-                    self.assertEqual(observed[-1]["category"], "builtins.UserWarning")
-                    self.assertEqual(observed[-1]["head"], "H")
+                    self.assertEqual("scaler compatibility observation", observed[-1]["message"])
+                    self.assertEqual("builtins.UserWarning", observed[-1]["category"])
+                    self.assertEqual("H", observed[-1]["head"])
                     self.assertIsNone(observed[-1]["versions"])
                     observed[-1]["message"] = "changed"
                     self.assertNotEqual(self.loader.observed_warnings()[-1]["message"], "changed")
@@ -777,8 +778,8 @@ class SelectedReleaseTests(unittest.TestCase):
                 self.loader.load_selected_element("C", PredictionDictionary())
             self.assertIs(raised.exception, warning)
             self.assertIs(warnings.showwarning, hook)
-        self.assertEqual(self.loader.observed_artifacts()["elements"], {})
-        self.assertEqual(self.loader.observed_warnings(), [])
+        self.assertEqual({}, self.loader.observed_artifacts()["elements"])
+        self.assertEqual([], self.loader.observed_warnings())
 
     def test_scaler_versions_are_captured_from_attributes_not_message_text(self):
         warning_type = type("InconsistentVersionWarning", (UserWarning,), {"__module__": "sklearn.exceptions"})
@@ -798,9 +799,9 @@ class SelectedReleaseTests(unittest.TestCase):
             ):
                 self.loader.load_selected_element("C", PredictionDictionary())
         observed = self.loader.observed_warnings()
-        self.assertEqual(observed[0]["head"], "C")
-        self.assertEqual(observed[0]["versions"], {"original": "1.5.2", "current": "1.8.0"})
-        self.assertEqual(observed[0]["message"], "private unstructured prose")
+        self.assertEqual("C", observed[0]["head"])
+        self.assertEqual({"original": "1.5.2", "current": "1.8.0"}, observed[0]["versions"])
+        self.assertEqual("private unstructured prose", observed[0]["message"])
 
     def test_default_warning_suppression_survives_repeated_loads(self):
         def decode(_content):
@@ -815,8 +816,8 @@ class SelectedReleaseTests(unittest.TestCase):
             ):
                 for element in ("H", "C"):
                     self.loader.load_selected_element(element, PredictionDictionary())
-        self.assertEqual(len(emitted), 1)
-        self.assertEqual(len(self.loader.observed_warnings()), 1)
+        self.assertEqual(1, len(emitted))
+        self.assertEqual(1, len(self.loader.observed_warnings()))
 
     def test_missing_runtime_metadata_cannot_enter_model_execution(self):
         session = ReleasedPredictionSession(self.loader)

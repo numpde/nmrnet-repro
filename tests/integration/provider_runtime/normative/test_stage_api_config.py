@@ -40,7 +40,7 @@ class StageApiConfigTests(unittest.TestCase):
                 help_result = subprocess.run(
                     [sys.executable, "-B", str(script), "--help"], env=environment, capture_output=True, text=True, check=False
                 )
-                self.assertEqual(0, help_result.returncode, help_result.stderr)
+                self.assertEqual(0, help_result.returncode, msg=help_result.stderr)
                 result = subprocess.run(
                     [sys.executable, "-B", str(script), "--root", str(output), "--inspect-interpreter", str(fragment)],
                     env=environment,
@@ -48,7 +48,7 @@ class StageApiConfigTests(unittest.TestCase):
                     text=True,
                     check=False,
                 )
-                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertEqual("/absent/key\n", (output / "key_file.txt").read_text())
                 self.assertEqual("\n", (output / "ca_file.txt").read_text())
                 self.assertEqual(0o600, (output / "interpreter-inputs.json").stat().st_mode & 0o777)
@@ -84,19 +84,19 @@ class StageApiConfigTests(unittest.TestCase):
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
             api = tomllib.loads((root / "deployment/secrets/api.toml").read_text())
             self.assertNotIn("api", public)
-            self.assertEqual(api["ca_file"], "/srv/nmrnet/input/api-ca.pem")
+            self.assertEqual("/srv/nmrnet/input/api-ca.pem", api["ca_file"])
             self.assertEqual((root / "deployment/secrets/api-ca.pem").read_bytes(), original_ca)
             self.assertEqual(
-                private["routes"]["interpreter"],
                 {
                     "mode": "mapped",
                     "interface": "lo",
                     "log_level": "INFO",
                     "addresses": ["model.example=127.0.0.1"],
                 },
+                private["routes"]["interpreter"],
             )
             self.assertNotIn("resolvers", private)
-            self.assertEqual(private["deployment"], {"project": "fixture-delivery", "gid": 1001})
+            self.assertEqual({"project": "fixture-delivery", "gid": 1001}, private["deployment"])
 
     def test_named_deployment_keeps_credential_bytes_store_and_selected_model(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -118,28 +118,28 @@ class StageApiConfigTests(unittest.TestCase):
             public = tomllib.loads((root / "deployment/provider.toml").read_text())
             private = tomllib.loads((root / "deployment/deployment.toml").read_text())
             self.assertNotIn("lifetime_root", private)
-            self.assertEqual(public["lifecycle"]["lifetime_root"], "/srv/nmrnet/attempts")
+            self.assertEqual("/srv/nmrnet/attempts", public["lifecycle"]["lifetime_root"])
             api = tomllib.loads((root / "deployment/secrets/api.toml").read_text())
             self.assertEqual(api["provider_ref"], original["api"]["provider_ref"])
             self.assertEqual(
-                private["routes"]["store"],
                 {
                     "mode": "mapped",
                     "interface": "lo",
                     "log_level": "INFO",
                     "addresses": ["api.example=127.0.0.1"],
                 },
+                private["routes"]["store"],
             )
             self.assertNotIn("api", private["routes"])
-            self.assertEqual(private["deployment"], {"project": "fixture-delivery", "gid": 1001})
+            self.assertEqual({"project": "fixture-delivery", "gid": 1001}, private["deployment"])
             self.assertEqual(
-                private["routes"]["interpreter"], {"mode": "external", "interface": "external0", "log_level": "INFO"}
+                {"mode": "external", "interface": "external0", "log_level": "INFO"}, private["routes"]["interpreter"]
             )
-            self.assertEqual(private["resolvers"], ["192.0.2.53"])
+            self.assertEqual(["192.0.2.53"], private["resolvers"])
             selected = tomllib.loads((root / "deployment/interpreter.d/00-primary.toml").read_text())
             previous = tomllib.loads((root / "source/interpreter.d/00-primary.toml").read_text())
             self.assertEqual(selected | {"key_file": previous["key_file"]}, previous)
-            self.assertEqual(selected["key_file"], "/srv/nmrnet/input/interpreter.key")
+            self.assertEqual("/srv/nmrnet/input/interpreter.key", selected["key_file"])
             for name in ("interpreter.key", "signing.private.json", "api-ca.crt"):
                 retained = root / "deployment/secrets" / name
                 self.assertEqual(retained.read_bytes(), (root / "source" / name).read_bytes())
@@ -161,7 +161,7 @@ class StageApiConfigTests(unittest.TestCase):
             inspect_interpreter(fragment, selection)
             self.assertFalse(key.exists())
             self.assertEqual((selection / "key_file.txt").read_text(), str(root / "unmounted-selection/model.key") + "\n")
-            self.assertEqual((selection / "ca_file.txt").read_text(), "\n")
+            self.assertEqual("\n", (selection / "ca_file.txt").read_text())
             self.assertEqual((selection / "interpreter-inputs.json").stat().st_mode & 0o777, 0o600)
 
     def test_selected_fragment_and_exact_key_are_frozen_before_normal_configuration_admission(self):
@@ -185,13 +185,13 @@ class StageApiConfigTests(unittest.TestCase):
             endpoint = admitted.interpreter.endpoints[0]
             self.assertIn("https://numpde.github.io/nmrnet-repro/", admitted.service.announcement.description)
             self.assertEqual((endpoint.spec.configuration_id, endpoint.spec.model), ("00-primary", "selected-model"))
-            self.assertEqual(endpoint.spec.reasoning_effort, "none")
-            self.assertEqual(endpoint.spec.api_key, "synthetic-fixture-key")
+            self.assertEqual("none", endpoint.spec.reasoning_effort)
+            self.assertEqual("synthetic-fixture-key", endpoint.spec.api_key)
             self.assertEqual((admitted.interpreter.timeout_seconds, endpoint.retirement_seconds), (240, 5))
             self.assertEqual(
                 (endpoint.request_bytes, endpoint.response_bytes, admitted.preparation.seconds), (65536, 262144, 240)
             )
-            self.assertEqual(admitted.uploads.limits.seconds, 300)
+            self.assertEqual(300, admitted.uploads.limits.seconds)
             self.assertEqual((admitted.api.http.exchange_seconds, admitted.api.http.retirement_seconds), (2, 1))
             self.assertEqual((admitted.uploads.http.exchange_seconds, admitted.uploads.http.retirement_seconds), (2, 1))
             self.assertEqual((root / "source/interpreter.key").read_bytes(), key.read_bytes())
@@ -201,7 +201,7 @@ class StageApiConfigTests(unittest.TestCase):
             identity = json.loads((root / "source/identity.json").read_bytes())
             self.assertFalse(identity["interpretation_scripted"])
             self.assertEqual(identity["interpreter"]["timeout_seconds"], admitted.interpreter.timeout_seconds)
-            self.assertEqual(identity["interpreter"]["endpoints"][0]["model"], "selected-model")
+            self.assertEqual("selected-model", identity["interpreter"]["endpoints"][0]["model"])
             self.assertNotIn("synthetic-fixture-key", json.dumps(identity))
 
     def test_optional_interpreter_trust_is_frozen_with_the_selected_key(self):
@@ -247,7 +247,7 @@ class StageApiConfigTests(unittest.TestCase):
                 prediction_image_id="sha256:" + "c" * 64,
             )
             admitted = load_provider_config(root / "source/provider.toml")
-            self.assertEqual(admitted.preparation.seconds, 240)
+            self.assertEqual(240, admitted.preparation.seconds)
             self.assertEqual(
                 (
                     admitted.interpreter.timeout_seconds,
@@ -271,9 +271,9 @@ class StageApiConfigTests(unittest.TestCase):
                 prediction_image_id="sha256:" + "c" * 64,
             )
             admitted = load_provider_config(root / "source/provider.toml")
-            self.assertEqual(admitted.interpreter.endpoints[0].spec.model, "fixture-model")
-            self.assertEqual(admitted.preparation.seconds, 45)
-            self.assertEqual(admitted.uploads.limits.seconds, 10)
+            self.assertEqual("fixture-model", admitted.interpreter.endpoints[0].spec.model)
+            self.assertEqual(45, admitted.preparation.seconds)
+            self.assertEqual(10, admitted.uploads.limits.seconds)
             self.assertTrue(json.loads((root / "source/identity.json").read_bytes())["interpretation_scripted"])
 
 
@@ -288,8 +288,8 @@ class StageUploadBudgetTests(unittest.IsolatedAsyncioTestCase):
                 await owner.inspect()
                 clock.monotonic.return_value = 340
                 verified = await owner.acquire(upload_ref)
-            self.assertEqual(verified.data, b"synthetic coordinates")
-            self.assertEqual(owner.requests_started, 4)
-            self.assertEqual(api.uploads.await_count, 2)
+            self.assertEqual(b"synthetic coordinates", verified.data)
+            self.assertEqual(4, owner.requests_started)
+            self.assertEqual(2, api.uploads.await_count)
             api.read_grant.assert_awaited_once_with("job:example", upload_ref)
             store.exchange.assert_awaited_once()

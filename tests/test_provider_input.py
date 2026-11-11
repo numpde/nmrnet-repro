@@ -40,7 +40,7 @@ class ProviderInputTests(unittest.TestCase):
                 request = json.loads(geometry.request_bytes)
                 self.assertEqual(request, {"coordinate_unit": "angstrom", "atoms": ["C"], "coordinates": [expected]})
                 self.assertEqual(geometry.source_sha256, hashlib.sha256(source).hexdigest())
-                self.assertEqual(geometry.source_positions, (0,))
+                self.assertEqual((0,), geometry.source_positions)
                 self.assertEqual((geometry.source_unit, geometry.scale_to_angstrom), (unit, factor))
 
     def test_json_file_unit_is_required_and_cannot_be_overridden(self):
@@ -116,7 +116,7 @@ class ProviderInputTests(unittest.TestCase):
             "input_geometry.prepare_table(b'C 0 0 0', source_unit='angstrom')"
         )
         result = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True, check=False)
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         guarded = subprocess.run(
             [sys.executable, "-B", "-c", "import os; os.environ.pop('NMRNET_IN_CONTAINER'); " + code],
             capture_output=True,

@@ -32,9 +32,9 @@ class ConsumerLauncherTests(unittest.TestCase):
                         text=True,
                         check=False,
                     )
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(0, result.returncode, msg=result.stderr)
                     command = shlex.split(result.stdout.splitlines()[-1])
-                    self.assertEqual(command[command.index("--network") + 1], "none")
+                    self.assertEqual("none", command[command.index("--network") + 1])
                     self.assertEqual(command[command.index("tools.provider_test_environment") + 1 :], ["integration", *patterns])
                     mounts = [command[index + 1] for index, word in enumerate(command) if word == "--mount"]
                     self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))

@@ -82,7 +82,7 @@ class StageUploadBudgetAdversarialTests(unittest.IsolatedAsyncioTestCase):
                 clock.monotonic.return_value = 400
                 with self.assertRaisesRegex(UploadFailed, "total deadline expired"):
                     await owner.acquire(upload_ref)
-            self.assertEqual(owner.requests_started, 4)
-            self.assertEqual(api.uploads.await_count, 2)
+            self.assertEqual(4, owner.requests_started)
+            self.assertEqual(2, api.uploads.await_count)
             api.read_grant.assert_awaited_once_with("job:example", upload_ref)
             store.exchange.assert_awaited_once()

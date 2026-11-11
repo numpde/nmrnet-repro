@@ -46,8 +46,8 @@ class WheelPoolTests(unittest.TestCase):
         report = io.StringIO()
         identity = wheelhouse.select_wheels(self.lock, self.pool, report_output=report)
         selected = json.loads(report.getvalue())
-        self.assertEqual(selected["version"], "1")
-        self.assertEqual(len(selected["install"]), 1)
+        self.assertEqual("1", selected["version"])
+        self.assertEqual(1, len(selected["install"]))
         self.assertEqual(
             selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"], identity["files"][self.alpha.name]
         )
@@ -55,7 +55,7 @@ class WheelPoolTests(unittest.TestCase):
         report = io.StringIO()
         with self.assertRaises(subprocess.CalledProcessError):
             wheelhouse.select_wheels(self.lock, self.pool, report_output=report)
-        self.assertEqual(report.getvalue(), "")
+        self.assertEqual("", report.getvalue())
 
     def test_report_command_emits_pip_json_for_the_captured_lock(self):
         result = subprocess.run(
@@ -77,7 +77,7 @@ class WheelPoolTests(unittest.TestCase):
             text=True,
         )
         selected = json.loads(result.stdout)
-        self.assertEqual(selected["version"], "1")
+        self.assertEqual("1", selected["version"])
         self.assertEqual(
             selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"],
             hashlib.sha256(self.alpha.read_bytes()).hexdigest(),
@@ -92,7 +92,7 @@ class WheelPoolTests(unittest.TestCase):
         self.alpha.write_bytes(b"corrupt cached wheel")
         with self.assertRaises(subprocess.CalledProcessError):
             wheelhouse.select_wheels(self.lock, self.pool)
-        self.assertEqual(self.alpha.read_bytes(), b"corrupt cached wheel")
+        self.assertEqual(b"corrupt cached wheel", self.alpha.read_bytes())
 
     def test_identical_filename_winner_is_reused_without_replacing_its_inode(self):
         staged = self.root / self.alpha.name
@@ -111,7 +111,7 @@ class WheelPoolTests(unittest.TestCase):
             wheelhouse.publish_file(staged, self.alpha, hashlib.sha256(expected).hexdigest())
         self.assertIsInstance(refused.exception.__cause__, ValueError)
         self.assertEqual(staged.read_bytes(), expected)
-        self.assertEqual(self.alpha.read_bytes(), b"other project's conflicting file")
+        self.assertEqual(b"other project's conflicting file", self.alpha.read_bytes())
 
     def test_source_archive_uses_shared_root_with_separate_pinned_identity(self):
         source_directory = self.pool
@@ -132,11 +132,11 @@ class WheelPoolTests(unittest.TestCase):
         with patch.object(wheelhouse, "open_url", return_value=io.BytesIO(archive)) as network:
             wheelhouse.prepare_source(declaration, source_directory)
             wheelhouse.prepare_source(declaration, source_directory)
-        self.assertEqual(network.call_count, 1)
+        self.assertEqual(1, network.call_count)
         source = source_directory / ("Uni-Core-" + "a" * 40 + ".tar.gz")
         self.assertEqual(source.read_bytes(), archive)
         self.assertFalse((self.pool / "unicore-source.tar.gz").exists())
         source.write_bytes(b"conflicting source")
         with self.assertRaises(ValueError):
             wheelhouse.prepare_source(declaration, source_directory)
-        self.assertEqual(source.read_bytes(), b"conflicting source")
+        self.assertEqual(b"conflicting source", source.read_bytes())

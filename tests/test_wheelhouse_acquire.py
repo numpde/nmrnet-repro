@@ -264,7 +264,7 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
                 worker.join(timeout=2)
                 completed_while_shared = not worker.is_alive()
             worker.join(timeout=5)
-        self.assertTrue(completed_while_shared, "a warm acquisition waited for an exclusive pool lease")
+        self.assertTrue(completed_while_shared, msg="a warm acquisition waited for an exclusive pool lease")
         self.assertFalse(worker.is_alive())
         self.assertEqual([], failures)
 
@@ -332,7 +332,7 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             patch.object(wheelhouse_acquire.subprocess, "run", side_effect=run),
         ):
             wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, declarations=[self.declaration])
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(2, len(calls))
         self.assertIn("locate", calls[0])
         self.assertEqual(calls[0][calls[0].index("--pool") + 1], str(self.pool))
         self.assertIn(self.url, calls[0])

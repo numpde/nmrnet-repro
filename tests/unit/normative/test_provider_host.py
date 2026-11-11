@@ -25,7 +25,7 @@ grants=() command=(/opt/provider/environment/bin/python -I -B -m nmrnet_provider
 provider_host_create helper none "$FAKE_IMAGE" grants command false
 provider_host_remove helper
 """)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         create = host.commands()[0]
         for option, value in ((b"--memory", b"512m"), (b"--memory-swap", b"512m"), (b"--pids-limit", b"64")):
             self.assertEqual(create[create.index(option) + 1], value)
@@ -67,7 +67,7 @@ directory=$provider_host_root/components/helper
 provider_host_remove helper
 [[ ${#provider_host_ids[@]} == 0 ]]
 """)
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 create = host.commands()[0]
                 image_index = create.index(host.environment["FAKE_IMAGE"].encode())
                 self.assertEqual(create[create.index(b"--network") + 1], network.encode())

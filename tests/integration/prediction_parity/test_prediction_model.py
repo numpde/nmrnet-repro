@@ -217,6 +217,7 @@ class PredictionModelParityTests(unittest.TestCase):
         def predict_prepared(composed, _model, _scaler):
             self.assertEqual(composed.model_inputs["src_coord"].dtype, torch.float32)
             self.assertTrue(torch.isfinite(composed.model_inputs["src_distance"]).all())
+            # repo-check: allow-tuple-generator -- This predictor double preserves the immutable atom-indexed row result of the real model; proof=nmrnet_inference/model.py::predict_composed_element.
             return tuple((index, float(index)) for index in composed.selected_atom_indices)
 
         with (
@@ -526,7 +527,7 @@ class PredictionModelParityTests(unittest.TestCase):
             identity = {"size": len(original), "sha256": hashlib.sha256(original).hexdigest()}
             with mock.patch.object(artifacts, "regular_file", side_effect=replace_after_open):
                 self.assertEqual(read_receipted_bytes(path, identity), original)
-            self.assertEqual(path.read_bytes(), b"different bytes")
+            self.assertEqual(b"different bytes", path.read_bytes())
 
     def test_reference_pickle_does_not_resolve_arbitrary_python_globals(self):
         content = pickle.dumps(os.system)
@@ -562,15 +563,16 @@ class PredictionModelParityTests(unittest.TestCase):
                     expected = upstream_net_input(atoms, coordinates, self.dictionary, selected)
                     self.assertEqual(
                         composed.selected_atom_indices,
+                        # repo-check: allow-tuple-generator -- ComposedNetInput freezes selected_atom_indices as a tuple; proof=nmrnet_inference/model.py::ComposedNetInput.
                         tuple(index for index, atom in enumerate(atoms) if atom == element),
                     )
                     self.assertEqual(set(actual), set(expected))
                     mask_indices = torch.where(actual["select_atom"][0, 1 : len(atoms) + 1] == 1)[0].tolist()
                     self.assertEqual(mask_indices, list(composed.selected_atom_indices))
                     for name in expected:
-                        self.assertEqual(actual[name].dtype, expected[name].dtype, name)
-                        self.assertEqual(actual[name].shape, expected[name].shape, name)
-                        self.assertEqual(actual[name].device.type, "cpu", name)
+                        self.assertEqual(actual[name].dtype, expected[name].dtype, msg=name)
+                        self.assertEqual(actual[name].shape, expected[name].shape, msg=name)
+                        self.assertEqual("cpu", actual[name].device.type, msg=name)
                         torch.testing.assert_close(actual[name], expected[name], rtol=0, atol=0, msg=name)
 
                     logical_length = len(atoms) + 2
@@ -599,7 +601,7 @@ class PredictionModelParityTests(unittest.TestCase):
                     self.dictionary,
                     self.dictionary.vec_index([element]),
                 )
-                self.assertEqual(composed.selected_atom_indices, ())
+                self.assertEqual((), composed.selected_atom_indices)
                 self.assertTrue(
                     torch.equal(
                         composed.model_inputs["select_atom"],
@@ -607,7 +609,7 @@ class PredictionModelParityTests(unittest.TestCase):
                     )
                 )
                 real_atom_mask = composed.model_inputs["select_atom"][0, 1 : len(atoms) + 1]
-                self.assertEqual(real_atom_mask.sum().item(), 0)
+                self.assertEqual(0, real_atom_mask.sum().item())
 
     def test_oversize_input_rejects_before_scientific_imports_or_pairwise_allocation(self):
         with (
@@ -656,14 +658,14 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
         self.assertEqual(len(provenance_bytes), expected_receipt["size"])
         self.assertEqual(hashlib.sha256(provenance_bytes).hexdigest(), expected_receipt["sha256"])
         self.assertEqual(provenance["record_id"], reference_packet["release"]["record_id"])
-        self.assertEqual(provenance["selection"], {"count_per_element": 2, "max_atoms": 128, "max_tokens": 130})
+        self.assertEqual({"count_per_element": 2, "max_atoms": 128, "max_tokens": 130}, provenance["selection"])
         self.assertEqual(provenance["selection"], reference_packet["selection"])
-        self.assertEqual(set(provenance["elements"]), {"H", "C"})
+        self.assertEqual({"H", "C"}, set(provenance["elements"]))
         self.assertEqual(provenance["dictionary"], reference_packet["dictionary"])
         expected_symbols = provenance["dictionary"]["symbols"]
         mask_token = provenance["dictionary"]["task_special_token"]
         self.assertEqual(mask_token, {"symbol": "[MASK]", "index": len(expected_symbols) - 1})
-        self.assertEqual(expected_symbols[-1], "[MASK]")
+        self.assertEqual("[MASK]", expected_symbols[-1])
 
         total_records = 0
         tensor_observations = []
@@ -683,7 +685,7 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                 keys = load_reference_pickle(key_bytes)
                 record_receipts = provenance["elements"][fixture_element]["records"]
                 expected_records = reference_packet["elements"][fixture_element]["records"]
-                self.assertEqual(len(keys), 2)
+                self.assertEqual(2, len(keys))
                 self.assertEqual(
                     [
                         {field: item[field] for field in ("key_hex", "raw_sha256", "atom_count", "selected_atom_indices")}
@@ -747,15 +749,16 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                                 )
                                 self.assertEqual(
                                     composed.selected_atom_indices,
+                                    # repo-check: allow-tuple-generator -- ComposedNetInput freezes selected_atom_indices as a tuple; proof=nmrnet_inference/model.py::ComposedNetInput.
                                     tuple(index for index, atom in enumerate(atoms) if atom == element),
                                 )
-                                expected_label_indices = tuple(
+                                expected_label_indices = [
                                     index
                                     for index, (atom, selected) in enumerate(zip(atoms, label_mask, strict=True))
                                     if atom == element and selected == 1
-                                )
+                                ]
                                 oracle_mask = torch.where(expected["select_atom"][0, 1 : len(atoms) + 1] == 1)[0].tolist()
-                                self.assertEqual(tuple(oracle_mask), expected_label_indices)
+                                self.assertEqual(expected_label_indices, oracle_mask)
                                 actual_mask = composed.model_inputs["select_atom"][0, 1 : len(atoms) + 1]
                                 self.assertEqual(
                                     torch.where(actual_mask == 1)[0].tolist(),
@@ -764,9 +767,9 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                                 for name in ("src_tokens", "src_coord", "src_distance", "src_edge_type"):
                                     actual = composed.model_inputs[name]
                                     reference_tensor = expected[name]
-                                    self.assertEqual(actual.dtype, reference_tensor.dtype, name)
-                                    self.assertEqual(actual.shape, reference_tensor.shape, name)
-                                    self.assertEqual(actual.device.type, "cpu", name)
+                                    self.assertEqual(actual.dtype, reference_tensor.dtype, msg=name)
+                                    self.assertEqual(actual.shape, reference_tensor.shape, msg=name)
+                                    self.assertEqual("cpu", actual.device.type, msg=name)
                                     torch.testing.assert_close(actual, reference_tensor, rtol=0, atol=0, msg=name)
                                     actual_bytes = actual.contiguous().numpy().tobytes()
                                     reference_bytes = reference_tensor.contiguous().numpy().tobytes()
@@ -941,11 +944,11 @@ class VerifiedModelArtifactTests(unittest.TestCase):
                 path.write_bytes(b"changed in place after verification")
                 loaded = loader(snapshot)
                 if name.endswith("checkpoint.pt"):
-                    self.assertEqual(loaded["model"]["weight"].tolist(), [2.5])
+                    self.assertEqual([2.5], loaded["model"]["weight"].tolist())
                 elif name.endswith("target_scaler.ss"):
                     np.testing.assert_array_equal(loaded.mean_, np.array([2.0]))
                 else:
-                    self.assertEqual(loaded.symbols, ["C", "H"])
+                    self.assertEqual(["C", "H"], loaded.symbols)
 
                 replacement = path.with_name("replacement")
                 replacement.write_bytes(b"replacement path contents")

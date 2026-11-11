@@ -347,7 +347,7 @@ class ToolingLauncherTests(unittest.TestCase):
                         "/input/provider-core-install.lock",
                     ],
                 )
-                self.assertEqual(command[command.index("--stream-assets") + 1], "/input/wheelhouse-tool-assets.in")
+                self.assertEqual("/input/wheelhouse-tool-assets.in", command[command.index("--stream-assets") + 1])
 
     def test_preparation_acquisition_grants_only_the_selected_shared_root(self):
         self.assert_wheel_profile("preparation")
@@ -368,7 +368,7 @@ class ToolingLauncherTests(unittest.TestCase):
             command = next(command for command in self.commands("wheelhouse", lane, profile) if f"tools.{module}" in command)
             self.assert_guarded_module(command, module, writable, self.root)
             self.assertNotIn("/input/unicore-source.json", command)
-            self.assertEqual(command[command.index("--pool") + 1], "/wheelhouse")
+            self.assertEqual("/wheelhouse", command[command.index("--pool") + 1])
             self.assertEqual("--check" in command, lane == "check")
             self.assertNotIn(f"/wheelhouse/{profile}", command)
             if profile == "provider-core":

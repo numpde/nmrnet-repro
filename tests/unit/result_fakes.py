@@ -39,6 +39,7 @@ def scientific_facts():
 
 def scientific_outcomes(batch, facts):
     """Different per-conformer values expose accidental reordering or averaging."""
+    # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
     return tuple(
         {
             "request_sha256": hashlib.sha256(conformer.request_bytes).hexdigest(),

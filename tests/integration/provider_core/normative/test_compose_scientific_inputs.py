@@ -24,10 +24,10 @@ from provider_core.job_input import verify_job_input
 class ScientificInputTests(unittest.TestCase):
     def test_successive_fixture_keeps_distinct_job_attempt_and_result_identities(self):
         reply = runpy.run_path("/consumer/compose_peer_runtime.py")["successive_api_reply"]
-        inputs = tuple(
+        inputs = [
             verify_job_input(response(b"same science", job_ref=job), feed=replace(facts(b"same science"), job_ref=job))
             for job in ("job:first", "job:second")
-        )
+        ]
         peer = SimpleNamespace(result=None)
         results = []
         for index, item in enumerate(inputs):
@@ -56,8 +56,8 @@ class ScientificInputTests(unittest.TestCase):
             results.append(completed["analysis_result_ref"])
             with self.assertRaises(AssertionError):
                 reply(peer, f"/provider/v1/jobs/{inputs[1 - index].identity.job_ref}/input", None, index, inputs)
-        self.assertEqual(len(set(results)), 2)
-        self.assertEqual(json.loads(reply(peer, "/provider/v1/jobs", None, 2, inputs))["jobs"], [])
+        self.assertEqual(2, len(set(results)))
+        self.assertEqual([], json.loads(reply(peer, "/provider/v1/jobs", None, 2, inputs))["jobs"])
 
     def test_connected_fixture_ports_load_without_the_displaced_native_launch_harness(self):
         program = """
@@ -82,7 +82,7 @@ assert not forbidden.intersection(sys.modules), forbidden.intersection(sys.modul
             timeout=5,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_store_receiving_oracle_requires_its_bearer_and_refuses_other_credentials(self):
         target = f"GET /upload/v1/uploads/{UPLOAD_REF}/bytes HTTP/1.1\r\n".encode()
@@ -133,6 +133,6 @@ assert not forbidden.intersection(sys.modules), forbidden.intersection(sys.modul
                 self.assertEqual([len(item["original_request"]["atoms"]) for item in manifest["records"]], counts)
                 self.assertEqual(manifest["source"]["size"], len(source))
                 self.assertEqual(
-                    manifest["producer"]["execution"]["image_id"],
                     "sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08",
+                    manifest["producer"]["execution"]["image_id"],
                 )

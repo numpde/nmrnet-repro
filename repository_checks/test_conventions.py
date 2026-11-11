@@ -98,7 +98,7 @@ class RepositoryConventionTests(unittest.TestCase):
         target = subprocess.run(
             ["make", "--dry-run", "prediction/worker-parity/batch"], cwd=ROOT, capture_output=True, text=True, check=False
         )
-        self.assertEqual(0, target.returncode, target.stderr)
+        self.assertEqual(0, target.returncode, msg=target.stderr)
         self.assertEqual(["bash tools/baseline.sh batch-worker-parity"], target.stdout.splitlines())
 
     def test_authored_production_sources_require_the_shared_guard(self):

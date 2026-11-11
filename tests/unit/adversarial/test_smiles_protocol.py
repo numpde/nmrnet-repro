@@ -158,6 +158,7 @@ class SmilesProtocolAdversarialTests(unittest.TestCase):
         batch = collection()
         baseline = conformer_reply(batch, allocation="fixture")
         padding = MAX_FRAME_BYTES - len(frame(baseline)[4:])
+        # repo-check: allow-tuple-generator -- GeneratedConformers freezes its ordered conformers as a tuple; proof=nmrnet_provider/smiles.py::GeneratedConformers.
         expanded = tuple(
             replace(item, request_bytes=item.request_bytes + b" " * (padding // 2 + (index < padding % 2)))
             for index, item in enumerate(batch.conformers)
@@ -174,7 +175,7 @@ class SmilesProtocolAdversarialTests(unittest.TestCase):
             ),
         )
         reply = conformer_reply(overflow, allocation="fixture")
-        self.assertEqual(reply["kind"], "conformer_output_limit")
+        self.assertEqual("conformer_output_limit", reply["kind"])
         self.assertFalse(reply["coordinates_available"])
         with self.assertRaises(ConformerOutputLimit) as caught:
             prepared_conformers(reply, SOURCE, 2, **SETTINGS)
@@ -196,6 +197,7 @@ class SmilesProtocolAdversarialTests(unittest.TestCase):
 
     def test_output_limit_of_an_incomplete_native_collection_is_not_a_shortfall_payload(self):
         batch = collection(requested=3)
+        # repo-check: allow-tuple-generator -- GeneratedConformers freezes its ordered conformers as a tuple; proof=nmrnet_provider/smiles.py::GeneratedConformers.
         expanded = tuple(
             replace(item, request_bytes=item.request_bytes + b" " * (1024 * 1024 - len(item.request_bytes)))
             for item in batch.conformers
@@ -203,11 +205,12 @@ class SmilesProtocolAdversarialTests(unittest.TestCase):
         reply = conformer_reply(replace(batch, conformers=expanded), allocation="fixture")
         with self.assertRaises(ConformerOutputLimit) as caught:
             prepared_conformers(reply, SOURCE, 3, **SETTINGS)
-        self.assertEqual(caught.exception.requested_count, 3)
-        self.assertEqual(caught.exception.actual_count, 2)
+        self.assertEqual(3, caught.exception.requested_count)
+        self.assertEqual(2, caught.exception.actual_count)
 
     def test_tampered_output_limit_evidence_is_rejected_privately(self):
         batch = collection()
+        # repo-check: allow-tuple-generator -- GeneratedConformers freezes its ordered conformers as a tuple; proof=nmrnet_provider/smiles.py::GeneratedConformers.
         expanded = tuple(
             replace(item, request_bytes=item.request_bytes + b" " * (1024 * 1024 - len(item.request_bytes)))
             for item in batch.conformers

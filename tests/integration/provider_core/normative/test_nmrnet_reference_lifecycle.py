@@ -73,9 +73,9 @@ class ReferenceFixtureTests(unittest.TestCase):
             [{"element": "H", "atom_index": 0, "shift_ppm": 1.5}],
         ]
         self.assertEqual(
-            indexed_predictions(identities, rows),
             {
                 ("H", "01", "C", 0): 10.25,
                 ("C", "01", "H", 0): 1.5,
             },
+            indexed_predictions(identities, rows),
         )

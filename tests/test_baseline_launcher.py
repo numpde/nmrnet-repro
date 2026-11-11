@@ -298,13 +298,13 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
     def test_loaded_state_lane_selects_one_producer_proof_with_the_existing_model_grants(self):
         whole = BaselineLauncherTests.command(self, "model-parity")
         focused = BaselineLauncherTests.command(self, "state-parity")
-        self.assertEqual(whole.returncode, 0, whole.stderr)
-        self.assertEqual(focused.returncode, 0, focused.stderr)
+        self.assertEqual(0, whole.returncode, msg=whole.stderr)
+        self.assertEqual(0, focused.returncode, msg=focused.stderr)
         whole_args, focused_args = decode_command(whole.stdout), decode_command(focused.stdout)
         self.assertEqual(whole_args[:-1], focused_args[:-1])
         self.assertEqual(
-            focused_args[-1],
             "test_prediction_release.ReleasedPredictionTests.test_loaded_state_matches_verified_checkpoint_bytes",
+            focused_args[-1],
         )
 
     def test_batch_worker_lane_selects_one_fixed_test_with_the_same_containment(self):
@@ -312,8 +312,8 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         (self.root / "tests/integration/prediction_parity/test_prediction_worker_release.py").write_text("fixture")
         whole = BaselineLauncherTests.command(self, "worker-parity")
         focused = BaselineLauncherTests.command(self, "batch-worker-parity")
-        self.assertEqual(0, whole.returncode, whole.stderr)
-        self.assertEqual(0, focused.returncode, focused.stderr)
+        self.assertEqual(0, whole.returncode, msg=whole.stderr)
+        self.assertEqual(0, focused.returncode, msg=focused.stderr)
         whole_args, focused_args = decode_command(whole.stdout), decode_command(focused.stdout)
         whole_mounts = {whole_args[index + 1] for index, value in enumerate(whole_args) if value == "--mount"}
         focused_mounts = {focused_args[index + 1] for index, value in enumerate(focused_args) if value == "--mount"}
@@ -373,7 +373,7 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         (self.root / "tests/integration/prediction_parity/test_prediction_worker_release.py").write_text("fixture")
         direct = BaselineLauncherTests.command(self, "model-parity")
         worker = BaselineLauncherTests.command(self, "worker-parity")
-        self.assertEqual(worker.returncode, 0, worker.stderr)
+        self.assertEqual(0, worker.returncode, msg=worker.stderr)
         direct_args, worker_args = decode_command(direct.stdout), decode_command(worker.stdout)
         direct_mounts = {direct_args[i + 1] for i, item in enumerate(direct_args) if item == "--mount"}
         worker_mounts = {worker_args[i + 1] for i, item in enumerate(worker_args) if item == "--mount"}

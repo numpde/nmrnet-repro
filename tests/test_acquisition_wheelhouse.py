@@ -59,14 +59,14 @@ class CallbackTests(unittest.TestCase):
 
     def test_missing_after_acquisition_is_failure(self):
         result, events = self.run_callback("3,0,3")
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(1, result.returncode)
         self.assertIn("remain missing", result.stderr)
         self.assertEqual(events, ["offline", "select", "route:system", "online", "offline"])
 
     def test_worker_failure_is_preserved_without_recheck(self):
         result, events = self.run_callback("3,17")
-        self.assertEqual(result.returncode, 17)
-        self.assertEqual(events[-1], "online")
+        self.assertEqual(17, result.returncode)
+        self.assertEqual("online", events[-1])
 
 
 if __name__ == "__main__":

@@ -75,11 +75,13 @@ def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_s
 
 def fixture_interpreter(endpoints, *, timeout_seconds, on_endpoint_failure=None):
     """Give each scripted visit its own preconstructed fixture carrier."""
+    # repo-check: allow-tuple-generator -- The released Interpreter rejects factory collections that are not tuples; proof=provider_core/interpreter.py::Interpreter.__init__.
     factories = tuple(create_autospec(EndpointFactory, instance=True, return_value=endpoint) for endpoint in endpoints)
     return InputInterpreter(
         factories,
         timeout_seconds=timeout_seconds,
         context_bytes=60000,
+        # repo-check: allow-tuple-generator -- The released Interpreter rejects secret collections that are not tuples; proof=provider_core/interpreter.py::Interpreter.__init__.
         secrets=tuple(endpoint.spec.api_key for endpoint in endpoints),
         on_endpoint_failure=on_endpoint_failure,
     )

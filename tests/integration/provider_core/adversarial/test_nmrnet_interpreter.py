@@ -45,10 +45,10 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertEqual("interpretation_failed", outcome.code)
             self.assertIs(owner.source_failure, failure)
             self.assertIsNone(owner._source_task)
-            self.assertEqual(len(second.requests), 0)
+            self.assertEqual(0, len(second.requests))
             self.assertNotIn("PRIVATE_LATE_SOURCE_FAILURE", outcome.message)
 
     async def test_interrupted_model_post_retains_final_private_diagnostics_after_received_headers(self):
@@ -111,7 +111,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 summary = json.dumps(failure_evidence(limited, secrets=("PRIVATE_MODEL_KEY",)))
                 self.assertIn("request:input-selection", summary)
                 self.assertIn("request_cancelled", summary)
-                self.assertEqual(len(peer.requests), 1)
+                self.assertEqual(1, len(peer.requests))
                 ports.allocate_reader.assert_not_awaited()
                 ports.allocate_generator.assert_not_awaited()
             finally:
@@ -134,7 +134,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     await chooser.run(other_ports.instructions, other)
                 await owner.retire()
                 self.assertIsNone(other.interpreter_diagnostics)
-                self.assertEqual(len(peer.requests), 2)
+                self.assertEqual(2, len(peer.requests))
             finally:
                 await owner.retire()
 
@@ -149,7 +149,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
         async def generate(_smiles, _count):
             diagnostics = json.loads(owner.interpreter_diagnostics)
             self.assertIn(1, [entry.get("turn_index") for entry in diagnostics])
-            self.assertEqual(diagnostics[0]["endpoint_index"], 0)
+            self.assertEqual(0, diagnostics[0]["endpoint_index"])
             self.assertIn(str(rejection), json.dumps(diagnostics))
             return ports.batch
 
@@ -196,16 +196,16 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("PRIVATE_MODEL_KEY", private)
             self.assertNotIn("PRIVATE_CREDENTIAL", private)
             self.assertLess(len(private), 16000)
-            self.assertEqual(prepared["interpretation"]["visits"][-1]["corrections"], 1)
+            self.assertEqual(1, prepared["interpretation"]["visits"][-1]["corrections"])
             self.assertNotIn("Cannot select", json.dumps(prepared["interpretation"]))
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             self.assertNotIn("interpreter_diagnostics", json.loads(outcome.content))
             self.assertNotIn(b"PRIVATE reader dump", outcome.content)
             self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], prepared["interpreter_diagnostics"])
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
             ports.reader.read.assert_awaited_once()
-            self.assertEqual(ports.worker.events, ["prepare", "execute"])
+            self.assertEqual(["prepare", "execute"], ports.worker.events)
 
     async def test_invalid_shift_precision_is_corrected_before_any_preparation_effect(self):
         for digits in (0, 18, True, None, 4.0):
@@ -237,11 +237,11 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     self.addAsyncCleanup(session.retire)
                     handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
                     identity = json.loads(handle.identity.content)
-                    self.assertEqual(identity["output"], {"shift_significant_digits": 3, "verbosity": "medium"})
-                    self.assertEqual(identity["interpretation"]["visits"][-1]["corrections"], 1)
-                    self.assertEqual(identity["interpretation"]["visits"][-1]["turns_started"], 2)
+                    self.assertEqual({"shift_significant_digits": 3, "verbosity": "medium"}, identity["output"])
+                    self.assertEqual(1, identity["interpretation"]["visits"][-1]["corrections"])
+                    self.assertEqual(2, identity["interpretation"]["visits"][-1]["turns_started"])
                     ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
-                    self.assertEqual(ports.worker.events, [])
+                    self.assertEqual([], ports.worker.events)
 
     async def test_unknown_report_issue_invites_correction_without_echoing_untrusted_text(self):
         ports = SessionPorts()
@@ -250,8 +250,8 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             messages = json.loads(raw)["messages"]
             if messages[-2]["role"] == "tool":
                 self.assertEqual(
-                    messages[-2]["content"],
                     "The issue field must be one of the advertised choices.",
+                    messages[-2]["content"],
                 )
                 self.assertNotIn("PRIVATE_UNKNOWN_ISSUE", json.dumps(messages[-2:]))
                 self.assertNotIn("PRIVATE_DISCARDED_REPORT", json.dumps(messages[-2:]))
@@ -278,13 +278,13 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertEqual("interpretation_failed", outcome.code)
             self.assertNotIn("PRIVATE_", outcome.message)
             self.assertIn("PRIVATE_RETAINED_REPORT", outcome.evidence.content.decode())
-            self.assertEqual(len(peer.request_bodies), 2)
+            self.assertEqual(2, len(peer.request_bodies))
             ports.allocate_reader.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
 
     async def test_real_rejection_is_corrected_in_the_same_conversation_before_one_generation(self):
         ports = SessionPorts()
@@ -293,7 +293,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             messages = json.loads(raw)["messages"]
             if messages[-2]["role"] == "tool":
                 self.assertIn("count", messages[-2]["content"])
-                self.assertEqual(messages[-3]["reasoning_content"], "fixture reasoning")
+                self.assertEqual("fixture reasoning", messages[-3]["reasoning_content"])
                 return tool_reply("corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
             return tool_reply("invalid", "prepare_smiles", {"smiles": "CCl", "requested_count": 0})
 
@@ -304,10 +304,10 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
             observation = json.loads(handle.identity.content)["interpretation"]
-            self.assertEqual(observation["visits"][-1]["corrections"], 1)
-            self.assertEqual(observation["visits"][-1]["turns_started"], 2)
-            self.assertEqual(len(peer.request_bodies), 2)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual(1, observation["visits"][-1]["corrections"])
+            self.assertEqual(2, observation["visits"][-1]["turns_started"])
+            self.assertEqual(2, len(peer.request_bodies))
+            self.assertEqual([], ports.worker.events)
 
     async def test_model_reports_exhaust_ladder_without_disclosing_private_explanation(
         self,
@@ -326,13 +326,13 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertEqual("interpretation_failed", outcome.code)
             published = fail_body(ATTEMPT_REF, outcome.code, outcome.message)
             self.assertNotIn(b"PRIVATE_SOURCE_EXCERPT", published)
             self.assertIn("PRIVATE_SOURCE_EXCERPT", outcome.evidence.content.decode())
-            self.assertEqual(len(peer.request_bodies), 2)
+            self.assertEqual(2, len(peer.request_bodies))
             self.assertNotIn("PRIVATE_SOURCE_EXCERPT", peer.request_bodies[1].decode())
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             ports.allocate_generator.assert_not_awaited()
             ports.uploads.acquire.assert_not_awaited()
             self.assertTrue(first.retirement_confirmed and unused.retirement_confirmed)
@@ -369,14 +369,14 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertEqual("interpretation_failed", outcome.code)
             private = json.loads(outcome.evidence.content)["interpreter_diagnostics"]
             self.assertIn(1, [entry.get("turn_index") for entry in private])
             self.assertIn(str(failure), json.dumps(private))
             self.assertIn("PRIVATE reader dump", json.dumps(private))
             self.assertNotIn("PRIVATE reader dump", outcome.message)
             ports.reader_host.retire.assert_awaited_once()
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
 
     async def test_operational_generation_failure_cannot_become_model_correction_or_fallback(
         self,
@@ -405,6 +405,6 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(OSError) as caught:
                 await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIs(caught.exception, failure)
-            self.assertEqual(len(peer.request_bodies), 1)
+            self.assertEqual(1, len(peer.request_bodies))
             ports.generator_host.retire.assert_awaited_once()
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)

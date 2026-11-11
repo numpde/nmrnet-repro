@@ -30,7 +30,7 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
                 with patch("interpreter_ambiguity.ChatEndpoint", return_value=carrier) as factory:
                     self.assertEqual(await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64), 1)
                 factory.assert_called_once()
-                self.assertEqual(carrier.complete.await_count, 1)
+                self.assertEqual(1, carrier.complete.await_count)
                 observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
                 self.assertEqual(observed["preparation_attempts"], [name])
                 self.assertNotIn("issue", observed)
@@ -49,13 +49,13 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
             with patch("interpreter_ambiguity.ChatEndpoint", return_value=carrier) as factory:
                 self.assertEqual(await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64), 1)
             factory.assert_called_once()
-            self.assertEqual(carrier.complete.await_count, 2)
+            self.assertEqual(2, carrier.complete.await_count)
             observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
-            self.assertIn("issue", observed, json.dumps(observed))
+            self.assertIn("issue", observed, msg=json.dumps(observed))
             self.assertEqual(observed["issue"], cases[0]["expected_issue"])
-            self.assertEqual(observed["interpretation"]["corrections"], 1)
+            self.assertEqual(1, observed["interpretation"]["corrections"])
             correction = next(item for item in observed["interpreter_diagnostics"] if item.get("turn_index") == 1)
-            self.assertEqual(correction["failure"]["exception_type"], "ToolRejected")
+            self.assertEqual("ToolRejected", correction["failure"]["exception_type"])
             self.assertIn("JSON object", correction["failure"]["message"])
             self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
             self.assertNotIn("DISTINCT_ARGUMENT_CANARY", json.dumps(observed))
@@ -111,7 +111,7 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
                     result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64)
                 self.assertEqual(result, 1)
                 factory.assert_called_once()
-                self.assertEqual(carrier.complete.await_count, 1)
+                self.assertEqual(1, carrier.complete.await_count)
                 observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
                 self.assertEqual(observed["preparation_attempts"], ["prepare_smiles"] if prepare else [])
                 self.assertFalse((output / (cases[1]["id"] + ".json")).exists())
@@ -127,10 +127,10 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
             with patch("interpreter_ambiguity.ChatEndpoint", return_value=carrier) as factory:
                 self.assertEqual(await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64), 1)
             factory.assert_called_once()
-            self.assertEqual(carrier.complete.await_count, 1)
+            self.assertEqual(1, carrier.complete.await_count)
             observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
             self.assertNotIn("issue", observed)
-            self.assertEqual(observed["preparation_attempts"], [])
+            self.assertEqual([], observed["preparation_attempts"])
             self.assertIn("OSError", json.dumps(observed))
             self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
 
@@ -155,7 +155,7 @@ class InterpreterFormatChoiceRefusalTests(unittest.IsolatedAsyncioTestCase):
                     result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="formats")
                 self.assertEqual(result, 1)
                 factory.assert_called_once()
-                self.assertEqual(carrier.complete.await_count, 3)
+                self.assertEqual(3, carrier.complete.await_count)
                 carrier.retire.assert_awaited()
                 observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
                 self.assertFalse(observed["passed"])
@@ -180,7 +180,7 @@ class InterpreterFormatChoiceRefusalTests(unittest.IsolatedAsyncioTestCase):
                 observed = json.loads((output / (case["id"] + ".json")).read_bytes())
                 self.assertFalse(observed["passed"])
                 self.assertIn("record order", json.dumps(observed))
-                self.assertEqual(carrier.complete.await_count, 3)
+                self.assertEqual(3, carrier.complete.await_count)
 
     async def test_wrong_preparation_tool_and_model_problem_are_not_format_choice_success(self):
         cases = load_cases(Path("/fixture/interpreter_formats.json"), probe="formats")
@@ -194,7 +194,7 @@ class InterpreterFormatChoiceRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(
                         await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="formats"), 1
                     )
-                self.assertEqual(carrier.complete.await_count, 1)
+                self.assertEqual(1, carrier.complete.await_count)
                 carrier.retire.assert_awaited()
                 observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
                 self.assertFalse(observed["passed"])

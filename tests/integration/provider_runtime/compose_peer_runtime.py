@@ -233,10 +233,10 @@ async def serve(root, seconds, case, delivery_project):
         expected_model_calls = 2
     peer.ports.instructions = verify_job_input(response(instructions), feed=facts(instructions))
     successive_inputs = (
-        tuple(
+        [
             verify_job_input(response(instructions, job_ref=job), feed=replace(facts(instructions), job_ref=job))
             for job in ("job:compose-first", "job:compose-second")
-        )
+        ]
         if case == "successive"
         else ()
     )
@@ -389,7 +389,7 @@ async def serve(root, seconds, case, delivery_project):
         if direct_case:
             store = api
         else:
-            headers = tuple((name, value) for name, value in store_headers(peer.ports.source) if name != b"content-length")
+            headers = [(name, value) for name, value in store_headers(peer.ports.source) if name != b"content-length"]
             store = await peers.enter_async_context(TlsPeer("success", response_factory=store_reply, response_headers=headers))
             peer.store_peer = store
         peer.peer = api

@@ -318,7 +318,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"errno": 13', rendered)
         self.assertNotIn("execution_attempt_ref", rendered)
         self.assertNotIn("PRIVATE", rendered)
-        self.assertEqual(factory.allocations, [])
+        self.assertEqual([], factory.allocations)
         self.assertIsNone(factory.last_failure)
         allocation.retire.assert_awaited_once()
         with (
@@ -329,7 +329,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         report = self.receive(source.exception)
         self.assertNotIn("job_ref", json.dumps(report))
         self.assertNotIn("execution_attempt_ref", json.dumps(report))
-        self.assertEqual(caught.exception.job_ref, "job:example")
+        self.assertEqual("job:example", caught.exception.job_ref)
 
     async def test_returned_outcome_in_memory_does_not_claim_durable_retention_or_publication(self):
         session = _DiagnosticSession()
@@ -350,7 +350,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         failure = caught.exception.cause
         self.assertIs(type(failure), ExecutionFailed)
         self.assertIs(failure.outcome, session.outcome)
-        self.assertEqual(len(transport.calls), 8)
+        self.assertEqual(8, len(transport.calls))
         rendered = json.dumps(self.receive(failure))
         self.assertIn('"outcome_in_memory": true', rendered)
         self.assertNotIn("outcome_retained", rendered)
@@ -425,7 +425,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"independently_verified": false', rendered)
         self.assertIn('"errno": 5', rendered)
         self.assertNotIn("PRIVATE", rendered)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         self.assertFalse(ports.host.confirmed)
 
     async def test_exhausted_real_endpoints_report_unsent_and_http_failures_without_payloads(self):
@@ -459,8 +459,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             ):
                 self.assertIn(fact, rendered)
             self.assertNotIn("PRIVATE", rendered)
-            self.assertEqual(len(first.requests), 0)
-            self.assertEqual(len(second.requests), 1)
+            self.assertEqual(0, len(first.requests))
+            self.assertEqual(1, len(second.requests))
             dispatch.assert_not_awaited()
 
     def test_chat_reason_and_received_head_survive_body_failure_in_stderr(self):
@@ -581,7 +581,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     )
                     status = 503 if refusal == "status" else 200
                     if refusal == "header":
-                        headers = tuple((name, value) for name, value in headers if name != b"content-type")
+                        headers = [(name, value) for name, value in headers if name != b"content-type"]
                     elif refusal == "encoding":
                         headers += ((b"content-encoding", b"PRIVATE_ENCODING"),)
                     client.status, client.headers = status, headers
@@ -594,7 +594,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                                 await owner.acquire_file(api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1)
                             else:
                                 await owner.acquire(api.member.upload_ref)
-                        self.assertEqual(list(Path(root).iterdir()), [])
+                        self.assertEqual([], list(Path(root).iterdir()))
                     failure = caught.exception
                     rendered = json.dumps(self.receive(failure))
                     self.assertIsInstance(failure.cause, ExchangeFailed)
@@ -623,7 +623,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             rendered = json.dumps(report)
             self.assertIn("mode-0700 directory", rendered)
             self.assertNotIn(root, rendered)
-            self.assertEqual(api.calls, ["membership"])
+            self.assertEqual(["membership"], api.calls)
 
     def test_actual_snapshot_read_and_close_failures_reach_stderr_without_acquisition_facts(self):
         interruption = asyncio.CancelledError("PRIVATE_INTERRUPTION")
@@ -683,7 +683,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 write.assert_called_once()
                 publish.assert_not_called()
                 self.assertTrue(caught.exception.requires_host_retirement)
-                self.assertEqual(tuple(cause for _, cause in caught.exception.failures), (primary, cleanup, output_failure))
+                self.assertEqual([primary, cleanup, output_failure], [cause for _, cause in caught.exception.failures])
                 rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
                 self.assertIn("Cannot read selected input", rendered)
                 self.assertIn("stderr diagnostic output", rendered)
@@ -728,6 +728,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
         handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         result = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         result[0]["prediction"]["unit"] = "PRIVATE_UNIT"
         result[0]["provenance"]["PRIVATE_PROVENANCE"] = "PRIVATE_RAW"
@@ -776,9 +777,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("configured-key", rendered)
         self.assertNotIn("coordinates", rendered)
         self.assertLess(len(rendered), 16000)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     def test_received_result_projection_bounds_malformed_geometry_and_row_metadata(self):
+        # repo-check: allow-tuple-generator -- Received-result evidence preserves the original tuple batch after assembly fails; proof=nmrnet_provider/session.py::ResultAssemblyFailed.
         result = tuple(
             {
                 "request_sha256": "PRIVATE_HASH",
@@ -936,7 +938,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             owner = report["relationships"][0]["failure"]
             self.assertEqual(owner["acknowledgement_received"], acknowledgement is active)
             if acknowledgement is active:
-                self.assertEqual(owner["observed_attempt_state"], "in_progress")
+                self.assertEqual("in_progress", owner["observed_attempt_state"])
             self.assertNotIn("PRIVATE", json.dumps(report))
         for acceptance in (None, item.acceptance()):
             failure = ExecutionFailed(

@@ -44,7 +44,7 @@ class DeploymentRefusalTests(unittest.TestCase):
                         command += ["--" + name.replace("_", "-"), str(value)]
                 errors = io.StringIO()
                 with patch("sys.stderr", errors):
-                    self.assertEqual(main(["freeze", *command]), 2)
+                    self.assertEqual(2, main(["freeze", *command]))
                 self.assertNotIn("PRIVATE_MODEL_KEY", errors.getvalue())
                 self.assertFalse((arguments["bundle"] / "compose.json").exists())
                 if failure == "missing":

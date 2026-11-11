@@ -24,13 +24,13 @@ class ResultVerbosityTests(unittest.TestCase):
         plan = ResultPlan(prepared, **facts)
         public = json.loads(plan.finish(outcomes))
         retained = json.loads(plan.prepared_identity)
-        self.assertEqual(public["schema_id"], "nmrnet.coordinate_shifts.result.v2")
-        self.assertEqual(public["output"], {"verbosity": "medium", "shift_significant_digits": 17})
+        self.assertEqual("nmrnet.coordinate_shifts.result.v2", public["schema_id"])
+        self.assertEqual({"verbosity": "medium", "shift_significant_digits": 17}, public["output"])
         self.assertNotIn("tool_sources", public["execution"])
-        self.assertEqual(public["interpretation"], {"outcome": "prepared"})
-        self.assertEqual(public["execution"]["runtime_identity_source"], "caller")
+        self.assertEqual({"outcome": "prepared"}, public["interpretation"])
+        self.assertEqual("caller", public["execution"]["runtime_identity_source"])
         self.assertEqual(retained["execution"]["tool_sources"], manifest)
-        self.assertEqual(retained["interpretation"], {"outcome": "prepared"})
+        self.assertEqual({"outcome": "prepared"}, retained["interpretation"])
         self.assertEqual(retained["output"], public["output"])
         self.assertIn("prepared_request", public["geometries"][0])
         self.assertIn("float32_coordinates", public["geometries"][0])
@@ -67,7 +67,7 @@ class ResultVerbosityTests(unittest.TestCase):
                         evidence.append(plan.scientific_evidence_reservation())
                         self.assertLessEqual(len(plan.finish(outcomes)), plan.maximum_result_bytes)
                         self.assertEqual(json.loads(plan.prepared_identity)["execution"]["tool_sources"], manifest)
-                        self.assertEqual(documents[verbosity]["warnings"][0]["code"], "scaler_version_mismatch")
+                        self.assertEqual("scaler_version_mismatch", documents[verbosity]["warnings"][0]["code"])
                         self.assertNotIn("PRIVATE_WARNING", json.dumps(documents[verbosity]))
                     self.assertEqual(outcomes, original)
                     self.assertEqual(evidence[0], evidence[1])
@@ -90,8 +90,8 @@ class ResultVerbosityTests(unittest.TestCase):
                         self.assertEqual(geometry["source"], full_geometry["source"])
                     if route == "generated":
                         provenance = documents[ResultVerbosity.LOW]["generation"]["provenance"]
-                        self.assertEqual(provenance["added_hydrogen_parents"], [[1, 0], [2, 0], [3, 0], [4, 0]])
-                        self.assertEqual(provenance["source_atoms"][0]["source_atom_index"], 0)
+                        self.assertEqual([[1, 0], [2, 0], [3, 0], [4, 0]], provenance["added_hydrogen_parents"])
+                        self.assertEqual(0, provenance["source_atoms"][0]["source_atom_index"])
 
     def test_public_reservation_is_selected_separately_from_private_identity_admission(self):
         """This isolates public sizing; session tests separately refuse oversized private identity."""

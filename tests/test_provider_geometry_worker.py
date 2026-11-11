@@ -58,7 +58,7 @@ class MOL2ContainerExpectationTests(unittest.TestCase):
             {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))}, source, **options
         )
         expected = json.loads((FIXTURES / "expected.json").read_bytes())["geometries"]
-        self.assertEqual(tuple(geometry.source_record_number for geometry in geometries), (2, 1))
+        self.assertEqual([2, 1], [geometry.source_record_number for geometry in geometries])
         for geometry, name in zip(geometries, ("water", "chloromethane"), strict=True):
             request = json.loads(geometry.request_bytes)
             self.assertEqual(request["atoms"], expected[name]["atoms"])
@@ -117,6 +117,7 @@ class NativeGeometryProtocolTests(unittest.TestCase):
         for selection, numbers in (("all", (1, 2, 3)), ((3, 1), (3, 1))):
             with self.subTest(selection=selection):
                 request = source_request(source, source_format="sdf", source_unit="nm", selection=selection)
+                # repo-check: allow-tuple-generator -- The reader double preserves prepare_sdf's tuple of prepared geometries; proof=nmrnet_provider/sdf.py::prepare_sdf.
                 geometries = tuple(replace(geometry, source_record_number=number) for number in numbers)
                 with patch("nmrnet_provider.geometry_protocol.prepare_sdf", return_value=geometries) as reader:
                     records = read_source(request)
@@ -128,7 +129,7 @@ class NativeGeometryProtocolTests(unittest.TestCase):
                     source_unit="nm",
                     selection=selection,
                 )
-                self.assertEqual(numbers, tuple(item.source_record_number for item in actual))
+                self.assertEqual(list(numbers), [item.source_record_number for item in actual])
                 self.assertTrue(all(item.source_sha256 == hashlib.sha256(source).hexdigest() for item in actual))
                 self.assertTrue(all(item.source_positions == (1, 2) for item in actual))
 
@@ -256,7 +257,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
             with self.subTest(selection=selection):
                 client = await self.client(fault=False)
                 geometries = await client.read(source, source_format="mol2", source_unit="angstrom", selection=selection)
-                self.assertEqual(numbers, tuple(g.source_record_number for g in geometries))
+                self.assertEqual(list(numbers), [g.source_record_number for g in geometries])
                 for geometry in geometries:
                     name = "water" if geometry.source_record_number == 2 else "chloromethane"
                     request = json.loads(geometry.request_bytes)
@@ -312,7 +313,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
             with self.subTest(selection=selection):
                 client = await self.client(fault=False)
                 geometries = await client.read(source, source_format="pdb", source_unit="angstrom", selection=selection)
-                self.assertEqual(expected, tuple(g.source_record_number for g in geometries))
+                self.assertEqual(list(expected), [g.source_record_number for g in geometries])
                 for geometry in geometries:
                     expected_x = 2.027 if geometry.source_record_number == 7000 else 1.027
                     self.assertEqual(expected_x, json.loads(geometry.request_bytes)["coordinates"][0][0])
@@ -396,7 +397,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
         expected = json.loads((FIXTURES / "expected.json").read_bytes())["geometries"]["chloromethane"]
         client = await self.client(fault=False)
         result = await client.read(source, source_format="xyz", source_unit="angstrom", selection=(3, 1))
-        self.assertEqual((3, 1), tuple(geometry.source_record_number for geometry in result))
+        self.assertEqual([3, 1], [geometry.source_record_number for geometry in result])
         for geometry, positions in zip(result, ((15, 16, 17, 18, 19), (3, 4, 5, 6, 7)), strict=True):
             self.assertEqual(positions, geometry.source_positions)
             self.assertEqual(expected["atoms"], json.loads(geometry.request_bytes)["atoms"])
@@ -407,7 +408,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
         expected = json.loads((FIXTURES / "expected.json").read_bytes())["geometries"]
         client = await self.client(fault=False)
         result = await client.read(source, source_format="xyz", source_unit="angstrom", selection="all")
-        self.assertEqual((1, 2, 3), tuple(geometry.source_record_number for geometry in result))
+        self.assertEqual([1, 2, 3], [geometry.source_record_number for geometry in result])
         for geometry, name in zip(result, ("chloromethane", "water", "chloromethane"), strict=True):
             self.assertEqual(expected[name]["atoms"], json.loads(geometry.request_bytes)["atoms"])
 
@@ -487,6 +488,7 @@ class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
         original = read_source(source_request(source, source_format="json", source_unit=None, selection=None))[0]
         baseline = json.loads(json.dumps(original))
         self.assertEqual(
+            1,
             len(
                 prepared_reply(
                     {"kind": "geometries", "allocation": ALLOCATION, "records": [baseline]},
@@ -496,7 +498,6 @@ class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
                     selection=None,
                 )
             ),
-            1,
         )
         for changed in ({"coordinates": [[10.0000001, 0, 0]]}, {"atoms": ["H"]}, {"coordinate_unit": "nm"}):
             raw = json.loads(base64.b64decode(original["request_base64"])) | changed
@@ -670,7 +671,7 @@ class GeometryFailureFramingTests(unittest.TestCase):
             self.assertRaises(BrokenPipeError) as failure,
         ):
             serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
-        self.assertTrue(failure.exception is cause, "Transport failure was replaced.")
+        self.assertTrue(failure.exception is cause, msg="Transport failure was replaced.")
         self.assertTrue(any("PRIVATE_READER_REASON" in note for note in getattr(cause, "__notes__", ())))
         self.assertNotIn("PRIVATE", str(cause))
         sender.assert_called_once()
@@ -726,7 +727,7 @@ class GeometryFailureFramingTests(unittest.TestCase):
             self.assertRaises(WorkerProtocolError) as failure,
         ):
             serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
-        self.assertTrue(failure.exception.__context__ is cause, "Original rejection context was lost.")
+        self.assertTrue(failure.exception.__context__ is cause, msg="Original rejection context was lost.")
         self.assertIn("PRIVATE_REJECTION", cause.__notes__[0][:100])
         self.assertNotIn("PRIVATE_REJECTION", str(cause))
         self.assertEqual([], connection.sent)
@@ -741,7 +742,7 @@ class GeometryFailureFramingTests(unittest.TestCase):
             self.assertRaises(WorkerProtocolError) as failure,
         ):
             serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
-        self.assertTrue(failure.exception.__context__ is cause, "Original failure context was lost.")
+        self.assertTrue(failure.exception.__context__ is cause, msg="Original failure context was lost.")
         self.assertEqual([], connection.sent)
 
 

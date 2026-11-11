@@ -122,7 +122,7 @@ class NmrnetProseServiceOutageTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     1,
                     len(fixture.start_bodies),
-                    "The next NMRNet Job started while the prose interpreter service was delayed",
+                    msg="The next NMRNet Job started while the prose interpreter service was delayed",
                 )
                 await asyncio.wait_for(task, 8)
                 await fixture.wait_published(3)

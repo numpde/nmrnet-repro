@@ -47,12 +47,12 @@ class SmilesNormativeTests(unittest.TestCase):
                 metadata = json.loads(batch.provenance)
                 self.assertEqual(metadata["source_sha256"], hashlib.sha256(source).hexdigest())
                 self.assertEqual(metadata["requested_count"], case["requested_conformers"])
-                self.assertEqual(metadata["runtime"]["rdkit"], "2026.09.1")
+                self.assertEqual("2026.09.1", metadata["runtime"]["rdkit"])
                 self.assertEqual([atom["element"] for atom in metadata["source_atoms"]], case["source_atoms"])
                 self.assertEqual(len(batch.conformers), case["requested_conformers"])
                 for conformer in batch.conformers:
                     request = json.loads(conformer.request_bytes)
-                    self.assertEqual(request["coordinate_unit"], "angstrom")
+                    self.assertEqual("angstrom", request["coordinate_unit"])
                     self.assertEqual(Counter(request["atoms"]), Counter(case["generated_atom_counts"]))
                     self.assertEqual(request["atoms"][: len(case["source_atoms"])], case["source_atoms"])
                     self.assertEqual(len(request["atoms"]), len(request["coordinates"]))
@@ -61,7 +61,7 @@ class SmilesNormativeTests(unittest.TestCase):
                     self.assertEqual(added, case["expected_added_hydrogen_parents"])
                     self.assertEqual([row[0] for row in added], list(range(len(case["source_atoms"]), len(request["atoms"]))))
                     for index, parent in added:
-                        self.assertEqual(request["atoms"][index], "H")
+                        self.assertEqual("H", request["atoms"][index])
                         self.assertLess(parent, len(case["source_atoms"]))
                         self.assertNotEqual(request["atoms"][parent], "H")
 
@@ -78,13 +78,13 @@ class SmilesNormativeTests(unittest.TestCase):
         call.assert_called_once()
         metadata = json.loads(batch.provenance)
         self.assertEqual(observed, [(3, metadata["embedding"]["parameters"])])
-        self.assertEqual(metadata["embedding"]["preset"], "ETKDGv3")
+        self.assertEqual("ETKDGv3", metadata["embedding"]["preset"])
         self.assertFalse(metadata["parser"]["removeHs"])
-        self.assertEqual(metadata["hydrogen_expansion"], {"explicitOnly": False, "addCoords": False})
+        self.assertEqual({"explicitOnly": False, "addCoords": False}, metadata["hydrogen_expansion"])
 
     def test_source_atom_map_labels_and_opposite_stereochemical_tags_survive(self):
         mapped = generate_conformers(b"[CH3:42]Cl", 1, **SETTINGS)
-        self.assertEqual(json.loads(mapped.provenance)["source_atoms"][0]["atom_map_number"], 42)
+        self.assertEqual(42, json.loads(mapped.provenance)["source_atoms"][0]["atom_map_number"])
         tags = []
         for source in (b"F[C@H](Cl)Br", b"F[C@@H](Cl)Br"):
             batch = generate_conformers(source, 1, **SETTINGS)
@@ -97,13 +97,13 @@ class SmilesNormativeTests(unittest.TestCase):
     def test_isotopes_source_bond_stereo_and_generated_stereo_stay_distinct(self):
         isotopic = generate_conformers(b"[2H]C", 1, **SETTINGS)
         metadata = json.loads(isotopic.provenance)
-        self.assertEqual(metadata["source_atoms"][0]["isotope"], 2)
+        self.assertEqual(2, metadata["source_atoms"][0]["isotope"])
         self.assertIn("not separate prediction features", metadata["model_projection"])
         generated = generate_conformers(b"FC(Cl)Br", 1, **SETTINGS)
-        self.assertEqual(json.loads(generated.provenance)["source_atoms"][1]["chiral_tag"], "CHI_UNSPECIFIED")
+        self.assertEqual("CHI_UNSPECIFIED", json.loads(generated.provenance)["source_atoms"][1]["chiral_tag"])
         stereo = json.loads(generated.conformers[0].stereochemistry)
-        self.assertEqual(stereo["origin"], "generated_coordinates")
-        self.assertEqual(stereo["atoms"][0]["atom_index"], 1)
+        self.assertEqual("generated_coordinates", stereo["origin"])
+        self.assertEqual(1, stereo["atoms"][0]["atom_index"])
         self.assertIn(stereo["atoms"][0]["cip_code"], ("R", "S"))
         bond_stereo = []
         for source in (b"F/C=C/F", b"F/C=C\\F"):
@@ -114,7 +114,7 @@ class SmilesNormativeTests(unittest.TestCase):
             assigned = [bond["stereo"] for bond in json.loads(batch.conformers[0].stereochemistry)["bonds"]]
             self.assertEqual(assigned, specified)
             bond_stereo.extend(specified)
-        self.assertEqual(set(bond_stereo), {"STEREOE", "STEREOZ"})
+        self.assertEqual({"STEREOE", "STEREOZ"}, set(bond_stereo))
 
 
 class SmilesAdversarialTests(unittest.TestCase):
@@ -167,7 +167,7 @@ class SmilesAdversarialTests(unittest.TestCase):
             generate_conformers(b"CCCC", 3, **SETTINGS)
         call.assert_called_once()
         self.assertEqual([item.conformer_id for item in caught.exception.partial.conformers], [0, 2])
-        self.assertEqual(json.loads(caught.exception.partial.provenance)["requested_count"], 3)
+        self.assertEqual(3, json.loads(caught.exception.partial.provenance)["requested_count"])
         self.assertTrue(all(json.loads(item.request_bytes)["coordinates"] for item in caught.exception.partial.conformers))
 
     def test_zero_conformers_is_whole_failure_and_native_exception_keeps_its_type(self):
@@ -177,7 +177,7 @@ class SmilesAdversarialTests(unittest.TestCase):
         ):
             generate_conformers(b"CCCC", 3, **SETTINGS)
         embed.assert_called_once()
-        self.assertEqual(caught.exception.partial.conformers, ())
+        self.assertEqual((), caught.exception.partial.conformers)
         failure = RuntimeError("native failure canary")
         with (
             patch.object(rdDistGeom, "EmbedMultipleConfs", side_effect=failure),

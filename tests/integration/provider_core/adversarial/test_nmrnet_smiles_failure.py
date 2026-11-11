@@ -47,13 +47,13 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(type(outcome), AnalysisFailure)
         self.assertNotEqual(outcome.code, "invalid_input")
         self.assertNotIn("PRIVATE_", outcome.message)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         ports.generator_host.retire.assert_awaited_once()
         ports.generator.wait_closed.assert_awaited_once()
         evidence = json.loads(outcome.evidence.content)
         self.assertEqual(evidence["input_fingerprint"], ports.instructions.identity.input_fingerprint)
         generation = evidence["generation_failure"]
-        self.assertEqual(generation["requested_count"], 2)
+        self.assertEqual(2, generation["requested_count"])
         self.assertEqual(generation["provenance_sha256"], hashlib.sha256(ports.batch.provenance).hexdigest())
         self.assertEqual(json.loads(generation["provenance_utf8"])["source_sha256"], hashlib.sha256(b"CCl").hexdigest())
         self.assertEqual(generation["diagnostic"], ports.batch.diagnostic)
@@ -62,7 +62,6 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         originals = ports.batch.conformers[: generation["actual_count"]]
         for item, original in zip(generation["conformers"], originals, strict=True):
             self.assertEqual(
-                set(item),
                 {
                     "conformer_id",
                     "request_sha256",
@@ -70,6 +69,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
                     "stereochemistry_sha256",
                     "stereochemistry_byte_length",
                 },
+                set(item),
             )
             self.assertEqual(item["request_sha256"], hashlib.sha256(original.request_bytes).hexdigest())
             self.assertEqual(item["stereochemistry_sha256"], hashlib.sha256(original.stereochemistry).hexdigest())
@@ -83,18 +83,18 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         failure = ConformerShortfall(replace(ports.batch, conformers=ports.batch.conformers[:1]))
         outcome, generation = await self.run_failure(ports, failure)
-        self.assertEqual(outcome.code, "conformer_shortfall")
+        self.assertEqual("conformer_shortfall", outcome.code)
         self.assertIn("requested 2", outcome.message)
         self.assertIn("returned 1", outcome.message)
-        self.assertEqual(generation["actual_count"], 1)
+        self.assertEqual(1, generation["actual_count"])
         self.assertEqual([item["conformer_id"] for item in generation["conformers"]], [2])
 
     async def test_output_limit_preserves_compact_identity_without_allocation_or_coordinates(self):
         ports = SessionPorts()
         outcome, generation = await self.run_failure(ports, output_limit(ports.batch))
-        self.assertEqual(outcome.code, "conformer_output_limit")
+        self.assertEqual("conformer_output_limit", outcome.code)
         self.assertIn("2 MiB", outcome.message)
-        self.assertEqual(generation["actual_count"], 2)
+        self.assertEqual(2, generation["actual_count"])
         self.assertIs(generation["coordinates_available"], False)
         self.assertEqual([item["conformer_id"] for item in generation["conformers"]], [2, 0])
 
@@ -102,9 +102,9 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         failure = ConformerShortfall(replace(ports.batch, conformers=()))
         outcome, generation = await self.run_failure(ports, failure)
-        self.assertEqual(outcome.code, "conformer_shortfall")
-        self.assertEqual(generation["actual_count"], 0)
-        self.assertEqual(generation["conformers"], [])
+        self.assertEqual("conformer_shortfall", outcome.code)
+        self.assertEqual(0, generation["actual_count"])
+        self.assertEqual([], generation["conformers"])
 
     async def test_failure_evidence_overflow_retains_original_typed_cause_and_whole_diagnostic(self):
         ports = SessionPorts()
@@ -117,7 +117,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(caught.exception.preparation_failure, failure)
         self.assertEqual(caught.exception.document["generation_failure"]["diagnostic"], partial.diagnostic)
         self.assertIsNotNone(caught.exception.__cause__)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_unconfirmed_retirement_keeps_operational_cleanup_wrapper_and_original_shortfall(self):
         ports = SessionPorts()
@@ -131,7 +131,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
                 await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIs(caught.exception.operation_failure, failure)
             self.assertIs(caught.exception.failures[0][1], cleanup)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
         finally:
             ports.generator_host.retire.side_effect = None
 
@@ -160,5 +160,5 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
             release.set()
         with self.assertRaisesRegex(ValueError, "retirement"):
             await asyncio.wait_for(task, timeout=1)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         self.assertFalse(ports.host.confirmed)

@@ -89,7 +89,7 @@ class DockerContextSelectionTests(unittest.TestCase):
             "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
         }
         result = self.command(selected)
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("CONTEXT=local-a ENDPOINT=unix:///run/user/1000/docker-a.sock", result.stdout)
         self.assertIn("unix:///run/user/1000/docker-a.sock", result.stdout)
 
@@ -128,7 +128,7 @@ class DockerContextSelectionTests(unittest.TestCase):
                 break
             output.extend(chunk)
         os.close(master)
-        self.assertEqual(0, process.wait(), output.decode(errors="replace"))
+        self.assertEqual(0, process.wait(), msg=output.decode(errors="replace"))
         rendered = output.decode(errors="replace")
         self.assertIn("local-a", rendered)
         self.assertIn("local-b", rendered)
@@ -154,7 +154,7 @@ printf 'unix:///run/user/1000/replaced.sock\\nunix:///run/user/1000/docker-b.soc
 bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; printf "%s\\n" "$NMRNET_DOCKER_ENDPOINT_INPUT"; printf "%s\\n" "${engine[@]}"'
 """
         result = self.command(environment, script)
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(3, result.stdout.count("unix:///run/user/1000/docker-a.sock"))
         self.assertNotIn("replaced.sock", result.stdout)
 
@@ -166,7 +166,7 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
             capture_output=True,
             check=False,
         )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Every Docker-using command needs DOCKER_CONTEXT=<name>", result.stdout)
         self.assertFalse(self.context_calls.exists())
 
@@ -183,8 +183,8 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
                     bare_calls.append(f"{path.relative_to(root)}:{number}")
                 if "unix://" in line and path.name != "docker_client.sh":
                     hard_coded_endpoints.append(f"{path.relative_to(root)}:{number}")
-        self.assertEqual([], bare_calls, "Docker commands must use the shared operation endpoint.")
-        self.assertEqual([], hard_coded_endpoints, "Only the context owner may validate Unix endpoint syntax.")
+        self.assertEqual([], bare_calls, msg="Docker commands must use the shared operation endpoint.")
+        self.assertEqual([], hard_coded_endpoints, msg="Only the context owner may validate Unix endpoint syntax.")
 
     def test_make_forwards_only_command_line_context(self):
         recipe = '\t@printf "%s|%s|%s|%s\\n" "$$NMRNET_DOCKER_CONTEXT_INPUT" "$$NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN" "$$NMRNET_DOCKER_ENDPOINT_INPUT" "$${DOCKER_CONTEXT-unset}"\n'
@@ -213,7 +213,7 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
             capture_output=True,
             check=False,
         )
-        self.assertEqual(0, command_line.returncode, command_line.stderr)
+        self.assertEqual(0, command_line.returncode, msg=command_line.stderr)
         self.assertEqual(
             "local-b|command line|unix:///run/user/1000/docker-b.sock|unset\n"
             "local-b|command line|unix:///run/user/1000/docker-b.sock|unset\n",
@@ -234,7 +234,7 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
                 check=False,
             )
             self.assertNotEqual(0, rejected.returncode)
-            self.assertFalse(canary.exists(), "Make interpolated context input as shell syntax.")
+            self.assertFalse(canary.exists(), msg="Make interpolated context input as shell syntax.")
 
         self.context_calls.unlink()
         self.endpoints.write_text("unix:///run/user/1000/docker-a.sock\nunix:///run/user/1000/docker-b.sock\n")
@@ -245,7 +245,7 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
             capture_output=True,
             check=False,
         )
-        self.assertEqual(0, child.returncode, child.stderr)
+        self.assertEqual(0, child.returncode, msg=child.stderr)
         self.assertEqual("local-a|command line|unix:///run/user/1000/replaced.sock|unset\n", child.stdout)
         self.assertEqual(
             [
@@ -261,7 +261,7 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
             capture_output=True,
             check=False,
         )
-        self.assertEqual(0, explicit_default.returncode, explicit_default.stderr)
+        self.assertEqual(0, explicit_default.returncode, msg=explicit_default.stderr)
         self.assertEqual("default|command line|unix:///run/user/1000/docker-default.sock|unset\n", explicit_default.stdout)
         calls_before_ambient = self.context_calls.read_text()
         ambient = subprocess.run(
@@ -305,7 +305,7 @@ bash -c 'source tools/docker_client.sh; docker_client_prepare print || exit; pri
                 break
             output.extend(chunk)
         os.close(master)
-        self.assertEqual(0, process.wait(), output.decode(errors="replace"))
+        self.assertEqual(0, process.wait(), msg=output.decode(errors="replace"))
         self.assertIn("local-a", output.decode(errors="replace"))
         self.assertIn("local-b", output.decode(errors="replace"))
         self.assertRegex(

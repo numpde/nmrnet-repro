@@ -89,4 +89,5 @@ report_next_actions 'NEXT_FROM_CHILD'
 
     def calls(self):
         fields = self.journal.read_bytes().split(b"\0")[:-1]
+        # repo-check: allow-tuple-generator -- Captured commands are fixed positional tuple records compared with tuple literals; proof=tests/unit/normative/test_provider_prepare.py.
         return [tuple(value.decode() for value in fields[index : index + 4]) for index in range(0, len(fields), 4)]

@@ -93,7 +93,7 @@ class DocumentationTests(unittest.TestCase):
             and name not in exceptions
             and not name.startswith("NMRNetplusplus/")
         ]
-        self.assertEqual([], leftovers, "Move owned prose to docs/*.html; keep one maintained source.")
+        self.assertEqual([], leftovers, msg="Move owned prose to docs/*.html; keep one maintained source.")
 
     def test_pages_have_unique_anchors_and_working_local_links(self):
         root = ROOT / "docs"
@@ -101,11 +101,11 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn(root / "index.html", pages)
         for path, page in pages.items():
             with self.subTest(page=path.relative_to(root)):
-                self.assertEqual(len(page.ids), len(set(page.ids)), "Duplicate fragment IDs")
+                self.assertEqual(len(page.ids), len(set(page.ids)), msg="Duplicate fragment IDs")
                 self.assertIn("main", page.ids)
-                self.assertTrue(page.stylesheets, "Each page needs its local stylesheet.")
+                self.assertTrue(page.stylesheets, msg="Each page needs its local stylesheet.")
                 for stylesheet in page.stylesheets:
-                    self.assertFalse(urlsplit(stylesheet).scheme or urlsplit(stylesheet).netloc, stylesheet)
+                    self.assertFalse(urlsplit(stylesheet).scheme or urlsplit(stylesheet).netloc, msg=stylesheet)
                 for link in page.links:
                     parts = urlsplit(link)
                     if parts.scheme or parts.netloc:
@@ -113,10 +113,10 @@ class DocumentationTests(unittest.TestCase):
                     target = (path.parent / unquote(parts.path)).resolve() if parts.path else path
                     if target.is_dir():
                         target /= "index.html"
-                    self.assertTrue(target.is_relative_to(root), (path, link))
-                    self.assertTrue(target.is_file(), (path, link))
+                    self.assertTrue(target.is_relative_to(root), msg=(path, link))
+                    self.assertTrue(target.is_file(), msg=(path, link))
                     if parts.fragment:
-                        self.assertIn(unquote(parts.fragment), pages[target].ids, (path, link))
+                        self.assertIn(unquote(parts.fragment), pages[target].ids, msg=(path, link))
 
     def test_record_quotations_match_their_cited_source_lines(self):
         records = 0
@@ -139,9 +139,9 @@ class DocumentationTests(unittest.TestCase):
                 # Original line IDs keep citations stable across omissions.
                 source_lines = original.decode().splitlines(keepends=True)
                 retained = [(int(identity[1:]), "".join(text)) for identity, text in page.lines]
-                self.assertTrue(retained, "Retain the cited design and evidence quotations.")
+                self.assertTrue(retained, msg="Retain the cited design and evidence quotations.")
                 indices = [index for index, _ in retained]
-                self.assertEqual(indices, sorted(set(indices)), "Keep original source order and unique line IDs.")
+                self.assertEqual(indices, sorted(set(indices)), msg="Keep original source order and unique line IDs.")
                 for index, text in retained:
                     self.assertGreaterEqual(index, 1)
                     self.assertLessEqual(index, len(source_lines))
@@ -160,7 +160,7 @@ class DocumentationTests(unittest.TestCase):
                     }
                     if path.name == "003_nmr_api_provider_20261018.html" and index in redacted:
                         source_line = re.sub(r"https?://[^\s,;]+", redacted[index], source_line, count=1)
-                    self.assertTrue(source_line.endswith(text), (path, index, text))
+                    self.assertTrue(source_line.endswith(text), msg=(path, index, text))
                 self.assertEqual("".join(page.record), "".join(text for _, text in retained))
                 records += 1
-        self.assertGreaterEqual(records, 13, "Historical notes must retain their cited source evidence.")
+        self.assertGreaterEqual(records, 13, msg="Historical notes must retain their cited source evidence.")

@@ -107,7 +107,7 @@ class DeploymentBundleTests(unittest.TestCase):
             ):
                 prepare_runtime(runtime, os.getuid(), os.getgid())
             chown.assert_not_called()
-            self.assertEqual(unexpected.read_text(), "preserve")
+            self.assertEqual("preserve", unexpected.read_text())
 
     def test_runtime_preparation_rejects_external_hardlinks_before_ownership_changes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -128,7 +128,7 @@ class DeploymentBundleTests(unittest.TestCase):
                 prepare_runtime(runtime, os.getuid(), os.getgid())
             chown.assert_not_called()
             self.assertEqual((external.stat().st_uid, external.stat().st_mode & 0o777), (original.st_uid, 0o600))
-            self.assertEqual(external.read_text(), "retained")
+            self.assertEqual("retained", external.read_text())
 
     def test_old_api_route_admission_uses_the_retained_recipe(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -163,8 +163,8 @@ class DeploymentBundleTests(unittest.TestCase):
                     argv.extend(("--" + key.replace("_", "-"), str(value)))
             output, errors = io.StringIO(), io.StringIO()
             with redirect_stdout(output), redirect_stderr(errors):
-                self.assertEqual(main(argv), 2)
-            self.assertEqual(output.getvalue(), "")
+                self.assertEqual(2, main(argv))
+            self.assertEqual("", output.getvalue())
             self.assertIn("scientific_retry.max_retries", errors.getvalue())
             self.assertNotIn("Traceback", errors.getvalue())
             self.assertFalse((arguments["bundle"] / "compose.json").exists())
@@ -184,12 +184,12 @@ class DeploymentBundleTests(unittest.TestCase):
             identity = json.loads(raw)
             self.assertEqual(identity["prediction_image_id"], arguments["image_id"])
             self.assertEqual(identity["bundle"], arguments["bundle"].name)
-            self.assertEqual(identity["provider_ref"], "provider:example")
+            self.assertEqual("provider:example", identity["provider_ref"])
             plan = json.loads((arguments["bundle"] / "compose.json").read_bytes())
             checkpoint_mount = next(
                 mount for mount in plan["services"]["provider"]["volumes"] if mount["type"] == "volume" and not mount["read_only"]
             )
-            self.assertEqual(checkpoint_mount["target"], "/srv/nmrnet/attempts")
+            self.assertEqual("/srv/nmrnet/attempts", checkpoint_mount["target"])
             self.assertNotIn(files.key.read_text().strip(), raw)
             self.assertNotIn("key_file", raw)
             self.assertNotIn("credential", raw)
@@ -207,7 +207,7 @@ class DeploymentBundleTests(unittest.TestCase):
                         prediction_image_id=arguments["image_id"],
                         client_root=arguments["bundle"] / "client",
                     )
-            self.assertEqual(rejected.getvalue(), "")
+            self.assertEqual("", rejected.getvalue())
 
     def test_refresh_preserves_old_generation_and_exact_actual_source_and_secret_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -232,23 +232,23 @@ class DeploymentBundleTests(unittest.TestCase):
             self.assertEqual((second / "secrets/provider/signing.private.json").read_bytes(), files.credential.read_bytes())
             self.assertEqual((second / "secrets/provider/interpreter.key").read_bytes(), files.key.read_bytes())
             plan = json.loads((second / "compose.json").read_bytes())
-            self.assertEqual(len(plan["services"]), 6)
+            self.assertEqual(6, len(plan["services"]))
             self.assertNotIn("api", plan["services"])
             provider = plan["services"]["provider"]
-            self.assertEqual(provider["group_add"], ["1001"])
+            self.assertEqual(["1001"], provider["group_add"])
             self.assertIn("fixture-delivery-outbox-socket", plan["volumes"])
             socket = provider["command"][provider["command"].index("--api-proxy-socket") + 1]
             grant = next(item for item in provider["volumes"] if socket.startswith(item["target"] + "/"))
-            self.assertEqual(grant["source"], "fixture-delivery-proxy-socket")
+            self.assertEqual("fixture-delivery-proxy-socket", grant["source"])
             self.assertTrue(grant["read_only"])
             self.assertEqual(plan["name"], json.loads((first / "compose.json").read_bytes())["name"])
-            self.assertEqual((second / "resolv.conf").read_text(), "nameserver 192.0.2.53\n")
+            self.assertEqual("nameserver 192.0.2.53\n", (second / "resolv.conf").read_text())
             self.assertEqual((second / "execution.json").stat().st_mode & 0o777, 0o444)
             self.assertEqual((second / "compose.json").stat().st_mode & 0o777, 0o444)
             self.assertEqual((second / "secrets/provider/signing.private.json").stat().st_mode & 0o777, 0o400)
             self.assertEqual((second / "config").stat().st_mode & 0o777, 0o555)
             execution = json.loads((second / "execution.json").read_bytes())
-            self.assertEqual(execution["runtime_identity_source"], "caller")
+            self.assertEqual("caller", execution["runtime_identity_source"])
             self.assertEqual(execution["image_id"], arguments["image_id"])
             self.assertEqual(execution["repository_revision"], arguments["repository_revision"])
             expected = {}

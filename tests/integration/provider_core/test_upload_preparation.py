@@ -82,7 +82,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         prepared = await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertEqual([geometry.source_record_number for geometry in prepared.geometries], [2, 1])
         self.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
-        self.assertEqual(len(self.readers), 2)
+        self.assertEqual(2, len(self.readers))
         await owner.retire()
 
     async def test_success_freezes_input_and_forbids_further_source_operations(self):
@@ -96,8 +96,8 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose)
         prepared = await owner.prepare(self.instructions, require_execution=lambda: None)
-        self.assertEqual(len(prepared.geometries), 2)
-        self.assertEqual(len(self.readers), 1)
+        self.assertEqual(2, len(prepared.geometries))
+        self.assertEqual(1, len(self.readers))
         with self.assertRaises(ValueError):
             await owner.prepare(self.instructions, require_execution=lambda: None)
         await owner.retire()
@@ -117,7 +117,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "select"):
             await owner.prepare(self.instructions, require_execution=lambda: None)
         self.uploads.acquire.assert_awaited_once()
-        self.assertEqual(len(self.readers), 1)
+        self.assertEqual(1, len(self.readers))
         await owner.retire()
 
     async def test_acquisition_failure_does_not_consume_a_parse_attempt(self):
@@ -130,8 +130,8 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
 
         owner = self.owner(choose, reads=1)
         prepared = await owner.prepare(self.instructions, require_execution=lambda: None)
-        self.assertEqual(prepared.geometries[0].source_record_number, 2)
-        self.assertEqual(len(self.readers), 1)
+        self.assertEqual(2, prepared.geometries[0].source_record_number)
+        self.assertEqual(1, len(self.readers))
         await owner.retire()
 
     async def test_read_rejection_and_failed_cleanup_keep_both_private_causes(self):
@@ -154,7 +154,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await owner.prepare(self.instructions, require_execution=lambda: None)
         self.assertIs(caught.exception.operation_failure, rejection)
         self.assertIs(caught.exception.cause, rejection)
-        self.assertEqual(caught.exception.operation_failure.diagnostic, "private native evidence")
+        self.assertEqual("private native evidence", caught.exception.operation_failure.diagnostic)
         self.assertIs(caught.exception.failures[0][1], cleanup)
         self.assertNotIn(rejection.diagnostic, str(caught.exception))
         self.assertNotIn(str(cleanup), str(caught.exception))
@@ -184,7 +184,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await owner.retire()
         for transport in self.transports:
             transport.retire.assert_awaited_once()
-        self.assertEqual(len(self.readers), 1)
+        self.assertEqual(1, len(self.readers))
         self.readers[0][1].retire.side_effect = None
         await owner.retire()
 
@@ -270,7 +270,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 settled.set()
 
         async def transport_retire():
-            self.assertTrue(settled.is_set(), "Source transports closed while acquisition could start another exchange")
+            self.assertTrue(settled.is_set(), msg="Source transports closed while acquisition could start another exchange")
 
         self.uploads.acquire.side_effect = acquire
         for transport in self.transports:
@@ -287,6 +287,6 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await preparing
         later_exchange.assert_not_awaited()
-        self.assertEqual(self.readers, [])
+        self.assertEqual([], self.readers)
         with self.assertRaisesRegex(ValueError, "retiring"):
             await owner.inspect()

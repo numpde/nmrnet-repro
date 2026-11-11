@@ -89,6 +89,7 @@ class FormatFixture:
             ]
             self.expected_records = records
             self.expected = [corpus["geometries"][native["geometry_names"][record - 1]] for record in records]
+            # repo-check: allow-tuple-generator -- The fixture preserves tuple-valued source positions for each ordered geometry; proof=nmrnet_provider/input_geometry.py::PreparedGeometry.
             self.expected_positions = tuple(tuple(native["source_atom_ids"][record - 1]) for record in records)
             selection = (
                 None if source_format == "mol" else "all" if self.format_case in ("sdf-all", "sdf-carbon-only") else records
@@ -119,7 +120,7 @@ class FormatFixture:
             messages = json.loads(raw)["messages"]
             feedback = messages[-2]["content"]
             if not feedback.startswith("{"):
-                self.assertEqual(len(self.source_clients), 1)
+                self.assertEqual(1, len(self.source_clients))
                 self.assertTrue(self.source_clients[0][1].confirmed)
                 self.assertEqual((self.worker.preparations, self.worker.executions), (0, 0))
                 self.assertIn("record 4" if self.format_case == "sdf-correction" else "alternate", feedback.lower())

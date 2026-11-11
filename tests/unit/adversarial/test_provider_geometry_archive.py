@@ -84,7 +84,7 @@ class UploadArchiveRefusalTests(unittest.TestCase):
             inspect_upload(bytes(source))
 
     def test_member_listing_has_its_own_finite_model_handoff_bound(self):
-        source = archive(tuple((str(n) + "x" * 200, b"x") for n in range(100)))
+        source = archive(((str(n) + "x" * 200, b"x") for n in range(100)))
         with self.assertRaisesRegex(InputRejected, "listing"):
             inspect_upload(source)
 

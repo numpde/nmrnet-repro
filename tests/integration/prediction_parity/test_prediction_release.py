@@ -99,16 +99,16 @@ class ReleasedPredictionTests(unittest.TestCase):
     def assert_loaded_checkpoint_state(self, model, expected, element):
         """Compare actual parameters and persistent buffers, without a tolerance."""
         actual = model.state_dict()
-        self.assertEqual(set(actual), set(expected), element + ": state keys differ")
+        self.assertEqual(set(actual), set(expected), msg=element + ": state keys differ")
         for name, tensor in actual.items():
             label = element + " " + name
-            self.assertIsInstance(tensor, torch.Tensor, label)
-            self.assertIsInstance(expected[name], torch.Tensor, label)
-            self.assertEqual(tensor.device.type, "cpu", label)
-            self.assertEqual(expected[name].device.type, "cpu", label)
-            self.assertEqual(tensor.dtype, expected[name].dtype, label)
-            self.assertEqual(tensor.shape, expected[name].shape, label)
-            self.assertTrue(torch.equal(tensor, expected[name]), label + ": tensor values differ from verified checkpoint")
+            self.assertIsInstance(tensor, torch.Tensor, msg=label)
+            self.assertIsInstance(expected[name], torch.Tensor, msg=label)
+            self.assertEqual("cpu", tensor.device.type, msg=label)
+            self.assertEqual("cpu", expected[name].device.type, msg=label)
+            self.assertEqual(tensor.dtype, expected[name].dtype, msg=label)
+            self.assertEqual(tensor.shape, expected[name].shape, msg=label)
+            self.assertTrue(torch.equal(tensor, expected[name]), msg=label + ": tensor values differ from verified checkpoint")
 
     def test_loaded_state_matches_verified_checkpoint_bytes(self):
         """Prove state transfer independently of apparent loading success or predictions."""
@@ -237,7 +237,7 @@ class ReleasedPredictionTests(unittest.TestCase):
         for fixture_element, key, request in [*requests, *reversed(requests)]:
             raw = json.dumps(request, allow_nan=False).encode()
             result = predict.predict_request(raw, loader.load_dictionary, loader.load_selected_element)
-            self.assertEqual(result["unit"], "ppm")
+            self.assertEqual("ppm", result["unit"])
             predictions = result["predictions"]
             self.assertEqual(
                 [item["atom_index"] for item in predictions],
@@ -276,9 +276,9 @@ class ReleasedPredictionTests(unittest.TestCase):
             for element in ("H", "C")
             for item in self.reference["elements"][element]["predictions"]
         }
-        self.assertEqual(len(population), 64)
+        self.assertEqual(64, len(population))
         self.assertEqual(observed, population)
-        self.assertEqual(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"})
+        self.assertEqual({"H": "angstrom", "C": "angstrom"}, predict.QUALIFIED_MODEL_COORDINATE_UNITS)
         self.print_fixture_observation(observations, self.assert_observed_container_budget(), loader._selection())
 
     def print_fixture_observation(self, observations, resources, effective_selection):
@@ -432,10 +432,10 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stdout + result.stderr)
             resolved_args = json.loads(read_fixture_receipt(output))
         for name, value in vars(model.args).items():
-            self.assertEqual(value, resolved_args[name], name)
+            self.assertEqual(value, resolved_args[name], msg=name)
         self.assertEqual(prediction_model.require_cpu_float32_model(model, torch.float32), expected["model"]["parameter_count"])
         self.assertFalse(model.training)
 
@@ -452,17 +452,17 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
                     predictions = prediction_model.predict_element(request, element, model, dictionary, scaler)
                     self.assertEqual([index for index, _value in predictions], list(range(count)))
             absent = {"coordinate_unit": PARITY_TEST_UNIT, "atoms": ["O"], "coordinates": [[0.0, 0.0, 0.0]]}
-            self.assertEqual(prediction_model.predict_element(absent, element, model, dictionary, scaler), ())
+            self.assertEqual((), prediction_model.predict_element(absent, element, model, dictionary, scaler))
 
     def assert_observed_container_budget(self):
         facts = {
             name: (Path("/sys/fs/cgroup") / name).read_text().strip()
             for name in ("cpu.max", "memory.max", "memory.peak", "memory.swap.max", "pids.max")
         }
-        self.assertEqual(facts["cpu.max"], "200000 100000")
+        self.assertEqual("200000 100000", facts["cpu.max"])
         self.assertEqual(facts["memory.max"], str(4 * 1024**3))
-        self.assertEqual(facts["memory.swap.max"], "0")
-        self.assertEqual(facts["pids.max"], "64")
+        self.assertEqual("0", facts["memory.swap.max"])
+        self.assertEqual("64", facts["pids.max"])
         self.assertGreater(int(facts["memory.peak"]), 0)
         self.assertLessEqual(int(facts["memory.peak"]), int(facts["memory.max"]))
         message = "Observed release-model qualification resources: " + json.dumps(facts, sort_keys=True)
@@ -475,7 +475,7 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
         dictionary_bytes = self.verified_bytes("/weight", "weight.zip", self.reference["source_artifacts"]["dictionary"])
         dictionary = prediction_model.load_prediction_dictionary_from_bytes(dictionary_bytes)
         self.assertEqual(dictionary.symbols, self.reference["dictionary"]["symbols"])
-        self.assertEqual(dictionary.indices["[MASK]"], 30)
+        self.assertEqual(30, dictionary.indices["[MASK]"])
         observed = set()
         with (
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
@@ -517,6 +517,6 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
             for element in ("H", "C")
             for item in self.reference["elements"][element]["predictions"]
         }
-        self.assertEqual(len(population), 64)
+        self.assertEqual(64, len(population))
         self.assertEqual(observed, population)
         self.assert_observed_container_budget()

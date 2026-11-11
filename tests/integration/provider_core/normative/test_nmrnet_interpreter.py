@@ -101,20 +101,20 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             document = json.loads(outcome.content)
-            self.assertEqual(document["interpretation"]["operations"], ["inspect_uploads", "inspect_upload", "prepare_upload"])
-            self.assertEqual(document["interpretation"]["visits"][-1]["turns_started"], 3)
-            self.assertEqual(len(peer.request_bodies), 3)
-            self.assertEqual(ports.worker.events.count("execute"), 1)
+            self.assertEqual(["inspect_uploads", "inspect_upload", "prepare_upload"], document["interpretation"]["operations"])
+            self.assertEqual(3, document["interpretation"]["visits"][-1]["turns_started"])
+            self.assertEqual(3, len(peer.request_bodies))
+            self.assertEqual(1, ports.worker.events.count("execute"))
             self.assertEqual([row["source"]["record_number"] for row in document["geometries"]], [2, 1])
             for geometry in document["geometries"]:
                 self.assertEqual(geometry["source"]["sha256"], hashlib.sha256(member_bytes).hexdigest())
                 self.assertEqual(geometry["source"]["archive"]["sha256"], digest.removeprefix("sha256:"))
             ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
             member_reader.read_member.assert_awaited_once()
-            self.assertEqual(len(allocated), 2)
+            self.assertEqual(2, len(allocated))
             for reader, host in allocated:
                 reader.close.assert_called()
                 reader.wait_closed.assert_awaited_once()
@@ -131,14 +131,14 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                 if function["name"].startswith("prepare_"):
                     parameters = function["parameters"]
                     self.assertEqual(
-                        parameters["properties"]["output"]["properties"]["shift_significant_digits"],
                         {"type": "integer", "minimum": 1, "maximum": 17},
+                        parameters["properties"]["output"]["properties"]["shift_significant_digits"],
                     )
                     self.assertEqual(
-                        parameters["properties"]["output"]["properties"]["verbosity"]["enum"], ["low", "medium", "max"]
+                        ["low", "medium", "max"], parameters["properties"]["output"]["properties"]["verbosity"]["enum"]
                     )
                     self.assertEqual(
-                        parameters["properties"]["output"]["default"], {"verbosity": "medium", "shift_significant_digits": 4}
+                        {"verbosity": "medium", "shift_significant_digits": 4}, parameters["properties"]["output"]["default"]
                     )
                     self.assertNotIn("output", parameters["required"])
             return tool_reply(
@@ -152,14 +152,14 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 3, "verbosity": "max"})
+            self.assertEqual({"shift_significant_digits": 3, "verbosity": "max"}, json.loads(handle.identity.content)["output"])
             result = json.loads((await session.execute(handle, report_condition=unexpected_condition)).content)
-            self.assertEqual(result["output"], {"shift_significant_digits": 3, "verbosity": "max"})
-            self.assertEqual(result["interpretation"]["operations"], ["prepare_smiles"])
-            self.assertEqual(result["interpretation"]["visits"][-1]["turns_started"], 1)
-            self.assertEqual(result["interpretation"]["visits"][-1]["corrections"], 0)
+            self.assertEqual({"shift_significant_digits": 3, "verbosity": "max"}, result["output"])
+            self.assertEqual(["prepare_smiles"], result["interpretation"]["operations"])
+            self.assertEqual(1, result["interpretation"]["visits"][-1]["turns_started"])
+            self.assertEqual(0, result["interpretation"]["visits"][-1]["corrections"])
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
-            self.assertEqual(len(peer.request_bodies), 1)
+            self.assertEqual(1, len(peer.request_bodies))
 
     async def test_model_report_falls_back_to_successful_preparation(self):
         ports = SessionPorts()
@@ -184,11 +184,11 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
-            self.assertEqual(len(first_peer.request_bodies), 1)
-            self.assertEqual(len(second_peer.request_bodies), 1)
+            self.assertEqual(1, len(first_peer.request_bodies))
+            self.assertEqual(1, len(second_peer.request_bodies))
             self.assertNotIn("PRIVATE REPORT", second_peer.request_bodies[0].decode())
             outcome = await session.execute(handle, report_condition=unexpected_condition)
-            self.assertEqual(ports.worker.events, ["prepare", "execute"])
+            self.assertEqual(["prepare", "execute"], ports.worker.events)
             self.assertNotIn(b"PRIVATE REPORT", outcome.content)
             self.assertTrue(all(endpoint.retirement_confirmed for endpoint in endpoints))
 
@@ -211,21 +211,21 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             failure = chooser._conversation.last_failure
             self.assertIs(type(failure), InterpretationFailed)
-            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertEqual("interpretation_failed", outcome.code)
             self.assertEqual(outcome.message, str(failure))
             handoff = next(error for visit, error in failure.failures if visit == 1)
             self.assertIs(type(handoff), ModelReportedInterpretationProblem)
             self.assertIs(type(handoff.__cause__), ModelReportedInputProblem)
-            self.assertEqual(handoff.__cause__.explanation, "PRIVATE REPORT")
+            self.assertEqual("PRIVATE REPORT", handoff.__cause__.explanation)
             self.assertTrue(any(visit == 2 and isinstance(error, ChatFailed) for visit, error in failure.failures))
             diagnostics = outcome.evidence.content.decode()
             self.assertIn("PRIVATE REPORT", diagnostics)
             self.assertIn('"status":503', diagnostics)
             self.assertNotIn("PRIVATE BODY", diagnostics)
             self.assertNotIn("PRIVATE REPORT", outcome.message)
-            self.assertEqual(len(first_peer.request_bodies), 1)
+            self.assertEqual(1, len(first_peer.request_bodies))
             self.assertGreaterEqual(len(second_peer.request_bodies), 1)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
 
     async def test_lost_reply_before_dispatch_falls_back_and_prepares_once(self):
         ports = SessionPorts()
@@ -249,7 +249,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             self.assertTrue(all(endpoint.retirement_confirmed for endpoint in endpoints))
             observation = json.loads(handle.identity.content)["interpretation"]
             self.assertEqual(
@@ -257,7 +257,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             )
             outcome = await session.execute(handle, report_condition=unexpected_condition)
             self.assertEqual(json.loads(outcome.content)["interpretation"], observation)
-            self.assertEqual(ports.worker.events, ["prepare", "execute"])
+            self.assertEqual(["prepare", "execute"], ports.worker.events)
             notices.assert_any_call(0, chooser._conversation.failures[0][1])
             await session.retire()
             notices.assert_called_once()
@@ -321,14 +321,14 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     session = ports.make_session(owner)
                     self.addAsyncCleanup(session.retire)
                     handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-                    self.assertEqual(ports.worker.events, [])
+                    self.assertEqual([], ports.worker.events)
                     self.assertTrue(endpoint.retirement_confirmed)
                     prepared_identity = json.loads(handle.identity.content)
                     outcome = await session.execute(handle, report_condition=unexpected_condition)
                     result = json.loads(outcome.content)
-                    self.assertEqual(result["output"], {"shift_significant_digits": 4, "verbosity": "max"})
+                    self.assertEqual({"shift_significant_digits": 4, "verbosity": "max"}, result["output"])
                     self.assertEqual(result["interpretation"], prepared_identity["interpretation"])
-                    self.assertEqual(result["interpretation"]["outcome"], "selected")
+                    self.assertEqual("selected", result["interpretation"]["outcome"])
                     interpretation = result["interpretation"]
                     self.assertEqual(
                         interpretation["prompt_sha256"],
@@ -373,16 +373,16 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         )
                     elif route == "pasted":
                         self.assertEqual(
-                            json.loads(ports.worker.requests[0])["coordinates"],
                             [[1.25, 0.0, 0.0]],
+                            json.loads(ports.worker.requests[0])["coordinates"],
                         )
                         geometry = result["geometries"][0]
-                        self.assertEqual(geometry["source"]["origin"], "interpreter_supplied_coordinates")
-                        self.assertEqual(geometry["preparation"]["source_unit"], "nm")
+                        self.assertEqual("interpreter_supplied_coordinates", geometry["source"]["origin"])
+                        self.assertEqual("nm", geometry["preparation"]["source_unit"])
                     else:
                         ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
                         self.assertEqual(ports.reader.read.call_args.args, (ports.source,))
-                        self.assertEqual(ports.reader.read.call_args.kwargs["selection"], (2, 1))
+                        self.assertEqual((2, 1), ports.reader.read.call_args.kwargs["selection"])
                         self.assertEqual(
                             [json.loads(raw)["atoms"] for raw in ports.worker.requests],
                             [["H"], ["O"]],

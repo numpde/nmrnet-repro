@@ -210,7 +210,7 @@ api_witness_finish
                     time.sleep(0.01)
                 self.assertIsNone(process.poll())
                 self.assertTrue((root / "held").exists())
-                self.assertEqual((root / "calls").read_text().splitlines(), ["client"])
+                self.assertEqual(["client"], (root / "calls").read_text().splitlines())
                 self.assertFalse((root / "forbidden-cleanup").exists())
             finally:
                 if process.poll() is None:
@@ -266,9 +266,9 @@ compose_witness_finish
                     deadline = time.monotonic() + 2
                     while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
                         time.sleep(0.01)
-                    self.assertIsNone(process.poll(), "finish released the original local owner")
+                    self.assertIsNone(process.poll(), msg="finish released the original local owner")
                     self.assertTrue((root / "held").exists())
-                    self.assertEqual(len((root / "calls").read_text().splitlines()), 1)
+                    self.assertEqual(1, len((root / "calls").read_text().splitlines()))
                     self.assertFalse((root / "forbidden-retirement").exists())
                     self.assertFalse((root / "forbidden-cleanup").exists())
                 finally:
@@ -286,8 +286,8 @@ qualification_delivery_down() { printf 'unexpected shared shutdown\n'; return 7;
 api_witness_stop_deployment 0
 """
         result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3, check=False)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
 
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
         for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent", "missing-volume"):
@@ -361,7 +361,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     check=False,
                 )
                 if scenario == "existing-output":
-                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(2, result.returncode, msg=result.stderr)
                     self.assertIn("Use fresh client output", result.stderr)
                     self.assertFalse((records / "query").exists())
                     self.assertFalse((records / "creates").exists())
@@ -369,16 +369,16 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertEqual(
                     result.returncode,
                     7 if scenario == "query-failure" else 2 if scenario == "missing-volume" else 0,
-                    result.stderr,
+                    msg=result.stderr,
                 )
-                self.assertEqual((records / "query").read_text(), "client-inputs\n")
+                self.assertEqual("client-inputs\n", (records / "query").read_text())
                 self.assertFalse((records / "deployments").exists())
                 if scenario == "query-failure":
                     self.assertFalse(output.exists())
                     self.assertFalse((records / "creates").exists())
                 elif scenario == "missing-volume":
                     self.assertNotIn("client|", (records / "creates").read_text())
-                    self.assertEqual((records / "removals").read_text(), "grants\n")
+                    self.assertEqual("grants\n", (records / "removals").read_text())
                 else:
                     if scenario == "missing-parent":
                         self.assertEqual(output.parent.stat().st_mode & 0o777, 0o700)
@@ -386,7 +386,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         (records / "creates").read_text().splitlines(),
                         ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"],
                     )
-                    self.assertEqual((records / "removals").read_text(), "grants\nclient\n")
+                    self.assertEqual("grants\nclient\n", (records / "removals").read_text())
                     grants = (records / "client.grants").read_bytes()
                     self.assertNotIn(b"/attempts", grants)
                     self.assertNotIn(b"model_peer", grants)
@@ -444,7 +444,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
     def test_ambiguity_mode_has_one_external_route_and_no_api_native_or_state_grants(self):
         with tempfile.TemporaryDirectory() as temporary:
             result, records, output, key, ca = self._ambiguity(Path(temporary))
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             creates = [line.split("|") for line in (records / "creates").read_text().splitlines()]
             self.assertEqual(
                 [(row[0], row[1]) for row in creates],
@@ -469,7 +469,6 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(forbidden, selection + proxy + probe)
             argv = (records / "proxy.argv").read_text().split("\0")[:-1]
             self.assertEqual(
-                argv[argv.index("--mode") :],
                 [
                     "--mode",
                     "external",
@@ -486,36 +485,37 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "--status-directory",
                     "/diagnostics",
                 ],
+                argv[argv.index("--mode") :],
             )
-            self.assertEqual((output / "resolv.conf").read_text(), "nameserver 192.0.2.53\nnameserver 198.51.100.53\n")
+            self.assertEqual("nameserver 192.0.2.53\nnameserver 198.51.100.53\n", (output / "resolv.conf").read_text())
             waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
             self.assertIn(int(waits["probe"]), (2420, 2419))
-            self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
+            self.assertEqual(["selection", "admission", "probe", "proxy"], (records / "removals").read_text().splitlines())
             self.assertIn("no API Jobs or science", result.stdout)
             self.assertFalse((records / "deployments").exists())
 
     def test_format_choice_mode_reuses_the_same_route_retirement_and_metadata_only_grants(self):
         with tempfile.TemporaryDirectory() as temporary:
             result, records, _output, _key, _ca = self._ambiguity(Path(temporary), probe="formats")
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             creates = [line.split("|")[:2] for line in (records / "creates").read_text().splitlines()]
             self.assertEqual(creates, [["selection", "none"], ["admission", "none"], ["proxy", "host"], ["probe", "none"]])
             for role in ("admission", "probe"):
                 argv = (records / (role + ".argv")).read_text().split("\0")
-                self.assertEqual(argv[argv.index("--probe") + 1], "formats")
+                self.assertEqual("formats", argv[argv.index("--probe") + 1])
             grants = (records / "probe.grants").read_text()
             self.assertIn("interpreter_formats.json,dst=/fixture/cases.json,readonly", grants)
             self.assertNotIn("/native", grants)
             self.assertNotIn("/input/provider.json", grants)
             self.assertNotIn("/input/retained-result.json", grants)
-            self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
+            self.assertEqual(["selection", "admission", "probe", "proxy"], (records / "removals").read_text().splitlines())
             self.assertFalse((records / "deployments").exists())
 
     def test_ambiguity_selector_refusal_has_zero_helper_dispatch(self):
         for missing in ("INTERPRETER_CONFIG", "EXTERNAL_INTERFACE", "RESOLVERS", "OUTPUT"):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
                 result, records, _output, _key, _ca = self._ambiguity(Path(temporary), missing=missing)
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(2, result.returncode)
                 self.assertIn(missing, result.stderr)
                 self.assertFalse((records / "creates").exists())
 
@@ -523,11 +523,11 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
         for failed, changed in ((True, False), (False, True)):
             with self.subTest(failed=failed, changed=changed), tempfile.TemporaryDirectory() as temporary:
                 result, records, _output, _key, _ca = self._ambiguity(Path(temporary), failed=failed, changed=changed)
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(2, result.returncode)
                 self.assertNotIn("qualified;", result.stdout)
                 removals = (records / "removals").read_text().splitlines()
                 self.assertLess(removals.index("probe"), removals.index("proxy"))
-                self.assertEqual((records / "creates").read_text().count("probe|"), 1)
+                self.assertEqual(1, (records / "creates").read_text().count("probe|"))
                 if changed:
                     self.assertIn("source bytes changed", result.stderr)
 
@@ -678,14 +678,14 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
                 expected_status = 7 if failed else 0
-                self.assertEqual(result.returncode, expected_status, result.stderr)
+                self.assertEqual(result.returncode, expected_status, msg=result.stderr)
                 calls = [row.split("|") for row in (records / "deployments").read_text().splitlines()]
                 if failed:
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("qualified;", result.stdout)
                     if failed == "down":
                         self.assertEqual([row[0] for row in calls], ["install", "up", "down", "down"])
-                        self.assertEqual((records / "creates").read_text().count("client|"), 1)
+                        self.assertEqual(1, (records / "creates").read_text().count("client|"))
                         events = (records / "events").read_text().splitlines()
                         self.assertNotIn("signal-peer", events)
                         self.assertNotIn("peer", events)
@@ -698,7 +698,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         events = (records / "events").read_text().splitlines()
                         self.assertLess(events.index("down"), events.index("peer"))
                     continue
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
                 self.assertEqual({row[1] for row in calls}, {(output / "deployment-name").read_text().strip()})
                 self.assertNotIn(calls[0][1], deployment_names)
@@ -714,11 +714,11 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 stage_argv = (records / "stage.argv").read_text().split("\0")[:-1]
                 self.assertIn("--deployment", stage_argv)
                 self.assertEqual(
-                    stage_argv[stage_argv.index("--deployment-settings") + 1],
                     "/input/deployment.toml",
+                    stage_argv[stage_argv.index("--deployment-settings") + 1],
                 )
-                self.assertEqual(stage_argv[stage_argv.index("--api-interface") + 1], "lo")
-                self.assertEqual(stage_argv[stage_argv.index("--api-address") + 1], "127.0.0.1")
+                self.assertEqual("lo", stage_argv[stage_argv.index("--api-interface") + 1])
+                self.assertEqual("127.0.0.1", stage_argv[stage_argv.index("--api-address") + 1])
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
                 self.assertEqual(
                     client_argv[-8:-2] if resumed else client_argv[-6:],
@@ -758,10 +758,10 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 client_grants = (records / "client.grants").read_text().split("\0")[:-1]
                 self.assertIn("--group-add", client_grants)
                 self.assertIn("type=volume,src=fixture-proxy-socket,dst=/run/nmr-api-proxy,readonly,volume-nocopy", client_grants)
-                self.assertEqual(client_argv[client_argv.index("--proxy-socket") + 1], "/run/nmr-api-proxy/proxy.sock")
+                self.assertEqual("/run/nmr-api-proxy/proxy.sock", client_argv[client_argv.index("--proxy-socket") + 1])
                 self.assertEqual(any("dst=/input/upload-receipt.json,readonly" in grant for grant in client_grants), resumed)
                 if resumed:
-                    self.assertEqual(client_argv[-2:], ["--upload-receipt", "/input/upload-receipt.json"])
+                    self.assertEqual(["--upload-receipt", "/input/upload-receipt.json"], client_argv[-2:])
                 self.assertTrue(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in stage_grants))
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))
@@ -798,8 +798,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertIn("tests/integration/provider_runtime/api_prediction.py", capture)
                     self.assertIn("tests/fixtures/preparation/normative/butane_conformers.sdf", capture)
                 if mode != "scripted-pasted":
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "external")
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "fixture0")
+                    self.assertEqual("external", stage_argv[stage_argv.index("--interpreter-route") + 1])
+                    self.assertEqual("fixture0", stage_argv[stage_argv.index("--interpreter-interface") + 1])
                     self.assertEqual(
                         [stage_argv[index + 1] for index, arg in enumerate(stage_argv) if arg == "--resolver"],
                         selectors["RESOLVERS"].split(),
@@ -810,14 +810,14 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertIn(f"type=bind,src={selected_key},dst=/input/interpreter.key,readonly", stage_grants)
                     self.assertIn(f"type=bind,src={selected_ca},dst=/input/interpreter-ca.pem,readonly", stage_grants)
                     self.assertEqual(
-                        (records / "stage.argv").read_text().split("\0")[-3:-1],
                         ["--interpreter-config", "/input/interpreter.toml"],
+                        (records / "stage.argv").read_text().split("\0")[-3:-1],
                     )
                     self.assertFalse(any("model-ready" in grant for grant in stage_grants))
                 else:
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "local")
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "eth0")
+                    self.assertEqual("local", stage_argv[stage_argv.index("--interpreter-route") + 1])
+                    self.assertEqual("eth0", stage_argv[stage_argv.index("--interpreter-interface") + 1])
                     self.assertEqual(stage_argv[stage_argv.index("--interpreter-network") + 1], f"{2:064d}")
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-address") + 1], "127.0.0.1")
+                    self.assertEqual("127.0.0.1", stage_argv[stage_argv.index("--interpreter-address") + 1])
                     self.assertNotIn("--resolver", stage_argv)
                     self.assertFalse(any("interpreter.key" in grant for grant in stage_grants))

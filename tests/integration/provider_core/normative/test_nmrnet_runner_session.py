@@ -41,7 +41,7 @@ assert operation.session is None
             result = subprocess.run(
                 [sys.executable, "-c", code, str(root)], capture_output=True, text=True, timeout=3, check=False
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
@@ -108,7 +108,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         await operation.retire()
         await operation.settle()
         self.assertTrue(operation.session.retirement.scratch_released)
-        self.assertEqual(operation.session.control.fileno(), -1)
+        self.assertEqual(-1, operation.session.control.fileno())
         self.assertIs(self.notices.call_args.args[0], opening.exception)
 
     async def test_observed_channel_failure_while_child_lives_stops_and_joins_original_reader(self):
@@ -183,7 +183,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await operation.settle()
         self.assertEqual(allocations, [])
         self.assertIsNone(operation.allocation)
-        self.assertEqual(operation.session.control.fileno(), -1)
+        self.assertEqual(-1, operation.session.control.fileno())
         self.assertIsInstance(self.notices.call_args.args[0], RunnerStartupStopped)
 
     async def test_never_connected_readiness_expiry_retires_without_a_proof_child(self):
@@ -199,7 +199,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await operation.settle()
             self.assertIsNone(operation.allocation)
             self.assertIsNone(operation.proof)
-            self.assertEqual(operation.session.control.fileno(), -1)
+            self.assertEqual(-1, operation.session.control.fileno())
             notice = self.notices.call_args.args[0]
             failures = notice.exceptions if isinstance(notice, BaseExceptionGroup) else (notice,)
             self.assertTrue(any(isinstance(failure, RunnerStartupUnavailable) for failure in failures))
@@ -253,10 +253,10 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await operation.settle()
             closed.assert_awaited_once()
         worker.wait_closed.assert_not_called()
-        self.assertEqual(operation.session.control.fileno(), -1)
+        self.assertEqual(-1, operation.session.control.fileno())
         self.assertIsNotNone(operation.proof)
-        self.assertEqual(operation.proof.control.fileno(), -1)
-        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.assertEqual(-1, operation.proof.control.fileno())
+        self.assertEqual([], list(self.runner.scratch.iterdir()))
         self.notices.assert_called_once()
         evidence = self.notices.call_args.args[0]
         self.assertTrue(evidence is reset or reset in evidence.exceptions)
@@ -301,7 +301,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await retirement
             await operation.settle()
         self.assertTrue(adopted[0].is_closing())
-        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.assertEqual([], list(self.runner.scratch.iterdir()))
 
     async def test_cancelled_science_close_waiter_keeps_the_original_transport_observation(self):
         operation = self.operation()
@@ -355,8 +355,8 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await operation.settle()
         self.notices.assert_called_once()
         self.assertIs(self.notices.call_args.args[0], failure)
-        self.assertEqual(self.notices.call_args.args[1]["event"], "native_lifecycle_settled")
-        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.assertEqual("native_lifecycle_settled", self.notices.call_args.args[1]["event"])
+        self.assertEqual([], list(self.runner.scratch.iterdir()))
 
     def setUp(self):
         self.runner = RunningSupervisor(role="reader")
@@ -425,7 +425,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await operation.retire()
             await operation.settle()
             self.assertIs(operation._retirement, retained)
-        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.assertEqual([], list(self.runner.scratch.iterdir()))
 
     async def test_lost_control_uses_one_retired_proof_session_without_scientific_commands(self):
         operation = self.operation()
@@ -461,7 +461,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         proof = operation.proof
         await operation.retire()
         self.assertIs(operation.proof, proof)
-        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.assertEqual([], list(self.runner.scratch.iterdir()))
         self.runner.close()
         self.assertNotIn(b"event=fixture_scientific_input", self.runner.diagnostic)
 
@@ -520,8 +520,8 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(RuntimeError, "Injected proof"),
         ):
             await operation.retire()
-        self.assertEqual(operation.proof.control.fileno(), -1)
-        self.assertEqual(operation.proof.science.fileno(), -1)
+        self.assertEqual(-1, operation.proof.control.fileno())
+        self.assertEqual(-1, operation.proof.science.fileno())
         with self.assertRaisesRegex(RuntimeError, "Injected proof"):
             await operation.settle()
         original.close()

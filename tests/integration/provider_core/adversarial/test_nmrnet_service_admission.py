@@ -23,8 +23,8 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
             selected = await select_pending_start(
                 fixture.config, fixture.api, policy=AdmissionPolicy(3, 2), owner=self, claims=fixture.claims
             )
-            self.assertEqual(selected.input.job_ref, "job:free")
-            self.assertEqual(fixture.request_paths, ["/provider/v1/jobs", "/provider/v1/jobs"])
+            self.assertEqual("job:free", selected.input.job_ref)
+            self.assertEqual(["/provider/v1/jobs", "/provider/v1/jobs"], fixture.request_paths)
             self.assertTrue(claim.active)
             await ports.session.retire()
 
@@ -48,8 +48,8 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                             claims=fixture.claims,
                         )
                     self.assertNotIn("PRIVATE", str(caught.exception))
-                    self.assertEqual(len(fixture.api_peer.requests), 2)
-                    self.assertEqual(ports.worker.events, [])
+                    self.assertEqual(2, len(fixture.api_peer.requests))
+                    self.assertEqual([], ports.worker.events)
                     await ports.session.retire()
 
     async def test_wrong_identity_topology_or_missing_owner_refuses_before_network(self):
@@ -67,7 +67,7 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
             for policy, owner in ((AdmissionPolicy(1, 2), None), (object(), self)):
                 with self.assertRaises(ValueError):
                     await select_pending_start(fixture.config, fixture.api, policy=policy, owner=owner, claims=fixture.claims)
-            self.assertEqual(fixture.api_peer.requests, [])
+            self.assertEqual([], fixture.api_peer.requests)
             await ports.session.retire()
 
     def test_invalid_page_work_bounds_are_refused(self):
@@ -88,5 +88,5 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
                 await task
             self.assertIsInstance(fixture.api.last_failure.cause.primary, asyncio.CancelledError)
             await fixture.api.retire(owner=self)
-            self.assertEqual(len(fixture.api_peer.requests), 1)
+            self.assertEqual(1, len(fixture.api_peer.requests))
             await ports.session.retire()
