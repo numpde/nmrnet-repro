@@ -576,7 +576,8 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(file_output=file_output, refusal=refusal):
                     owner, api, _, client = file_sources()
                     await owner.inspect()
-                    headers = store_headers(b"geometry") + (
+                    headers = (
+                        *store_headers(b"geometry"),
                         (b"x-request-id", b"request:store-refusal"),
                         (b"x-private", b"PRIVATE_HEADER"),
                     )

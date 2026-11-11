@@ -328,8 +328,7 @@ class SuccessiveServicePeers(ServicePeers):
         if path.endswith("/fail"):
             if pending.operation is not TerminalOperation.FAIL:
                 raise AssertionError("Failure request differs from the retained terminal choice")
-            result = self.failure_receipt(index, value, pending)
-            return result
+            return self.failure_receipt(index, value, pending)
         if pending.operation is not TerminalOperation.COMPLETE:
             raise AssertionError("Completion request differs from the retained terminal choice")
         content = base64.b64decode(value["canonical_result_base64"], validate=True)
