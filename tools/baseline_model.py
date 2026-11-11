@@ -265,7 +265,13 @@ def main():
     parser.add_argument("--results", type=Path, required=True)
     args = parser.parse_args()
     report = preflight(
-        args.prepared, args.checkpoint_root, args.declaration, args.selection, args.element, args.results, installed_user_directory()
+        args.prepared,
+        args.checkpoint_root,
+        args.declaration,
+        args.selection,
+        args.element,
+        args.results,
+        installed_user_directory(),
     )
     sys.stdout.write(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n")
 

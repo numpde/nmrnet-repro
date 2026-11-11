@@ -44,9 +44,23 @@ def _write(path, raw):
         os.fsync(stream.fileno())
 
 
-def freeze_deployment(definition, settings, secrets, bundle, source_root, models,
-                      *, source_names, deployment, checkout, uid, gid, prepared,
-                      shared_image_id, **identities):
+def freeze_deployment(
+    definition,
+    settings,
+    secrets,
+    bundle,
+    source_root,
+    models,
+    *,
+    source_names,
+    deployment,
+    checkout,
+    uid,
+    gid,
+    prepared,
+    shared_image_id,
+    **identities,
+):
     """Freeze admitted inputs into a fresh generation for Compose normalization.
 
     No API/model request, store opening or worker allocation occurs. Failed
@@ -61,15 +75,21 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     for directory in expected_directories:
         observed = directory.lstat()
         if not stat.S_ISDIR(observed.st_mode) or observed.st_uid != os.geteuid() or stat.S_IMODE(observed.st_mode) != 0o700:
-            raise ConfigurationRejected("the fresh deployment bundle requires caller-owned mode-0700 config and secret directories.")
+            raise ConfigurationRejected(
+                "the fresh deployment bundle requires caller-owned mode-0700 config and secret directories."
+            )
     with os.scandir(bundle / "secrets") as entries:
         secret_children = list(entries)
     if len(secret_children) != 1 or secret_children[0].name != "provider" or not secret_children[0].is_dir(follow_symlinks=False):
-        raise ConfigurationRejected("choose a fresh deployment bundle with only its provider secret directory; existing contents were preserved.")
+        raise ConfigurationRejected(
+            "choose a fresh deployment bundle with only its provider secret directory; existing contents were preserved."
+        )
     for directory in (bundle / "config", bundle / "secrets" / "provider"):
         with os.scandir(directory) as entries:
             if next(entries, None) is not None:
-                raise ConfigurationRejected("choose fresh empty deployment input directories; existing generation contents were preserved.")
+                raise ConfigurationRejected(
+                    "choose fresh empty deployment input directories; existing generation contents were preserved."
+                )
     raw = read_startup_file(definition, maximum_bytes=65536, label="public deployment definition")
     local_raw = read_startup_file(settings, maximum_bytes=65536, label="private deployment settings", secret=True)
     try:
@@ -78,14 +98,23 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     except (ValueError, UnicodeError):
         raise ConfigurationRejected("provider and deployment definitions must contain valid UTF-8 TOML.") from None
     if not {"maximum_startup_bytes", "routes", "deployment"} <= set(local) or set(local) - {
-        "maximum_startup_bytes", "routes", "resolvers", "deployment"
+        "maximum_startup_bytes",
+        "routes",
+        "resolvers",
+        "deployment",
     }:
-        raise ConfigurationRejected("deployment.toml requires maximum_startup_bytes, routes and shared deployment grants; only external routing accepts resolvers.")
+        raise ConfigurationRejected(
+            "deployment.toml requires maximum_startup_bytes, routes and shared deployment grants; only external routing accepts resolvers."
+        )
     grant_input = local["deployment"]
     project = grant_input.get("project") if type(grant_input) is dict else None
     group_id = grant_input.get("gid") if type(grant_input) is dict else None
-    if (type(project) is not str or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,48}", project) is None
-            or type(group_id) is not int or not 0 < group_id <= 4294967294):
+    if (
+        type(project) is not str
+        or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,48}", project) is None
+        or type(group_id) is not int
+        or not 0 < group_id <= 4294967294
+    ):
         raise ConfigurationRejected("deployment.toml [deployment] requires the shared project name and nonzero socket group ID.")
     grants = SharedGrants(project, group_id)
     if "delivery" not in document or type(document["delivery"]) is not dict:
@@ -93,8 +122,9 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     if "api" in document:
         raise ConfigurationRejected("API identity and trust settings must come from the provider's private api.toml.")
     try:
-        api_raw = read_startup_file(_source_path(secrets / "api.toml", secrets), maximum_bytes=65536,
-                                    label="provider API settings", secret=True)
+        api_raw = read_startup_file(
+            _source_path(secrets / "api.toml", secrets), maximum_bytes=65536, label="provider API settings", secret=True
+        )
         document["api"] = tomllib.loads(api_raw.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise ConfigurationRejected("provider API settings require valid UTF-8 TOML.") from None
@@ -165,6 +195,7 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
 
     config = _read_provider_config(path, read_frozen, read_api_file=read_frozen)
     capture_execution(source_root, bundle, source_names, **identities)
+
     # Repository declarations arrive as individual read-only source grants.
     # Checkout write modes are unrelated to the frozen config/secret policy.
     def source_bytes(value, maximum_bytes):
@@ -183,9 +214,19 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     _write(bundle / "prediction-models.json", model_raw)
     for name in ("inference.lock", "unicore-source.json"):
         _write(bundle / name, source_bytes(source_root / "requirements" / name, 1024 * 1024))
-    plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
-                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=routes, grants=grants,
-                          shared_image_id=shared_image_id)
+    plan = render_compose(
+        config,
+        deployment=deployment,
+        checkout=checkout,
+        bundle=bundle,
+        uid=uid,
+        gid=gid,
+        prepared=prepared,
+        execution=execution,
+        routes=routes,
+        grants=grants,
+        shared_image_id=shared_image_id,
+    )
     external = any(route["mode"] == "external" for route in local["routes"].values())
     if external:
         resolvers = local.get("resolvers")
@@ -196,7 +237,9 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         except ipaddress.AddressValueError:
             raise ConfigurationRejected("deployment resolvers require literal IPv4 addresses.") from None
         if len(set(addresses)) != len(addresses) or any(address.is_loopback for address in addresses):
-            raise ConfigurationRejected("deployment resolvers must be distinct non-loopback IPv4 addresses reachable on the selected interface.")
+            raise ConfigurationRejected(
+                "deployment resolvers must be distinct non-loopback IPv4 addresses reachable on the selected interface."
+            )
         _write(bundle / "resolv.conf", "".join("nameserver " + str(address) + "\n" for address in addresses).encode())
     elif "resolvers" in local:
         raise ConfigurationRejected("resolvers are unused by local/mapped routes; remove that grant.")
@@ -208,8 +251,9 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
 def creation_plan(bundle):
     """Decode the public Compose recipe's literal-dollar encoding."""
     try:
-        encoded = read_startup_file(_bind_path(Path(bundle) / "compose.json"), maximum_bytes=1024 * 1024,
-                                    label="original Compose creation plan")
+        encoded = read_startup_file(
+            _bind_path(Path(bundle) / "compose.json"), maximum_bytes=1024 * 1024, label="original Compose creation plan"
+        )
         return read_document(encoded.replace(b"$$", b"$"), 1024 * 1024)
     except ResponseRejected as cause:
         raise ConfigurationRejected("original Compose plan requires strict retained JSON.", cause=cause) from None
@@ -275,9 +319,15 @@ def require_old_api_route(bundle, directory):
     plan = creation_plan(bundle)
     api = plan.get("services", {}).get("api", {})
     grants = [grant for grant in api.get("volumes", []) if grant.get("target") == "/route"]
-    if (len(grants) != 1 or grants[0].get("type") != "bind"
-            or grants[0].get("source") != str(directory) or grants[0].get("read_only") is not False):
-        raise ConfigurationRejected("Cannot retire the old API route: the selected recipe does not grant its private directory to the API service.")
+    if (
+        len(grants) != 1
+        or grants[0].get("type") != "bind"
+        or grants[0].get("source") != str(directory)
+        or grants[0].get("read_only") is not False
+    ):
+        raise ConfigurationRejected(
+            "Cannot retire the old API route: the selected recipe does not grant its private directory to the API service."
+        )
 
 
 def initialize_lifetime(uid, gid):
@@ -294,7 +344,9 @@ def initialize_lifetime(uid, gid):
         raise ConfigurationRejected("refusing to change a provider lifetime volume with unexpected ownership or mode.")
     with os.scandir(path) as entries:
         if next(entries, None) is not None:
-            raise ConfigurationRejected("refusing to change a nonempty provider lifetime volume with unexpected ownership or mode.")
+            raise ConfigurationRejected(
+                "refusing to change a nonempty provider lifetime volume with unexpected ownership or mode."
+            )
     descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
         os.fchmod(descriptor, 0o700)
@@ -324,10 +376,14 @@ def prepare_runtime(runtime_root, uid, gid, *, check_only=False):
     for name, leaves in expected.items():
         directory = runtime_root / name
         observed = directory.lstat()
-        if (not stat.S_ISDIR(observed.st_mode)
-                or observed.st_uid not in {os.geteuid(), uid}
-                or stat.S_IMODE(observed.st_mode) != 0o700):
-            raise ConfigurationRejected("provider runtime directories must be private directories owned by the caller or mapped service user.")
+        if (
+            not stat.S_ISDIR(observed.st_mode)
+            or observed.st_uid not in {os.geteuid(), uid}
+            or stat.S_IMODE(observed.st_mode) != 0o700
+        ):
+            raise ConfigurationRejected(
+                "provider runtime directories must be private directories owned by the caller or mapped service user."
+            )
         with os.scandir(directory) as entries:
             actual = {entry.name: entry for entry in entries}
         if set(actual) - set(leaves):
@@ -345,9 +401,10 @@ def prepare_runtime(runtime_root, uid, gid, *, check_only=False):
                 raise ConfigurationRejected(
                     f"provider runtime entry {relative} has another hard link; refusing ownership change because it would change that alias too."
                 )
-            if (not is_type(item.st_mode) or item.st_uid not in {os.geteuid(), uid}
-                    or stat.S_IMODE(item.st_mode) != 0o600):
-                raise ConfigurationRejected("provider runtime files must be private, standalone regular files or sockets owned by the caller or mapped service user.")
+            if not is_type(item.st_mode) or item.st_uid not in {os.geteuid(), uid} or stat.S_IMODE(item.st_mode) != 0o600:
+                raise ConfigurationRejected(
+                    "provider runtime files must be private, standalone regular files or sockets owned by the caller or mapped service user."
+                )
             ownership_targets.append(path)
         ownership_targets.append(directory)
     if check_only:
@@ -384,22 +441,36 @@ def client_inputs(*, bundle, prediction_image_id, client_root):
     admitted = _read_provider_config(configuration, read_file, read_api_file=read_file)
     _disjoint(client_root, bundle.parent.parent)
     identity = {
-        "origin": admitted.api.identity.origin, "authority": admitted.api.identity.authority,
+        "origin": admitted.api.identity.origin,
+        "authority": admitted.api.identity.authority,
         "profile": tomllib.loads(raw.decode())["api"]["profile"],
-        "topology": admitted.api.expected_topology, "provider_ref": admitted.lifecycle.scope.provider_ref,
+        "topology": admitted.api.expected_topology,
+        "provider_ref": admitted.lifecycle.scope.provider_ref,
         "interpretation_scripted": False,
-        "interpreter": {"timeout_seconds": admitted.interpreter.timeout_seconds, "endpoints": [
-            json.loads(ChatEndpoint(endpoint.spec, transport=None, request_bytes=endpoint.request_bytes,
-                                    response_bytes=endpoint.response_bytes).identity)
-            for endpoint in admitted.interpreter.endpoints
-        ]},
-        "prediction_image_id": prediction_image_id, "bundle": bundle.name,
+        "interpreter": {
+            "timeout_seconds": admitted.interpreter.timeout_seconds,
+            "endpoints": [
+                json.loads(
+                    ChatEndpoint(
+                        endpoint.spec,
+                        transport=None,
+                        request_bytes=endpoint.request_bytes,
+                        response_bytes=endpoint.response_bytes,
+                    ).identity
+                )
+                for endpoint in admitted.interpreter.endpoints
+            ],
+        },
+        "prediction_image_id": prediction_image_id,
+        "bundle": bundle.name,
     }
     sys.stdout.write(json.dumps(identity, sort_keys=True) + "\n")
 
 
 def main(arguments=None):
-    parser = argparse.ArgumentParser(description="Prepare deployment configuration and export public-client expectations offline.")
+    parser = argparse.ArgumentParser(
+        description="Prepare deployment configuration and export public-client expectations offline."
+    )
     operations = parser.add_subparsers(dest="operation", required=True)
     freeze = operations.add_parser("freeze", help="Freeze one deployment generation without starting services.")
     for name in ("definition", "settings", "secrets", "bundle", "source-root", "models", "checkout", "prepared"):

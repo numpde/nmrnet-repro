@@ -21,11 +21,18 @@ from tools.wheelhouse import requirements, wheel_inputs_from_report
 
 
 def _install_core(python, lock, runtime_wheels, evidence_root):
-    installed = json.loads(subprocess.check_output(
-        [str(python), "-I", "-B", "-c",
-         "import importlib.metadata,json,re; print(json.dumps({re.sub(r'[-_.]+','-',d.metadata['Name']).lower():d.version for d in importlib.metadata.distributions()}))"],
-        text=True,
-    ))
+    installed = json.loads(
+        subprocess.check_output(
+            [
+                str(python),
+                "-I",
+                "-B",
+                "-c",
+                "import importlib.metadata,json,re; print(json.dumps({re.sub(r'[-_.]+','-',d.metadata['Name']).lower():d.version for d in importlib.metadata.distributions()}))",
+            ],
+            text=True,
+        )
+    )
     for name, version in requirements(lock):
         if name in installed and installed[name] != version:
             raise ValueError(
@@ -35,9 +42,24 @@ def _install_core(python, lock, runtime_wheels, evidence_root):
     with tempfile.TemporaryDirectory(prefix="provider-install-") as temporary:
         report = Path(temporary) / "runtime-install.json"
         subprocess.run(
-            [*pip, "install", "--ignore-installed", "--disable-pip-version-check", "--no-cache-dir",
-             "--no-index", "--no-deps", "--only-binary=:all:", "--require-hashes", "--no-compile",
-             "--report", str(report), "--find-links", str(runtime_wheels), "-r", str(lock)],
+            [
+                *pip,
+                "install",
+                "--ignore-installed",
+                "--disable-pip-version-check",
+                "--no-cache-dir",
+                "--no-index",
+                "--no-deps",
+                "--only-binary=:all:",
+                "--require-hashes",
+                "--no-compile",
+                "--report",
+                str(report),
+                "--find-links",
+                str(runtime_wheels),
+                "-r",
+                str(lock),
+            ],
             check=True,
         )
         identities = {"runtime": wheel_inputs_from_report(lock, runtime_wheels, report)}
@@ -50,7 +72,8 @@ def _install_binding(python, source):
     # Bindings live beside the core wheel so -I excludes ambient source while
     # still finding image-owned code. They are not a second distribution.
     location = subprocess.check_output(
-        [str(python), "-I", "-B", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True,
+        [str(python), "-I", "-B", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+        text=True,
     ).strip()
     installed = Path(location)
     for name in ("nmrnet_provider", "nmrnet_inference"):
@@ -81,7 +104,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "source", "install-lock", "runtime-wheels"):
         parser.add_argument("--" + name, type=Path, required=True)
-    parser.add_argument("--python", type=Path, help="Extend this existing scientific interpreter; otherwise create the controller environment.")
+    parser.add_argument(
+        "--python", type=Path, help="Extend this existing scientific interpreter; otherwise create the controller environment."
+    )
     options = parser.parse_args()
     if options.python is None:
         install_provider(options.root, options.source, options.install_lock, options.runtime_wheels)
