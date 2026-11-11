@@ -16,6 +16,84 @@ from tools import wheelhouse, wheelhouse_acquire
 
 
 class SharedAcquisitionIntegrationTests(unittest.TestCase):
+    def test_released_streamer_refuses_selected_wheel_symlink(self):
+        pool = Path("/wheelhouse")
+        pin = next(
+            line for line in Path("/input/wheelhouse-tool-assets.in").read_text().splitlines() if line.startswith("https://")
+        )
+        url, tool_hash = pin.rsplit("#sha256=", 1)
+        tool = pool / url.rsplit("/", 1)[-1]
+        self.assertEqual(tool_hash, hashlib.sha256(tool.read_bytes()).hexdigest())
+        wheel_pin = next(
+            line
+            for line in Path("/input/provider-core-assets.in").read_text().splitlines()
+            if line.partition("#")[0].endswith(".whl")
+        )
+        wheel_url, wheel_hash = wheel_pin.rsplit("#sha256=", 1)
+        wheel = Path(urllib.parse.urlsplit(wheel_url).path).name
+        target = pool / wheel
+        self.assertEqual(wheel_hash, hashlib.sha256(target.read_bytes()).hexdigest())
+        with tempfile.TemporaryDirectory(prefix="nmrnet-stream-link-") as temporary:
+            root = Path(temporary)
+            linked_pool = root / "pool"
+            linked_pool.mkdir()
+            (linked_pool / wheel).symlink_to(target)
+            allowlist = root / "sources.json"
+            allowlist.write_text("[]")
+            report = root / "report.json"
+            report_output = io.StringIO()
+            with wheelhouse_acquire.pool_lock(pool, exclusive=False) as descriptor:
+                wheelhouse.select_wheels(
+                    Path("/input/provider-core-native-install.lock"), pool, report_output=report_output, lock_fd=descriptor
+                )
+            report.write_text(report_output.getvalue())
+            projected = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    str(tool),
+                    "report",
+                    "--report",
+                    str(report),
+                    "--pool",
+                    str(pool),
+                    "--directory",
+                    "wheelhouse/runtime",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(
+                [{"directory": "wheelhouse/runtime", "filename": wheel, "sha256": wheel_hash}],
+                json.loads(projected.stdout),
+            )
+            manifest = root / "manifest.json"
+            manifest.write_text(projected.stdout)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    str(tool),
+                    "stream",
+                    "--pool",
+                    str(linked_pool),
+                    "--source-allowlist",
+                    str(allowlist),
+                    "--manifest",
+                    str(manifest),
+                ],
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b"Too many levels of symbolic links", result.stderr)
+            self.assertTrue((linked_pool / wheel).is_symlink())
+
     def test_released_streamer_emits_captured_source_and_selected_cached_wheel(self):
         pool = Path("/wheelhouse")
         pin = next(
