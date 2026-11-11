@@ -55,13 +55,15 @@ def require_read_options(source_format, source_unit, selection, alternate_locati
         raise InputRejected("Cannot select alternate locations: this option applies only to PDB sources.")
     if source_format != "json" or source_unit is not None:
         coordinate_conversion(source_unit)
+    # silent-defaults: allow-contract -- PDB MODEL identifiers occupy four decimal columns; MAX_RECORDS separately bounds selection count and other formats' source-record ordinals.
+    record_number_limit = 9999 if source_format == "pdb" else MAX_RECORDS
     if source_format not in ("xyz", "sdf", "pdb", "mol2"):
         if selection is not None:
             raise InputRejected("Cannot select records: JSON, coordinate tables and MOL contain one geometry; omit selection.")
     elif selection != "all" and not (
         type(selection) is tuple
         and 1 <= len(selection) <= MAX_RECORDS
-        and all(type(number) is int and 1 <= number <= (9999 if source_format == "pdb" else MAX_RECORDS) for number in selection)
+        and all(type(number) is int and 1 <= number <= record_number_limit for number in selection)
         and len(set(selection)) == len(selection)
     ):
         raise InputRejected(
@@ -166,6 +168,7 @@ def _read_options(request):
         raise WorkerProtocolError("Structure worker accepts only read_geometry with its exact source and option fields.")
     selection = tuple(request["selection"]) if type(request["selection"]) is list else request["selection"]
     source_format, source_unit = request["source_format"], request["source_unit"]
+    # silent-defaults: allow-contract -- Exact request fields require alternate_location only for PDB; None marks that option inapplicable to every other admitted format.
     alternate_location = request["alternate_location"] if source_format == "pdb" else None
     require_read_options(source_format, source_unit, selection, alternate_location)
     return source_format, source_unit, selection, alternate_location
@@ -221,6 +224,7 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
         raise WorkerProtocolError("Structure worker must return between 1 and 128 geometry records.")
     expected_numbers = tuple(range(1, len(records) + 1)) if selection == "all" else selection
     if source_format == "pdb" and selection == "all":
+        # silent-defaults: allow-contract -- Missing identifiers and non-object PDB records project None for immediate rejection; no source MODEL identifier is invented.
         expected_numbers = [record.get("source_record_number") if type(record) is dict else None for record in records]
         if any(type(number) is not int or not 1 <= number <= 9999 for number in expected_numbers) or len(
             set(expected_numbers)
@@ -235,12 +239,14 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     source_sha256 = hashlib.sha256(source).hexdigest()
     # JSON owns its unit. Bind the reply to the deterministic angstrom request
     # derived from the original source, not merely any valid worker request.
+    # silent-defaults: allow-contract -- Derive original executable bytes only for JSON; qualified native readers own parsing for other formats.
     source_geometry = prepare_json(source, source_unit=source_unit) if source_format == "json" else None
     resolved_unit = source_geometry.source_unit if source_geometry is not None else source_unit
     factor, reference = coordinate_conversion(resolved_unit)
     line_count = len(source.splitlines())
     prepared = []
     for record, number in zip(records, expected_numbers, strict=True):
+        # silent-defaults: allow-contract -- JSON replies must match the original deterministic conversion; None leaves native formats to their source-position checks.
         geometry = _prepared_record(
             record, number, source_geometry.request_bytes if source_geometry is not None else None, source_format, line_count
         )
