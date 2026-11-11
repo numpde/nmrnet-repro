@@ -56,6 +56,8 @@ class AcquisitionEngine:
         self.containers[identifier] = {"role": role, "network": network, "mounts": mounts, "phase": "created"}
         self.save()
         receipt.write_text(identifier + "\n")
+        if role == "worker-1":
+            (self.root / "worker-cid-path").write_text(str(receipt))
         sys.stdout.write(f"{identifier}\n")
         return 0
 
@@ -102,6 +104,10 @@ class AcquisitionEngine:
             record["exit_status"] = int(os.environ["NMRNET_FAKE_WORKER_STATUS"])
         self.save()
         if role == "worker-1":
+            if "NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT" in os.environ:
+                receipt = Path((self.root / "worker-cid-path").read_text())
+                receipt.write_text(os.environ["NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT"] + "\n")
+                (self.root / "attach-completed").write_text(str(os.getpid()))
             return record["exit_status"]
         return 0
 

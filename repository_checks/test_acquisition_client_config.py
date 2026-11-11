@@ -266,8 +266,18 @@ class AcquisitionClientTests(unittest.TestCase):
                 group = int(child)
                 if self._anchor(group, process.pid) is None:
                     continue
+                # silent-defaults: allow-contract -- Register only a verified caller anchor; rescue verifies it again before acting; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_scope_cleanup_report_sigint_before_stderr_drain
+                self.observed.setdefault(process.pid, set()).add(group)
                 try:
                     publishers = Path("/proc", child, "task", child, "children").read_text().split()
+                    frontier = publishers[:]
+                    for _ in range(2):
+                        frontier = [
+                            descendant
+                            for intermediary in frontier
+                            for descendant in Path("/proc", intermediary, "task", intermediary, "children").read_text().split()
+                        ]
+                        publishers.extend(frontier)
                     for publisher in publishers:
                         arguments = Path("/proc", publisher, "cmdline").read_bytes().split(b"\0")
                         if arguments == expected and Path("/proc", publisher, "wchan").read_text().strip() in {
@@ -275,8 +285,7 @@ class AcquisitionClientTests(unittest.TestCase):
                             "anon_pipe_write",
                         }:
                             self.assertEqual(group, os.getpgid(int(publisher)))
-                            # silent-defaults: allow-contract -- Register the caller group only after matching its live anchor and exact blocked publisher; rescue rechecks the recorded anchor before admitting it; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_cleanup_report_signals_finish_before_stderr_drain
-                            self.observed.setdefault(process.pid, set()).add(group)
+                            self.assertEqual(process.pid, os.getsid(int(publisher)))
                             return int(publisher)
                 except (FileNotFoundError, ProcessLookupError):
                     continue
@@ -817,6 +826,97 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertFalse(Path("/proc", str(publisher)).exists())
                 self.assertEqual(b"damaged-started-worker\n", (scratch / "worker.cid").read_bytes())
                 self.assertFalse(Path(self.fixture.calls()[-1]["client_config"]["path"]).parent.exists())
+
+    def test_scope_cleanup_report_sighup_before_stderr_drain(self):
+        self._scope_cleanup_report_signal(signal.SIGHUP)
+
+    def test_scope_cleanup_report_sigint_before_stderr_drain(self):
+        self._scope_cleanup_report_signal(signal.SIGINT)
+
+    def test_scope_cleanup_report_sigterm_before_stderr_drain(self):
+        self._scope_cleanup_report_signal(signal.SIGTERM)
+
+    def _scope_cleanup_report_signal(self, interrupt):
+        owner = (self.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").read_text()
+        marker = "python3 -I -S -B -c '\n"
+        self.assertEqual(1, owner.count(marker))
+        program = ("\n" + owner.split(marker)[1].split('\' "$_acq_diagnostic"', 1)[0]).encode()
+        (self.root / "attach-completed").unlink(missing_ok=True)
+        receipt = self.root / f"scope-retired-{interrupt.value}"
+        command = [
+            "bash",
+            str(self.root / "tools/acquisition_run.sh"),
+            "--retired-receipt",
+            str(receipt),
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
+        ]
+        before = len(self.fixture.calls())
+        process, descriptor, prefill = self._start_command(
+            command,
+            {
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                "NMRNET_FAKE_WORKER_STATUS": "0",
+                "NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT": "damaged-started-worker",
+            },
+            full_stderr=True,
+        )
+        deadline = time.monotonic() + 15
+        while not (self.root / "attach-completed").exists() and time.monotonic() < deadline:
+            try:
+                children = Path("/proc", str(process.pid), "task", str(process.pid), "children").read_text().split()
+                for child in children:
+                    group = int(child)
+                    if self._anchor(group, process.pid) is not None:
+                        # silent-defaults: allow-contract -- Register only a verified caller anchor; rescue verifies it again before acting; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_scope_cleanup_report_sigint_before_stderr_drain
+                        self.observed.setdefault(process.pid, set()).add(group)
+            except FileNotFoundError:
+                break
+            time.sleep(0.01)
+        self.assertTrue((self.root / "attach-completed").exists())
+        worker_cid = Path((self.root / "worker-cid-path").read_text())
+        scratch = worker_cid.parent.parent
+        self.retained.add(scratch)
+        self._remember()
+        diagnostic = (
+            "Cannot remove acquisition worker-1: its container identity no longer matches its creation receipt.\n" * 2
+            + f"Cannot confirm acquisition retirement; retained operation {scratch}.\n"
+        )
+        expected = [
+            os.fsencode(self.environment["NMRNET_FIXTURE_PYTHON"]),
+            b"-B",
+            b"-I",
+            b"-S",
+            b"-B",
+            b"-c",
+            program,
+            diagnostic.encode(),
+            b"",
+            os.fsencode(scratch / "failure.stderr"),
+            b"",
+        ]
+        publisher = self._observe_reporter(process, expected)
+        group = os.getpgid(publisher)
+        self.assertEqual(
+            diagnostic + f"Rendered acquisition error retained at {scratch}/failure.stderr.\n",
+            (scratch / "failure.stderr").read_text(),
+        )
+        self._finish_full_pipe(process, descriptor, prefill, interrupt, -interrupt)
+        self.assertFalse(Path("/proc", str(publisher)).exists())
+        self.assertFalse(Path("/proc", str(group)).exists())
+        self.assertEqual(b"damaged-started-worker\n", worker_cid.read_bytes())
+        self.assertEqual(("3" * 64 + "\n").encode(), (worker_cid.parent / "stdout").read_bytes())
+        self.assertFalse(receipt.exists())
+        calls = self.fixture.calls()[before:]
+        self.assertFalse(any(call["arguments"][0] == "rm" for call in calls))
+        self.assertTrue(Path(calls[-1]["client_config"]["path"]).is_dir())
+        self.assertEqual({"1" * 64, "2" * 64, "3" * 64}, set(json.loads((self.root / "acquisition-containers.json").read_text())))
 
     def test_failed_private_config_cleanup_preserves_primary_and_attempt_truth(self):
         self._intercept("rm")
