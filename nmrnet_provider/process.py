@@ -281,6 +281,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     async def refresh_status():
         try:
             while True:
+                # Related regression (partial): tests/integration/provider_core/normative/test_nmrnet_process.py::ForegroundProcessTests.test_current_readiness_tracks_periodic_hello_failure_and_recovery covers ready, API uncertainty, recovery and stopping, not a held heartbeat.
+                # silent-defaults: allow-contract -- A stop request publishes stopping unless unresolved ownership has selected held, which periodic refresh must preserve.
                 process_status.refresh("stopping" if stop.is_set() and status_phase != "held" else status_phase)
                 await asyncio.sleep(5)
         except asyncio.CancelledError:
@@ -383,6 +385,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                     {
                         "event": "api_condition_retry",
                         "phase": phase,
+                        # Related regression (partial): tests/integration/provider_core/normative/test_nmrnet_process.py::ForegroundProcessTests.test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention covers condition notices and reference redaction, not absent or secret-valued condition codes.
+                        # silent-defaults: allow-contract -- A missing condition stays null; a present condition is redacted before notice delivery or failed-output retention.
                         "condition_code": redact(code) if code is not None else None,
                         "condition_receipt_received": False,
                         "retry_seconds": seconds,
@@ -394,6 +398,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                     {
                         "event": "api_condition_recovered",
                         "phase": phase,
+                        # Related regression (partial): tests/integration/provider_core/normative/test_nmrnet_process.py::ForegroundProcessTests.test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention covers condition notices and reference redaction, not absent or secret-valued condition codes.
+                        # silent-defaults: allow-contract -- A missing condition stays null; a present condition is redacted before notice delivery or failed-output retention.
                         "condition_code": redact(code) if code is not None else None,
                         "condition_receipt_received": True,
                     },
@@ -471,6 +477,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             except OSError as cause:
                 failures.append(("provider lifetime lock release", cause))
                 released = False
+    # Related regression (partial): tests/integration/provider_core/adversarial/test_nmrnet_process.py::ForegroundProcessRefusalTests.test_held_setup_reports_before_host_kill_and_keeps_its_lifetime_and_original_task covers retained owners, not the held status document.
+    # silent-defaults: allow-contract -- Confirmed retirement selects stopping; unresolved owners select held and keep their readiness task alive.
     status_phase = "stopping" if released else "held"
     try:
         process_status.refresh(status_phase)
@@ -481,6 +489,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         # suppress() can split exception groups; this handler catches only the whole exception.
         try:  # noqa: SIM105
             await status_task
+        # Related regression (partial): tests/integration/provider_core/normative/test_nmrnet_process.py::ForegroundProcessTests.test_current_readiness_tracks_periodic_hello_failure_and_recovery covers clean exit after stopping, not cancellation identity.
+        # silent-defaults: allow-contract -- After confirmed release, join the explicitly cancelled readiness task and accept its cancellation without splitting exception groups.
         except asyncio.CancelledError:
             pass
     try:
