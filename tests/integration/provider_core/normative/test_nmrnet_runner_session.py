@@ -53,9 +53,11 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         async def cancel_adoption(**_options):
             raise original
 
-        with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=cancel_adoption):
-            with self.assertRaises(asyncio.CancelledError) as caught:
-                await operation.start()
+        with (
+            patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=cancel_adoption),
+            self.assertRaises(asyncio.CancelledError) as caught,
+        ):
+            await operation.start()
         self.assertIs(caught.exception, original)
         self.assertIsNotNone(operation.allocation)
         await operation.retire()
@@ -92,9 +94,11 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         async def fail_adoption(**_options):
             raise SystemExit(7)
 
-        with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=fail_adoption):
-            with self.assertRaises(BaseExceptionGroup) as opening:
-                await operation.start()
+        with (
+            patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=fail_adoption),
+            self.assertRaises(BaseExceptionGroup) as opening,
+        ):
+            await operation.start()
         self.assertTrue(any(isinstance(cause, SystemExit) for cause in opening.exception.exceptions))
         self.assertIsNotNone(operation.allocation)
         await operation.retire()
@@ -507,9 +511,11 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             connect(session, **options)
             raise RuntimeError("Injected proof setup failure after descriptor admission")
 
-        with patch.object(RunnerSession, "connect", failed_after_admission):
-            with self.assertRaisesRegex(RuntimeError, "Injected proof"):
-                await operation.retire()
+        with (
+            patch.object(RunnerSession, "connect", failed_after_admission),
+            self.assertRaisesRegex(RuntimeError, "Injected proof"),
+        ):
+            await operation.retire()
         self.assertEqual(operation.proof.control.fileno(), -1)
         self.assertEqual(operation.proof.science.fileno(), -1)
         with self.assertRaisesRegex(RuntimeError, "Injected proof"):
