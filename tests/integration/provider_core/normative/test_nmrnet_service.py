@@ -521,6 +521,11 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(received), 1)
             wire = json.loads(received[0])
             self.assertEqual(wire["failure_code"], "interpretation_failed")
+            self.assertEqual(
+                wire["failure_message"],
+                guidance
+                + " This report was not independently verified. The provider retains the model's explanation as private evidence.",
+            )
             self.assertNotIn(b"PRIVATE_SOURCE_EXCERPT", received[0])
             self.assertNotIn(b"private_model_key", received[0].lower())
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())

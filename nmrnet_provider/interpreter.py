@@ -250,8 +250,7 @@ class _InputProblemReport:
 class ModelReportedInputProblem(RuntimeError):
     """End selection with an unverified model report and retain its private evidence."""
 
-    # silent-defaults: allow-contract -- A model can report an input problem without an earlier endpoint failure; an empty history means no earlier failure was observed.
-    def __init__(self, report, observation, *, endpoint_failures=(), correction_failures=()):
+    def __init__(self, report):
         """Expose provider-written guidance and keep the model explanation private."""
         # Even after credential redaction, the admitted explanation may contain
         # private molecular data. Public guidance comes only from the issue category.
@@ -261,9 +260,6 @@ class ModelReportedInputProblem(RuntimeError):
         )
         self.issue = report.issue
         self.explanation = report.explanation
-        self.observation = observation
-        self.endpoint_failures = tuple(endpoint_failures)
-        self.correction_failures = tuple(correction_failures)
 
 
 class InspectionUnavailable(RuntimeError):
@@ -441,7 +437,7 @@ class InputInterpreter:
             if not message.strip() or not message.isprintable() or len(message.encode("utf-8")) > 2048:
                 raise ToolRejected("Provide a nonblank, single-line printable explanation within 2048 UTF-8 bytes.")
             report = _InputProblemReport(arguments["issue"], message)
-            cause = ModelReportedInputProblem(report, b"{}")
+            cause = ModelReportedInputProblem(report)
             raise ModelReportedInterpretationProblem(model_summary=_PROBLEM_GUIDANCE[report.issue]) from cause
         if name == "prepare_smiles":
             await capability.prepare_smiles(**arguments)

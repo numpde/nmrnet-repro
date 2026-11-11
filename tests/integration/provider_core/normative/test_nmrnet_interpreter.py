@@ -22,9 +22,11 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import PreparedUploadMember
-from nmrnet_provider.interpreter import PROMPT
+from nmrnet_provider.interpreter import PROMPT, ModelReportedInputProblem
 from nmrnet_provider.upload_archive import inspect_upload, select_member
 from nmrnet_provider.xyz import prepare_xyz
+from provider_core.chat_errors import ChatFailed
+from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
 from provider_core.upload_response import UploadMember, UploadSet
 from provider_core.uploads import VerifiedUpload
 
@@ -158,6 +160,72 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["interpretation"]["visits"][-1]["corrections"], 0)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
             self.assertEqual(len(peer.request_bodies), 1)
+
+    async def test_model_report_falls_back_to_successful_preparation(self):
+        ports = SessionPorts()
+
+        async def first_reply(_headers, _raw):
+            return tool_reply(
+                "report", "report_interpretation_problem", {"issue": "source_unit_unclear", "message": "PRIVATE REPORT"}
+            )
+
+        async def second_reply(_headers, _raw):
+            return tool_reply(
+                "prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "output": {"verbosity": "max"}}
+            )
+
+        async with (
+            TlsPeer("success", response_factory=first_reply) as first_peer,
+            TlsPeer("success", response_factory=second_reply) as second_peer,
+        ):
+            endpoints = (chat_endpoint(first_peer, identifier="first"), chat_endpoint(second_peer, identifier="second"))
+            chooser = fixture_interpreter(endpoints, timeout_seconds=4)
+            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            self.addAsyncCleanup(session.retire)
+            handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
+            self.assertEqual(len(first_peer.request_bodies), 1)
+            self.assertEqual(len(second_peer.request_bodies), 1)
+            self.assertNotIn("PRIVATE REPORT", second_peer.request_bodies[0].decode())
+            outcome = await session.execute(handle, report_condition=unexpected_condition)
+            self.assertEqual(ports.worker.events, ["prepare", "execute"])
+            self.assertNotIn(b"PRIVATE REPORT", outcome.content)
+            self.assertTrue(all(endpoint.retirement_confirmed for endpoint in endpoints))
+
+    async def test_model_report_followed_by_unavailable_endpoint_keeps_operational_failure(self):
+        ports = SessionPorts()
+
+        async def first_reply(_headers, _raw):
+            return tool_reply(
+                "report", "report_interpretation_problem", {"issue": "source_unit_unclear", "message": "PRIVATE REPORT"}
+            )
+
+        async with (
+            TlsPeer("success", response_factory=first_reply) as first_peer,
+            TlsPeer("success", response_status=503, response_body=b"PRIVATE BODY") as second_peer,
+        ):
+            endpoints = (chat_endpoint(first_peer, identifier="first"), chat_endpoint(second_peer, identifier="second"))
+            chooser = fixture_interpreter(endpoints, timeout_seconds=4)
+            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            self.addAsyncCleanup(session.retire)
+            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            failure = chooser._conversation.last_failure
+            self.assertIs(type(failure), InterpretationFailed)
+            self.assertEqual(outcome.code, "interpretation_failed")
+            self.assertEqual(outcome.message, str(failure))
+            handoff = next(error for visit, error in failure.failures if visit == 1)
+            self.assertIs(type(handoff), ModelReportedInterpretationProblem)
+            self.assertIs(type(handoff.__cause__), ModelReportedInputProblem)
+            self.assertEqual(handoff.__cause__.explanation, "PRIVATE REPORT")
+            self.assertTrue(any(visit == 2 and isinstance(error, ChatFailed) for visit, error in failure.failures))
+            diagnostics = outcome.evidence.content.decode()
+            self.assertIn("PRIVATE REPORT", diagnostics)
+            self.assertIn('"status":503', diagnostics)
+            self.assertNotIn("PRIVATE BODY", diagnostics)
+            self.assertNotIn("PRIVATE REPORT", outcome.message)
+            self.assertEqual(len(first_peer.request_bodies), 1)
+            self.assertGreaterEqual(len(second_peer.request_bodies), 1)
+            self.assertEqual(ports.worker.events, [])
 
     async def test_lost_reply_before_dispatch_falls_back_and_prepares_once(self):
         ports = SessionPorts()

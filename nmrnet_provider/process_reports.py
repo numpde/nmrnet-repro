@@ -70,11 +70,6 @@ def _owned_relationships(error):
     if kind in (ProviderProcessFailed, ServiceFailed, SessionRetirementFailed, PreparationRetirementFailed):
         for operation, cause in error.failures:
             yield operation, cause
-    if kind is ModelReportedInputProblem:
-        for endpoint_index, cause in error.endpoint_failures:
-            yield f"interpreter endpoint {endpoint_index} failure", cause
-        for turn_index, cause in error.correction_failures:
-            yield f"interpreter turn {turn_index} correction failure", cause
     if kind in (ConfigurationRejected, PreparationRetirementFailed, NativeSetupFailed, InputSelectionTimeLimit):
         yield "owned cause", error.cause
     if kind is ConfigurationRejected:

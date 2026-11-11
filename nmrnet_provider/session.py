@@ -35,7 +35,7 @@ from provider_core.analysis import (
     PreparedAnalysis,
 )
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
-from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected
+from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected, ModelReportedInterpretationProblem
 from provider_core.job_input import VerifiedJobInput
 from provider_core.task_boundary import contain_task_exit
 
@@ -173,6 +173,19 @@ def _generation_failure(cause):
     }
 
 
+def _interpretation_failure_message(cause):
+    failures = cause.failures
+    if not failures:
+        return str(cause)
+    final_visit = max(visit for visit, _ in failures)
+    reports = [
+        failure for visit, failure in failures if visit == final_visit and type(failure) is ModelReportedInterpretationProblem
+    ]
+    if len(reports) == 1 and type(reports[0].__cause__) is ModelReportedInputProblem:
+        return str(reports[0].__cause__)
+    return str(cause)
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class _PreparedExecution:
     handle: PreparedAnalysis
@@ -256,7 +269,6 @@ class NMRNetSession:
             InputRejected,
             ConformerShortfall,
             ConformerOutputLimit,
-            ModelReportedInputProblem,
             InterpretationFailed,
             InterpretationInputRejected,
             InspectionUnavailable,
@@ -320,14 +332,6 @@ class NMRNetSession:
                 code = "interpretation_input_rejected"
             elif type(cause) is InspectionUnavailable:
                 code = "interpretation_failed"
-            elif isinstance(cause, ModelReportedInputProblem):
-                code = "interpreter_reported_input_problem"
-                document["model_report"] = {
-                    "issue": cause.issue,
-                    "explanation": cause.explanation,
-                    "independently_verified": False,
-                    "interpretation": json.loads(cause.observation),
-                }
             elif isinstance(cause, ResultCapacityExceeded):
                 code = "result_size_limit"
             elif isinstance(cause, InputRejected):
@@ -342,7 +346,8 @@ class NMRNetSession:
             # Retain the original typed failure too: a capacity/encoding error
             # must not erase its complete private observations or partial batch.
             raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
-        return AnalysisFailure(code, str(cause), evidence)
+        message = _interpretation_failure_message(cause) if type(cause) is InterpretationFailed else str(cause)
+        return AnalysisFailure(code, message, evidence)
 
     async def execute(self, handle, *, report_condition):
         if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:

@@ -25,6 +25,7 @@ from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from tests.integration.nmrnet.session_ports import CoordinateJsonPreparation
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
+from nmrnet_provider.interpreter import ModelReportedInputProblem, _InputProblemReport
 from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
@@ -34,6 +35,7 @@ from provider_core.attempt_record import (
     acknowledge_start,
 )
 from provider_core.controller import AttemptController, LiveStartPolicy
+from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
@@ -382,6 +384,52 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], history)
         self.assertEqual(self.worker.events, [])
         await session.retire()
+
+    async def test_interpretation_failure_projects_only_an_unambiguous_final_visit_report(self):
+        report = ModelReportedInputProblem(_InputProblemReport("other_input_problem", "PRIVATE MOLECULE"))
+        handoff = ModelReportedInterpretationProblem(model_summary="PRIVATE SUMMARY")
+        handoff.__cause__ = report
+        later_report = ModelReportedInputProblem(_InputProblemReport("source_unit_unclear", "PRIVATE UNIT"))
+        later_handoff = ModelReportedInterpretationProblem(model_summary="PRIVATE LATER SUMMARY")
+        later_handoff.__cause__ = later_report
+        another = ModelReportedInterpretationProblem(model_summary="SECOND PRIVATE SUMMARY")
+        another.__cause__ = report
+        forged = ModelReportedInterpretationProblem(model_summary="FORGED SUMMARY")
+        forged.__cause__ = RuntimeError("FORGED CAUSE")
+        operational = RuntimeError("PRIVATE OPERATIONAL FAILURE")
+        cases = (
+            (((1, operational), (2, handoff)), str(report)),
+            (((1, handoff), (2, later_handoff), (2, operational)), str(later_report)),
+            (((1, later_handoff), (2, handoff)), str(report)),
+            (((1, handoff), (2, operational)), None),
+            (((1, handoff), (1, another)), None),
+            (((1, forged),), None),
+            (((1, report),), None),
+            ((), None),
+        )
+        for failures, expected in cases:
+            with self.subTest(failures=failures):
+                failure = InterpretationFailed(failures, ())
+                preparation = AsyncMock()
+                preparation.interpreter_diagnostics = b'{"private": "PRIVATE EVIDENCE"}'
+                preparation.prepare.side_effect = failure
+                session = self.make_session(preparation)
+                outcome = await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                self.assertEqual(outcome.code, "interpretation_failed")
+                self.assertEqual(outcome.message, expected if expected is not None else str(failure))
+                for private in (
+                    "PRIVATE MOLECULE",
+                    "PRIVATE UNIT",
+                    "PRIVATE SUMMARY",
+                    "PRIVATE LATER SUMMARY",
+                    "PRIVATE OPERATIONAL",
+                    "FORGED",
+                ):
+                    self.assertNotIn(private, outcome.message)
+                self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], {"private": "PRIVATE EVIDENCE"})
+                self.assertEqual(failure.failures, failures)
+                self.assertIs(handoff.__cause__, report)
+                await session.retire()
 
     async def test_oversized_reader_diagnostic_is_kept_whole_when_evidence_admission_fails(self):
         rejection = InputRejected("Cannot read selected record: missing atoms.", diagnostic="private" * 40000)

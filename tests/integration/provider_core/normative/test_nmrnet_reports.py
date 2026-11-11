@@ -406,9 +406,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_session_cleanup_cancellation_keeps_its_nested_owned_reason_for_the_operator(self):
         ports = SessionPorts()
-        report = ModelReportedInputProblem(
-            _InputProblemReport("other_input_problem", "model could not identify the source unit"), b"{}"
-        )
+        report = ModelReportedInputProblem(_InputProblemReport("other_input_problem", "model could not identify the source unit"))
         previous = PreparationRetirementFailed(
             (("model retirement", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=report
         )
@@ -593,9 +591,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     ):
                         with self.assertRaises(UploadFailed) as caught:
                             if file_output:
-                                await owner.acquire_file(
-                                    api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1
-                                )
+                                await owner.acquire_file(api.member.upload_ref, directory_fd=directory, retirement_seconds=0.1)
                             else:
                                 await owner.acquire(api.member.upload_ref)
                         self.assertEqual(list(Path(root).iterdir()), [])
@@ -880,8 +876,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             ),
             (
                 ModelReportedInputProblem(
-                    _InputProblemReport("source_unit_unclear", "record 2 coordinate unit was not specified\n" + credentials),
-                    b"PRIVATE_OBSERVATION",
+                    _InputProblemReport("source_unit_unclear", "record 2 coordinate unit was not specified\n" + credentials)
                 ),
                 "Specify angstrom, nm or bohr",
                 "record 2 coordinate unit was not specified",
@@ -902,7 +897,6 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 "PRIVATE_COORDINATES",
                 "PRIVATE_STEREO",
                 "PRIVATE_PROVENANCE",
-                "PRIVATE_OBSERVATION",
                 "PRIVATE_CLEANUP",
             ):
                 self.assertNotIn(private, rendered)
