@@ -377,21 +377,6 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
                             RuntimeError("A corrected conversation does not qualify an uncoached ambiguity decision."),
                         )
                     )
-        except ModelReportedInputProblem as report:
-            observed.update(
-                issue=report.issue,
-                guidance=str(report),
-                explanation=report.explanation,
-                interpretation=json.loads(report.observation),
-            )
-            if probe == "formats" or report.issue != case["expected_issue"]:
-                failures.append(
-                    ("model decision", RuntimeError("The model reported a different category from the authored case."))
-                )
-            if observed["interpretation"]["corrections"] != 0:
-                failures.append(
-                    ("model decision", RuntimeError("A corrected conversation does not qualify an uncoached ambiguity decision."))
-                )
         except (Exception, asyncio.CancelledError) as cause:
             failures.append(("input interpretation", cause))
         finally:
