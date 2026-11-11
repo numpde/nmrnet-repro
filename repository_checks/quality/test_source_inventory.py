@@ -112,6 +112,9 @@ class SourceInventoryUnitTests(unittest.TestCase):
             root = Path(directory)
             for name in (
                 "host/bootstrap.py",
+                "host/bootstrap/acquisition/generated.py",
+                "host/bootstrap/acquisition/unlisted.py",
+                "host/bootstrap/other.py",
                 "tools/z.py",
                 "tools/nested/a.py",
                 "tools/readme.txt",
@@ -124,9 +127,14 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("pass\n")
+            record = root / "requirements/provider-core-release.json"
+            record.parent.mkdir()
+            record.write_text(json.dumps({"acquisition_source_files": {"generated.py": {}}}))
             with patch.object(sources, "ROOT", root):
                 self.assertEqual(
                     [
+                        root / "host/bootstrap/acquisition/unlisted.py",
+                        root / "host/bootstrap/other.py",
                         root / "host/bootstrap.py",
                         root / "nmrnet_inference/nested/future.py",
                         root / "nmrnet_provider/nested/future.py",
@@ -137,6 +145,8 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     [
+                        root / "host/bootstrap/acquisition/unlisted.py",
+                        root / "host/bootstrap/other.py",
                         root / "host/bootstrap.py",
                         root / "nmrnet_inference/nested/future.py",
                         root / "nmrnet_provider/nested/future.py",
@@ -149,6 +159,29 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 )
                 with self.assertRaises(TypeError):
                     sources.python_sources()
+
+    def test_generated_classification_keeps_text_and_symlink_visibility(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "host/bootstrap/acquisition"
+            snapshot.mkdir(parents=True)
+            generated = snapshot / "generated.py"
+            generated.write_text("issued source\n")
+            unlisted = snapshot / "secret.txt"
+            unlisted.write_text("unlisted source\n")
+            link = snapshot / "linked.py"
+            link.symlink_to(generated)
+            record = root / "requirements/provider-core-release.json"
+            record.parent.mkdir()
+            record.write_text(json.dumps({"acquisition_source_files": {"generated.py": {}, "linked.py": {}}}))
+            with patch.object(sources, "ROOT", root):
+                self.assertEqual({generated}, sources.generated_sdk_sources())
+                visible = sources.iter_repo_text_files()
+                self.assertIn(generated, visible)
+                self.assertIn(unlisted, visible)
+                self.assertIn(link, visible)
+                self.assertFalse(sources.is_skipped(link))
+                self.assertIn(link, sources.python_sources(production_only=True))
 
     def test_frontend_ownership_rejects_pinned_and_unpinned_registry_directives(self):
         self.assertFalse(has_external_frontend("# Local engine frontend.\nFROM base@sha256:hash\n"))
@@ -307,7 +340,7 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
                     images = [field for field in fields[1:] if not field.startswith("--")]
                     self.assertTrue(images)
                     image = images[0]
-                    if image not in named_stages:
+                    if image != "scratch" and image not in named_stages:
                         external_images.append(image)
                     if len(fields) >= 4 and fields[-2].upper() == "AS":
                         named_stages.add(fields[-1])
