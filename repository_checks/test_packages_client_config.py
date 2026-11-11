@@ -25,7 +25,8 @@ import unittest
 from contextlib import suppress
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import FIXTURES, LauncherFixture, record_engine_call
+from repository_checks.fixtures.containers.engine_log import record_engine_call
+from repository_checks.fixtures.containers.fixture import FIXTURES, LauncherFixture
 
 
 class PackagesClientTests(unittest.TestCase):

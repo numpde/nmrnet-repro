@@ -23,7 +23,8 @@ import unittest
 from contextlib import suppress
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import LauncherFixture, record_engine_call
+from repository_checks.fixtures.containers.engine_log import record_engine_call
+from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class WheelhouseClientTests(unittest.TestCase):
@@ -36,11 +37,11 @@ class WheelhouseClientTests(unittest.TestCase):
             additions={"NMRNET_WHEELHOUSE_FIXTURE_ROOT": str(self.root)},
         )
         self._remember(result.stderr)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertFalse((self.root / "sentinel").exists())
         worker = next(call["arguments"] for call in self.fixture.calls() if "tools.wheelhouse" in call["arguments"])
         self.assertIn(f"type=bind,src={cache},dst=/wheelhouse,readonly", worker)
-        self.assertEqual(worker[worker.index("--pool") + 1], "/wheelhouse")
+        self.assertEqual("/wheelhouse", worker[worker.index("--pool") + 1])
 
     def test_make_without_a_terminal_requires_a_path_before_engine_effects(self):
         result = subprocess.run(
@@ -53,7 +54,7 @@ class WheelhouseClientTests(unittest.TestCase):
             timeout=5,
             check=False,
         )
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("WHEELHOUSE must be set on the make command line", result.stderr)
         self.assertFalse(self.fixture.calls())
 
@@ -65,7 +66,7 @@ class WheelhouseClientTests(unittest.TestCase):
         environment = self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"}
         for action in ("download", "check"):
             result = self.caller("--print", action, "preparation", environment=environment)
-            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             commands = [shlex.split(line) for line in result.stdout.splitlines()]
             command = next(command for command in commands if "tools.wheelhouse" in command)
             mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
@@ -95,7 +96,7 @@ class WheelhouseClientTests(unittest.TestCase):
             if linked:
                 lock.symlink_to(self.root / "requirements/inference.lock")
             result = self.caller("check", "preparation")
-            self.assertEqual(2, result.returncode, result.stderr)
+            self.assertEqual(2, result.returncode, msg=result.stderr)
             self.assertIn("regular file", result.stderr)
             self.assertFalse(self.fixture.calls())
 
@@ -300,7 +301,7 @@ class WheelhouseClientTests(unittest.TestCase):
                 result = self.caller("check")
                 self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual("wheelhouse output\n", result.stdout)
-                self.assertTrue(result.stderr.startswith("wheelhouse diagnostic\n"), result.stderr)
+                self.assertTrue(result.stderr.startswith("wheelhouse diagnostic\n"), msg=result.stderr)
                 if status == 0:
                     self.assertIn("make packages/image", result.stderr)
                     self.assertNotIn("NETWORK_INTERFACE=", result.stderr)

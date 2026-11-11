@@ -85,12 +85,12 @@ class EngineMetadataFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
-            command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py")]
+            command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py"), "--root", str(fixture.root)]
             verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
-            self.assertEqual(0, verified.returncode, verified.stderr)
+            self.assertEqual(0, verified.returncode, msg=verified.stderr)
             (fixture.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
             rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
-            self.assertEqual(1, rejected.returncode, rejected.stderr)
+            self.assertEqual(1, rejected.returncode, msg=rejected.stderr)
             self.assertIn("bootstrap files differ from the release inventory", rejected.stderr)
             self.assertEqual([], fixture.calls())
 
@@ -159,7 +159,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
         program = (
             "import resource, sys, time\n"
             "from pathlib import Path\n"
-            "from repository_checks.fixtures.containers.fixture import record_engine_call\n"
+            "from repository_checks.fixtures.containers.engine_log import record_engine_call\n"
             "resource.setrlimit(resource.RLIMIT_FSIZE, (4096, 4096))\n"
             "root, name = Path(sys.argv[1]), sys.argv[2]\n"
             "(root / (name + '.ready')).write_text('ready\\n')\n"

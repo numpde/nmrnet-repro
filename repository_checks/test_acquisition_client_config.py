@@ -23,7 +23,8 @@ import unittest
 from contextlib import suppress
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import LauncherFixture, read_engine_calls
+from repository_checks.fixtures.containers.engine_log import read_engine_calls
+from repository_checks.fixtures.containers.fixture import LauncherFixture
 from repository_checks.quality.sources import ROOT
 
 
@@ -51,7 +52,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 "NMRNET_FAKE_WORKER_STDERR": "worker diagnostic\n",
             },
         )
-        self.assertEqual(17, result.returncode, result.stderr)
+        self.assertEqual(17, result.returncode, msg=result.stderr)
         self.assertEqual("worker bytes\n", result.stdout)
         self.assertEqual("worker diagnostic\n", result.stderr)
         self.assertEqual("retired\n", receipt.read_text())
@@ -535,7 +536,7 @@ class AcquisitionClientTests(unittest.TestCase):
         create = next(call for call in arguments if call[:1] == ["create"])
         scratch = Path(create[create.index("--cidfile") + 1]).parent.parent
         self.retained.add(scratch)
-        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertEqual("", result.stdout)
         self.assertIn(reason, result.stderr)
         if scenario in {"inspect-failed", "malformed"}:
@@ -600,7 +601,7 @@ class AcquisitionClientTests(unittest.TestCase):
         self.retained.add(scratch)
         self.retained.add(Path(calls[-1]["client_config"]["path"]).parent)
         self.assertNotEqual(0, result.returncode)
-        self.assertTrue((self.root / "ready-fault").is_file(), result.stderr)
+        self.assertTrue((self.root / "ready-fault").is_file(), msg=result.stderr)
         self.assertIn("Cannot confirm acquisition retirement", result.stderr)
         self.assertNotIn("unexpected success", result.stdout + result.stderr)
         self.assertFalse(receipt.exists())
@@ -636,7 +637,7 @@ class AcquisitionClientTests(unittest.TestCase):
             timeout=30,
         )
         self._remember(result.stderr)
-        self.assertEqual(143, result.returncode, result.stderr)
+        self.assertEqual(143, result.returncode, msg=result.stderr)
         self.assertNotIn("Acquisition was interrupted", result.stderr)
         self.assertTrue((self.root / "attach-completed").is_file())
         self.assertIn(
@@ -825,7 +826,7 @@ class AcquisitionClientTests(unittest.TestCase):
         create = next(call["arguments"] for call in calls if call["arguments"][:1] == ["create"])
         scratch = Path(create[create.index("--cidfile") + 1]).parent.parent
         self.retained.update((directory, scratch))
-        self.assertEqual(expected_status, result.returncode, result.stderr)
+        self.assertEqual(expected_status, result.returncode, msg=result.stderr)
         self.assertEqual(effect == "retain", directory.exists())
         self.assertIn(f"Cannot confirm Docker client configuration removal for {directory} (status 41).", result.stderr)
         self.assertNotIn("configuration retained", result.stderr)
