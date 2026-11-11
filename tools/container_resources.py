@@ -21,7 +21,7 @@ def cgroup_snapshot():
     for name in ("cpu.max", "cpu.stat", "memory.max", "memory.peak", "memory.swap.max", "pids.max"):
         with (CGROUP_ROOT / name).open("rb") as source:
             value = source.read(4097)
-        if len(value) > 4096:
+        if not (len(value) <= 4096):
             raise ValueError(f"Cannot observe container resources: kernel file {name} exceeds its 4096-byte evidence bound.")
         facts[name] = value.decode("ascii").strip()
     return facts

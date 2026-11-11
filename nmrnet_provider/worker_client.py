@@ -207,7 +207,7 @@ class PredictionClient(WorkerClient):
         # Raw bytes alone cannot exceed a frame that must also hold base64 and
         # JSON. This necessary bound limits encoding allocation; frame() remains
         # the authority for exact fit, including all expansion and envelope bytes.
-        if sum(len(raw) for raw in raw_requests) > MAX_FRAME_BYTES:
+        if not (sum(len(raw) for raw in raw_requests) <= MAX_FRAME_BYTES):
             raise ValueError("Scientific preparation cannot fit the 2 MiB channel frame: request bytes alone exceed it.")
         reply = await self._exchange(
             {"operation": "prepare", "requests_base64": [base64.b64encode(raw).decode("ascii") for raw in raw_requests]}

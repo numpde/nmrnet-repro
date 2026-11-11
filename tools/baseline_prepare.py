@@ -190,7 +190,7 @@ def _member_source(prepared, archive, selection):
         raise ValueError("Cannot prepare baseline: selection max_bytes must be a positive integer")
     with artifacts.regular_file(prepared / "provenance.json", os.O_RDONLY) as stream:
         receipt_bytes = stream.read(MAX_EXTRACTION_RECEIPT_BYTES + 1)
-    if len(receipt_bytes) > MAX_EXTRACTION_RECEIPT_BYTES:
+    if not (len(receipt_bytes) <= MAX_EXTRACTION_RECEIPT_BYTES):
         raise ValueError("Cannot prepare baseline: extraction provenance exceeds the 1 MiB byte limit")
     provenance = json.loads(receipt_bytes)
     if provenance["archive"] != archive:
@@ -217,7 +217,7 @@ def verified_member(prepared, archive, selection):
     the locally computed member SHA-256 independently authenticates the release.
     """
     path, name, limit, archive_sha256, expected = _member_source(prepared, archive, selection)
-    if path.stat().st_size > limit:
+    if not (path.stat().st_size <= limit):
         raise ValueError(f"Cannot prepare {name!r}: size exceeds selection max_bytes={limit}")
     actual = file_identity(path)
     _check_member_identity(name, actual, expected)
@@ -229,7 +229,7 @@ def verified_member_bytes(prepared, archive, selection):
     path, name, limit, archive_sha256, expected = _member_source(prepared, archive, selection)
     content = bytearray()
     with artifacts.regular_file(path, os.O_RDONLY) as stream:
-        if os.fstat(stream.fileno()).st_size > limit:
+        if not (os.fstat(stream.fileno()).st_size <= limit):
             raise ValueError(f"Cannot prepare {name!r}: size exceeds selection max_bytes={limit}")
         while len(content) <= limit:
             remaining = limit + 1 - len(content)
@@ -237,7 +237,7 @@ def verified_member_bytes(prepared, archive, selection):
             if chunk == b"":
                 break
             content.extend(chunk)
-    if len(content) > limit:
+    if not (len(content) <= limit):
         raise ValueError(f"Cannot prepare {name!r}: source exceeds selection max_bytes={limit}")
     actual = {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
     _check_member_identity(name, actual, expected)

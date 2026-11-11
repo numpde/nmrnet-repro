@@ -71,7 +71,7 @@ class SelectedReleaseModels:
             # if the mounted file grows while being read.
             with artifacts.regular_file(self.declaration_path, os.O_RDONLY) as stream:
                 content = stream.read(64 * 1024 + 1)
-            if len(content) > 64 * 1024:
+            if not (len(content) <= 64 * 1024):
                 raise ValueError("Cannot load prediction models: declaration exceeds the 64 KiB byte limit.")
             self._specification = json.loads(content)
             self.declaration_sha256 = hashlib.sha256(content).hexdigest()

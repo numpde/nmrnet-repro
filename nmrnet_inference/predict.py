@@ -107,7 +107,7 @@ def decode_request_document(raw):
     """Decode bounded scientific JSON without duplicate keys before field admission."""
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
-    if len(raw) > MAX_INPUT_BYTES:
+    if not (len(raw) <= MAX_INPUT_BYTES):
         raise ValueError("Cannot parse prediction input: request exceeds the 1 MiB byte limit.")
     parse_error = None
     try:
