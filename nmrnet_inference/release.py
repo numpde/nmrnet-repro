@@ -122,7 +122,7 @@ class SelectedReleaseModels:
         # default-policy suppression of warnings already emitted by this process.
         previous = warnings.showwarning
 
-        # silent-defaults: allow-contract -- Match Python's warning-hook signature; forwarding preserves the destination and optional source line.
+        # Match Python's warning-hook signature; forward its destination and optional source line.
         def observe(message, category, filename, lineno, file=None, line=None):
             category_name = category.__module__ + "." + category.__qualname__
             versions = None
