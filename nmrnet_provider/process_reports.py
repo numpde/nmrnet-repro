@@ -39,7 +39,8 @@ from nmrnet_provider.worker_client import (
 )
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.attempt_record import ProtectedEvidence
-from provider_core.diagnostics import DiagnosticOutputRefused, failure_evidence as core_failure_evidence
+from provider_core.diagnostics import DiagnosticOutputRefused
+from provider_core.diagnostics import failure_evidence as core_failure_evidence
 from provider_core.failure_projection import owned_details as core_owned_details
 from provider_core.failure_projection import owned_relationships as core_owned_relationships
 

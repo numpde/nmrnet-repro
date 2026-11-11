@@ -19,8 +19,8 @@ from nmrnet_provider.session import NMRNetSession
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.chat import ChatEndpointFactory
-from provider_core.interpreter import ProseService
 from provider_core.controller import AttemptController
+from provider_core.interpreter import ProseService
 from provider_core.shared_delivery_client import SharedDeliveryClient
 from provider_core.uploads import JobUploads, UploadRecovery
 

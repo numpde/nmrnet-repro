@@ -18,11 +18,11 @@ import re
 from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected
-from provider_core.producer_checkpoint import checkpoint_volume_name
 from nmrnet_provider.process import _declared_execution
-from nmrnet_provider.startup_capture import _bind_path, startup_authorities, prediction_lifetime_seconds
-from provider_core.provider_proxy import ServicePolicy, ServiceRefused
+from nmrnet_provider.startup_capture import _bind_path, prediction_lifetime_seconds, startup_authorities
 from provider_core.bound_http_proxy import require_interface_name
+from provider_core.producer_checkpoint import checkpoint_volume_name
+from provider_core.provider_proxy import ServicePolicy, ServiceRefused
 
 
 def project_name(checkout, deployment):

@@ -13,8 +13,8 @@ import argparse
 import os
 import sys
 
-from provider_core.runner import main as supervise
 from nmrnet_provider.worker_protocol import require_seconds
+from provider_core.runner import main as supervise
 
 
 def main(arguments=None):

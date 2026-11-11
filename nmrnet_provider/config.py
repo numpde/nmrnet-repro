@@ -14,26 +14,31 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import tomllib
-
 from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.api_config import (
-    ApiConfigurationRejected, ApiPublicationMaterial, ApiSettings, HttpsSettings,
-    api_settings_with_material, https_settings, https_trust,
+    ApiConfigurationRejected,
+    ApiPublicationMaterial,
+    ApiSettings,
+    HttpsSettings,
+    api_settings_with_material,
+    https_settings,
+    https_trust,
 )
 from provider_core.attempt_record import RecoveryScope
-from provider_core.ownership import LiveAttemptLimits
+from provider_core.chat import ChatEndpointSpec, require_chat_limits
 from provider_core.delivery_client import DeliveryEndpoint
 from provider_core.delivery_worker import require_delivery_retry_settings
-from provider_core.transport import _positive_seconds, require_unix_socket_path
-from provider_core.chat import ChatEndpointSpec, require_chat_limits
 from provider_core.execution import require_execution_settings, require_observation_gap
-from provider_core.startup_file import StartupFileRejected, read_startup_file as core_read_startup_file
+from provider_core.ownership import LiveAttemptLimits
+from provider_core.startup_file import StartupFileRejected
+from provider_core.startup_file import read_startup_file as core_read_startup_file
+from provider_core.transport import _positive_seconds, require_unix_socket_path
 from provider_core.uploads import UploadLimits, require_store_origin
 
 if TYPE_CHECKING:

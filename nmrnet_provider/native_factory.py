@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.geometry_client import GeometryClient
+from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient

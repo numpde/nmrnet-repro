@@ -20,17 +20,23 @@ from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
-from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.interpreter import InspectionUnavailable, ModelReportedInputProblem
+from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut, WorkerResultRejected
-from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
+from provider_core.analysis import (
+    AnalysisFailure,
+    AnalysisOutcomeUnresolved,
+    AnalysisSuccess,
+    ObservedWorkerCrash,
+    PreparedAnalysis,
+)
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
-from provider_core.job_input import VerifiedJobInput
 from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected
+from provider_core.job_input import VerifiedJobInput
 from provider_core.task_boundary import contain_task_exit
 
 

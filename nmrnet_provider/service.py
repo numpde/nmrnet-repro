@@ -21,15 +21,14 @@ from enum import Enum, auto
 
 from nmrnet_provider.admission import AdmissionPolicy, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
+from provider_core.analysis import AnalysisOutcomeUnresolved
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.controller import ControllerFailed
-from provider_core.analysis import AnalysisOutcomeUnresolved
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ObservationGapExpired
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims, LiveCapacityFull
 from provider_core.task_boundary import contain_task_exit
 from provider_core.uploads import UploadRecoveryExhausted
-
 
 LOGGER = logging.getLogger(__name__)
 

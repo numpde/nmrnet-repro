@@ -54,7 +54,9 @@ def _source(options, connection):
         serve_geometry_connection(connection, allocation=options.operation, io_seconds=options.io_seconds)
     else:
         from nmrnet_provider.smiles import GenerationSettings  # noqa: PLC0415 -- Generation settings belong to this role.
-        from nmrnet_provider.smiles_protocol import require_generation_deadline  # noqa: PLC0415 -- Admit before scientific dispatch.
+        from nmrnet_provider.smiles_protocol import (
+            require_generation_deadline,  # noqa: PLC0415 -- Admit before scientific dispatch.
+        )
         from nmrnet_provider.smiles_worker import serve_smiles_connection  # noqa: PLC0415 -- Prediction never imports RDKit.
 
         settings = GenerationSettings(options.seed, options.max_iterations, options.embedding_seconds)
