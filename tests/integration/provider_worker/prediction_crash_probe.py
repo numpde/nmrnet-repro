@@ -69,15 +69,20 @@ class FixedJsonPreparation:
 
 class SyntheticPrediction:
     declaration_sha256 = "d" * 64
+
     def __init__(self, operation):
         self.operation = operation
         self.before = oom_kills()
 
     def prepare(self, requests):
         self.requests, self.handle = requests, object()
-        write(Path("/proof/observations") / (self.operation + ".json"), {
-            "requests": [raw.hex() for raw in requests], "oom_kills": self.before,
-        })
+        write(
+            Path("/proof/observations") / (self.operation + ".json"),
+            {
+                "requests": [raw.hex() for raw in requests],
+                "oom_kills": self.before,
+            },
+        )
         return self.handle
 
     def execute(self, handle):
@@ -113,9 +118,13 @@ async def controller():
     def unexpected(*_args, **_kwargs):
         raise AssertionError("Synthetic native-exit proof must not retry prediction, API reads or delivery")
 
-    claims = AttemptClaims.live(limits=LiveAttemptLimits(
-        maximum_attempts=1, maximum_control_bytes=131072, maximum_pending_terminal_bytes=16384,
-    ))
+    claims = AttemptClaims.live(
+        limits=LiveAttemptLimits(
+            maximum_attempts=1,
+            maximum_control_bytes=131072,
+            maximum_pending_terminal_bytes=16384,
+        )
+    )
     start_policy = LiveStartPolicy(1, unexpected, unexpected)
     observation = ObservationRecovery(1, 1, unexpected, unexpected)
     conditions = ConditionRecovery(1, 1, unexpected, unexpected)
@@ -127,10 +136,16 @@ async def controller():
     factory = NativeAttemptFactory(
         admission_stopping=asyncio.Event(),
         prose_services=(),
-        config=None, claims=claims, execution_identity={"prediction_declaration_sha256": "d" * 64}, selected_artifacts=ARTIFACTS,
-        policy=NativePolicy(15, 20, 5), observation_recovery=observation,
-        condition_recovery=conditions, start_policy=start_policy,
-        on_delivery_retry=unexpected, on_unconfirmed_phase_progress=unexpected,
+        config=None,
+        claims=claims,
+        execution_identity={"prediction_declaration_sha256": "d" * 64},
+        selected_artifacts=ARTIFACTS,
+        policy=NativePolicy(15, 20, 5),
+        observation_recovery=observation,
+        condition_recovery=conditions,
+        start_policy=start_policy,
+        on_delivery_retry=unexpected,
+        on_unconfirmed_phase_progress=unexpected,
         on_operator_notice=notice,
     )
     facts = FeedInputFacts(
@@ -138,13 +153,18 @@ async def controller():
     )
     pending = StartPending(
         RecoveryScope("https://api.example", "provider:oom-proof", "oom-proof", "one"),
-        "peaks_from_mol", facts, start_body(facts.job_ref, "oom-proof"),
+        "peaks_from_mol",
+        facts,
+        start_body(facts.job_ref, "oom-proof"),
     )
     admission = AttemptAdmission(
         execution_attempt_ref="execution_attempt:sha256:" + "a" * 64,
-        job_ref=facts.job_ref, analysis_kind_ref=pending.analysis_kind_ref,
-        provider_ref=pending.scope.provider_ref, state="in_progress",
-        started_at=datetime(2026, 10, 23, tzinfo=UTC), replayed=False,
+        job_ref=facts.job_ref,
+        analysis_kind_ref=pending.analysis_kind_ref,
+        provider_ref=pending.scope.provider_ref,
+        state="in_progress",
+        started_at=datetime(2026, 10, 23, tzinfo=UTC),
+        replayed=False,
     )
     owners, starts, deliveries = [], [], []
 
@@ -186,26 +206,52 @@ async def controller():
         return item.acceptance()
 
     api = SimpleNamespace(
-        origin=pending.scope.api_origin, exchange_seconds=1, retirement_seconds=1,
-        retirement_confirmed=True, pending_owner=None, last_failure=None,
-        start_attempt=start, read_attempt=read_attempt, job_input=job_input,
-        progress_attempt=progress, retire=retire, can_replay_start=unexpected,
+        origin=pending.scope.api_origin,
+        exchange_seconds=1,
+        retirement_seconds=1,
+        retirement_confirmed=True,
+        pending_owner=None,
+        last_failure=None,
+        start_attempt=start,
+        read_attempt=read_attempt,
+        job_input=job_input,
+        progress_attempt=progress,
+        retire=retire,
+        can_replay_start=unexpected,
     )
     relay = SimpleNamespace(
         endpoint=DeliveryEndpoint(pending.scope.api_origin, pending.scope.provider_ref, Path("/output/synthetic-relay.sock")),
-        retirement_confirmed=True, last_failure=None, submit=submit, retire=retire, can_retry=unexpected,
+        retirement_confirmed=True,
+        last_failure=None,
+        submit=submit,
+        retire=retire,
+        can_retry=unexpected,
     )
     session = NMRNetSession(
-        allocate_prediction=allocate, execution_identity={"fixture": "synthetic native exit"},
-        selected_artifacts=ARTIFACTS, input_preparation=FixedJsonPreparation(),
+        allocate_prediction=allocate,
+        execution_identity={"fixture": "synthetic native exit"},
+        selected_artifacts=ARTIFACTS,
+        input_preparation=FixedJsonPreparation(),
     )
     lifecycle = AttemptController.live(
-        api, claims, session, scope=pending.scope, stopping=asyncio.Event(), start_policy=start_policy,
-        allow_active_start_replay=True, maximum_terminal_bytes=16384,
-        delivery=relay, on_delivery_retry=unexpected, delivery_retry_initial_seconds=1,
-        delivery_retry_max_seconds=30, allowed_job_states=frozenset({"open"}),
-        poll_seconds=0.05, task_settle_seconds=10, observation_recovery=observation,
-        condition_recovery=conditions, on_unconfirmed_phase_progress=unexpected,
+        api,
+        claims,
+        session,
+        scope=pending.scope,
+        stopping=asyncio.Event(),
+        start_policy=start_policy,
+        allow_active_start_replay=True,
+        maximum_terminal_bytes=16384,
+        delivery=relay,
+        on_delivery_retry=unexpected,
+        delivery_retry_initial_seconds=1,
+        delivery_retry_max_seconds=30,
+        allowed_job_states=frozenset({"open"}),
+        poll_seconds=0.05,
+        task_settle_seconds=10,
+        observation_recovery=observation,
+        condition_recovery=conditions,
+        on_unconfirmed_phase_progress=unexpected,
     )
     try:
         accepted = await asyncio.wait_for(lifecycle.run(pending), 60)
@@ -218,10 +264,14 @@ async def controller():
 
     if len(owners) != 1 or len(deliveries) != 1 or len(starts) != 1:
         raise AssertionError("Synthetic native-exit proof requires one START, one prediction child and one FAIL")
-    owner, = owners
+    (owner,) = owners
     crash = lifecycle.operation.observed_crash
-    if (crash is None or crash.phase != "running" or crash.runner is not owner.session
-            or crash.native_exit.returncode != -signal.SIGKILL):
+    if (
+        crash is None
+        or crash.phase != "running"
+        or crash.runner is not owner.session
+        or crash.native_exit.returncode != -signal.SIGKILL
+    ):
         raise AssertionError("Synthetic native-exit proof lacks the original prediction-phase SIGKILL receipt")
     body = json.loads(deliveries[0].body)
     public = crash.public_failure()
@@ -230,20 +280,34 @@ async def controller():
     observed = json.loads((Path("/proof/observations") / (owner.allocation + ".json")).read_bytes())
     if observed["requests"] != [RAW.hex()]:
         raise AssertionError("Synthetic prediction changed its admitted scientific bytes")
-    if (not owner.session.retirement.scratch_released or not lifecycle.shutdown_ready
-            or not factory.shutdown_ready or claims.live_owners()):
+    if (
+        not owner.session.retirement.scratch_released
+        or not lifecycle.shutdown_ready
+        or not factory.shutdown_ready
+        or claims.live_owners()
+    ):
         raise AssertionError("Synthetic native-exit proof still holds cleanup, reporting or setup obligations")
     write(Path("/output/failure.json"), body)
-    write(Path("/output/native-crash.json"), {
-        "failure": failure_evidence(crash, secrets=()), "operator_notices": notices,
-        "worker_cgroup_oom_kills_before": observed["oom_kills"],
-    })
-    write(Path("/output/summary.json"), {
-        "scope": "synthetic native exit and SDK-selected FAIL; no released models, deployed API or durable publication",
-        "operations": [owner.allocation], "generation": owner.session.generation,
-        "retirement_returncodes": [owner.session.retirement.returncode], "executions": 1,
-        "failure_code": body["failure_code"], "scientific_request_sha256": hashlib.sha256(RAW).hexdigest(),
-    })
+    write(
+        Path("/output/native-crash.json"),
+        {
+            "failure": failure_evidence(crash, secrets=()),
+            "operator_notices": notices,
+            "worker_cgroup_oom_kills_before": observed["oom_kills"],
+        },
+    )
+    write(
+        Path("/output/summary.json"),
+        {
+            "scope": "synthetic native exit and SDK-selected FAIL; no released models, deployed API or durable publication",
+            "operations": [owner.allocation],
+            "generation": owner.session.generation,
+            "retirement_returncodes": [owner.session.retirement.returncode],
+            "executions": 1,
+            "failure_code": body["failure_code"],
+            "scientific_request_sha256": hashlib.sha256(RAW).hexdigest(),
+        },
+    )
 
 
 if __name__ == "__main__":

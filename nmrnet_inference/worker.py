@@ -67,8 +67,12 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
                 require_request_batch(raw_requests)
                 prepared = prediction.prepare(raw_requests)
                 token = secrets.token_hex(16)
-                reply = {"kind": "prepared", "allocation": allocation, "token": token,
-                         "declaration_sha256": prediction.declaration_sha256}
+                reply = {
+                    "kind": "prepared",
+                    "allocation": allocation,
+                    "token": token,
+                    "declaration_sha256": prediction.declaration_sha256,
+                }
             elif operation == "execute" and set(request) == {"operation", "allocation", "token"}:
                 if token is None or request["token"] != token:
                     raise WorkerProtocolError("Execution requires this connection's current preparation token")
@@ -85,8 +89,13 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             diagnostic = "".join(traceback.format_exception(cause))
             # The distinct model-call fact requires a consumed execution token;
             # it does not by itself authorize another calculation.
-            kind = ("model_call_failed" if execution_entered and type(cause) is ModelCallFailed
-                    else "execution_failed" if execution_entered else "failure")
+            kind = (
+                "model_call_failed"
+                if execution_entered and type(cause) is ModelCallFailed
+                else "execution_failed"
+                if execution_entered
+                else "failure"
+            )
             send(connection, {"kind": kind, "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
             return
         try:

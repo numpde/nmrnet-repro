@@ -211,7 +211,8 @@ class ReleasedPredictionSession:
                     )
                 except Exception as recording_failure:
                     raise ExceptionGroup(
-                        "Prediction failed and its evidence could not be recorded", (cause, recording_failure),
+                        "Prediction failed and its evidence could not be recorded",
+                        (cause, recording_failure),
                     ) from None
                 raise
             outcomes.append(
