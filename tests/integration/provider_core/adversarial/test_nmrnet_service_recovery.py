@@ -145,7 +145,8 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 path = urlsplit(target).path
                 verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
                 if path == "/provider/v1/jobs":
-                    jobs = [] if len(fixture.start_bodies) >= 2 else ([first] if not fixture.start_bodies else [second])
+                    count = len(fixture.start_bodies)
+                    jobs = [first, second][count : count + 1]
                     return json.dumps(
                         page()
                         | {
@@ -227,15 +228,16 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     await asyncio.wait_for(service.run(fixture.stop), 8)
                 evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
-                self.assertIn("UploadFailed" if source_problem == "retirement" else "UploadRecoveryExhausted", evidence)
+                required_markers = {
+                    "cleanup": ("UploadRecoveryExhausted", "independent cleanup", "OSError"),
+                    "interruption": ("UploadRecoveryExhausted", "acquisition interruption", "OSError"),
+                    "control": ("UploadRecoveryExhausted", "independent control write"),
+                    "retirement": ("UploadFailed", "OSError"),
+                }
+                for marker in required_markers[source_problem]:
+                    self.assertIn(marker, evidence)
                 if source_problem == "retirement":
-                    self.assertIn("OSError", evidence)
                     self.assertNotIn("PRIVATE_RETIREMENT", evidence)
-                elif source_problem != "control":
-                    self.assertIn("independent cleanup" if source_problem == "cleanup" else "acquisition interruption", evidence)
-                    self.assertIn("OSError", evidence)
-                else:
-                    self.assertIn("independent control write", evidence)
                 self.assertNotIn("PRIVATE_SOURCE_", evidence)
                 self.assertEqual(1, len(fixture.start_bodies))
                 self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
@@ -294,6 +296,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 original_reply = fixture.api_peer.response_factory
                 starts = []
 
+                # silent-defaults: allow-contract -- Bind this iteration's START recorder, gates and responder; proof=test_stop_observes_inflight_start_past_drain.
                 async def reply(request, body, *, starts=starts, entered=entered, release=release, original_reply=original_reply):
                     if request.startswith(b"POST /provider/v1/execution-attempts/start "):
                         starts.append(body)
@@ -305,6 +308,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 service = fixture.service(drain_seconds=0.02)
                 wait_task = service._wait_task
 
+                # silent-defaults: allow-contract -- Bind this iteration's service, wait method and drain event; proof=test_stop_observes_inflight_start_past_drain.
                 async def observed_wait(task, seconds, *, wait_task=wait_task, service=service, elapsed=elapsed):
                     finished = await wait_task(task, seconds)
                     if task is service.work_task and seconds == service.policy.drain_seconds:
