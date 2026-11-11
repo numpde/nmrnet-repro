@@ -127,9 +127,7 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertFalse((self.root / ".work/baseline").exists())
         self.assertEqual(args[args.index("--image-id") + 1], "sha256:" + "a" * 64)
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
-        sources = [
-            (args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"
-        ]
+        sources = [(args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"]
         self.assertEqual(
             {
                 ("tools/container_guard.py", "/workspace/tools/container_guard.py"),
@@ -232,11 +230,16 @@ class BaselineLauncherTests(unittest.TestCase):
 class BaselinePredictionParityLauncherTests(unittest.TestCase):
     def setUp(self):
         BaselineLauncherTests.setUp(self)
-        for name in (".work/baseline/prepared/H", ".work/baseline/prepared/C", "tests", "nmrnet_inference"):
+        for name in (
+            ".work/baseline/prepared/H",
+            ".work/baseline/prepared/C",
+            "tests/integration/prediction_parity",
+            "nmrnet_inference",
+        ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         for name in (
             ".work/baseline/prepared/provenance.json",
-            "tests/test_prediction_model.py",
+            "tests/integration/prediction_parity/test_prediction_model.py",
             "nmrnet_inference/__init__.py",
             "nmrnet_inference/model.py",
             "nmrnet_inference/predict.py",
@@ -276,7 +279,7 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
         self.assertEqual(f"{os.getuid()}:{os.getgid()}", args[args.index("--user") + 1])
         environments = [args[index + 1] for index, item in enumerate(args) if item == "--env"]
         self.assertIn("NMRNET_IN_CONTAINER=1", environments)
-        self.assertIn("NMRNET_PREDICTION_PARITY=1", environments)
+        self.assertIn('"/workspace/tests/integration/prediction_parity"', " ".join(args))
         self.assertIn("NMRNET_QUALIFICATION_IMAGE_ID=sha256:" + "a" * 64, environments)
         self.assertIn("NMRNET_QUALIFICATION_REPOSITORY_REVISION=" + "d" * 40, environments)
         self.assertIn("NMRNET_QUALIFICATION_UPSTREAM_REVISION=" + "b" * 40, environments)
@@ -305,7 +308,7 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
 
     def test_batch_worker_lane_selects_one_fixed_test_with_the_same_containment(self):
         (self.root / "nmrnet_provider").mkdir()
-        (self.root / "tests/test_prediction_worker_release.py").write_text("fixture")
+        (self.root / "tests/integration/prediction_parity/test_prediction_worker_release.py").write_text("fixture")
         whole = BaselineLauncherTests.command(self, "worker-parity")
         focused = BaselineLauncherTests.command(self, "batch-worker-parity")
         self.assertEqual(0, whole.returncode, whole.stderr)
@@ -331,7 +334,7 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         (self.root / "artifacts/checkpoints.selection.json").write_text("fixture")
         (self.root / "artifacts/prediction-models.json").write_text("fixture")
         (self.root / "tools/baseline_model.py").write_text("fixture")
-        (self.root / "tests/test_prediction_release.py").write_text("fixture")
+        (self.root / "tests/integration/prediction_parity/test_prediction_release.py").write_text("fixture")
 
     def test_real_model_lane_has_only_readonly_inputs_and_four_gib_memory(self):
         result = BaselineLauncherTests.command(self, "model-parity")
@@ -354,8 +357,10 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         ):
             self.assertIn(f"type=bind,src={self.root / source},dst={destination},readonly", mounts)
         for flag, value in (
-            ("--memory", "4g"), ("--memory-swap", "4g"),
-            ("--network", "none"), ("--pull", "never"),
+            ("--memory", "4g"),
+            ("--memory-swap", "4g"),
+            ("--network", "none"),
+            ("--pull", "never"),
         ):
             self.assertEqual(value, args[args.index(flag) + 1])
         self.assertIn("test_prediction_release.py", args)
@@ -364,16 +369,20 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
     def test_worker_parity_adds_only_readonly_binding_and_requires_it(self):
         binding = self.root / "nmrnet_provider"
         binding.mkdir()
-        (self.root / "tests/test_prediction_worker_release.py").write_text("fixture")
+        (self.root / "tests/integration/prediction_parity/test_prediction_worker_release.py").write_text("fixture")
         direct = BaselineLauncherTests.command(self, "model-parity")
         worker = BaselineLauncherTests.command(self, "worker-parity")
         self.assertEqual(worker.returncode, 0, worker.stderr)
         direct_args, worker_args = decode_command(direct.stdout), decode_command(worker.stdout)
         direct_mounts = {direct_args[i + 1] for i, item in enumerate(direct_args) if item == "--mount"}
         worker_mounts = {worker_args[i + 1] for i, item in enumerate(worker_args) if item == "--mount"}
-        self.assertEqual(worker_mounts, direct_mounts | {
-            f"type=bind,src={binding},dst=/workspace/nmrnet_provider,readonly",
-        })
+        self.assertEqual(
+            worker_mounts,
+            direct_mounts
+            | {
+                f"type=bind,src={binding},dst=/workspace/nmrnet_provider,readonly",
+            },
+        )
         for flag in ("--network", "--pull", "--memory", "--memory-swap", "--user", "--pids-limit"):
             self.assertEqual(worker_args[worker_args.index(flag) + 1], direct_args[direct_args.index(flag) + 1])
         self.assertIn("test_prediction_worker_release.py", worker_args)
@@ -480,12 +489,8 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.assertNotIn("--gpus", args)
         self.assertEqual("NMRNET_IN_CONTAINER=1", args[args.index("--env") + 1])
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
-        sources = [
-            (args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"
-        ]
-        self.assertEqual(
-            {(name, f"/workspace/{name}") for name in readonly if name.endswith(".py")}, set(sources)
-        )
+        sources = [(args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"]
+        self.assertEqual({(name, f"/workspace/{name}") for name in readonly if name.endswith(".py")}, set(sources))
         for name, mounted_path in sources:
             self.assertIn(
                 f"type=bind,src={self.root / name},dst={mounted_path},readonly",

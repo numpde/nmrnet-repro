@@ -16,9 +16,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-if os.environ.get("NMRNET_PREDICTION_PARITY") != "1":
-    raise unittest.SkipTest("run make prediction/worker-parity")
-
 import test_prediction_release as release_reference
 from test_prediction_model import EXPECTED_REFERENCE_PACKET_SHA256, read_fixture_receipt
 
@@ -44,9 +41,9 @@ WORKER_SOURCES = (
     "nmrnet_provider/smiles.py",
     "nmrnet_provider/native_diagnostics.py",
     "nmrnet_provider/result.py",
-    "tests/test_prediction_worker_release.py",
-    "tests/test_prediction_release.py",
-    "tests/test_prediction_model.py",
+    "tests/integration/prediction_parity/test_prediction_worker_release.py",
+    "tests/integration/prediction_parity/test_prediction_release.py",
+    "tests/integration/prediction_parity/test_prediction_model.py",
     "tools/container_guard.py",
     "tools/artifacts.py",
     "tools/baseline_prepare.py",
@@ -178,8 +175,9 @@ class ReleasedWorkerTests(unittest.TestCase):
             child.close()
             reader, writer = await asyncio.open_unix_connection(sock=parent)
             declaration_sha256 = hashlib.sha256(Path("/input/prediction-models.json").read_bytes()).hexdigest()
-            client = PredictionClient(reader, writer, allocation=allocation, operation_seconds=120,
-                                      declaration_sha256=declaration_sha256)
+            client = PredictionClient(
+                reader, writer, allocation=allocation, operation_seconds=120, declaration_sha256=declaration_sha256
+            )
             prepared = await client.prepare(raw_requests)
             return await client.execute(prepared)
         finally:

@@ -1,5 +1,9 @@
 """Compare coordinate-driven tensors with upstream without claiming their physical unit."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import hashlib
 import io
 import json
@@ -14,14 +18,13 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
+from unittest.mock import patch
 
-if os.environ.get("NMRNET_PREDICTION_PARITY") != "1":
-    # The ordinary unit image intentionally excludes the scientific stack; this
-    # module runs only in the recorded inference-image parity lane.
-    raise unittest.SkipTest("run make prediction/tensor-parity")
-
+import joblib
+import lmdb
 import numpy as np
 import torch
+from sklearn.preprocessing import StandardScaler
 from unicore.data import (
     AppendTokenDataset,
     Dictionary,
@@ -30,16 +33,6 @@ from unicore.data import (
     RightPadDataset2D,
     TokenizeDataset,
 )
-
-from nmrnet_inference import predict
-from nmrnet_inference.model import (
-    compose_net_input,
-    load_checkpoint_from_bytes,
-    load_dictionary_from_bytes,
-    load_scaler_from_bytes,
-    predict_element,
-)
-from tools import artifacts, baseline_prepare
 from uninmr.data import (
     CroppingDataset,
     DistanceDataset,
@@ -52,6 +45,15 @@ from uninmr.data import (
     ToTorchDataset,
 )
 
+from nmrnet_inference import predict
+from nmrnet_inference.model import (
+    compose_net_input,
+    load_checkpoint_from_bytes,
+    load_dictionary_from_bytes,
+    load_scaler_from_bytes,
+    predict_element,
+)
+from tools import artifacts, baseline_prepare
 
 MAX_REFERENCE_FILE_BYTES = 64 * 1024 * 1024
 MAX_PROVENANCE_BYTES = 1024 * 1024
@@ -70,6 +72,8 @@ def compose_for_tensor_parity(atoms, coordinates, dictionary, element):
     }
     with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {element: PARITY_TEST_UNIT}):
         return compose_net_input(request, dictionary, element)
+
+
 REFERENCE_PICKLE_GLOBALS = {
     ("numpy", "dtype"),
     ("numpy", "ndarray"),
@@ -119,9 +123,7 @@ def upstream_net_input(atoms, coordinates, dictionary, selected_token, label_mas
     token_mask = KeyDataset(normalized, "atoms_target_mask") if label_mask is not None else None
     selection = SelectTokenDataset(tokens, token_mask_dataset=token_mask, selected_token=selected_token)
     tokens = AppendTokenDataset(PrependTokenDataset(tokens, dictionary.bos()), dictionary.eos())
-    selection = AppendTokenDataset(
-        PrependTokenDataset(selection, dictionary.pad()), dictionary.pad()
-    )
+    selection = AppendTokenDataset(PrependTokenDataset(selection, dictionary.pad()), dictionary.pad())
 
     coordinates = ToTorchDataset(KeyDataset(normalized, "coordinates"), "float32")
     distances = PrependAndAppend2DDataset(DistanceDataset(coordinates), 0.0)
@@ -404,9 +406,7 @@ class PredictionModelParityTests(unittest.TestCase):
             model_scaler.inverse_transform.assert_not_called()
 
             inverse_scaler = mock.Mock()
-            inverse_scaler.inverse_transform.return_value = np.array(
-                [[float("inf")]], dtype=np.float64
-            )
+            inverse_scaler.inverse_transform.return_value = np.array([[float("inf")]], dtype=np.float64)
             with self.assertRaisesRegex(ValueError, "inverse-scaled ppm values are not finite"):
                 predict_element(
                     request,
@@ -519,8 +519,6 @@ class PredictionModelParityTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), b"different bytes")
 
     def test_reference_pickle_does_not_resolve_arbitrary_python_globals(self):
-        import os
-
         content = pickle.dumps(os.system)
         with self.assertRaisesRegex(pickle.UnpicklingError, "serialized type is not approved"):
             load_reference_pickle(content)
@@ -538,16 +536,12 @@ class PredictionModelParityTests(unittest.TestCase):
                 with self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
                     load_reference_pickle(content)
 
-
     def test_one_and_maximum_atoms_match_upstream_for_h_and_c(self):
         samples = (
             (["H"], [[7.0, -3.0, 2.0]]),
             (
                 ["H", "C", "O", "N"] * 32,
-                [
-                    [index * 0.123456789, (index * 7) % 19 + 0.1, (index * 13) % 23 + 0.03]
-                    for index in range(128)
-                ],
+                [[index * 0.123456789, (index * 7) % 19 + 0.1, (index * 13) % 23 + 0.03] for index in range(128)],
             ),
         )
         for atoms, coordinates in samples:
@@ -562,9 +556,7 @@ class PredictionModelParityTests(unittest.TestCase):
                         tuple(index for index, atom in enumerate(atoms) if atom == element),
                     )
                     self.assertEqual(set(actual), set(expected))
-                    mask_indices = torch.where(
-                        actual["select_atom"][0, 1 : len(atoms) + 1] == 1
-                    )[0].tolist()
+                    mask_indices = torch.where(actual["select_atom"][0, 1 : len(atoms) + 1] == 1)[0].tolist()
                     self.assertEqual(mask_indices, list(composed.selected_atom_indices))
                     for name in expected:
                         self.assertEqual(actual[name].dtype, expected[name].dtype, name)
@@ -580,7 +572,9 @@ class PredictionModelParityTests(unittest.TestCase):
                     self.assertEqual(actual["src_edge_type"].shape, (1, padded_length, padded_length))
                     self.assertTrue(torch.equal(actual["src_coord"][0, 0], torch.zeros(3)))
                     self.assertTrue(torch.equal(actual["src_coord"][0, len(atoms) + 1], torch.zeros(3)))
-                    self.assertTrue(torch.equal(actual["src_coord"][0, logical_length:], torch.zeros(padded_length - logical_length, 3)))
+                    self.assertTrue(
+                        torch.equal(actual["src_coord"][0, logical_length:], torch.zeros(padded_length - logical_length, 3))
+                    )
                     self.assertTrue(torch.equal(actual["src_distance"][0, 0], torch.zeros(padded_length)))
                     self.assertTrue(torch.equal(actual["src_distance"][0, len(atoms) + 1], torch.zeros(padded_length)))
 
@@ -607,8 +601,6 @@ class PredictionModelParityTests(unittest.TestCase):
                 self.assertEqual(real_atom_mask.sum().item(), 0)
 
     def test_oversize_input_rejects_before_scientific_imports_or_pairwise_allocation(self):
-        from unittest.mock import patch
-
         with (
             patch("scipy.spatial.distance_matrix") as pairwise,
             patch.dict("sys.modules", {"numpy": None, "torch": None, "scipy": None}),
@@ -703,16 +695,17 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                 )
                 self.assertEqual(dictionary.symbols, expected_symbols)
 
-                import lmdb
-
-                with lmdb.open(
-                    str(database_path),
-                    subdir=False,
-                    readonly=True,
-                    lock=False,
-                    readahead=False,
-                    meminit=False,
-                ) as environment, environment.begin() as transaction:
+                with (
+                    lmdb.open(
+                        str(database_path),
+                        subdir=False,
+                        readonly=True,
+                        lock=False,
+                        readahead=False,
+                        meminit=False,
+                    ) as environment,
+                    environment.begin() as transaction,
+                ):
                     self.assertEqual(transaction.stat()["entries"], len(keys))
                     for key, record_receipt in zip(keys, record_receipts):
                         packed_record = transaction.get(key)
@@ -724,7 +717,8 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                         self.assertEqual(len(atoms), record_receipt["atom_count"])
                         self.assertEqual(len(label_mask), len(atoms))
                         labelled_fixture_indices = [
-                            index for index, (atom, selected) in enumerate(zip(atoms, label_mask))
+                            index
+                            for index, (atom, selected) in enumerate(zip(atoms, label_mask))
                             if atom == fixture_element and selected == 1
                         ]
                         self.assertEqual(labelled_fixture_indices, record_receipt["selected_atom_indices"])
@@ -747,7 +741,8 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                                     tuple(index for index, atom in enumerate(atoms) if atom == element),
                                 )
                                 expected_label_indices = tuple(
-                                    index for index, (atom, selected) in enumerate(zip(atoms, label_mask))
+                                    index
+                                    for index, (atom, selected) in enumerate(zip(atoms, label_mask))
                                     if atom == element and selected == 1
                                 )
                                 oracle_mask = torch.where(expected["select_atom"][0, 1 : len(atoms) + 1] == 1)[0].tolist()
@@ -766,18 +761,20 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                                     torch.testing.assert_close(actual, reference_tensor, rtol=0, atol=0, msg=name)
                                     actual_bytes = actual.contiguous().numpy().tobytes()
                                     reference_bytes = reference_tensor.contiguous().numpy().tobytes()
-                                    tensor_observations.append({
-                                        "source_element": fixture_element,
-                                        "source_key_hex": key.hex(),
-                                        "source_record_sha256": record_receipt["raw_sha256"],
-                                        "prediction_element": element,
-                                        "tensor": name,
-                                        "shape": list(actual.shape),
-                                        "dtype": str(actual.dtype),
-                                        "actual_sha256": hashlib.sha256(actual_bytes).hexdigest(),
-                                        "reference_sha256": hashlib.sha256(reference_bytes).hexdigest(),
-                                        "exact_equal": actual_bytes == reference_bytes,
-                                    })
+                                    tensor_observations.append(
+                                        {
+                                            "source_element": fixture_element,
+                                            "source_key_hex": key.hex(),
+                                            "source_record_sha256": record_receipt["raw_sha256"],
+                                            "prediction_element": element,
+                                            "tensor": name,
+                                            "shape": list(actual.shape),
+                                            "dtype": str(actual.dtype),
+                                            "actual_sha256": hashlib.sha256(actual_bytes).hexdigest(),
+                                            "reference_sha256": hashlib.sha256(reference_bytes).hexdigest(),
+                                            "exact_equal": actual_bytes == reference_bytes,
+                                        }
+                                    )
                         total_records += 1
         self.assertEqual(total_records, 4)
         sys.stdout.write(
@@ -786,8 +783,6 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
             + "\n"
         )
         sys.stdout.flush()
-
-
 
 
 class VerifiedModelArtifactTests(unittest.TestCase):
@@ -820,9 +815,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
     def test_verified_member_snapshot_reports_the_bytes_it_returns(self):
         content = b"model release member"
         path, selection = self.add_member("model/checkpoint.pt", content)
-        snapshot, identity = baseline_prepare.verified_member_bytes(
-            self.root, self.archive, selection
-        )
+        snapshot, identity = baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
         self.assertEqual(snapshot, content)
         self.assertEqual(
             identity,
@@ -834,9 +827,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
                 "sha256": hashlib.sha256(content).hexdigest(),
             },
         )
-        verified_path, path_identity = baseline_prepare.verified_member(
-            self.root, self.archive, selection
-        )
+        verified_path, path_identity = baseline_prepare.verified_member(self.root, self.archive, selection)
         self.assertEqual(verified_path, path)
         self.assertEqual(path_identity["sha256"], identity["sha256"])
         self.assertEqual(path.read_bytes(), content)
@@ -917,13 +908,9 @@ class VerifiedModelArtifactTests(unittest.TestCase):
         self.assertEqual(path.stat().st_size, len(content) + 1)
 
     def test_checkpoint_scaler_and_dictionary_load_only_verified_byte_snapshots(self):
-        from sklearn.preprocessing import StandardScaler
-
         checkpoint_buffer = io.BytesIO()
         torch.save({"model": {"weight": torch.tensor([2.5])}}, checkpoint_buffer)
         scaler_buffer = io.BytesIO()
-        import joblib
-
         joblib.dump(StandardScaler().fit(np.array([[1.0], [3.0]])), scaler_buffer)
         members = (
             ("model/checkpoint.pt", checkpoint_buffer.getvalue(), load_checkpoint_from_bytes),
@@ -934,9 +921,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
         for name, content, loader in members:
             with self.subTest(member=name):
                 path, selection = self.add_member(name, content)
-                snapshot, identity = baseline_prepare.verified_member_bytes(
-                    self.root, self.archive, selection
-                )
+                snapshot, identity = baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
                 self.assertEqual(identity["sha256"], hashlib.sha256(snapshot).hexdigest())
                 self.assertEqual(identity["size"], len(snapshot))
 
@@ -955,5 +940,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
                 self.assertIsNotNone(loader(snapshot))
                 with self.assertRaises(TypeError):
                     loader(path)
+
+
 if __name__ == "__main__":
     unittest.main()

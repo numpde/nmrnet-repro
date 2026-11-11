@@ -17,15 +17,10 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-if os.environ.get("NMRNET_PREDICTION_PARITY") != "1":
-    raise unittest.SkipTest("run make prediction/model-parity")
-
 import lmdb
 import numpy as np
+import sklearn
 import torch
-
-from nmrnet_inference import model as prediction_model, predict
-from nmrnet_inference.release import SelectedReleaseModels
 from test_prediction_model import (
     EXPECTED_REFERENCE_PACKET_SHA256,
     PARITY_TEST_UNIT,
@@ -33,6 +28,10 @@ from test_prediction_model import (
     read_fixture_receipt,
     read_receipted_bytes,
 )
+
+from nmrnet_inference import model as prediction_model
+from nmrnet_inference import predict
+from nmrnet_inference.release import SelectedReleaseModels
 from tools import artifacts, baseline_model, baseline_prepare
 
 
@@ -65,11 +64,17 @@ def reference_requests(test, reference):
                         test.assertIsNotNone(content)
                         test.assertEqual(hashlib.sha256(content).hexdigest(), expected["raw_sha256"])
                         record = load_reference_pickle(content)
-                        requests.append((element, key.hex(), {
-                            "coordinate_unit": "angstrom",
-                            "atoms": list(record["atoms"]),
-                            "coordinates": np.asarray(record["coordinates"]).tolist(),
-                        }))
+                        requests.append(
+                            (
+                                element,
+                                key.hex(),
+                                {
+                                    "coordinate_unit": "angstrom",
+                                    "atoms": list(record["atoms"]),
+                                    "coordinates": np.asarray(record["coordinates"]).tolist(),
+                                },
+                            )
+                        )
     test.assertEqual(len(requests), 4)
     return requests
 
@@ -85,7 +90,8 @@ class ReleasedPredictionTests(unittest.TestCase):
     def selected_models(self):
         return SelectedReleaseModels(
             declaration_path=Path("/input/prediction-models.json"),
-            weight_root=Path("/weight"), checkpoint_root=Path("/checkpoints"),
+            weight_root=Path("/weight"),
+            checkpoint_root=Path("/checkpoints"),
         )
 
     def assert_loaded_checkpoint_state(self, model, expected, element):
@@ -154,10 +160,19 @@ class ReleasedPredictionTests(unittest.TestCase):
                 del unloaded, transfer
             del expected, content
         sources = (
-            "tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py", "tools/baseline_model.py",
-            "nmrnet_inference/model.py", "nmrnet_inference/predict.py", "nmrnet_inference/release.py",
-            "tests/test_prediction_model.py", "tests/test_prediction_release.py",
-            "tools/baseline.sh", "tools/inference_native.sh", "tools/docker_client.sh", "tools/git_metadata.sh",
+            "tools/container_guard.py",
+            "tools/artifacts.py",
+            "tools/baseline_prepare.py",
+            "tools/baseline_model.py",
+            "nmrnet_inference/model.py",
+            "nmrnet_inference/predict.py",
+            "nmrnet_inference/release.py",
+            "tests/integration/prediction_parity/test_prediction_model.py",
+            "tests/integration/prediction_parity/test_prediction_release.py",
+            "tools/baseline.sh",
+            "tools/inference_native.sh",
+            "tools/docker_client.sh",
+            "tools/git_metadata.sh",
         )
         execution = baseline_prepare.execution_identity(
             image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
@@ -177,8 +192,11 @@ class ReleasedPredictionTests(unittest.TestCase):
                 for name in ("prediction-models.json", "inference.lock", "unicore-source.json")
             },
             "runtime": {
-                "python": platform.python_version(), "torch": torch.__version__, "numpy": np.__version__,
-                "torch_threads": torch.get_num_threads(), "torch_interop_threads": torch.get_num_interop_threads(),
+                "python": platform.python_version(),
+                "torch": torch.__version__,
+                "numpy": np.__version__,
+                "torch_threads": torch.get_num_threads(),
+                "torch_interop_threads": torch.get_num_interop_threads(),
             },
             "heads": observed,
             "negative_controls": ["altered actual H parameter", "actual H class load_state_dict returns without copying"],
@@ -196,9 +214,9 @@ class ReleasedPredictionTests(unittest.TestCase):
         for element in ("H", "C"):
             expected = self.reference["elements"][element]
             self.assertEqual(expected["checkpoint_archive"], self.reference["elements"]["H"]["checkpoint_archive"])
-            self.assertEqual(specification["elements"][element], {
-                role: expected["artifacts"][role] for role in ("checkpoint", "scaler")
-            })
+            self.assertEqual(
+                specification["elements"][element], {role: expected["artifacts"][role] for role in ("checkpoint", "scaler")}
+            )
         for archive_name, members in (
             ("weight.zip", [specification["dictionary"]]),
             ("checkpoints.zip", [member for head in specification["elements"].values() for member in head.values()]),
@@ -219,9 +237,10 @@ class ReleasedPredictionTests(unittest.TestCase):
             result = predict.predict_request(raw, loader.load_dictionary, loader.load_selected_element)
             self.assertEqual(result["unit"], "ppm")
             predictions = result["predictions"]
-            self.assertEqual([item["atom_index"] for item in predictions], [
-                index for index, atom in enumerate(request["atoms"]) if atom in ("H", "C")
-            ])
+            self.assertEqual(
+                [item["atom_index"] for item in predictions],
+                [index for index, atom in enumerate(request["atoms"]) if atom in ("H", "C")],
+            )
             self.assertTrue(all(item["element"] == request["atoms"][item["atom_index"]] for item in predictions))
             values = {item["atom_index"]: item["shift_ppm"] for item in predictions}
             fixture_id = (fixture_element, key)
@@ -229,23 +248,22 @@ class ReleasedPredictionTests(unittest.TestCase):
                 self.assertEqual(result, outputs[fixture_id])
             else:
                 source_record = next(
-                    record for record in self.reference["elements"][fixture_element]["records"]
-                    if record["key_hex"] == key
+                    record for record in self.reference["elements"][fixture_element]["records"] if record["key_hex"] == key
                 )
-                observations.append({
-                    "source_element": fixture_element,
-                    "source_key_hex": key,
-                    "source_record_sha256": source_record["raw_sha256"],
-                    "request": {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()},
-                    "atom_count": len(request["atoms"]),
-                    "eligible_atom_indices_by_element": {
-                        element: [
-                            index for index, atom in enumerate(request["atoms"]) if atom == element
-                        ]
-                        for element in ("H", "C")
-                    },
-                    "result": result,
-                })
+                observations.append(
+                    {
+                        "source_element": fixture_element,
+                        "source_key_hex": key,
+                        "source_record_sha256": source_record["raw_sha256"],
+                        "request": {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()},
+                        "atom_count": len(request["atoms"]),
+                        "eligible_atom_indices_by_element": {
+                            element: [index for index, atom in enumerate(request["atoms"]) if atom == element]
+                            for element in ("H", "C")
+                        },
+                        "result": result,
+                    }
+                )
             outputs[fixture_id] = result
             for expected in self.reference["elements"][fixture_element]["predictions"]:
                 if expected["key_hex"] == key:
@@ -253,7 +271,8 @@ class ReleasedPredictionTests(unittest.TestCase):
                     observed.add((fixture_element, key, expected["atom_index"]))
         population = {
             (element, item["key_hex"], item["atom_index"])
-            for element in ("H", "C") for item in self.reference["elements"][element]["predictions"]
+            for element in ("H", "C")
+            for item in self.reference["elements"][element]["predictions"]
         }
         self.assertEqual(len(population), 64)
         self.assertEqual(observed, population)
@@ -263,10 +282,19 @@ class ReleasedPredictionTests(unittest.TestCase):
     def print_fixture_observation(self, observations, resources, effective_selection):
         """Emit evidence only; retain it publicly only after the whole lane passes."""
         sources = (
-            "tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py", "tools/baseline_model.py",
-            "nmrnet_inference/model.py", "nmrnet_inference/predict.py", "nmrnet_inference/release.py",
-            "tests/test_prediction_model.py", "tests/test_prediction_release.py",
-            "tools/baseline.sh", "tools/inference_native.sh", "tools/docker_client.sh", "tools/git_metadata.sh",
+            "tools/container_guard.py",
+            "tools/artifacts.py",
+            "tools/baseline_prepare.py",
+            "tools/baseline_model.py",
+            "nmrnet_inference/model.py",
+            "nmrnet_inference/predict.py",
+            "nmrnet_inference/release.py",
+            "tests/integration/prediction_parity/test_prediction_model.py",
+            "tests/integration/prediction_parity/test_prediction_release.py",
+            "tools/baseline.sh",
+            "tools/inference_native.sh",
+            "tools/docker_client.sh",
+            "tools/git_metadata.sh",
         )
         execution = baseline_prepare.execution_identity(
             image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
@@ -274,8 +302,6 @@ class ReleasedPredictionTests(unittest.TestCase):
             tool_sources=[(name, Path("/workspace") / name) for name in sources],
         )
         self.assertEqual(os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"], self.reference["provenance"]["upstream_revision"])
-        import sklearn
-
         observation = {
             "scope": "Contained real-model predictions on retained validation fixtures under the adopted angstrom input contract.",
             "fixture_payload_included": False,
@@ -287,8 +313,12 @@ class ReleasedPredictionTests(unittest.TestCase):
             "source_identity_scope": "Mounted files hashed after composed execution; repository_revision is caller-reported parent HEAD.",
             "upstream_revision": os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"],
             "runtime": {
-                "python": platform.python_version(), "torch": torch.__version__, "numpy": np.__version__, "sklearn": sklearn.__version__,
-                "torch_threads": torch.get_num_threads(), "torch_interop_threads": torch.get_num_interop_threads(),
+                "python": platform.python_version(),
+                "torch": torch.__version__,
+                "numpy": np.__version__,
+                "sklearn": sklearn.__version__,
+                "torch_threads": torch.get_num_threads(),
+                "torch_interop_threads": torch.get_num_interop_threads(),
             },
             "resources": resources,
             "resource_observation_scope": "Cumulative cgroup peak immediately after the composed fixture/reuse test; later tests may increase it.",
@@ -338,7 +368,8 @@ class ReleasedPredictionTests(unittest.TestCase):
         with (
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": sentinel, "C": sentinel}),
             mock.patch.object(prediction_model, "predict_element", side_effect=observe_prediction),
-            redirect_stdout(stdout), redirect_stderr(stderr),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
         ):
             with self.assertRaises(RuntimeError) as raised:
                 predict.predict_request(raw, loader.load_dictionary, fail_c_after_h)
@@ -369,8 +400,12 @@ class ReleasedPredictionTests(unittest.TestCase):
         expected = self.reference["elements"][element]
         paths = {role: Path("/checkpoints") / item["member"] for role, item in expected["artifacts"].items()}
         argv = baseline_model.inference_argv(
-            Path("/prepared"), element, paths,
-            {"max_atoms": 128, "max_tokens": 130}, Path("/tmp"), Path("/opt/nmrnet/uninmr"),
+            Path("/prepared"),
+            element,
+            paths,
+            {"max_atoms": 128, "max_tokens": 130},
+            Path("/tmp"),
+            Path("/opt/nmrnet/uninmr"),
         )
         # Uni-Core rejects registering a user module already imported outside its
         # own importer. Resolve the independent upstream CLI in a fresh process,
@@ -391,15 +426,15 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
             output = Path(temporary) / "args.json"
             result = subprocess.run(
                 [sys.executable, "-B", "-c", program, str(output), *argv],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
             resolved_args = json.loads(read_fixture_receipt(output))
         for name, value in vars(model.args).items():
             self.assertEqual(value, resolved_args[name], name)
-        self.assertEqual(
-            prediction_model.require_cpu_float32_model(model, torch.float32), expected["model"]["parameter_count"]
-        )
+        self.assertEqual(prediction_model.require_cpu_float32_model(model, torch.float32), expected["model"]["parameter_count"])
         self.assertFalse(model.training)
 
     def assert_synthetic_capacity(self, model, dictionary, scaler, element):
@@ -433,9 +468,7 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
 
     def test_real_models_match_all_64_reference_positions_without_task_setup(self):
         requests = reference_requests(self, self.reference)
-        dictionary_bytes = self.verified_bytes(
-            "/weight", "weight.zip", self.reference["source_artifacts"]["dictionary"]
-        )
+        dictionary_bytes = self.verified_bytes("/weight", "weight.zip", self.reference["source_artifacts"]["dictionary"])
         dictionary = prediction_model.load_prediction_dictionary_from_bytes(dictionary_bytes)
         self.assertEqual(dictionary.symbols, self.reference["dictionary"]["symbols"])
         self.assertEqual(dictionary.indices["[MASK]"], 30)
@@ -443,7 +476,9 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
         with (
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch("unicore.tasks.setup_task", side_effect=AssertionError("prediction must not set up a task")),
-            mock.patch("uninmr.tasks.uninmr.UniNMRTask.__init__", side_effect=AssertionError("prediction must not construct a task")),
+            mock.patch(
+                "uninmr.tasks.uninmr.UniNMRTask.__init__", side_effect=AssertionError("prediction must not construct a task")
+            ),
         ):
             for element in ("H", "C"):
                 expected = self.reference["elements"][element]
@@ -458,9 +493,9 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
                 for fixture_element, key, request in [*requests, *reversed(requests)]:
                     with self.subTest(model=element, fixture=fixture_element, key=key):
                         predictions = dict(prediction_model.predict_element(request, element, model, dictionary, scaler))
-                        self.assertEqual(list(predictions), [
-                            index for index, atom in enumerate(request["atoms"]) if atom == element
-                        ])
+                        self.assertEqual(
+                            list(predictions), [index for index, atom in enumerate(request["atoms"]) if atom == element]
+                        )
                         fixture_id = (fixture_element, key)
                         if fixture_id in repeated_outputs:
                             self.assertEqual(predictions, repeated_outputs[fixture_id])
@@ -475,7 +510,8 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
                 del model, scaler
         population = {
             (element, item["key_hex"], item["atom_index"])
-            for element in ("H", "C") for item in self.reference["elements"][element]["predictions"]
+            for element in ("H", "C")
+            for item in self.reference["elements"][element]["predictions"]
         }
         self.assertEqual(len(population), 64)
         self.assertEqual(observed, population)
