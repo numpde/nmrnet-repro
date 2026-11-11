@@ -140,7 +140,7 @@ def _atom_rows(lines):
         symbol = _element(fields[5], number)
         if not all(_COORDINATE_NUMBER.fullmatch(value) is not None for value in fields[2:5]):
             raise InputRejected(f"Cannot read MOL2 ATOM row {number}: X/Y/Z must be decimal numbers with optional exponents.")
-        coordinates = tuple(float(value) for value in fields[2:5])
+        coordinates = (float(fields[2]), float(fields[3]), float(fields[4]))
         rows.append((identifier, symbol, coordinates))
     return rows
 

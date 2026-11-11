@@ -128,7 +128,7 @@ def parse_atom_row(line, line_number):
     if len(parts) != 4:
         raise InputRejected(f"Cannot prepare coordinates at line {line_number}: expected element x y z.")
     try:
-        coordinates = tuple(float(value) for value in parts[1:])
+        coordinates = (float(parts[1]), float(parts[2]), float(parts[3]))
     except ValueError:
         raise InputRejected(f"Cannot prepare coordinates at line {line_number}: x, y and z must be numbers.") from None
     return line_number, parts[0], coordinates
