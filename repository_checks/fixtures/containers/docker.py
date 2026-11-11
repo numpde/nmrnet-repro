@@ -75,7 +75,6 @@ record_engine_call(
 command = arguments[0] if arguments else ""
 for fault_name, accepted_values in (
     ("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),
-    ("NMRNET_FAKE_PROXY_NO_READY", {"1"}),
 ):
     if fault_name in os.environ and os.environ[fault_name] not in accepted_values:
         sys.stderr.write("unexpected fake docker invocation: unmodeled acquisition fault selector\n")
@@ -265,8 +264,7 @@ elif command == "start":
         raise SystemExit(97)
     if "--attach" not in arguments:
         path = Path((log.parent / "ready-path").read_text())
-        if os.environ.get("NMRNET_FAKE_PROXY_NO_READY") != "1":
-            (path / "port").write_text("12345\n")
+        (path / "port").write_text("12345\n")
     else:
         if "NMRNET_FAKE_WORKER_STDOUT" in os.environ:
             sys.stdout.write(os.environ["NMRNET_FAKE_WORKER_STDOUT"])
