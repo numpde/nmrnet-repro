@@ -185,7 +185,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             ):
                 with self.subTest(case_kind=case_kind, output=output):
                     actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
-                    actual.pop("output", None)
+                    del actual["output"]
                     if output is not None:
                         actual["output"] = output
                     with (
@@ -234,18 +234,18 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     )
 
     def test_middle_conformer_source_order_native_values_stereo_coverage_or_prediction_cannot_be_skipped(self):
-        for fault in (
-            "source",
-            "geometry-id",
-            "missing-id",
-            "order",
-            "digest",
-            "native",
-            "stereo",
-            "coverage",
-            "row",
-            "nonfinite",
-            "parents",
+        for fault, expected_error in (
+            ("source", "geometry 2"),
+            ("geometry-id", "geometry 2"),
+            ("missing-id", "geometry 2"),
+            ("order", "geometry 2"),
+            ("digest", "geometry 2"),
+            ("native", "geometry 2"),
+            ("stereo", "geometry 2"),
+            ("coverage", "geometry 2"),
+            ("row", "geometry 2"),
+            ("nonfinite", "geometry 2"),
+            ("parents", "parents"),
         ):
             with self.subTest(fault=fault):
                 actual, retained, receipt, metadata, interpreter, expected = generated_multiple_documents()
@@ -276,7 +276,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     actual["generation"]["provenance_sha256"] = hashlib.sha256(
                         json.dumps(provenance, sort_keys=True, allow_nan=False).encode()
                     ).hexdigest()
-                with self.assertRaisesRegex(AssertionError, "parents" if fault == "parents" else "geometry 2"):
+                with self.assertRaisesRegex(AssertionError, expected_error):
                     compare_smiles_scientific_documents(
                         actual,
                         retained,
@@ -430,17 +430,17 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
 
     def test_upload_errors_never_retry_or_advance_and_secret_bodies_never_reach_files_or_rendered_failure(self):
         _actual, retained, _receipt, _metadata, _interpreter, _upload, _source, _expected = uploaded_documents()
-        for fault in (
-            "hostile-url",
-            "header-injection",
-            "cap-error-body",
-            "cap-schema",
-            "cap-expired",
-            "cap-json",
-            "put-error-body",
-            "lost-put",
-            "wrong-finalize",
-            "wrong-attach",
+        for fault, expected_puts in (
+            ("hostile-url", 0),
+            ("header-injection", 0),
+            ("cap-error-body", 0),
+            ("cap-schema", 0),
+            ("cap-expired", 0),
+            ("cap-json", 0),
+            ("put-error-body", 1),
+            ("lost-put", 1),
+            ("wrong-finalize", 1),
+            ("wrong-attach", 1),
         ):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary:
                 client, calls, _source, canary = upload_client(Path(temporary), fault=fault)
@@ -451,12 +451,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 ):
                     submit(client, {"specification": "Use attached atom_order.xyz, XYZ, angstrom, record 1."}, case_kind="upload")
                 byte_requests = [call for call in calls if call[1].startswith("/upload/v1/")]
-                self.assertEqual(
-                    len(byte_requests),
-                    0
-                    if fault in ("hostile-url", "header-injection", "cap-error-body", "cap-schema", "cap-expired", "cap-json")
-                    else 1,
-                )
+                self.assertEqual(expected_puts, len(byte_requests))
                 self.assertFalse(any(path.endswith("/state") for _method, path, *_rest in calls))
                 if fault in ("put-error-body", "lost-put"):
                     self.assertFalse(

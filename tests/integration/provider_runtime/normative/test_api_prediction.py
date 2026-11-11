@@ -89,6 +89,7 @@ class QualificationContextTests(unittest.TestCase):
         )
         self.invocations = 0
 
+    # silent-defaults: allow-contract -- These fixture switches select fresh submission, retained readback or deliberately incomplete original evidence; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::QualificationContextTests.test_readback_requires_both_original_evidence_inputs_before_output_or_deployment_work.
     def coordinate(self, *, receipt=False, identity=False):
         self.invocations += 1
         output = self.root / f"output-{self.invocations}"
@@ -151,6 +152,7 @@ class ApiReadSigningTests(unittest.TestCase):
         client._exchange = Mock(side_effect=replies)
         return client
 
+    # silent-defaults: allow-contract -- The scripted baseline is a retryable same-topology window refusal; explicit cases exercise nonretryable codes and topologies; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiReadSigningTests.test_repeated_window_refusal_is_bounded_and_other_refusals_or_mutations_are_not_retried.
     def refusal(self, *, code="authentication_window_closed", topology="dev-local"):
         return UploadResponse(401, topology=topology), json.dumps(
             {
