@@ -104,6 +104,18 @@ class WheelhouseTests(unittest.TestCase):
             wheelhouse.main()
         self.assertEqual({"version": "1"}, json.loads(output.getvalue()))
 
+    def test_report_without_a_lock_rejects_before_capturing_inputs(self):
+        arguments = ["wheelhouse", "report", "--lock-sha256", "a" * 64, "--pool", str(self.pool)]
+        with (
+            patch.object(wheelhouse.sys, "argv", arguments),
+            patch.object(wheelhouse.sys, "stderr", io.StringIO()),
+            patch.object(wheelhouse.tempfile, "TemporaryDirectory") as capture,
+            self.assertRaises(SystemExit) as failure,
+        ):
+            wheelhouse.main()
+        self.assertEqual(2, failure.exception.code)
+        capture.assert_not_called()
+
     def test_report_rejects_other_input_authorities(self):
         common = [
             "wheelhouse",

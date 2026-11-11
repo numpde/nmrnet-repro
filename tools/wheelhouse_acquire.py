@@ -165,7 +165,7 @@ def run_shared(command, operation, **kwargs):
         raise SystemExit(status) from None
 
 
-def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stream_assets=None):
+def acquire(locks, pool, assets, tool_assets, source=None, declarations=None, stream_assets=None):
     """Reuse the pool, then project missing locks and publish through the shared tool."""
     with tempfile.TemporaryDirectory(prefix="nmrnet-wheel-inputs-") as temporary:
         root = Path(temporary)
@@ -174,7 +174,10 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
             lock = root / f"requirements-{index}.lock"
             shutil.copyfile(original, lock)
             frozen.append(lock)
-        inputs = [assets, tool_assets, *declarations]
+        inputs = [assets, tool_assets]
+        if declarations is not None:
+            inputs.extend(declarations)
+        declaration_stop = len(inputs)
         if source is not None:
             inputs.append(source)
         if stream_assets is not None:
@@ -185,9 +188,9 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
             shutil.copyfile(original, snapshot)
             snapshots.append(snapshot)
         assets, tool_assets = snapshots[:2]
-        declarations = snapshots[2 : 2 + len(declarations)]
+        declarations = snapshots[2:declaration_stop]
         if source is not None:
-            source = snapshots[2 + len(declarations)]
+            source = snapshots[declaration_stop]
         if stream_assets is not None:
             stream_assets = snapshots[-1]
         with pool_lock(pool, exclusive=False) as descriptor:
@@ -318,7 +321,7 @@ def readiness(locks, pool, source=None, stream_assets=None):
     return not missing
 
 
-def prepare_test_support(assets, pool, download, *, probe=False):
+def prepare_test_support(assets, pool, download, *, probe):
     """Acquire or check only the SDK source archive used by consumer tests."""
     lines = [line.strip() for line in assets.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]
     sources = [line for line in lines if urllib.parse.urlsplit(line.split("#", 1)[0]).path.endswith(".tar.gz")]
@@ -347,13 +350,13 @@ def prepare_test_support(assets, pool, download, *, probe=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lock", type=Path, action="append", default=[])
+    parser.add_argument("--lock", type=Path, action="append")
     parser.add_argument("--pool", type=Path, required=True)
     parser.add_argument("--assets", type=Path)
     parser.add_argument("--tool-assets", type=Path)
     parser.add_argument("--stream-assets", type=Path)
     parser.add_argument("--source", type=Path)
-    parser.add_argument("--declaration", type=Path, action="append", default=[])
+    parser.add_argument("--declaration", type=Path, action="append")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--support", action="store_true")
     parser.add_argument("--probe", action="store_true")

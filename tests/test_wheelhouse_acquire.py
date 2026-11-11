@@ -111,6 +111,36 @@ class SharedAcquisitionTests(unittest.TestCase):
         for candidate in (science, sdk):
             self.assertEqual(candidate.read_bytes(), (self.pool / candidate.name).read_bytes())
 
+    def test_optional_declarations_keep_source_and_stream_snapshots_distinct(self):
+        source = self.root / "scientific-source.json"
+        source.write_bytes(b"scientific source identity")
+        for declarations in (None, [self.declaration]):
+            with self.subTest(declarations=declarations):
+                observed = []
+
+                def scientific_present(path, pool):
+                    observed.append(("source", path.read_bytes()))
+                    return True
+
+                def stream_present(path, pool):
+                    observed.append(("stream", path.read_bytes()))
+                    return True
+
+                with (
+                    patch.object(wheelhouse_acquire, "missing_wheel_locks", return_value=[]),
+                    patch.object(wheelhouse_acquire, "scientific_source_present", side_effect=scientific_present),
+                    patch.object(wheelhouse_acquire, "shared_asset_present", side_effect=stream_present),
+                    patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+                ):
+                    wheelhouse_acquire.acquire(
+                        [self.lock], self.pool, self.assets, self.tool_assets,
+                        source=source, declarations=declarations, stream_assets=self.tool_assets,
+                    )
+                self.assertEqual(
+                    [("source", b"scientific source identity"), ("stream", self.tool_assets.read_bytes())], observed,
+                )
+                prepare.assert_not_called()
+
     def test_warm_pool_needs_no_tool_or_metadata_request(self):
         with (
             patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
@@ -491,7 +521,7 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             self.assertTrue(download)
 
         with patch.object(wheelhouse_acquire, "prepare_core_assets", side_effect=prepare):
-            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=True)
+            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=True, probe=False)
         self.assertEqual(captured, [source_url + "\n"])
 
     def test_support_check_does_not_download_when_peer_publishes_after_first_check(self):
@@ -503,7 +533,7 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             patch.object(wheelhouse_acquire, "shared_asset_present", return_value=False),
             patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
         ):
-            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=False)
+            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=False, probe=False)
         self.assertEqual(1, prepare.call_count)
         self.assertIs(prepare.call_args.kwargs["download"], False)
 

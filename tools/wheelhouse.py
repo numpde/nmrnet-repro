@@ -344,7 +344,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("download", "check", "report"))
     parser.add_argument("--profile", choices=("inference", "preparation", "provider-core", "shared-tool"))
-    parser.add_argument("--lock", type=Path, action="append", default=[])
+    parser.add_argument("--lock", type=Path, action="append")
     parser.add_argument("--lock-sha256")
     parser.add_argument("--source", type=Path)
     parser.add_argument("--assets", type=Path)
@@ -353,7 +353,10 @@ def main():
     if args.action == "download" and args.profile != "shared-tool":
         parser.error("locked wheel acquisition belongs to tools.wheelhouse_acquire; download accepts only --profile shared-tool")
     if args.action == "report":
-        if args.profile is not None or args.source is not None or args.assets is not None or len(args.lock) != 1:
+        if (
+            args.profile is not None or args.source is not None or args.assets is not None
+            or args.lock is None or len(args.lock) != 1
+        ):
             parser.error("report requires one lock and no profile, source or assets")
         if args.lock_sha256 is None or not re.fullmatch(r"[0-9a-f]{64}", args.lock_sha256):
             parser.error("report requires the captured lock SHA-256")
@@ -378,11 +381,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix="wheel-inputs-") as temporary:
         root = Path(temporary)
         locks = []
-        for index, original in enumerate(args.lock):
-            lock = root / f"requirements-{index}.lock"
-            with regular_file(original, os.O_RDONLY) as stream, lock.open("xb") as target:
-                shutil.copyfileobj(stream, target, CHUNK_BYTES)
-            locks.append(lock)
+        if args.lock is not None:
+            for index, original in enumerate(args.lock):
+                lock = root / f"requirements-{index}.lock"
+                with regular_file(original, os.O_RDONLY) as stream, lock.open("xb") as target:
+                    shutil.copyfileobj(stream, target, CHUNK_BYTES)
+                locks.append(lock)
         source_path = None
         if args.source is not None:
             source_path = root / "unicore-source.json"
