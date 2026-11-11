@@ -1,4 +1,4 @@
-"""Acquire hash-locked wheels and, for inference, pinned Uni-Core without installing."""
+"""Verify locked artifacts and acquire pinned source or shared-tool assets."""
 
 from tools.container_guard import require_container
 
@@ -6,6 +6,7 @@ require_container()
 
 import argparse
 import fcntl
+import functools
 import hashlib
 import http.client
 import json
@@ -51,7 +52,9 @@ def network_request(name, operation):
                 detail = "the connection timed out"
             elif isinstance(reason, ssl.SSLError):
                 detail = "the TLS connection failed"
-            elif isinstance(reason, OSError) and (match := re.match(r"^Tunnel connection failed: ([0-9]{3})(?:\s|$)", str(reason))):
+            elif isinstance(reason, OSError) and (
+                match := re.match(r"^Tunnel connection failed: ([0-9]{3})(?:\s|$)", str(reason))
+            ):
                 detail = f"the proxy tunnel returned HTTP {match[1]}"
             elif isinstance(reason, OSError) and isinstance(reason.errno, int):
                 detail = f"the network failed with error number {reason.errno}"
@@ -138,7 +141,10 @@ def acquire_source(source, partial):
     """Fetch the admitted Uni-Core archive to one private file in its pool."""
     checksum = hashlib.sha256()
     size = 0
-    with network_request("Uni-Core source", lambda: open_url(urllib.request.Request(source["url"]), timeout=60)) as response, partial.open("wb") as stream:
+    with (
+        network_request("Uni-Core source", lambda: open_url(urllib.request.Request(source["url"]), timeout=60)) as response,
+        partial.open("wb") as stream,
+    ):
         while chunk := network_request("Uni-Core source", lambda: response.read(CHUNK_BYTES)):
             size += len(chunk)
             if not (size <= source["size"]):
@@ -253,79 +259,6 @@ def publish_file(path, destination, checksum):
     fsync_directory(destination.parent)
 
 
-def populate_pool(lock, pool, *, inference):
-    """Download hash-verified wheels directly into the locked shared pool.
-
-    SECS supplies the pip invocation, not its replace-whole-directory policy:
-    https://github.com/numpde/secs-repro/blob/7632f35f22ac20c70ff7c112531f4f32b6d2bd7b/make/packages.mk#L91-L104
-    https://pip.pypa.io/en/stable/cli/pip_download/
-
-    pip 25.0.1 resolves requirements and verifies hashes before saving linked
-    requirements to --dest. The caller holds an exclusive flock on the pool
-    directory until this operation and its final verification finish. Existing
-    complete files in the pool are discoverable through --find-links.
-    """
-    from pip._vendor.packaging.tags import sys_tags
-    from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
-    from pip._vendor.packaging.version import Version
-
-    locked = {(name, Version(version)): hashes for (name, version), hashes in requirements(lock).items()}
-    if not pool.is_dir():
-        raise ValueError("Cannot populate wheels: shared pool must already be a directory.")
-    try:
-        selected = select_wheels(lock, pool)
-    except subprocess.CalledProcessError:
-        # An incomplete pool is expected during explicit acquisition. Pip still
-        # owns compatibility and hash admission on the download path below.
-        pass
-    else:
-        sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
-        return selected
-    target_tags = set(sys_tags())
-    for path in pool.glob("*.whl"):
-        try:
-            name, version, _build, tags = parse_wheel_filename(path.name)
-        except InvalidWheelFilename:
-            continue
-        hashes = locked.get((name, version))
-        if hashes and tags.intersection(target_tags) and digest(path) not in hashes:
-            raise ValueError(f"Cannot acquire {path.name}: cached bytes differ from the lock; the existing file is preserved.")
-    print("Acquiring missing locked wheels directly in WHEELHOUSE.", flush=True)
-    indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
-    subprocess.run(
-        [
-            sys.executable,
-            "-I",
-            "-m",
-            "pip",
-            "--isolated",
-            "download",
-            "--require-hashes",
-            "--only-binary=:all:",
-            "--no-deps",
-            "--no-cache-dir",
-            "--disable-pip-version-check",
-            "--index-url",
-            "https://pypi.org/simple",
-            "--find-links",
-            str(pool),
-            *indexes,
-            "--dest",
-            str(pool),
-            "-r",
-            str(lock),
-        ],
-        check=True,
-    )
-    selected = select_wheels(lock, pool)
-    for name in selected["files"]:
-        with regular_file(pool / name, os.O_RDONLY) as stream:
-            os.fchmod(stream.fileno(), 0o644)
-            os.fsync(stream.fileno())
-    fsync_directory(pool)
-    return select_wheels(lock, pool)
-
-
 def prepare_source(source_path, directory):
     """Reuse or acquire the separately verified source in the same shared root."""
     source = source_identity(source_path)
@@ -337,7 +270,8 @@ def prepare_source(source_path, directory):
     os.close(descriptor)
     partial = Path(temporary)
     try:
-        print("Acquiring Uni-Core source directly into WHEELHOUSE.", flush=True)
+        sys.stdout.write("Acquiring Uni-Core source directly into WHEELHOUSE.\n")
+        sys.stdout.flush()
         acquire_source(source, partial)
         verified_source(partial, source)
         publish_file(partial, destination, source["sha256"])
@@ -355,10 +289,15 @@ def core_assets(inputs):
             continue
         url, checksum = line.rsplit("#sha256=", 1)
         parsed = urllib.parse.urlsplit(url)
-        if (parsed.scheme != "https" or parsed.netloc != "github.com"
-                or not parsed.path.startswith("/numpde/nmr-provider-tools/releases/download/")
-                or re.fullmatch(r"[0-9a-f]{64}", checksum) is None):
-            raise ValueError("Cannot acquire shared release artifact: require a pinned shared-owner GitHub release URL and SHA-256.")
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != "github.com"
+            or not parsed.path.startswith("/numpde/nmr-provider-tools/releases/download/")
+            or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+        ):
+            raise ValueError(
+                "Cannot acquire shared release artifact: require a pinned shared-owner GitHub release URL and SHA-256."
+            )
         name = parsed.path.rsplit("/", 1)[1]
         if name in ("", ".", ".."):
             raise ValueError("Cannot acquire shared release artifact: the URL must name a file.")
@@ -372,16 +311,24 @@ def prepare_core_assets(inputs, pool, *, download):
         destination = pool / name
         if destination.exists() or destination.is_symlink():
             if digest(destination) != checksum:
-                raise ValueError(f"Cannot reuse {name}: cached bytes differ from their GitHub release pin; existing file preserved.")
+                raise ValueError(
+                    f"Cannot reuse {name}: cached bytes differ from their GitHub release pin; existing file preserved."
+                )
             continue
         if not download:
-            raise ValueError(f"Cannot verify shared release artifact {name}: missing from the selected wheelhouse; run the matching acquisition target first.")
+            raise ValueError(
+                f"Cannot verify shared release artifact {name}: missing from the selected wheelhouse; run the matching acquisition target first."
+            )
         descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".part", dir=pool)
         os.close(descriptor)
         staged = Path(temporary)
         try:
-            print(f"Downloading shared release artifact: {name}", flush=True)
-            with network_request(name, lambda: open_url(urllib.request.Request(url), timeout=60)) as response, staged.open("wb") as target:
+            sys.stdout.write(f"Downloading shared release artifact: {name}\n")
+            sys.stdout.flush()
+            with (
+                network_request(name, functools.partial(open_url, urllib.request.Request(url), timeout=60)) as response,
+                staged.open("wb") as target,
+            ):
                 while chunk := network_request(name, lambda: response.read(CHUNK_BYTES)):
                     target.write(chunk)
                 target.flush()
@@ -391,18 +338,6 @@ def prepare_core_assets(inputs, pool, *, download):
             publish_file(staged, destination, checksum)
         finally:
             staged.unlink(missing_ok=True)
-
-
-def core_dependencies(lock, destination):
-    """Write third-party pins and report whether the lock needs any index packages."""
-    packages = requirements(lock)
-    if sum(name == "provider-core" for name, _version in packages) != 1:
-        raise ValueError("Cannot acquire shared dependencies: the installation lock must identify provider-core once.")
-    with destination.open("x") as stream:
-        for (name, version), hashes in sorted(packages.items()):
-            if name != "provider-core":
-                stream.write(" \\\n    ".join([f"{name}=={version}", *(f"--hash=sha256:{value}" for value in sorted(hashes))]) + "\n")
-    return len(packages) > 1
 
 
 def main():
@@ -415,6 +350,8 @@ def main():
     parser.add_argument("--assets", type=Path)
     parser.add_argument("--pool", type=Path)
     args = parser.parse_args()
+    if args.action == "download" and args.profile != "shared-tool":
+        parser.error("locked wheel acquisition belongs to tools.wheelhouse_acquire; download accepts only --profile shared-tool")
     if args.action == "report":
         if args.profile is not None or args.source is not None or args.assets is not None or len(args.lock) != 1:
             parser.error("report requires one lock and no profile, source or assets")
@@ -462,31 +399,12 @@ def main():
             finally:
                 os.close(descriptor)
         elif args.action == "download":
-            if args.profile == "provider-core":
-                if args.assets is None or len(locks) != 1:
-                    parser.error("provider-core acquisition requires --assets and one released installation lock")
-            if args.assets is not None:
-                if args.profile == "shared-tool":
-                    descriptor = os.open(args.pool, os.O_RDONLY | os.O_DIRECTORY)
-                    try:
-                        fcntl.flock(descriptor, fcntl.LOCK_EX)
-                        prepare_core_assets(args.assets, args.pool, download=True)
-                    finally:
-                        os.close(descriptor)
-                else:
-                    prepare_core_assets(args.assets, args.pool, download=True)
-            for index, lock in enumerate(locks):
-                if any(name == "provider-core" for name, _version in requirements(lock)):
-                    if args.assets is None:
-                        parser.error("the provider-core installation lock requires --assets for its GitHub release pins")
-                    third_party = root / f"third-party-{index}.lock"
-                    if core_dependencies(lock, third_party):
-                        populate_pool(third_party, args.pool, inference=False)
-                    select_wheels(lock, args.pool)
-                else:
-                    populate_pool(lock, args.pool, inference=args.profile == "inference")
-            if source_path is not None:
-                prepare_source(source_path, args.pool)
+            descriptor = os.open(args.pool, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                prepare_core_assets(args.assets, args.pool, download=True)
+            finally:
+                os.close(descriptor)
         else:
             if args.assets is not None:
                 if args.profile == "shared-tool":
@@ -514,5 +432,5 @@ if __name__ == "__main__":
     try:
         main()
     except WheelhouseNetworkError as error:
-        print(error, file=sys.stderr)
+        sys.stderr.write(f"{error}\n")
         raise SystemExit(1) from None

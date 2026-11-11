@@ -16,13 +16,23 @@ import urllib.parse
 from contextlib import contextmanager
 from pathlib import Path
 
-from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
-from pip._vendor.packaging.tags import sys_tags
 from pip._vendor.packaging.specifiers import Specifier
+from pip._vendor.packaging.tags import sys_tags
+from pip._vendor.packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from pip._vendor.packaging.version import Version
 
-from tools.wheelhouse import (WheelhouseNetworkError, core_assets, digest, prepare_core_assets, prepare_source, requirements, select_wheels,
-                              source_cache_file, source_identity, verified_source)
+from tools.wheelhouse import (
+    WheelhouseNetworkError,
+    core_assets,
+    digest,
+    prepare_core_assets,
+    prepare_source,
+    requirements,
+    select_wheels,
+    source_cache_file,
+    source_identity,
+    verified_source,
+)
 
 
 @contextmanager
@@ -76,8 +86,11 @@ def refuse_conflicting_wheels(lock, pool):
             continue
         if not tags.intersection(wheel_tags):
             continue
-        identities = [identity for identity, specifier in specifiers.items()
-                      if identity[0] == name and specifier.contains(version, prereleases=True)]
+        identities = [
+            identity
+            for identity, specifier in specifiers.items()
+            if identity[0] == name and specifier.contains(version, prereleases=True)
+        ]
         if not identities:
             continue
         try:
@@ -92,7 +105,9 @@ def refuse_conflicting_wheels(lock, pool):
                 conflicts[identity] = path.name
     for identity, name in conflicts.items():
         if identity not in valid:
-            raise ValueError(f"Cannot acquire wheels: cached wheel {name!r} is unreadable or differs from its lock; existing file preserved.")
+            raise ValueError(
+                f"Cannot acquire wheels: cached wheel {name!r} is unreadable or differs from its lock; existing file preserved."
+            )
     return set(expected) - valid
 
 
@@ -114,16 +129,21 @@ def direct_wheels(paths, packages):
     """Use only wheel URLs already pinned in the input declarations."""
     result = []
     for path in paths:
-        for line in path.read_text().splitlines():
-            line = line.strip()
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
             if " @ " not in line and not line.startswith(("https://", "http://")):
                 continue
             url = line.split(" @ ", 1)[-1]
             parsed = urllib.parse.urlsplit(url)
-            if (parsed.scheme != "https" or not parsed.netloc or parsed.username is not None or parsed.query
-                    or not re.fullmatch(r"sha256=[0-9a-f]{64}", parsed.fragment)):
+            if (
+                parsed.scheme != "https"
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.query
+                or not re.fullmatch(r"sha256=[0-9a-f]{64}", parsed.fragment)
+            ):
                 raise ValueError("Cannot acquire wheels: direct sources require HTTPS and a SHA-256 pin.")
             if not parsed.path.endswith(".whl"):
                 continue
@@ -141,7 +161,7 @@ def run_shared(command, operation, **kwargs):
         subprocess.run(command, check=True, **kwargs)
     except subprocess.CalledProcessError as error:
         status = error.returncode if error.returncode > 0 else 128 - error.returncode
-        print(f"Cannot {operation}: the shared wheelhouse tool exited with status {status}.", file=sys.stderr)
+        sys.stderr.write(f"Cannot {operation}: the shared wheelhouse tool exited with status {status}.\n")
         raise SystemExit(status) from None
 
 
@@ -165,7 +185,7 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
             shutil.copyfile(original, snapshot)
             snapshots.append(snapshot)
         assets, tool_assets = snapshots[:2]
-        declarations = snapshots[2:2 + len(declarations)]
+        declarations = snapshots[2 : 2 + len(declarations)]
         if source is not None:
             source = snapshots[2 + len(declarations)]
         if stream_assets is not None:
@@ -186,15 +206,19 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
                     if not source_ready:
                         prepare_source(source, pool)
         if not missing:
-            print("All locked wheels are already available in WHEELHOUSE; no download is needed.", flush=True)
+            sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
+            sys.stdout.flush()
             return
         with pool_lock(pool, exclusive=True) as descriptor:
             still_missing = missing_wheel_locks(missing, pool, descriptor)
             if not still_missing:
-                print("All locked wheels are already available in WHEELHOUSE; no download is needed.", flush=True)
+                sys.stdout.write("All locked wheels are already available in WHEELHOUSE; no download is needed.\n")
+                sys.stdout.flush()
                 return
-            jobs = [(lock, direct_wheels([assets, *declarations], {name for name, _version in requirements(lock)}))
-                    for lock in still_missing]
+            jobs = [
+                (lock, direct_wheels([assets, *declarations], {name for name, _version in requirements(lock)}))
+                for lock in still_missing
+            ]
             prepare_core_assets(tool_assets, pool, download=True)
         urls = [line.strip() for line in tool_assets.read_text().splitlines() if line.strip() and not line.startswith("#")]
         if len(urls) != 1:
@@ -203,12 +227,40 @@ def acquire(locks, pool, assets, tool_assets, source=None, declarations=(), stre
         for index, (lock, sources) in enumerate(jobs):
             projected = root / f"pylock.{index}.toml"
             with projected.open("xb") as output:
-                run_shared([sys.executable, "-I", "-S", str(tool), "locate", "--lock", str(lock),
-                            "--index-url", "https://pypi.org/simple", "--pool", str(pool),
-                            *[argument for url in sources for argument in ("--source", url)]],
-                           "locate locked wheels", stdout=output)
-            run_shared([sys.executable, "-I", "-S", str(tool), "acquire", "--lock", str(projected),
-                        "--source-lock", str(lock), "--pool", str(pool)], "acquire locked wheels")
+                run_shared(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-S",
+                        str(tool),
+                        "locate",
+                        "--lock",
+                        str(lock),
+                        "--index-url",
+                        "https://pypi.org/simple",
+                        "--pool",
+                        str(pool),
+                        *[argument for url in sources for argument in ("--source", url)],
+                    ],
+                    "locate locked wheels",
+                    stdout=output,
+                )
+            run_shared(
+                [
+                    sys.executable,
+                    "-I",
+                    "-S",
+                    str(tool),
+                    "acquire",
+                    "--lock",
+                    str(projected),
+                    "--source-lock",
+                    str(lock),
+                    "--pool",
+                    str(pool),
+                ],
+                "acquire locked wheels",
+            )
             with pool_lock(pool, exclusive=False) as descriptor:
                 select_wheels(lock, pool, lock_fd=descriptor)
 
@@ -230,7 +282,7 @@ def check(locks, pool, source=None, stream_assets=None):
                 verified_source(source_cache_file(pool, declaration), declaration)
             if stream_assets is not None:
                 prepare_core_assets(stream_assets, pool, download=False)
-    print(f"Verified locked wheels from {pool}")
+    sys.stdout.write(f"Verified locked wheels from {pool}\n")
 
 
 def readiness(locks, pool, source=None, stream_assets=None):
@@ -266,7 +318,7 @@ def readiness(locks, pool, source=None, stream_assets=None):
     return not missing
 
 
-def test_support(assets, pool, download, *, probe=False):
+def prepare_test_support(assets, pool, download, *, probe=False):
     """Acquire or check only the SDK source archive used by consumer tests."""
     lines = [line.strip() for line in assets.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")]
     sources = [line for line in lines if urllib.parse.urlsplit(line.split("#", 1)[0]).path.endswith(".tar.gz")]
@@ -289,7 +341,8 @@ def test_support(assets, pool, download, *, probe=False):
     if probe:
         return True
     if not download:
-        print(f"Verified provider test support from {pool}")
+        sys.stdout.write(f"Verified provider test support from {pool}\n")
+    return None
 
 
 def main():
@@ -307,15 +360,31 @@ def main():
     parser.add_argument("--tool-only", action="store_true")
     args = parser.parse_args()
     if args.support:
-        if args.assets is None or args.lock or args.source is not None or args.tool_assets is not None or args.stream_assets is not None or args.declaration:
+        if (
+            args.assets is None
+            or args.lock
+            or args.source is not None
+            or args.tool_assets is not None
+            or args.stream_assets is not None
+            or args.declaration
+        ):
             parser.error("test support requires only --assets and --pool")
         if args.tool_only or (args.probe and args.check):
             parser.error("test support cannot combine probe with check or tool-only")
-        result = test_support(args.assets, args.pool, download=not args.check, probe=args.probe)
+        result = prepare_test_support(args.assets, args.pool, download=not args.check, probe=args.probe)
         if args.probe:
             return 0 if result else 3
     elif args.tool_only:
-        if not args.probe or args.assets is None or args.lock or args.source or args.tool_assets or args.stream_assets or args.declaration or args.check:
+        if (
+            not args.probe
+            or args.assets is None
+            or args.lock
+            or args.source
+            or args.tool_assets
+            or args.stream_assets
+            or args.declaration
+            or args.check
+        ):
             parser.error("tool-only probe requires only --assets and --pool")
         with pool_lock(args.pool, exclusive=False):
             return 0 if shared_asset_present(args.assets, args.pool) else 3
@@ -333,11 +402,12 @@ def main():
         if not args.lock or args.assets is None or args.tool_assets is None:
             parser.error("acquisition requires locks, release assets and the shared tool pin")
         acquire(args.lock, args.pool, args.assets, args.tool_assets, args.source, args.declaration, args.stream_assets)
+    return 0
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except WheelhouseNetworkError as error:
-        print(error, file=sys.stderr)
+        sys.stderr.write(f"{error}\n")
         raise SystemExit(1) from None

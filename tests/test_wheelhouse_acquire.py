@@ -14,8 +14,9 @@ from contextlib import contextmanager, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-from tools import wheelhouse_acquire
 from tests.unit.wheel_pool_fixtures import locked, wheel
+
+from tools import wheelhouse_acquire
 
 
 class SharedAcquisitionTests(unittest.TestCase):
@@ -28,37 +29,118 @@ class SharedAcquisitionTests(unittest.TestCase):
         self.lock = self.root / "inference.lock"
         self.lock.write_text("torch==2.13.0+cpu \\\n    --hash=sha256:" + "a" * 64 + "\n")
         self.assets = self.root / "assets.in"
-        self.assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0-py3-none-any.whl#sha256=" + "b" * 64 + "\n")
+        self.assets.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0-py3-none-any.whl#sha256="
+            + "b" * 64
+            + "\n"
+        )
         self.tool_assets = self.root / "tool.in"
-        self.tool_assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/wheelhouse-tool-1.0.0.pyz#sha256=" + "c" * 64 + "\n")
+        self.tool_assets.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/wheelhouse-tool-1.0.0.pyz#sha256="
+            + "c" * 64
+            + "\n"
+        )
         self.declaration = self.root / "inference.in"
         self.url = "https://download.pytorch.org/whl/torch-2.13.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=" + "a" * 64
         self.declaration.write_text("torch @ " + self.url + "\n")
 
+    def test_scientific_and_sdk_projection_reuse_captured_source_authority(self):
+        science = wheel(self.root, "capture-alpha", "1.0")
+        sdk = wheel(self.root, "provider-core", "1.0")
+        sdk_lock = self.root / "sdk.lock"
+        locked(self.lock, [("capture-alpha", "1.0", [science])])
+        locked(sdk_lock, [("provider-core", "1.0", [sdk])])
+        science_url = "https://example.invalid/" + science.name + "#sha256=" + hashlib.sha256(science.read_bytes()).hexdigest()
+        sdk_url = (
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + sdk.name
+            + "#sha256="
+            + hashlib.sha256(sdk.read_bytes()).hexdigest()
+        )
+        self.declaration.write_text("capture-alpha @ " + science_url + "\n")
+        self.assets.write_text(sdk_url + "\n")
+        expected = {self.lock.read_bytes(): (science, science_url), sdk_lock.read_bytes(): (sdk, sdk_url)}
+        tool_bytes = self.tool_assets.read_bytes()
+        real_run = subprocess.run
+        selections = []
+        handoffs = {}
+
+        def run(command, **kwargs):
+            if "pip" in command:
+                captured = Path(command[command.index("-r") + 1])
+                self.assertIn(captured.read_bytes(), expected)
+                self.assertIn("--no-index", command)
+                if not selections:
+                    for original in (self.lock, sdk_lock, self.declaration, self.assets, self.tool_assets):
+                        original.write_text("changed original input\n")
+                selections.append(captured)
+                return real_run(command, **kwargs)
+            if "locate" in command:
+                captured = Path(command[command.index("--lock") + 1])
+                candidate, source_url = expected[captured.read_bytes()]
+                self.assertEqual([source_url], [command[index + 1] for index, value in enumerate(command) if value == "--source"])
+                handoffs[captured.read_bytes()] = captured
+                kwargs["stdout"].write(candidate.name.encode())
+            else:
+                self.assertIn("acquire", command)
+                captured = Path(command[command.index("--source-lock") + 1])
+                candidate, _source_url = expected[captured.read_bytes()]
+                self.assertEqual(handoffs[captured.read_bytes()], captured)
+                projection = Path(command[command.index("--lock") + 1])
+                self.assertEqual(candidate.name.encode(), projection.read_bytes())
+                (self.pool / candidate.name).write_bytes(candidate.read_bytes())
+            return subprocess.CompletedProcess(command, 0)
+
+        def prepare(path, pool, *, download):
+            self.assertEqual(tool_bytes, path.read_bytes())
+            self.assertEqual(self.pool, pool)
+            self.assertTrue(download)
+
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets", side_effect=prepare) as prepared,
+            patch.object(wheelhouse_acquire.subprocess, "run", side_effect=run),
+        ):
+            wheelhouse_acquire.acquire(
+                [self.lock, sdk_lock], self.pool, self.assets, self.tool_assets, declarations=[self.declaration]
+            )
+        prepared.assert_called_once()
+        self.assertEqual(set(expected), set(handoffs))
+        self.assertEqual(2, len(set(handoffs.values())))
+        for captured in handoffs.values():
+            self.assertEqual(3, selections.count(captured))
+        for candidate in (science, sdk):
+            self.assertEqual(candidate.read_bytes(), (self.pool / candidate.name).read_bytes())
+
     def test_warm_pool_needs_no_tool_or_metadata_request(self):
-        with (patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
-              patch.object(wheelhouse_acquire, "select_wheels", return_value={}),
-              patch.object(wheelhouse_acquire.subprocess, "run") as run):
-            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
-                                       declarations=[self.declaration])
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
+            patch.object(wheelhouse_acquire, "select_wheels", return_value={}),
+            patch.object(wheelhouse_acquire.subprocess, "run") as run,
+        ):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, declarations=[self.declaration])
         assets.assert_not_called()
         run.assert_not_called()
 
     def test_shared_tool_failure_preserves_status_without_printing_command(self):
         output = io.StringIO()
         failure = subprocess.CalledProcessError(7, ["tool", "https://secret.invalid/private"])
-        with patch.object(wheelhouse_acquire.subprocess, "run", side_effect=failure), redirect_stderr(output):
-            with self.assertRaises(SystemExit) as stopped:
-                wheelhouse_acquire.run_shared(failure.cmd, "locate locked wheels")
+        with (
+            patch.object(wheelhouse_acquire.subprocess, "run", side_effect=failure),
+            redirect_stderr(output),
+            self.assertRaises(SystemExit) as stopped,
+        ):
+            wheelhouse_acquire.run_shared(failure.cmd, "locate locked wheels")
         self.assertEqual(7, stopped.exception.code)
         self.assertIn("locate locked wheels", output.getvalue())
         self.assertNotIn("secret.invalid", output.getvalue())
         self.assertNotIn("private", output.getvalue())
 
     def test_support_cli_reports_network_failure_without_traceback(self):
-        source_url = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        source_url = (
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        )
         self.assets.write_text(source_url + "\n")
-        script = '''
+        script = """
 import runpy, sys, urllib.error
 from unittest.mock import patch
 import tools.wheelhouse as wheelhouse
@@ -66,9 +148,10 @@ sys.argv = ["wheelhouse_acquire", "--support", "--assets", sys.argv[1], "--pool"
 failure = urllib.error.HTTPError("https://secret.invalid/private", 503, "private body", {}, None)
 with patch.object(wheelhouse, "open_url", side_effect=failure):
     runpy.run_module("tools.wheelhouse_acquire", run_name="__main__")
-'''
-        result = subprocess.run([sys.executable, "-B", "-c", script, str(self.assets), str(self.pool)],
-                                capture_output=True, text=True, check=False)
+"""
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", script, str(self.assets), str(self.pool)], capture_output=True, text=True, check=False
+        )
         self.assertEqual(1, result.returncode)
         self.assertIn("HTTP 503", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
@@ -88,14 +171,18 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
     def test_readiness_does_not_treat_pip_failure_with_complete_pool_as_missing(self):
         cached = wheel(self.pool, "pool-alpha", "1.0")
         lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
-        with patch.object(wheelhouse_acquire, "select_wheels", side_effect=subprocess.CalledProcessError(1, "pip")):
-            with self.assertRaises(subprocess.CalledProcessError):
-                wheelhouse_acquire.readiness([lock], self.pool)
+        with (
+            patch.object(wheelhouse_acquire, "select_wheels", side_effect=subprocess.CalledProcessError(1, "pip")),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            wheelhouse_acquire.readiness([lock], self.pool)
 
     def test_readiness_propagates_interruption(self):
-        with patch.object(wheelhouse_acquire, "select_wheels", side_effect=subprocess.CalledProcessError(2, "pip")):
-            with self.assertRaises(subprocess.CalledProcessError):
-                wheelhouse_acquire.readiness([self.lock], self.pool)
+        with (
+            patch.object(wheelhouse_acquire, "select_wheels", side_effect=subprocess.CalledProcessError(2, "pip")),
+            self.assertRaises(subprocess.CalledProcessError),
+        ):
+            wheelhouse_acquire.readiness([self.lock], self.pool)
 
     def test_readiness_rejects_invalid_missing_release_declaration(self):
         self.tool_assets.write_text("https://example.invalid/missing.pyz#sha256=" + "a" * 64 + "\n")
@@ -103,15 +190,22 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             wheelhouse_acquire.readiness([], self.pool, stream_assets=self.tool_assets)
 
     def test_conflict_scan_does_not_treat_directory_error_as_missing(self):
-        with patch.object(wheelhouse_acquire.os, "scandir", side_effect=PermissionError("denied")):
-            with self.assertRaises(PermissionError):
-                wheelhouse_acquire.refuse_conflicting_wheels(self.lock, self.pool)
+        with (
+            patch.object(wheelhouse_acquire.os, "scandir", side_effect=PermissionError("denied")),
+            self.assertRaises(PermissionError),
+        ):
+            wheelhouse_acquire.refuse_conflicting_wheels(self.lock, self.pool)
 
     def test_tool_only_probe_reports_missing_then_verified(self):
         path = self.pool / "wheelhouse-tool-1.0.0.pyz"
         content = b"tool bytes"
-        self.tool_assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
-                                    + path.name + "#sha256=" + hashlib.sha256(content).hexdigest() + "\n")
+        self.tool_assets.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + path.name
+            + "#sha256="
+            + hashlib.sha256(content).hexdigest()
+            + "\n"
+        )
         argv = ["wheelhouse_acquire", "--probe", "--tool-only", "--assets", str(self.tool_assets), "--pool", str(self.pool)]
         with patch.object(sys, "argv", argv):
             self.assertEqual(3, wheelhouse_acquire.main())
@@ -124,14 +218,19 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
     def test_support_probe_reports_missing_then_verified(self):
         path = self.pool / "provider_core-1.0.tar.gz"
         content = b"source bytes"
-        self.assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
-                               + path.name + "#sha256=" + hashlib.sha256(content).hexdigest() + "\n")
-        self.assertFalse(wheelhouse_acquire.test_support(self.assets, self.pool, download=False, probe=True))
+        self.assets.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + path.name
+            + "#sha256="
+            + hashlib.sha256(content).hexdigest()
+            + "\n"
+        )
+        self.assertFalse(wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=False, probe=True))
         path.write_bytes(content)
-        self.assertTrue(wheelhouse_acquire.test_support(self.assets, self.pool, download=False, probe=True))
+        self.assertTrue(wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=False, probe=True))
         path.write_bytes(b"corrupt")
         with self.assertRaisesRegex(ValueError, "cached bytes differ"):
-            wheelhouse_acquire.test_support(self.assets, self.pool, download=False, probe=True)
+            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=False, probe=True)
 
     def test_probe_rejects_incompatible_cli_modes(self):
         argv = ["wheelhouse_acquire", "--probe", "--check", "--pool", str(self.pool), "--lock", str(self.lock)]
@@ -143,15 +242,21 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
         content = b"cached release tool"
         name = "wheelhouse-tool-1.0.0.pyz"
         (self.pool / name).write_bytes(content)
-        self.tool_assets.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/" + name
-                                    + "#sha256=" + hashlib.sha256(content).hexdigest() + "\n")
+        self.tool_assets.write_text(
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
+            + name
+            + "#sha256="
+            + hashlib.sha256(content).hexdigest()
+            + "\n"
+        )
         failures = []
+
         def acquire():
             try:
-                wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
-                                           stream_assets=self.tool_assets)
+                wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, stream_assets=self.tool_assets)
             except Exception as error:
                 failures.append(error)
+
         with patch.object(wheelhouse_acquire, "select_wheels", return_value={}):
             with wheelhouse_acquire.pool_lock(self.pool, exclusive=False):
                 worker = threading.Thread(target=acquire)
@@ -164,21 +269,24 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
         self.assertEqual([], failures)
 
     def test_stream_asset_is_rechecked_after_another_publisher_wins(self):
-        with (patch.object(wheelhouse_acquire, "shared_asset_present", side_effect=[False, True]),
-              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
-              patch.object(wheelhouse_acquire, "select_wheels", return_value={})):
-            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
-                                       stream_assets=self.tool_assets)
+        with (
+            patch.object(wheelhouse_acquire, "shared_asset_present", side_effect=[False, True]),
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+            patch.object(wheelhouse_acquire, "select_wheels", return_value={}),
+        ):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, stream_assets=self.tool_assets)
         prepare.assert_not_called()
 
     def test_interrupted_offline_selection_does_not_start_acquisition(self):
         for status in (-9, 2, 130, 137, 143):
             with self.subTest(status=status):
                 failure = subprocess.CalledProcessError(status, "pip")
-                with (patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
-                      patch.object(wheelhouse_acquire, "select_wheels", side_effect=failure),
-                      patch.object(wheelhouse_acquire.subprocess, "run") as run,
-                      self.assertRaises(SystemExit) as interrupted):
+                with (
+                    patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
+                    patch.object(wheelhouse_acquire, "select_wheels", side_effect=failure),
+                    patch.object(wheelhouse_acquire.subprocess, "run") as run,
+                    self.assertRaises(SystemExit) as interrupted,
+                ):
                     wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets)
                 self.assertEqual(interrupted.exception.code, 128 - status if status < 0 else status)
                 assets.assert_not_called()
@@ -192,11 +300,12 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             self.assertEqual(pool, self.pool)
             self.assertTrue(download)
 
-        with (patch.object(wheelhouse_acquire, "prepare_core_assets", side_effect=prepare),
-              patch.object(wheelhouse_acquire, "select_wheels", return_value={}),
-              patch.object(wheelhouse_acquire.subprocess, "run") as run):
-            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
-                                       stream_assets=self.tool_assets)
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets", side_effect=prepare),
+            patch.object(wheelhouse_acquire, "select_wheels", return_value={}),
+            patch.object(wheelhouse_acquire.subprocess, "run") as run,
+        ):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, stream_assets=self.tool_assets)
         self.assertEqual(captured, [self.tool_assets.read_text()])
         run.assert_not_called()
 
@@ -213,12 +322,16 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
                     fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return subprocess.CompletedProcess(command, 0)
 
-        with (patch.object(wheelhouse_acquire, "prepare_core_assets"),
-              patch.object(wheelhouse_acquire, "select_wheels", side_effect=[subprocess.CalledProcessError(1, "pip"),
-                                                                            subprocess.CalledProcessError(1, "pip"), {}]),
-              patch.object(wheelhouse_acquire.subprocess, "run", side_effect=run)):
-            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
-                                       declarations=[self.declaration])
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets"),
+            patch.object(
+                wheelhouse_acquire,
+                "select_wheels",
+                side_effect=[subprocess.CalledProcessError(1, "pip"), subprocess.CalledProcessError(1, "pip"), {}],
+            ),
+            patch.object(wheelhouse_acquire.subprocess, "run", side_effect=run),
+        ):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, declarations=[self.declaration])
         self.assertEqual(len(calls), 2)
         self.assertIn("locate", calls[0])
         self.assertEqual(calls[0][calls[0].index("--pool") + 1], str(self.pool))
@@ -228,11 +341,12 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
         self.assertEqual(calls[1][-2:], ["--pool", str(self.pool)])
 
     def test_peer_winner_is_rechecked_before_tool_bootstrap(self):
-        with (patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
-              patch.object(wheelhouse_acquire, "select_wheels", side_effect=[subprocess.CalledProcessError(1, "pip"), {}]),
-              patch.object(wheelhouse_acquire.subprocess, "run") as run):
-            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets,
-                                       declarations=[self.declaration])
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as assets,
+            patch.object(wheelhouse_acquire, "select_wheels", side_effect=[subprocess.CalledProcessError(1, "pip"), {}]),
+            patch.object(wheelhouse_acquire.subprocess, "run") as run,
+        ):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets, declarations=[self.declaration])
         assets.assert_not_called()
         run.assert_not_called()
 
@@ -250,6 +364,7 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             with wheelhouse_acquire.pool_lock(self.pool, exclusive=True):
                 os.link(candidate, self.pool / candidate.name)
             published.set()
+
         peer = context.Process(target=publish)
         peer.start()
         real_lock = wheelhouse_acquire.pool_lock
@@ -265,9 +380,12 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
                 start.set()
                 if not published.wait(10):
                     raise RuntimeError("peer did not publish")
+
         try:
-            with (patch.object(wheelhouse_acquire, "pool_lock", coordinated),
-                  patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
+            with (
+                patch.object(wheelhouse_acquire, "pool_lock", coordinated),
+                patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+            ):
                 wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
             prepare.assert_not_called()
             peer.join(timeout=10)
@@ -282,10 +400,11 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
         cached = wheel(self.pool, "pool-alpha", "1.0")
         lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
         cached.write_bytes(b"conflicting cached bytes")
-        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare:
-            with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
-                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets,
-                                           stream_assets=self.tool_assets)
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+            self.assertRaisesRegex(ValueError, "cached wheel.*differs"),
+        ):
+            wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets, stream_assets=self.tool_assets)
         prepare.assert_not_called()
         self.assertEqual(b"conflicting cached bytes", cached.read_bytes())
 
@@ -294,17 +413,20 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
         lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
         cached.unlink()
         calls = 0
+
         def select(*args, **kwargs):
             nonlocal calls
             calls += 1
             if calls == 2:
                 cached.write_bytes(b"conflicting cached bytes")
             raise subprocess.CalledProcessError(1, "pip")
-        with (patch.object(wheelhouse_acquire, "select_wheels", side_effect=select),
-              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
-            with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
-                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets,
-                                           stream_assets=self.tool_assets)
+
+        with (
+            patch.object(wheelhouse_acquire, "select_wheels", side_effect=select),
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+            self.assertRaisesRegex(ValueError, "cached wheel.*differs"),
+        ):
+            wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets, stream_assets=self.tool_assets)
         prepare.assert_not_called()
         self.assertEqual(2, calls)
 
@@ -319,26 +441,32 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
         cached = wheel(self.pool, "pool-alpha", "1.0+local")
         lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [cached])])
         cached.write_bytes(b"conflicting cached bytes")
-        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare:
-            with self.assertRaisesRegex(ValueError, "cached wheel.*differs"):
-                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
+        with (
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+            self.assertRaisesRegex(ValueError, "cached wheel.*differs"),
+        ):
+            wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
         prepare.assert_not_called()
         self.assertEqual(b"conflicting cached bytes", cached.read_bytes())
 
     def test_invalid_locked_version_is_rejected_without_cached_candidate(self):
         lock = self.root / "invalid.lock"
         lock.write_text("pool-alpha==not-a-version \\\n    --hash=sha256:" + "a" * 64 + "\n")
-        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare:
-            with self.assertRaises(ValueError):
-                wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
+        with patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare, self.assertRaises(ValueError):
+            wheelhouse_acquire.acquire([lock], self.pool, self.assets, self.tool_assets)
         prepare.assert_not_called()
 
     def test_interrupted_recheck_does_not_bootstrap_tool(self):
-        with (patch.object(wheelhouse_acquire, "select_wheels", side_effect=[
-                subprocess.CalledProcessError(1, "pip"), subprocess.CalledProcessError(2, "pip")]),
-              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
-            with self.assertRaises(SystemExit) as interrupted:
-                wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets)
+        with (
+            patch.object(
+                wheelhouse_acquire,
+                "select_wheels",
+                side_effect=[subprocess.CalledProcessError(1, "pip"), subprocess.CalledProcessError(2, "pip")],
+            ),
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+            self.assertRaises(SystemExit) as interrupted,
+        ):
+            wheelhouse_acquire.acquire([self.lock], self.pool, self.assets, self.tool_assets)
         self.assertEqual(2, interrupted.exception.code)
         prepare.assert_not_called()
 
@@ -351,7 +479,9 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             wheelhouse_acquire.direct_wheels([self.declaration], {"torch"})
 
     def test_support_selects_only_the_pinned_source_archive(self):
-        source_url = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        source_url = (
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        )
         self.assets.write_text(self.assets.read_text() + source_url + "\n")
         captured = []
 
@@ -361,15 +491,19 @@ with patch.object(wheelhouse, "open_url", side_effect=failure):
             self.assertTrue(download)
 
         with patch.object(wheelhouse_acquire, "prepare_core_assets", side_effect=prepare):
-            wheelhouse_acquire.test_support(self.assets, self.pool, download=True)
+            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=True)
         self.assertEqual(captured, [source_url + "\n"])
 
     def test_support_check_does_not_download_when_peer_publishes_after_first_check(self):
-        source_url = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        source_url = (
+            "https://github.com/numpde/nmr-provider-tools/releases/download/v1/provider_core-1.0.tar.gz#sha256=" + "d" * 64
+        )
         self.assets.write_text(source_url + "\n")
-        with (patch.object(wheelhouse_acquire, "shared_asset_present", return_value=False),
-              patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare):
-            wheelhouse_acquire.test_support(self.assets, self.pool, download=False)
+        with (
+            patch.object(wheelhouse_acquire, "shared_asset_present", return_value=False),
+            patch.object(wheelhouse_acquire, "prepare_core_assets") as prepare,
+        ):
+            wheelhouse_acquire.prepare_test_support(self.assets, self.pool, download=False)
         self.assertEqual(1, prepare.call_count)
         self.assertIs(prepare.call_args.kwargs["download"], False)
 
