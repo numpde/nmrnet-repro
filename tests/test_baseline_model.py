@@ -21,9 +21,11 @@ class ModelTests(unittest.TestCase):
                     baseline_model.installed_user_directory()
                 (package / "infer.py").write_text("# controlled installed fixture\n")
                 self.assertEqual(baseline_model.installed_user_directory(), package)
-        with patch("tools.baseline_model.importlib.util.find_spec", return_value=None):
-            with self.assertRaisesRegex(ValueError, "installed NMRNet"):
-                baseline_model.installed_user_directory()
+        with (
+            patch("tools.baseline_model.importlib.util.find_spec", return_value=None),
+            self.assertRaisesRegex(ValueError, "installed NMRNet"),
+        ):
+            baseline_model.installed_user_directory()
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
