@@ -1,10 +1,11 @@
 """Literal first-party launches suppress bytecode before their Python payload."""
 from tools.container_guard import require_container
+
 require_container()
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from .python_bytecode import findings, production_files, scan
 from .sources import ROOT

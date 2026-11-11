@@ -15,8 +15,8 @@ import stat
 import sys
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import read_engine_calls, record_engine_call
 from repository_checks.fixtures.containers.acquisition_engine import AcquisitionEngine
+from repository_checks.fixtures.containers.fixture import read_engine_calls, record_engine_call
 
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
