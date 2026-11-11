@@ -25,8 +25,16 @@ The declaration therefore contains 19 Debian artifacts and one Ruff wheel.
 This is the complete addition set relative to the pinned base; inherited
 dependencies remain supplied by that exact base, whose package inventory was
 captured. Recommended and suggested packages are excluded.</p>
-<p>Debian versions, filenames, sizes and SHA-256 values come from apt's authenticated
-package stanzas. Security-pool artifacts use <code>/debian-security/pool/updates/main/</code>;
+<p>The October 14 catalogue and advisory record describe the original declaration.
+On November 11, the <code>libexpat1</code> pin was updated to
+<code>2.5.0-1+deb12u5</code> after the former package became unavailable. The
+signed Bookworm security catalogue, package identity and remaining open issues
+for this update are recorded separately in <code>checker-advisories.json</code>;
+the other package assessments remain the October 14 snapshot. Debian still
+reports open Expat issues, so this update is not a claim that the package is
+free of vulnerabilities.</p>
+<p>For the original declaration, Debian versions, filenames, sizes and SHA-256
+values came from apt's authenticated package stanzas. Security-pool artifacts use <code>/debian-security/pool/updates/main/</code>;
 ordinary artifacts use <code>/debian/pool/main/</code>. Apt verified the signed catalogs
 using the pinned base's <code>/usr/share/keyrings/debian-archive-keyring.gpg</code>, and a
 separate offline gpgv pass verified all three retained InRelease files. Catalog
@@ -41,24 +49,26 @@ selected from official exact-release metadata:
 https://pypi.org/pypi/ruff/0.15.15/json
 Its SHA-256 is
 <code>48decfa11d740de4889de623be1463308346312f2409a56e24aa280c86162dc4</code>.
-The completed declaration's SHA-256 is
+The original declaration's SHA-256 is
 <code>dda2f9555dd64c637f6fe4c161ba0523e3da28dca08f51354c4230f50e0e0432</code>.
+After the Expat update, the current declaration's SHA-256 is
+<code>c026dda3e7c442ec5b488d0e6d7b5741f96270f86fe560886389b5c989398b27</code>.
 No package artifact was acquired or installed during resolution. The declaration
 and advisory findings were independently reviewed before artifact acquisition.</p>
 <p>Checker preparation verifies Ruff in the selected shared wheelhouse and keeps
 the Debian packages in the checker dependency directory. The offline build streams
 the pinned Ruff wheel from the pool; it does not copy that wheel into the checker
 capture. Existing private checker dependencies are preserved.</p>
-<p>If an older private checker cache contains Ruff but the selected shared pool
-does not, preparation stops and preserves the private wheel. Resolve that cache
-migration before retrying; it will not silently download a duplicate.</p>
+<p>If an older private checker cache contains Ruff, preparation stops and
+preserves the directory. Move it aside before reacquiring; the checker does not
+migrate or delete its contents.</p>
 <p>After an interrupted Debian acquisition, the reported retained
 <code>.dependencies.pending-...</code> directory can be resumed by passing its
 basename as <code>RESUME_STAGE</code> to <code>make checks/dependencies/download</code>.
 The command checks every retained file before acquiring missing files. A partial
 or mismatched file is preserved and must be investigated before retrying.</p>
-<p><code>checker-advisories.json</code> records the exact-version advisory lookup at
-2026-10-14T10:17:32Z, including every declared Debian binary's source package and
+<p><code>checker-advisories.json</code> records the original exact-version advisory lookup at
+2026-10-14T10:17:32Z, including every then-declared Debian binary's source package and
 source version. Debian's source advisory records were compared with those exact
 versions using dpkg version ordering; unresolved findings are preserved with
 Debian's status, urgency and no-DSA rationale where present. The primary input is:

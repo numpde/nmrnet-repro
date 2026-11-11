@@ -1,6 +1,6 @@
 {
   "checked_at": "2026-10-14T10:17:32.238588+00:00",
-  "scope": "Exact newly installed checker package versions and their Debian source packages / PyPI release metadata; does not audit all inherited base packages, upstream code or runtime exposure and is not a complete security audit",
+  "scope": "Historical 2026-10-14 lookup for the manifest identified below; the later updates are separately scoped. This is not a complete security audit of inherited base packages, upstream code or runtime exposure.",
   "base": "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
   "manifest_sha256": "dda2f9555dd64c637f6fe4c161ba0523e3da28dca08f51354c4230f50e0e0432",
   "metadata": {
@@ -1309,6 +1309,55 @@
       "version": "0.15.15",
       "url": "https://pypi.org/pypi/ruff/0.15.15/json",
       "vulnerabilities": []
+    }
+  ],
+  "updates": [
+    {
+      "checked_at": "2026-11-11T20:47:29Z",
+      "scope": "libexpat1 update only; other package advisory lookups and the original manifest remain historical",
+      "previous_manifest_sha256": "dda2f9555dd64c637f6fe4c161ba0523e3da28dca08f51354c4230f50e0e0432",
+      "current_manifest_sha256": "c026dda3e7c442ec5b488d0e6d7b5741f96270f86fe560886389b5c989398b27",
+      "debian_security_inrelease": {
+        "url": "https://deb.debian.org/debian-security/dists/bookworm-security/InRelease",
+        "sha256": "d0ab0371536a4a1f875787f7777109cb11b02796be429a55f315d0f508a35eb7",
+        "size": 34770,
+        "local_evidence": ".work/checker/metadata/bookworm-security-InRelease-20261111",
+        "signature_date": "2026-11-11T08:54:06Z",
+        "valid_signature_fingerprints": [
+          "ED541312A33F1128F10B1C6C54404762BBB6E853",
+          "B0CAB9266E8C3929798B3EEEBDE6D2B9216EC7A8"
+        ],
+        "verification": "gpgv using the pinned Python base Debian archive keyring; retained catalogue bytes match the verified SHA-256"
+      },
+      "debian_security_amd64_index": {
+        "path": "main/binary-amd64/Packages.xz",
+        "sha256": "82feb648fe09f833e7df285e00abf384c73230baa1b1920eb024314b482a0c90",
+        "size": 367876,
+        "local_evidence": ".work/checker/metadata/bookworm-security-amd64-Packages-20261111.xz",
+        "source": "Debian security index fetched by SHA-256 and checked against the signed catalogue"
+      },
+      "package": {
+        "name": "libexpat1",
+        "version": "2.5.0-1+deb12u5",
+        "file": "libexpat1_2.5.0-1+deb12u5_amd64.deb",
+        "url": "https://deb.debian.org/debian-security/pool/updates/main/e/expat/libexpat1_2.5.0-1+deb12u5_amd64.deb",
+        "size": 107940,
+        "sha256": "cae5ded666d8573dd33060bc66fbac21eea8b101a6b56e2af8bd590fcfa65d79",
+        "verification": "Signed package index, Debian package page, HTTPS response length and independently streamed artifact SHA-256 agree"
+      },
+      "security_update": "https://lists.debian.org/debian-lts-announce/2026/10/msg00043.html",
+      "security_tracker": "https://security-tracker.debian.org/tracker/source-package/expat",
+      "open_bookworm_issues": [
+        "CVE-2023-52426",
+        "CVE-2025-66382",
+        "CVE-2026-41080",
+        "CVE-2026-113351",
+        "CVE-2026-115506",
+        "CVE-2026-117610",
+        "CVE-2026-118370",
+        "CVE-2026-124317"
+      ],
+      "limitation": "The tracker reports these issues for Bookworm; checker exploitability and unlisted future advisories are not established by this record."
     }
   ]
 }
