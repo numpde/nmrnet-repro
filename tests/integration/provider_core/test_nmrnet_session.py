@@ -289,9 +289,11 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.confirmed)
 
     async def test_other_result_rejection_remains_internal(self):
-        with patch("nmrnet_provider.session.ResultPlan", side_effect=ResultRejected("structural failure")):
-            with self.assertRaisesRegex(ResultRejected, "structural failure"):
-                await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        with (
+            patch("nmrnet_provider.session.ResultPlan", side_effect=ResultRejected("structural failure")),
+            self.assertRaisesRegex(ResultRejected, "structural failure"),
+        ):
+            await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         self.assertEqual(self.worker.events, [])
         await self.session.retire()
 
@@ -552,9 +554,11 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_process_control_failure_in_retirement_stays_owned_by_task(self):
         await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         fatal = SystemExit(7)
-        with patch.object(self.host, "retire_channel", new=AsyncMock(side_effect=fatal)):
-            with self.assertRaises(BaseExceptionGroup) as caught:
-                await self.session.retire()
+        with (
+            patch.object(self.host, "retire_channel", new=AsyncMock(side_effect=fatal)),
+            self.assertRaises(BaseExceptionGroup) as caught,
+        ):
+            await self.session.retire()
         self.assertIs(caught.exception.exceptions[0], fatal)
         await self.session.retire()
         self.assertTrue(self.host.confirmed)

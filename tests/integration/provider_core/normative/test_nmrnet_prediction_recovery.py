@@ -342,9 +342,11 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         original = PredictionExecutionFailed("private diagnostic")
         ports.worker.execute = AsyncMock(side_effect=original)
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        with patch("nmrnet_provider.session._evidence", side_effect=ValueError("evidence unavailable")):
-            with self.assertRaisesRegex(ValueError, "evidence unavailable") as caught:
-                await session.execute(prepared, report_condition=unexpected_condition)
+        with (
+            patch("nmrnet_provider.session._evidence", side_effect=ValueError("evidence unavailable")),
+            self.assertRaisesRegex(ValueError, "evidence unavailable") as caught,
+        ):
+            await session.execute(prepared, report_condition=unexpected_condition)
         self.assertIs(caught.exception.__cause__, original)
         await session.retire()
 
