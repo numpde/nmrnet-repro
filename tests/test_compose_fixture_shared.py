@@ -6,12 +6,11 @@ require_container()
 
 import hashlib
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import unittest
 import uuid
-
+from pathlib import Path
 
 CHECKER = r'''#!/usr/bin/env bash
 checker_begin() {

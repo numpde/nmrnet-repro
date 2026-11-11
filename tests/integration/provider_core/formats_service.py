@@ -9,9 +9,9 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
-from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.fakes.uploads import UPLOAD_REF
+from tests.integration.nmrnet.interpreter_ports import tool_reply
+from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
 
 FORMAT_CASES = (
     "json",

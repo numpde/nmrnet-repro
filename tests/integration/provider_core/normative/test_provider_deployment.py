@@ -12,10 +12,10 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.integration.nmrnet.compose_ports import deployment_inputs
-from tools.provider_deployment import client_inputs, freeze_deployment, main, prepare_runtime, require_old_api_route
+from tests.integration.nmrnet.compose_ports import ComposeFixture, deployment_inputs
+
 from nmrnet_provider.config import ConfigurationRejected
-from tests.integration.nmrnet.compose_ports import ComposeFixture
+from tools.provider_deployment import client_inputs, freeze_deployment, main, prepare_runtime, require_old_api_route
 
 
 class DeploymentBundleTests(unittest.TestCase):

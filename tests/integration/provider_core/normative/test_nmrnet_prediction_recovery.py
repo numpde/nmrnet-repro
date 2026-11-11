@@ -11,8 +11,8 @@ from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWorker
 
-from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut
 from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess
 

@@ -16,8 +16,8 @@ from contextlib import AsyncExitStack
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit
 from unittest.mock import AsyncMock
+from urllib.parse import urlsplit
 
 from http_sf import parse
 from tests.fakes.acquisition import store_headers
@@ -35,14 +35,14 @@ from nmrnet_provider.runtime import capture_prose_services
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.lifetime import ProviderLifetime
 from provider_core.controller import ControllerFailed, LiveStartPolicy
 from provider_core.delivery_store import QueueLimits
+from provider_core.execution import ObservationRecovery
+from provider_core.lifetime import ProviderLifetime
+from provider_core.ownership import AttemptClaims
 from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
 from provider_core.shared_delivery_ipc import SharedDeliverySocket
 from provider_core.shared_delivery_service import SharedDeliveryService
-from provider_core.execution import ObservationRecovery
-from provider_core.ownership import AttemptClaims
 
 
 class JoinedDeliveryProxy(ServiceProxyServer):

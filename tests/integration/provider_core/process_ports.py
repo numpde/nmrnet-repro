@@ -14,20 +14,19 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers
-from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.api_tls import api_tls_peer, verify_signed_request
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import job, page
 from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.runtime_ports import HELD_FIXTURES, RuntimePeers
 from tests.integration.nmrnet.smiles_ports import InputPorts
-from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.config import load_provider_config
 from provider_core.delivery_store import QueueLimits
-from provider_core.shared_delivery_ipc import SharedDeliverySocket
-from provider_core.shared_delivery_service import SharedDeliveryService
 from provider_core.lifetime import ProviderLifetime
 from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
+from provider_core.shared_delivery_ipc import SharedDeliverySocket
+from provider_core.shared_delivery_service import SharedDeliveryService
 
 
 class JoinedServiceProxy(ServiceProxyServer):

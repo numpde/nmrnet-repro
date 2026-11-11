@@ -19,7 +19,6 @@ from nmrnet_provider.process import main
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from provider_core.lifetime import ProviderLifetime
 
-
 setup_task = None
 
 

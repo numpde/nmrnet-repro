@@ -7,12 +7,12 @@ require_container()
 import hashlib
 import json
 import math
-import struct
-import tempfile
 import socket
+import struct
+import sys
+import tempfile
 import traceback
 import unittest
-import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 

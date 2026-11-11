@@ -26,6 +26,7 @@ from nmrnet_inference import model as prediction_model
 from nmrnet_inference.predict import MAX_INPUT_BYTES
 from nmrnet_inference.release import ReleasedPredictionSession, SelectedReleaseModels
 from nmrnet_inference.worker import serve_connection
+from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.worker_client import (
     ModelCallFailed,
     PredictionClient,
@@ -35,7 +36,6 @@ from nmrnet_provider.worker_client import (
     WorkerResultRejected,
 )
 from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame
-from nmrnet_provider.process_reports import failure_evidence
 
 
 class RecordingPrediction:

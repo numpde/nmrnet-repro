@@ -10,11 +10,10 @@ from tests.fakes.attempts import ATTEMPT_REF
 from tests.fakes.controller import cancel_task
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
-from tests.integration.nmrnet.interpreter_ports import chat_endpoint, tool_reply
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter, tool_reply
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.session import PreparationEvidenceFailed
 from provider_core.analysis import AnalysisFailure

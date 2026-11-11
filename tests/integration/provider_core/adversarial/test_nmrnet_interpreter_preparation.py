@@ -13,13 +13,12 @@ from unittest.mock import AsyncMock, patch
 
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
-from tests.integration.nmrnet.interpreter_ports import chat_endpoint
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected

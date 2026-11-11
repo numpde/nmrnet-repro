@@ -9,10 +9,10 @@ from tests.integration.nmrnet.reference_fixtures import (
     indexed_predictions,
     render_fixture,
     require_reference_inputs,
+    require_reference_predictions,
     verify_fixture,
 )
 from tests.integration.nmrnet.reference_ports import authored_populations
-from tests.integration.nmrnet.reference_fixtures import require_reference_predictions
 
 
 class ReferenceFixtureRefusalTests(unittest.TestCase):

@@ -5,9 +5,10 @@ import sys
 import unittest
 from unittest.mock import Mock
 
+from tests.fakes.runner import RunningSupervisor
+
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.native_session import NativeOperation
-from tests.fakes.runner import RunningSupervisor
 
 
 class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):

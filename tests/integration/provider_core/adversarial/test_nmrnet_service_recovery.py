@@ -4,28 +4,28 @@ import asyncio
 import json
 import unittest
 from dataclasses import asdict, replace
-from urllib.parse import urlsplit
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlsplit
 
-from tests.fakes.attempts import start_response
 from tests.fakes.api import response_headers
 from tests.fakes.api_tls import verify_signed_request
+from tests.fakes.attempts import start_response
 from tests.fakes.job_feed import page
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from nmrnet_provider.input_geometry import prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.service import ServiceFailed
 from nmrnet_provider.worker_client import WorkerResultRejected
+from provider_core.api import ApiFailure
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.api import ApiFailure
 from provider_core.controller import ControllerFailed, LiveStartPolicy, StartDeferred
 from provider_core.delivery_client import DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull

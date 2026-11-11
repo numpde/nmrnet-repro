@@ -17,10 +17,10 @@ import hashlib
 import json
 import math
 import signal
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 
-import tomllib
 from interpreter_fragment import interpreter_fragment
 
 from nmrnet_provider.config import ConfigurationRejected, InterpreterSettings, _endpoint, read_startup_file
@@ -28,12 +28,12 @@ from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.interpreter import InputInterpreter, ModelReportedInputProblem
 from nmrnet_provider.process import _diagnostics_directory, _failure_report, _publish
 from nmrnet_provider.process_reports import failure_evidence
-from provider_core.diagnostics import operator_redactor
 from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
+from provider_core.diagnostics import operator_redactor
 from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
-from provider_core.transport import HttpTransport
 from provider_core.job_input import INPUT_SCHEMA, FeedInputFacts, VerifiedJobInput
+from provider_core.transport import HttpTransport
 from provider_core.upload_response import UploadMember, UploadSet
 from provider_core.uploads import UploadInputRejected
 

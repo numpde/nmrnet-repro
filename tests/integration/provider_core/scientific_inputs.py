@@ -12,8 +12,8 @@ from tests.integration.nmrnet.reference_fixtures import (
     PRODUCTION_SHA256,
     REFERENCE_SHA256,
     pinned_packet,
-    require_reference_inputs,
     require_capacity_inputs,
+    require_reference_inputs,
     verify_fixture,
 )
 

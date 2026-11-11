@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers, signature_window_problem
+from tests.fakes.api_tls import verify_signed_request
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.unix_proxy import UnixProxy
 from tests.integration.nmrnet.admission_ports import feed_response
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.service_ports import ServicePeers
-from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.runtime import capture_prose_services

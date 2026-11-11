@@ -6,7 +6,6 @@ from tools.container_guard import require_container
 require_container()
 
 import os
-from pathlib import Path
 import pty
 import re
 import select
@@ -14,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 
 def fake_docker():

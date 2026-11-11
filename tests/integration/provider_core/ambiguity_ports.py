@@ -1,7 +1,7 @@
 """Scripted model decisions for offline probe mechanics, never semantic evidence."""
 
-import json
 import hashlib
+import json
 from types import SimpleNamespace
 
 from stage_api_config import inspect_interpreter

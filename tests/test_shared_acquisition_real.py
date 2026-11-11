@@ -7,8 +7,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import urllib.parse
 import unittest
+import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 

@@ -9,8 +9,8 @@ from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.xyz import prepare_xyz
 from nmrnet_provider.interpreter import InputInterpreter
+from nmrnet_provider.xyz import prepare_xyz
 from provider_core.attempt_record import acknowledge_start
 from provider_core.chat import ChatEndpoint, ChatEndpointSpec
 from provider_core.job_input import verify_job_input

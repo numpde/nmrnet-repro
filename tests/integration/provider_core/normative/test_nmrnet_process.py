@@ -11,16 +11,16 @@ import sys
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from tests.fakes.api import response_headers
+from tests.fakes.api_tls import verify_signed_request
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
-from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed

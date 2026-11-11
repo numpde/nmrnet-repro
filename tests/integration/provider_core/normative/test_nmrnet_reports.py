@@ -12,24 +12,23 @@ import json
 import os
 import sys
 import unittest
-import httpcore
 from contextlib import redirect_stderr
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import httpcore
 from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source, store_headers
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, api, reply
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, observation, progress_response, start_response
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.condition_recovery import ConditionOutageTransport
 from tests.fakes.conditions import ConditionTransport
-from tests.fakes.live_analysis import LiveSession
 from tests.fakes.execution import unexpected_condition
-from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.job_input import response
-from tests.fakes.api import api
+from tests.fakes.live_analysis import LiveSession
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.smiles_ports import SessionPorts
@@ -54,11 +53,18 @@ from provider_core.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
 from provider_core.controller import AttemptController, ControllerFailed, LiveStartPolicy
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import ConditionRecovery, ConditionRecoveryExpired, ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationRecovery
-from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.delivery_client import DeliveryRejected
 from provider_core.delivery_store import DeliveryOutcome, DeliveryStorageFailed
 from provider_core.delivery_worker import DeliveryWorkerFailed
+from provider_core.execution import (
+    ConditionRecovery,
+    ConditionRecoveryExpired,
+    ExecutionFailed,
+    ExecutionRefused,
+    ExecutionStopped,
+    ObservationRecovery,
+)
+from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file

@@ -11,10 +11,10 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from tests.integration.nmrnet.interpreter_ports import (
     UploadPorts,
     chat_endpoint,
+    fixture_interpreter,
     tool_reply,
 )
 from tests.integration.nmrnet.pasted_ports import PastedPorts

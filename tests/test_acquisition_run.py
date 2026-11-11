@@ -1,11 +1,11 @@
 """Exercise the NMRNet single-worker adapter at the shared-owner boundary."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path.cwd()
 

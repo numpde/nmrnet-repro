@@ -14,12 +14,11 @@ from unittest.mock import AsyncMock
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
-from tests.integration.nmrnet.interpreter_ports import UploadPorts, chat_endpoint
+from tests.integration.nmrnet.interpreter_ports import UploadPorts, chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.interpreter import InputInterpreter, _TOOLS
+from nmrnet_provider.interpreter import _TOOLS, InputInterpreter
 from provider_core.analysis import AnalysisFailure
 
 OBSERVATION = b'{"endpoint":{"configuration_id":"fixture","model":"fixture-model"},"prompt_sha256":"authored-test-identity"}'

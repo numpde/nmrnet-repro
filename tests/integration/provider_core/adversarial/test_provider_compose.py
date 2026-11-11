@@ -4,8 +4,9 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from nmrnet_provider.config import ConfigurationRejected
 from tests.integration.nmrnet.compose_ports import ComposeFixture
+
+from nmrnet_provider.config import ConfigurationRejected
 
 
 class ComposeRefusalTests(ComposeFixture, unittest.TestCase):

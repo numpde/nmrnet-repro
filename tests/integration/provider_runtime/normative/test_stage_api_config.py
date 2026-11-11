@@ -10,11 +10,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import tomllib
 from materialize_api_config import stage, stage_deployment
 from stage_api_config import inspect_interpreter
 from staging_test_ports import staged_real_config, staging_inputs, upload_sources

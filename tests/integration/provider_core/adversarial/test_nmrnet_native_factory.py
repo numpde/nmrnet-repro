@@ -7,12 +7,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.attempt_store import record
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, NativeSetupFailed
-from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from provider_core.controller import LiveStartPolicy
-from provider_core.ownership import AttemptClaims
 from provider_core.execution import ConditionRecovery, ObservationRecovery
+from provider_core.ownership import AttemptClaims
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):

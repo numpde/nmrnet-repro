@@ -1,9 +1,11 @@
 """The deployment plan grants each fixed role only its actual runtime inputs."""
 
-import unittest
 import os
+import unittest
 from dataclasses import replace
+
 from tests.integration.nmrnet.compose_ports import ComposeFixture
+
 from provider_core.producer_checkpoint import checkpoint_volume_name
 
 

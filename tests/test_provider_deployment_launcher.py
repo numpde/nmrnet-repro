@@ -4,13 +4,14 @@ The real host entrypoint owns selection, literal argv and helper retirement.
 No Engine, network, API or scientific execution is granted to these fixtures.
 """
 from tools.container_guard import require_container
+
 require_container()
 
 import hashlib
 import json
 import os
-import signal
 import shutil
+import signal
 import subprocess
 import tempfile
 import time

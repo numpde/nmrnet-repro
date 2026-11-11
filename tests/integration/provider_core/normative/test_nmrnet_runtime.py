@@ -7,8 +7,8 @@ import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
-from tests.fakes.execution import unexpected_condition
 from tests.fakes.attempts import start_response
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF, member
 from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
@@ -17,13 +17,13 @@ from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWorker
 
+from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
-from nmrnet_provider.process_reports import failure_evidence
 from provider_core.attempt_record import AcknowledgedAttempt
 from provider_core.controller import StartDeferred
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.job_input import verify_job_input
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.uploads import UploadInputRejected
 
 

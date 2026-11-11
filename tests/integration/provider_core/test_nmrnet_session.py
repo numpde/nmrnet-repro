@@ -14,29 +14,29 @@ import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.fakes.api import api
 from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
-from tests.fakes.execution import unexpected_condition
 from tests.fakes.checkpoint_execution import RecordingDelivery
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.job_input import facts, response
-from tests.fakes.api import api
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from tests.integration.nmrnet.session_ports import CoordinateJsonPreparation
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
-from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
     acknowledge_start,
 )
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.controller import AttemptController, LiveStartPolicy
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.result_verbosity import ResultVerbosity
 from provider_core.transport import HttpTransport
 

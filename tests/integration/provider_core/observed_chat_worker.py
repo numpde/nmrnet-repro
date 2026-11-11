@@ -1,7 +1,7 @@
 """Observe admitted model response headers inside the isolated SDK worker."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from provider_core.chat_worker import main

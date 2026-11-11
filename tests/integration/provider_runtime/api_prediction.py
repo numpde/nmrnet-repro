@@ -40,12 +40,12 @@ from nmr_api.canonical_base64 import decode_canonical_base64
 from nmr_api.canonical_json import decode_strict_json
 from nmr_api.discovery_examples.sign_request import main as sign_request
 from nmr_api.json_datetime import CANONICAL_JSON_DATETIME_PATTERN
+from nmr_api.operations.job_refs import require_job_ref
 from nmr_api.public.job_create_request import canonicalize_job_create_request_body
 from nmr_api.public.job_upload_set_replace_request import parse_job_upload_set_replace_request
 from nmr_api.public.schema_ids import UPLOAD_PUBLISH_CAPABILITY_RESPONSE_SCHEMA_ID
 from nmr_api.public.upload_create_request import parse_upload_create_request
 from nmr_api.request_ids import require_request_id
-from nmr_api.operations.job_refs import require_job_ref
 from nmr_api.security.project_refs import require_project_ref
 from nmr_api.security.user_credential_artifacts import validate_user_credential_artifacts
 from nmr_api.security.user_ids import UserAuthorityRefs
@@ -53,6 +53,7 @@ from nmr_api.upload_refs import require_upload_ref
 from nmr_api.upload_store_target import UploadStoreTarget
 from nmr_api.upload_transfer_capabilities import UPLOAD_TRANSFER_CAPABILITY_MAX_CHARACTERS
 from nmr_api.upload_transfer_http_contract import UPLOAD_BYTES_PUBLISH_METHOD
+
 
 def require(condition, message):
     if not condition:

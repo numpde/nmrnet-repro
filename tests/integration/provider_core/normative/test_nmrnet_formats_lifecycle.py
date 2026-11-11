@@ -12,15 +12,14 @@ from unittest.mock import AsyncMock, Mock
 from tests.fakes.job_input import facts, response
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF
-from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatFixture
 from tests.integration.nmrnet.config_ports import ConfigFiles
-from tests.integration.nmrnet.interpreter_ports import chat_endpoint
+from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatFixture
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.smiles_ports import InputPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
-from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.config import load_provider_config
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
+from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.pdb import prepare_pdb
 from nmrnet_provider.process_reports import failure_evidence
 from provider_core.job_input import verify_job_input

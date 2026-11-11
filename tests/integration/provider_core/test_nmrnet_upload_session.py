@@ -19,23 +19,23 @@ from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.acquisition import store_headers
+from tests.fakes.api import api
 from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
-from tests.fakes.job_input import facts, response
-from tests.fakes.api import api
 from tests.fakes.checkpoint_execution import RecordingDelivery
+from tests.fakes.job_input import facts, response
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 
 from nmrnet_provider.input_preparation import InputPreparation
-from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.controller import AttemptController, LiveStartPolicy
 from provider_core.ownership import AttemptClaims
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.transport import HttpTransport
 from provider_core.uploads import JobUploads, UploadLimits
 

@@ -9,9 +9,9 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock
 
-from provider_core.interpreter import InterpretationFailed, Interpreter
-
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
+
+from provider_core.interpreter import InterpretationFailed, Interpreter
 
 
 class NmrnetProseServiceOutageTests(unittest.IsolatedAsyncioTestCase):

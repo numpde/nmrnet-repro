@@ -11,8 +11,8 @@ from builtins import BaseExceptionGroup
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.attempts import ATTEMPT_REF
+from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers, read_process_failure
 
 from nmrnet_provider.process import _publish

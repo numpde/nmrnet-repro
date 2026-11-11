@@ -7,13 +7,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.attempt_store import record
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
-from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.controller import LiveStartPolicy
-from provider_core.ownership import AttemptClaims
 from provider_core.execution import ConditionRecovery, ObservationRecovery
+from provider_core.ownership import AttemptClaims
 
 
 class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):

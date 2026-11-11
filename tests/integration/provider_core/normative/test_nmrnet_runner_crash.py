@@ -5,13 +5,20 @@ framed channels, NMRNet session, SDK controller and exit observation are real.
 """
 
 import asyncio
-from dataclasses import replace
-from functools import partial
 import json
 import sys
-from types import SimpleNamespace
 import unittest
+from dataclasses import replace
+from functools import partial
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
+
+from tests.fakes.api import Transport, api, reply
+from tests.fakes.attempts import observation, progress_response, start_response
+from tests.fakes.checkpoint_execution import RecordingDelivery
+from tests.fakes.job_input import facts, response
+from tests.fakes.runner import RunningSupervisor
+from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
@@ -19,16 +26,9 @@ from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.session import NMRNetSession
 from provider_core.controller import AttemptController, LiveStartPolicy
 from provider_core.execution import ConditionRecovery, ObservationRecovery
+from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
-from tests.fakes.api import Transport, api, reply
-from tests.fakes.attempts import observation, progress_response, start_response
-from tests.fakes.checkpoint_execution import RecordingDelivery
-from tests.fakes.job_input import facts, response
-from provider_core.job_input import verify_job_input
-from tests.fakes.runner import RunningSupervisor
-from tests.integration.nmrnet.smiles_ports import SessionPorts
-
 
 PARTIAL_REPLY_CHILD = r'''
 import argparse, socket

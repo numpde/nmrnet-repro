@@ -1,16 +1,16 @@
 """Disposable caller facts and admitted configuration for fixed Compose plans."""
 
-import tempfile
 import json
+import tempfile
 import tomllib
 from pathlib import Path
 
 import tomli_w
+from tests.integration.nmrnet.config_ports import ConfigFiles
 
 from nmrnet_provider.config import load_provider_config
 from nmrnet_provider.deployment import render_compose
 from provider_core.shared_grants import SharedGrants
-from tests.integration.nmrnet.config_ports import ConfigFiles
 
 
 class ComposeFixture:

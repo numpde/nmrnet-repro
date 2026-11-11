@@ -6,16 +6,16 @@ synthetic: no deployed API, interpreter, model or durable publication is qualifi
 This source port is unrun until its opt-in target completes.
 """
 
-import asyncio
 import argparse
+import asyncio
 import hashlib
 import json
 import os
 import signal
 import socket
 import sys
-from datetime import UTC, datetime
 from contextlib import AsyncExitStack
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,8 +23,8 @@ from types import SimpleNamespace
 # deliberate prediction allocation, rather than import startup, triggers OOM.
 if sys.argv[1:] == ["controller"]:
     from nmrnet_provider.input_geometry import prepare_json
-    from nmrnet_provider.prepared_input import PreparedJobInput
     from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
+    from nmrnet_provider.prepared_input import PreparedJobInput
     from nmrnet_provider.process_reports import failure_evidence
     from nmrnet_provider.session import NMRNetSession
     from provider_core.attempt_record import RecoveryScope, StartPending
@@ -33,10 +33,10 @@ if sys.argv[1:] == ["controller"]:
     from provider_core.controller import AttemptController, LiveStartPolicy
     from provider_core.delivery_client import DeliveryEndpoint
     from provider_core.delivery_store import TerminalOperation
-    from provider_core.ownership import AttemptClaims, LiveAttemptLimits
-    from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
     from provider_core.execution import ConditionRecovery, ObservationRecovery
     from provider_core.job_input import FeedInputFacts, VerifiedJobInput
+    from provider_core.ownership import AttemptClaims, LiveAttemptLimits
+    from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 
 RUNTIME = {"python": sys.version.split()[0], "installed_distributions": {}}
 MEMBER = {"archive_sha256": "a" * 64, "member": "synthetic", "size": 1, "sha256": "b" * 64}

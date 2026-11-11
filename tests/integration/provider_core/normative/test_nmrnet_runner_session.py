@@ -12,9 +12,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from tests.fakes.runner import RunningSupervisor
+
 from nmrnet_provider.native_session import NativeOperation
 from provider_core.runner_session import RunnerSession, RunnerStartupStopped, RunnerStartupUnavailable
-from tests.fakes.runner import RunningSupervisor
 
 
 class NativeLeaseTests(unittest.TestCase):
