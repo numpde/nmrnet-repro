@@ -94,7 +94,7 @@ def source_allowlist(context, inventories):
 
 
 def main():
-    if len(sys.argv) < 5 or (len(sys.argv) - 2) % 3 != 0:
+    if not (5 <= len(sys.argv) and (len(sys.argv) - 2) % 3 == 0):
         raise ValueError("usage: git_stream_sources.py CONTEXT INVENTORY PREFIX INVENTORY_SHA256 [...]")
     inventories = list(zip(sys.argv[2::3], sys.argv[3::3], sys.argv[4::3], strict=True))
     sys.stdout.write(json.dumps(source_allowlist(sys.argv[1], inventories), sort_keys=True) + "\n")

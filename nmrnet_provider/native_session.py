@@ -53,7 +53,7 @@ class NativeOperation:
             raise ValueError("Native operation requires the fixed prediction, reader or smiles role.")
         require_seconds(operation_seconds)
         require_seconds(observation_seconds)
-        if observation_seconds >= operation_seconds:
+        if not (observation_seconds < operation_seconds):
             raise ValueError("Native exit observation must leave time for stop and retirement.")
         if not callable(on_notice):
             raise ValueError("Native operation requires a protected lifecycle diagnostic recipient.")
