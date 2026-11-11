@@ -628,6 +628,49 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual(b"d" * 64 + b"\n", (scratch / "worker.cid").read_bytes())
         self.assertTrue(Path(self.fixture.calls()[-1]["client_config"]["path"]).is_dir())
 
+    def test_scope_removal_startup_failure_retains_all_roles(self):
+        self._intercept("mv")
+        receipt = self.root / "scope-retired"
+        result = self.fixture.run(
+            "acquisition_run.sh",
+            "--retired-receipt",
+            str(receipt),
+            "--success-note",
+            "unexpected success",
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
+            additions=self.environment | {
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                "NMRNET_FAKE_WORKER_STATUS": "0",
+                "NMRNET_ACQUISITION_READY_FAULT": "scope-removal",
+            },
+            timeout=55,
+        )
+        calls = self.fixture.calls()
+        creates = [call["arguments"] for call in calls if call["arguments"][:1] == ["create"]]
+        scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent.parent
+        self.retained.add(scratch)
+        self.retained.add(Path(calls[-1]["client_config"]["path"]).parent)
+        self.assertNotEqual(0, result.returncode)
+        self.assertTrue((self.root / "ready-fault").is_file(), result.stderr)
+        self.assertIn("Cannot confirm acquisition retirement", result.stderr)
+        self.assertNotIn("unexpected success", result.stdout + result.stderr)
+        self.assertFalse(receipt.exists())
+        registry = json.loads((self.root / "acquisition-containers.json").read_text())
+        self.assertEqual(["1" * 64, "2" * 64, "3" * 64], list(registry))
+        self.assertFalse(any(call["arguments"][0] in {"rm", "ps"} for call in calls))
+        self.assertEqual(["inspect", "--format", "{{.State.Running}} {{.State.ExitCode}}", "3" * 64], calls[-1]["arguments"])
+        for role in ("gateway", "relay", "worker-1"):
+            self.assertTrue((scratch / role / "cid").is_file())
+            self.assertTrue((scratch / role / "stdout").is_file())
+        self.assertTrue(Path(calls[-1]["client_config"]["path"]).is_dir())
+
     def test_ordinary_post_start_corruption_still_reports_cause_even_at_status143(self):
         result = self.caller(
             "run",
@@ -927,6 +970,15 @@ def fake_command(name):
         os.execv("/bin/rm", ["rm", *arguments])
     if name == "mv":
         calls = read_engine_calls(root / "engine.jsonl")
+        if (
+            destination.name == "status.ready"
+            and calls
+            and calls[-1]["arguments"] == ["inspect", "--format", "{{.State.Running}} {{.State.ExitCode}}", "3" * 64]
+            and os.environ.get("NMRNET_ACQUISITION_READY_FAULT") == "scope-removal"
+            and not (root / "ready-fault").exists()
+        ):
+            (root / "ready-fault").write_text(str(destination))
+            return 47
         if destination.name == "status.ready" and calls and calls[-1]["arguments"] == ["start", "--attach", "d" * 64]:
             if os.environ["NMRNET_ACQUISITION_READY_FAULT"] != "1":
                 return 97
