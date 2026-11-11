@@ -17,8 +17,8 @@ import json
 import secrets
 import traceback
 
-from nmrnet_inference.predict import MAX_GEOMETRIES, require_request_batch
 from nmrnet_inference.model import ModelCallFailed
+from nmrnet_inference.predict import MAX_GEOMETRIES, require_request_batch
 from nmrnet_provider.worker_protocol import (
     WorkerProtocolError,
     receive,

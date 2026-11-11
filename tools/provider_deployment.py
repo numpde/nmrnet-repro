@@ -18,9 +18,9 @@ import os
 import re
 import stat
 import sys
+import tomllib
 from pathlib import Path
 
-import tomllib
 import tomli_w
 
 from nmrnet_provider.config import ConfigurationRejected, _read_provider_config, read_startup_file
@@ -29,8 +29,8 @@ from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.process import _declared_models
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.startup_capture import _bind_path, _source_path
-from provider_core.response_json import ResponseRejected, read_document
 from provider_core.chat import ChatEndpoint
+from provider_core.response_json import ResponseRejected, read_document
 from provider_core.shared_grants import SharedGrants
 
 INPUT_ROOT = Path("/srv/nmrnet/input")
