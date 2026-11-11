@@ -495,64 +495,79 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertEqual([["image", "inspect", "sha256:" + "b" * 64]], [call["arguments"] for call in calls])
                 self.assertFalse(Path(calls[0]["client_config"]["path"]).parent.exists())
 
-    def test_poll_exhaustion_retains_proxy_log_cause_and_primary_status(self):
-        # This new outer probe bound covers the existing 30-second metadata
-        # owner plus cleanup. It is not an acquisition/readiness policy change.
+    def test_scope_readiness_stopped_reports_stopped(self):
+        self._scope_readiness_failure("stopped", "0", "container stopped before becoming ready", 1)
+
+    def test_scope_readiness_inspection_failure_does_not_report_stopped(self):
+        self._scope_readiness_failure("inspect-failed", "23", "container running state could not be verified", 1)
+
+    def test_scope_readiness_malformed_state_does_not_report_stopped(self):
+        self._scope_readiness_failure("malformed", "0", "container running state could not be verified", 1)
+
+    def test_scope_readiness_exhaustion_collects_logs_before_removal(self):
+        self._scope_readiness_failure("exhausted", "37", "container did not become ready after 100 checks", 100)
+
+    def _scope_readiness_failure(self, scenario, log_status, reason, polls):
+        retired = self.root / "scope-retired"
         result = self.fixture.run(
-            "docker.sh",
-            "run",
-            "sha256:" + "b" * 64,
+            "acquisition_run.sh",
+            "--retired-receipt",
+            str(retired),
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
             additions=self.environment
             | {
-                "NMRNET_FAKE_PROXY_NO_READY": "1",
-                "NMRNET_FAKE_PROXY_LOG_STATUS": "37",
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                "NMRNET_FAKE_ACQ_READINESS_ROLE": "gateway",
+                "NMRNET_FAKE_ACQ_READINESS_SCENARIO": scenario,
+                "NMRNET_FAKE_ACQ_READINESS_LOG_STATUS": log_status,
             },
-            timeout=35,
+            timeout=90,
         )
-        self._remember(result.stderr)
-        self.assertEqual(2, result.returncode)
+        calls = self.fixture.calls()
+        arguments = [call["arguments"] for call in calls]
+        create = next(call for call in arguments if call[:1] == ["create"])
+        scratch = Path(create[create.index("--cidfile") + 1]).parent.parent
+        self.retained.add(scratch)
+        self.assertEqual(2, result.returncode, result.stderr)
         self.assertEqual("", result.stdout)
-        self.assertIn("proxy did not become ready", result.stderr)
-        self.assertIn("logs (status 37)", result.stderr)
-        self.assertNotIn("private native fixture output", result.stderr)
-        calls = [call["arguments"] for call in self.fixture.calls()]
-        self.assertEqual(100, calls.count(["inspect", "--format", "{{.State.Running}}", "c" * 64]))
-        self.assertEqual(1, calls.count(["logs", "c" * 64]))
-        self.assertLess(calls.index(["logs", "c" * 64]), calls.index(["rm", "--force", "c" * 64]))
-        self.assertEqual(1, sum(call[0] == "create" for call in calls))
-        scratch = Path((self.root / "proxy-cid-path").read_text()).parent
-        self.assertEqual(b"private native fixture output\n", (scratch / "readiness/logs.stderr").read_bytes())
-        self.assertEqual(b"37\n", (scratch / "readiness/log-status").read_bytes())
-        self.assertEqual(b"", (scratch / "readiness/logs.stdout").read_bytes())
-        self.assertIn(str(scratch), result.stderr)
-        self.assertFalse(Path(self.fixture.calls()[-1]["client_config"]["path"]).parent.exists())
-
-    def test_readiness_distinguishes_stopped_from_unobserved_state_and_log_failure(self):
-        for state, inspect_status, logs in (("false", "0", "0"), ("true", "37", "23"), ("garbage", "0", "0")):
-            with self.subTest(state=state, inspect_status=inspect_status, logs=logs):
-                before = len(self.fixture.calls())
-                result = self.caller(
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions={
-                        "NMRNET_FAKE_PROXY_NO_READY": "1",
-                        "NMRNET_FAKE_PROXY_STATE": state,
-                        "NMRNET_FAKE_PROXY_INSPECT_STATUS": inspect_status,
-                        "NMRNET_FAKE_PROXY_LOG_STATUS": logs,
-                    },
-                )
-                self.assertEqual(2, result.returncode, msg=result.stderr)
-                if state == "false":
-                    self.assertIn("proxy stopped before becoming ready", result.stderr)
-                else:
-                    self.assertIn("running state could not be verified", result.stderr)
-                    self.assertNotIn("proxy stopped", result.stderr)
-                self.assertNotIn("private native fixture output", result.stderr)
-                if logs != "0":
-                    self.assertIn("logs (status 23)", result.stderr)
-                self.assertEqual(1, sum(call["arguments"][0] == "create" for call in self.fixture.calls()[before:]))
-                scratch = Path((self.root / "proxy-cid-path").read_text()).parent
-                self.assertEqual(b"private native fixture output\n", (scratch / "readiness/logs.stderr").read_bytes())
+        self.assertIn(reason, result.stderr)
+        if scenario in {"inspect-failed", "malformed"}:
+            self.assertNotIn("stopped before becoming ready", result.stderr)
+        if scenario == "inspect-failed":
+            self.assertIn("inspect status 37", result.stderr)
+        if log_status != "0":
+            self.assertIn(f"logs (status {log_status})", result.stderr)
+        self.assertNotIn("private container", result.stderr)
+        self.assertNotIn("private inspect cause", result.stderr)
+        self.assertNotIn("private malformed state", result.stderr)
+        inspect = ["inspect", "--format", "{{.State.Running}}", "1" * 64]
+        logs = ["logs", "--tail", "80", "1" * 64]
+        remove = ["rm", "--force", "1" * 64]
+        self.assertEqual(polls, arguments.count(inspect))
+        self.assertEqual(1, arguments.count(logs))
+        self.assertEqual(1, arguments.count(remove))
+        self.assertLess(arguments.index(logs), arguments.index(remove))
+        evidence = scratch / "gateway"
+        state = {"stopped": b"false\n", "inspect-failed": b"", "malformed": b"private malformed state\n", "exhausted": b"true\n"}
+        self.assertEqual(state[scenario], (evidence / "state").read_bytes())
+        expected_error = b"private inspect cause\n" if scenario == "inspect-failed" else b""
+        self.assertEqual(expected_error, (evidence / "state.stderr").read_bytes())
+        self.assertEqual(b"private container stdout\n", (evidence / "logs").read_bytes())
+        self.assertEqual(b"private container stderr\n", (evidence / "logs.stderr").read_bytes())
+        self.assertEqual((log_status + "\n").encode(), (evidence / "log-status").read_bytes())
+        self.assertEqual(0o700, scratch.stat().st_mode & 0o777)
+        for name in ("state", "state.stderr", "logs", "logs.stderr", "log-status"):
+            self.assertEqual(0o600, (evidence / name).stat().st_mode & 0o777)
+        self.assertEqual("retired\n", retired.read_text())
+        self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
+        self.assertTrue(all(not Path(call["client_config"]["path"]).parent.exists() for call in calls))
 
     def test_scope_removal_startup_failure_retains_all_roles(self):
         self._intercept("mv")

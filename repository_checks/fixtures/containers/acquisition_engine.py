@@ -80,6 +80,13 @@ class AcquisitionEngine:
         if record["phase"] != "created":
             reject("start requires its original unstarted container")
         role = record["role"]
+        if role in {"gateway", "relay"} and os.environ.get("NMRNET_FAKE_ACQ_READINESS_ROLE") == role:
+            if arguments != [identifier]:
+                reject("readiness fixture requires a detached start")
+            scenario = os.environ["NMRNET_FAKE_ACQ_READINESS_SCENARIO"]
+            record["phase"] = "exited" if scenario == "stopped" else "running"
+            self.save()
+            return 0
         if role == "gateway":
             if arguments != [identifier]:
                 reject("gateway start must be detached")
@@ -134,7 +141,18 @@ class AcquisitionEngine:
             reject("inspect requires one exact projection and identity")
         record = self.containers[arguments[2]]
         projection = arguments[1]
-        if projection == "{{.HostConfig.NetworkMode}}":
+        if projection == "{{.State.Running}}" and os.environ.get("NMRNET_FAKE_ACQ_READINESS_ROLE") == record["role"]:
+            scenario = os.environ["NMRNET_FAKE_ACQ_READINESS_SCENARIO"]
+            if record["phase"] != ("exited" if scenario == "stopped" else "running"):
+                reject("readiness observation disagrees with modeled state")
+            if scenario == "inspect-failed":
+                sys.stderr.write("private inspect cause\n")
+                return 37
+            states = {"stopped": "false\n", "malformed": "private malformed state\n", "exhausted": "true\n"}
+            if scenario not in states:
+                reject("readiness scenario is not modeled")
+            sys.stdout.write(states[scenario])
+        elif projection == "{{.HostConfig.NetworkMode}}":
             sys.stdout.write(f"{record['network']}\n")
         elif projection == "{{.HostConfig.NetworkMode}} {{.State.Running}}":
             running = "true" if record["phase"] == "running" else "false"
@@ -154,6 +172,19 @@ class AcquisitionEngine:
         self.save()
         return 0
 
+    def logs(self, arguments):
+        if len(arguments) != 3 or arguments[:2] != ["--tail", "80"]:
+            reject("readiness logs require the exact bounded request")
+        identifier = arguments[2]
+        if (
+            identifier not in self.containers
+            or self.containers[identifier]["role"] != os.environ["NMRNET_FAKE_ACQ_READINESS_ROLE"]
+        ):
+            reject("readiness logs require the still-owned role")
+        sys.stdout.write("private container stdout\n")
+        sys.stderr.write("private container stderr\n")
+        return int(os.environ["NMRNET_FAKE_ACQ_READINESS_LOG_STATUS"])
+
     def census(self, arguments):
         if len(arguments) != 5 or arguments[:4] != ["--all", "--quiet", "--no-trunc", "--filter"]:
             reject("absence requires an exact full-ID census")
@@ -165,7 +196,14 @@ class AcquisitionEngine:
         return 0
 
     def run(self, arguments):
-        handlers = {"create": self.create, "start": self.start, "inspect": self.inspect, "rm": self.remove, "ps": self.census}
+        handlers = {
+            "create": self.create,
+            "start": self.start,
+            "inspect": self.inspect,
+            "logs": self.logs,
+            "rm": self.remove,
+            "ps": self.census,
+        }
         if not arguments or arguments[0] not in handlers:
             reject("engine command is outside the acquisition protocol")
         return handlers[arguments[0]](arguments[1:])
