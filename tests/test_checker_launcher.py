@@ -677,7 +677,9 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                     [call["arguments"][0] for call in calls],
                 )
                 evidence = json.loads((self.root / "state/build.json").read_text())
-                self.assertEqual(fault == "malformed-build", Path(evidence["context"]).parent.exists())
+                # The fake engine consumed the stream before replying. Joined
+                # local readers no longer borrow capture, even for a refused ID.
+                self.assertFalse(Path(evidence["context"]).parent.exists())
                 self.assertFalse(Path(calls[-1]["client_config"]).parent.exists())
                 if fault != "malformed-build":
                     receipt = Path(calls[-1]["receipt_directory"])
