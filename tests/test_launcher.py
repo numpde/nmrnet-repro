@@ -678,9 +678,14 @@ while :; do sleep 0.1; done
             (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "check"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
-                     "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line", "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
-                     "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64},
+                env={
+                    **os.environ,
+                    "NMRNET_ARCHIVE_INPUT": "weight.zip",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                },
                 text=True,
                 capture_output=True,
                 check=False,
@@ -733,9 +738,14 @@ while :; do sleep 0.1; done
             (checkout / "artifacts/weight.selection.json").write_text("{}")
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "extract"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
-                     "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line", "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
-                     "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64},
+                env={
+                    **os.environ,
+                    "NMRNET_ARCHIVE_INPUT": "weight.zip",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                },
                 text=True,
                 capture_output=True,
                 check=False,
@@ -753,9 +763,14 @@ while :; do sleep 0.1; done
             (checkout / ".work/prepared").symlink_to(checkout / "elsewhere", target_is_directory=True)
             denied = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "extract"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
-                     "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line", "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
-                     "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64},
+                env={
+                    **os.environ,
+                    "NMRNET_ARCHIVE_INPUT": "weight.zip",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                },
                 text=True,
                 capture_output=True,
                 check=False,

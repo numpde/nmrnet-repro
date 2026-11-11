@@ -122,11 +122,7 @@ class GeometryImageTests(unittest.TestCase):
 
     def test_changed_committed_inputs_reject_previous_image_before_worker_launch(self):
         self.assertEqual(0, self.fixture.run("container.sh", "geometry/image/build").returncode)
-        build = next(
-            call["arguments"]
-            for call in self.fixture.calls()
-            if call["arguments"][:1] == ["build"]
-        )
+        build = next(call["arguments"] for call in self.fixture.calls() if call["arguments"][:1] == ["build"])
         self.assertEqual("-", build[-1])
         old_identity = next(value.removeprefix("GEOMETRY_INPUTS=") for value in build if value.startswith("GEOMETRY_INPUTS="))
         previous_calls = len(self.fixture.calls())

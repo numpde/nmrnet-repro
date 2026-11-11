@@ -108,7 +108,8 @@ if command == "build":
     wheelhouse_manifest = {}
     directory_modes = {
         str(directory.relative_to(context)): stat.S_IMODE(directory.stat().st_mode)
-        for directory in sorted(context.rglob("*")) if directory.is_dir()
+        for directory in sorted(context.rglob("*"))
+        if directory.is_dir()
     }
     seen = set()
     with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
@@ -128,13 +129,20 @@ if command == "build":
                     manifest[name] = evidence
             else:
                 raise SystemExit("unexpected fake docker invocation: unsupported archive member")
-    (log.parent / "build-evidence.json").write_text(json.dumps({
-        "context": str(context), "wheelhouse": os.environ["NMRNET_WHEELHOUSE_INPUT"],
-        "capture_mode": stat.S_IMODE(capture.stat().st_mode), "capture_uid": capture.stat().st_uid,
-        "directory_modes": directory_modes, "manifest": manifest,
-        "wheelhouse_manifest": wheelhouse_manifest,
-        "content_identity": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
-    }))
+    (log.parent / "build-evidence.json").write_text(
+        json.dumps(
+            {
+                "context": str(context),
+                "wheelhouse": os.environ["NMRNET_WHEELHOUSE_INPUT"],
+                "capture_mode": stat.S_IMODE(capture.stat().st_mode),
+                "capture_uid": capture.stat().st_uid,
+                "directory_modes": directory_modes,
+                "manifest": manifest,
+                "wheelhouse_manifest": wheelhouse_manifest,
+                "content_identity": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
+            }
+        )
+    )
     if os.environ.get("NMRNET_FAKE_BUILD_BYTES"):
         build_output = "x" * int(os.environ["NMRNET_FAKE_BUILD_BYTES"])
     else:
@@ -167,7 +175,15 @@ elif arguments[:2] == ["image", "inspect"]:
     inference_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}'
     wheels_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}'
     geometry_wheels_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-wheels"}}'
-    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection, inference_projection, wheels_projection, geometry_wheels_projection}:
+    if projection not in {
+        "{{.Id}}",
+        label_projection,
+        "{{.Id}}|" + label_projection,
+        geometry_projection,
+        inference_projection,
+        wheels_projection,
+        geometry_wheels_projection,
+    }:
         sys.stderr.write("unexpected fake docker invocation: unmodeled image inspect format\n")
         raise SystemExit(97)
     if os.environ.get("NMRNET_FAKE_INSPECT_PRIVATE_ERROR"):
@@ -181,7 +197,12 @@ elif arguments[:2] == ["image", "inspect"]:
     elif projection == label_projection:
         response = revision
     elif projection in (geometry_projection, inference_projection, wheels_projection, geometry_wheels_projection):
-        label = {geometry_projection: "GEOMETRY_INPUTS", inference_projection: "INFERENCE_INPUTS", wheels_projection: "INFERENCE_WHEELS", geometry_wheels_projection: "GEOMETRY_WHEELS"}[projection]
+        label = {
+            geometry_projection: "GEOMETRY_INPUTS",
+            inference_projection: "INFERENCE_INPUTS",
+            wheels_projection: "INFERENCE_WHEELS",
+            geometry_wheels_projection: "GEOMETRY_WHEELS",
+        }[projection]
         fault = "NMRNET_FAKE_" + label
         if fault in os.environ:
             response = os.environ[fault]
@@ -326,7 +347,11 @@ elif command == "logs":
     raise SystemExit(int(os.environ["NMRNET_FAKE_PROXY_LOG_STATUS"]))
 elif command == "run":
     if "python3" in arguments and arguments[arguments.index("python3") :][:5] == [
-        "python3", "-B", "-m", "tools.wheelhouse", "report"
+        "python3",
+        "-B",
+        "-m",
+        "tools.wheelhouse",
+        "report",
     ]:
         import subprocess
 
@@ -338,10 +363,25 @@ elif command == "run":
         lock = mounts["/input/requirements.lock"]
         pool = mounts["/wheelhouse"]
         requested_hash = arguments[arguments.index("--lock-sha256") + 1]
-        result = subprocess.run([
-            sys.executable, "-B", "-m", "tools.wheelhouse", "report", "--lock", lock,
-            "--lock-sha256", requested_hash, "--pool", pool,
-        ], check=False, capture_output=True, text=True, cwd=Path(mounts["/workspace/tools/wheelhouse.py"]).parent.parent)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "tools.wheelhouse",
+                "report",
+                "--lock",
+                lock,
+                "--lock-sha256",
+                requested_hash,
+                "--pool",
+                pool,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=Path(mounts["/workspace/tools/wheelhouse.py"]).parent.parent,
+        )
         sys.stderr.write(result.stderr)
         if result.returncode == 0:
             report = json.loads(result.stdout)

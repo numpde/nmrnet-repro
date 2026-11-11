@@ -15,8 +15,9 @@ import sys
 import time
 from pathlib import Path
 
-from repository_checks.quality.sources import ROOT
 from tests.unit.wheel_pool_fixtures import locked, wheel
+
+from repository_checks.quality.sources import ROOT
 
 FIXTURES = ROOT / "repository_checks/fixtures/containers"
 
@@ -182,11 +183,18 @@ class LauncherFixture:
             locked(root / "requirements" / name, [("fixture", "1", [candidate])])
         archive = pool / ("Uni-Core-" + "a" * 40 + ".tar.gz")
         archive.write_bytes(b"synthetic source bytes")
-        (root / "requirements/unicore-source.json").write_text(json.dumps({
-            "name": "unicore", "version": "0.0.1", "commit": "a" * 40,
-            "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/" + "a" * 40,
-            "size": archive.stat().st_size, "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
-        }))
+        (root / "requirements/unicore-source.json").write_text(
+            json.dumps(
+                {
+                    "name": "unicore",
+                    "version": "0.0.1",
+                    "commit": "a" * 40,
+                    "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/" + "a" * 40,
+                    "size": archive.stat().st_size,
+                    "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+                }
+            )
+        )
         self.capture_committed_inputs()
         self.environment = os.environ | {
             "NMRNET_FIXTURE_ROOT": str(root),
