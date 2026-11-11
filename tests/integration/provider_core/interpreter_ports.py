@@ -3,6 +3,7 @@
 import hashlib
 import json
 from dataclasses import replace
+from unittest.mock import create_autospec
 
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.job_input import facts, response
@@ -13,6 +14,7 @@ from nmrnet_provider.interpreter import InputInterpreter
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.attempt_record import acknowledge_start
 from provider_core.chat import ChatEndpoint, ChatEndpointSpec
+from provider_core.interpreter import EndpointFactory
 from provider_core.job_input import verify_job_input
 from provider_core.transport import HttpTransport
 from provider_core.uploads import VerifiedUpload
@@ -73,7 +75,7 @@ def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_s
 
 def fixture_interpreter(endpoints, *, timeout_seconds, on_endpoint_failure=None):
     """Give each scripted visit its own preconstructed fixture carrier."""
-    factories = tuple((lambda *, exchange_seconds, connect_seconds, endpoint=endpoint: endpoint) for endpoint in endpoints)
+    factories = tuple(create_autospec(EndpointFactory, instance=True, return_value=endpoint) for endpoint in endpoints)
     return InputInterpreter(
         factories,
         timeout_seconds=timeout_seconds,

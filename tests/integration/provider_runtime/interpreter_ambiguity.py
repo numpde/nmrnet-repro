@@ -20,6 +20,7 @@ import signal
 import tomllib
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import create_autospec
 
 from interpreter_fragment import interpreter_fragment
 
@@ -31,7 +32,7 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
 from provider_core.diagnostics import operator_redactor
-from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
+from provider_core.interpreter import EndpointFactory, InterpretationFailed, ModelReportedInterpretationProblem
 from provider_core.job_input import INPUT_SCHEMA, FeedInputFacts, VerifiedJobInput
 from provider_core.transport import HttpTransport
 from provider_core.upload_response import UploadMember, UploadSet
@@ -318,7 +319,7 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe="amb
         )
         interpreter = InputInterpreter if probe == "formats" else _ProblemOnlyInterpreter
         chooser = interpreter(
-            (lambda *, exchange_seconds, connect_seconds, carrier=carrier: carrier,),
+            (create_autospec(EndpointFactory, instance=True, return_value=carrier),),
             timeout_seconds=settings.timeout_seconds,
             context_bytes=60000,
             secrets=secrets,
