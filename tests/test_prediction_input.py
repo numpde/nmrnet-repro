@@ -34,8 +34,9 @@ def encoded_request(**changes):
 
 
 class PredictionDictionary:
-    symbols = ["<s>", "<pad>", "</s>", "<unk>", "C", "H", "O", "N"]
-    indices = {symbol: index for index, symbol in enumerate(symbols)} | {"Xe": 3}
+    def __init__(self):
+        self.symbols = ["<s>", "<pad>", "</s>", "<unk>", "C", "H", "O", "N"]
+        self.indices = {symbol: index for index, symbol in enumerate(self.symbols)} | {"Xe": 3}
 
     def unk(self):
         return 3
