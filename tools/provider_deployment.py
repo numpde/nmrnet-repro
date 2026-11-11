@@ -319,17 +319,23 @@ def lifetime_owner(bundle):
 def require_old_api_route(bundle, directory):
     """Admit only the private API directory named by the retained recipe."""
     plan = creation_plan(bundle)
-    api = plan.get("services", {}).get("api", {})
-    grants = [grant for grant in api.get("volumes", []) if grant.get("target") == "/route"]
+    message = "Cannot retire the old API route: the selected recipe does not grant its private directory to the API service."
+    if type(plan) is not dict or type(plan.get("services")) is not dict:
+        raise ConfigurationRejected(message)
+    api = plan["services"].get("api")
+    if type(api) is not dict or type(api.get("volumes")) is not list:
+        raise ConfigurationRejected(message)
+    volumes = api["volumes"]
+    if any(type(grant) is not dict for grant in volumes):
+        raise ConfigurationRejected(message)
+    grants = [grant for grant in volumes if grant.get("target") == "/route"]
     if (
         len(grants) != 1
         or grants[0].get("type") != "bind"
         or grants[0].get("source") != str(directory)
         or grants[0].get("read_only") is not False
     ):
-        raise ConfigurationRejected(
-            "Cannot retire the old API route: the selected recipe does not grant its private directory to the API service."
-        )
+        raise ConfigurationRejected(message)
 
 
 def initialize_lifetime(uid, gid):
