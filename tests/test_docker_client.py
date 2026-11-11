@@ -35,7 +35,15 @@ class DockerClientTests(unittest.TestCase):
         for name in ("nmrnet_inference", "nmrnet_provider", "requirements", "wheelhouse"):
             (self.root / name).mkdir(parents=True)
         (self.root / "bin").mkdir()
-        for name in ("container.sh", "docker.sh", "docker_client.sh", "inference_native.sh", "wheelhouse_path.sh"):
+        for name in (
+            "container.sh",
+            "docker.sh",
+            "docker_client.sh",
+            "image_lifecycle.sh",
+            "inference_native.sh",
+            "operator_guidance.sh",
+            "wheelhouse_path.sh",
+        ):
             (self.root / "tools" / name).write_bytes((Path("tools") / name).read_bytes())
         for name in ("docker", "rm", "mv"):
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
