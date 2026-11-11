@@ -26,7 +26,8 @@ from provider_core.process_status import read_status
 
 def main(operation, seconds):
     assert re.fullmatch(r"[0-9a-f]{32}", operation)
-    assert type(seconds) is int and seconds > 0
+    assert type(seconds) is int
+    assert seconds > 0
     deadline = time.monotonic() + seconds
 
     def remaining():
@@ -46,9 +47,8 @@ def main(operation, seconds):
         assert not poller.poll(0), "Crash probe target exited before supervisor kill."
 
     status = read_status("/run/status.json", "reader")
-    assert status["phase"] == "working" and 0 <= time.monotonic() - status["updated_monotonic"] <= 30, (
-        "Reader has no current working supervisor."
-    )
+    assert status["phase"] == "working", "Reader has no current working supervisor."
+    assert 0 <= time.monotonic() - status["updated_monotonic"] <= 30, "Reader has no current working supervisor."
     supervisor = status["pid"]
     supervisor_fd = os.pidfd_open(supervisor, 0)
     live(supervisor_fd)

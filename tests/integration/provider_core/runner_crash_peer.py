@@ -72,15 +72,18 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
                         owned.callback(os.close, descriptor)
                         descriptors.append(descriptor)
             assert not flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC), "Reader crash probe was truncated."
-            assert len(ancillary) == 1 and ancillary[0][:2] == (socket.SOL_SOCKET, socket.SCM_RIGHTS) and len(descriptors) == 1, (
+            assert len(ancillary) == 1, "Reader crash probe must transfer exactly one child pidfd."
+            assert ancillary[0][:2] == (socket.SOL_SOCKET, socket.SCM_RIGHTS), (
                 "Reader crash probe must transfer exactly one child pidfd."
             )
+            assert len(descriptors) == 1, "Reader crash probe must transfer exactly one child pidfd."
             (child_fd,) = descriptors
             assert str(Path(f"/proc/self/fd/{child_fd}").readlink()) == "anon_inode:[pidfd]", (
                 "Reader probe did not transfer a process handle."
             )
             facts = read_document(payload, 4096)
-            assert type(facts) is dict and set(facts) == {
+            assert type(facts) is dict, "Reader crash probe returned unexpected facts."
+            assert set(facts) == {
                 "operation",
                 "lease",
                 "supervisor_pid",
@@ -91,9 +94,8 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
                 "alive_after_term",
                 "remnant_written",
             }, "Reader crash probe returned unexpected facts."
-            assert facts["operation"] == old.operation and facts["lease"] == list(identity), (
-                "Probe changed the operation or stable lease identity."
-            )
+            assert facts["operation"] == old.operation, "Probe changed the operation or stable lease identity."
+            assert facts["lease"] == list(identity), "Probe changed the operation or stable lease identity."
             assert all(type(facts[key]) is int and facts[key] > 1 for key in ("supervisor_pid", "child_pid")), (
                 "Probe did not identify native process IDs."
             )
@@ -115,11 +117,9 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
             assert not poller.poll(0), "Old reader exited before the supervisor crash."
             connection.sendall(b"GO " + old.operation.encode())
             events = poller.poll(max(1, int(remaining() * 1000)))
-            assert (
-                len(events) == 1
-                and events[0][1] & (select.POLLIN | select.POLLHUP)
-                and not events[0][1] & ~(select.POLLIN | select.POLLHUP)
-            ), "The retained pidfd did not confirm old-reader exit."
+            assert len(events) == 1, "The retained pidfd did not confirm old-reader exit."
+            assert events[0][1] & (select.POLLIN | select.POLLHUP), "The retained pidfd did not confirm old-reader exit."
+            assert not events[0][1] & ~(select.POLLIN | select.POLLHUP), "The retained pidfd did not confirm old-reader exit."
             old.close()
             publish("reader-old-child-exited.json", facts)
             marker = root / "reader-fresh-root"
@@ -137,9 +137,8 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
             )
             owned.callback(successor.close)
             successor.connect(deadline=deadline)
-            assert successor.generation != old.generation and successor.operation != old.operation, (
-                "Reader reused the old generation or operation after restart."
-            )
+            assert successor.generation != old.generation, "Reader reused the old generation or operation after restart."
+            assert successor.operation != old.operation, "Reader reused the old generation or operation after restart."
             successor.retire(deadline=deadline)
             assert successor.retirement.scratch_released, "Successor scratch cleanup remains unconfirmed."
             publish(
