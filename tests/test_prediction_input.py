@@ -378,9 +378,9 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         with (
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch.object(prediction_model, "predict_element", side_effect=run_element),
+            self.assertRaisesRegex(RuntimeError, "injected C model failure"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "injected C model failure"):
-                predict.predict_request(raw, load_dictionary, load_element)
+            predict.predict_request(raw, load_dictionary, load_element)
 
         self.assertEqual(
             [("dictionary",), ("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")],
@@ -636,11 +636,11 @@ class SelectedReleaseTests(unittest.TestCase):
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
             mock.patch.object(prediction_model, "load_prediction_model_from_bytes") as decoder,
+            self.assertRaisesRegex(ValueError, "no dedicated token"),
         ):
-            with self.assertRaisesRegex(ValueError, "no dedicated token"):
-                predict.predict_request(
-                    encoded_request(atoms=["H", "Xe"]), self.loader.load_dictionary, self.loader.load_selected_element
-                )
+            predict.predict_request(
+                encoded_request(atoms=["H", "Xe"]), self.loader.load_dictionary, self.loader.load_selected_element
+            )
         decoder.assert_not_called()
 
     def test_altered_member_and_matching_receipt_cannot_replace_declared_bytes(self):
@@ -695,11 +695,11 @@ class SelectedReleaseTests(unittest.TestCase):
             mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
             mock.patch.object(prediction_model, "load_prediction_model_from_bytes", side_effect=error) as decoder,
             mock.patch.object(prediction_model, "load_scaler_from_bytes") as scaler_decoder,
+            self.assertRaises(RuntimeError) as raised,
         ):
-            with self.assertRaises(RuntimeError) as raised:
-                predict.predict_request(
-                    encoded_request(atoms=["H", "O"]), self.loader.load_dictionary, self.loader.load_selected_element
-                )
+            predict.predict_request(
+                encoded_request(atoms=["H", "O"]), self.loader.load_dictionary, self.loader.load_selected_element
+            )
         self.assertIs(raised.exception, error)
         self.assertEqual(decoder.call_args.args[0], b"Hcheckpoint")
         scaler_decoder.assert_not_called()
