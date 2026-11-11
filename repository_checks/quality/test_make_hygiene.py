@@ -34,6 +34,7 @@ MAKE_DEFAULT_AUTHORITY_RE = re.compile(
     r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE
 )
 FIRST_PARTY_PYTHON_ROOTS = (
+    "host",
     "tools",
     "tests",
     "repository_checks",

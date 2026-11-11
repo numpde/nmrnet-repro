@@ -120,6 +120,7 @@ class ToolingLauncherTests(unittest.TestCase):
             "wheelhouse_path",
             "operator_guidance",
             "acquisition_interface",
+            "acquisition_run",
         ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
@@ -161,7 +162,13 @@ class ToolingLauncherTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        return [shlex.split(line) for line in result.stdout.splitlines()]
+        lines = result.stdout.splitlines()
+        if owner == "wheelhouse" and lane == "download":
+            prefix = "If missing, acquire: "
+            workers = [line.removeprefix(prefix) for line in lines if line.startswith(prefix)]
+            self.assertEqual(1, len(workers), msg=result.stdout)
+            return [shlex.split(workers[0])]
+        return [shlex.split(line) for line in lines]
 
     def test_rdkit_runtime_lane_keeps_native_installation_offline_and_ephemeral(self):
         for directory in ("tests/integration/rdkit_runtime",):

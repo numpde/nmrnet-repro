@@ -89,7 +89,6 @@ class LauncherFixture:
             "acquisition_run.sh",
             "acquisition_wheelhouse.sh",
             "wheelhouse_acquire.py",
-            "acquisition_bootstrap.py",
             "git_inputs.sh",
             "git_metadata.sh",
             "packages.sh",
@@ -99,6 +98,8 @@ class LauncherFixture:
             "provider_api_qualification.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
+        (root / "host").mkdir()
+        shutil.copyfile(ROOT / "host/acquisition_bootstrap.py", root / "host/acquisition_bootstrap.py")
         shutil.copytree(ROOT / "tools/bootstrap/acquisition", root / "tools/bootstrap/acquisition")
         shutil.copyfile(ROOT / "Makefile", root / "Makefile")
         shutil.copytree(ROOT / "containers", root / "containers")

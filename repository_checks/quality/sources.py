@@ -1,7 +1,7 @@
 """Inventory authored sources visible to the contained repository lane.
 
 The launcher pins /workspace. NMRNetplusplus is the captured upstream source,
-not authored tooling; local conventions govern tools, checks, tests and images.
+not authored tooling; local conventions govern host tools, contained tools, checks, tests and images.
 Nested inference and provider sources enter these inventories automatically.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path("/workspace")
 REPOSITORY_ROOT = ROOT
-PYTHON_ROOTS = ("tools", "tests", "repository_checks")
+PYTHON_ROOTS = ("host", "tools", "tests", "repository_checks")
 OPTIONAL_PYTHON_ROOTS = ("nmrnet_inference", "nmrnet_provider")
 SKIP_DIRS = {
     ".git",
@@ -34,11 +34,11 @@ def python_sources(*, production_only):
     """Use the caller's explicit production or whole-repository inventory.
 
     Both projections include nested inference and provider modules. Production
-    checks additionally own tools; whole-repository checks own tools, tests and
+    checks additionally own host and contained tools; whole-repository checks own tools, tests and
     repository_checks. The caller must choose the check's responsibility.
     """
-    # silent-defaults: allow-contract -- The required production_only choice selects tools or all authored roots; future inference modules belong to both inventories; proof=repository_checks/quality/test_source_inventory.py::SourceInventoryUnitTests.test_python_source_selection_respects_explicit_scope
-    roots = ("tools",) if production_only else PYTHON_ROOTS
+    # silent-defaults: allow-contract -- The required production_only choice selects host and contained tools or all authored roots; future inference modules belong to both inventories; proof=repository_checks/quality/test_source_inventory.py::SourceInventoryUnitTests.test_python_source_selection_respects_explicit_scope
+    roots = ("host", "tools") if production_only else PYTHON_ROOTS
     directories = [ROOT / name for name in (*roots, *OPTIONAL_PYTHON_ROOTS)]
     return sorted(path for directory in directories for path in directory.rglob("*.py"))
 

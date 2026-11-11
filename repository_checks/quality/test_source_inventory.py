@@ -106,6 +106,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in (
+                "host/bootstrap.py",
                 "tools/z.py",
                 "tools/nested/a.py",
                 "tools/readme.txt",
@@ -121,6 +122,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
             with patch.object(sources, "ROOT", root):
                 self.assertEqual(
                     [
+                        root / "host/bootstrap.py",
                         root / "nmrnet_inference/nested/future.py",
                         root / "nmrnet_provider/nested/future.py",
                         root / "tools/nested/a.py",
@@ -130,6 +132,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     [
+                        root / "host/bootstrap.py",
                         root / "nmrnet_inference/nested/future.py",
                         root / "nmrnet_provider/nested/future.py",
                         root / "repository_checks/check.py",

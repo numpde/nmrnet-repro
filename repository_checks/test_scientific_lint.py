@@ -89,7 +89,7 @@ class ScientificLintTests(unittest.TestCase):
     def test_guard_exception_retains_late_module_import_rejection(self):
         findings = [
             f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
-            for name in ("tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider")
+            for name in ("host", "tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider")
             for path in sorted((ROOT / name).rglob("*.py"))
             for line in late_module_imports(path.read_text())
         ]
@@ -102,7 +102,7 @@ class ScientificLintTests(unittest.TestCase):
         )
         version = subprocess.run([binary, "--version"], check=True, capture_output=True, text=True)
         self.assertEqual("ruff 0.15.15", version.stdout.strip(), msg="The full source policy requires its pinned Ruff version")
-        paths = [ROOT / name for name in ("tools", "repository_checks", "tests")]
+        paths = [ROOT / name for name in ("host", "tools", "repository_checks", "tests")]
         for path in paths:
             self.assertTrue(path.is_dir() and not path.is_symlink(), msg=f"Authored lint root is missing or a symlink: {path}")
             self.assertTrue(list(path.rglob("*.py")), msg=f"Authored lint inventory is empty: {path}")

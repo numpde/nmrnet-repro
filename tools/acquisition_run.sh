@@ -32,7 +32,7 @@ if "$print_command"; then
     printf 'Online worker: '; printf '%q ' "$image" "${grants[@]}" -- "${app[@]}"; printf '\n'
     exit
 fi
-python3 -B "$repository_root/tools/acquisition_bootstrap.py"
+python3 -B "$repository_root/host/acquisition_bootstrap.py"
 source "$repository_root/tools/bootstrap/acquisition/acquisition_tool/owner.sh"
 run_worker() {
     local worker_status

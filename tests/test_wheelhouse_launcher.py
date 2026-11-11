@@ -21,7 +21,7 @@ class WheelhouseLauncherTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        for directory in ("tools", "requirements", "state", "pool"):
+        for directory in ("tools", "host", "requirements", "state", "pool"):
             (self.root / directory).mkdir()
         for name in ("wheelhouse.sh", "wheelhouse_path.sh", "acquisition_interface.sh", "operator_guidance.sh", "inference_native.sh", "acquisition_wheelhouse.sh"):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
@@ -29,7 +29,7 @@ class WheelhouseLauncherTests(unittest.TestCase):
                      "provider-core-install.lock", "wheelhouse-tool-assets.in", "provider-core-assets.in",
                      "wheelhouse-acquirer-assets.in", "inference.in"):
             (self.root / "requirements" / name).write_text("fixture\n")
-        (self.root / "tools/acquisition_bootstrap.py").write_text("# fixture: verification is tested separately\n")
+        (self.root / "host/acquisition_bootstrap.py").write_text("# fixture: verification is tested separately\n")
         (self.root / "tools/docker_client.sh").write_text('''docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }
 ''')
         owner = self.root / "tools/bootstrap/acquisition/acquisition_tool"

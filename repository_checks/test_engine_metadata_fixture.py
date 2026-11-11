@@ -78,7 +78,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
-            command = [sys.executable, "-B", str(fixture.root / "tools/acquisition_bootstrap.py")]
+            command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py")]
             verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
             self.assertEqual(0, verified.returncode, verified.stderr)
             (fixture.root / "tools/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
@@ -297,10 +297,12 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             identity = "sha256:" + "b" * 64
             self.assertEqual(identity, fixture.environment["NMRNET_FAKE_BUILD_RESULT"])
+            dockerfile = fixture.root / "metadata.Dockerfile"
+            dockerfile.write_text("FROM scratch\nCOPY requirements/inference.lock /input.lock\n")
             arguments = [
                 "build",
                 "--file",
-                str(fixture.root / "containers/inference/Dockerfile"),
+                str(dockerfile),
                 "--build-context",
                 "wheelhouse=" + str(fixture.root / ".work/wheelhouse"),
                 "--build-context",
