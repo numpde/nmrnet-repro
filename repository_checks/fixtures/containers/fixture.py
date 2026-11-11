@@ -176,7 +176,9 @@ class LauncherFixture:
             "NMRNET_FIXTURE_GID": "1000",
             "NMRNET_FIXTURE_PYTHON": sys.executable,
             "NMRNET_FAKE_IDENTITY_OWNER": "1000 1000",
-            "NMRNET_FAKE_ACQ_CIDS": json.dumps({"gateway": "1" * 64, "relay": "2" * 64, "worker-1": "3" * 64}),
+            "NMRNET_FAKE_ACQ_CIDS": json.dumps(
+                {"gateway": "1" * 64, "relay": "2" * 64, "worker-1": "3" * 64, "worker-2": "4" * 64, "worker-3": "5" * 64}
+            ),
             "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,

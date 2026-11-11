@@ -43,8 +43,21 @@ class AcquisitionEngine:
         if re.fullmatch("[0-9a-f]{64}", identifier) is None or identifier in self.containers:
             reject("create requires a fresh exact container identity")
         network = option(arguments, "--network")
-        expected = {"gateway": "host", "relay": "none", "worker-1": "container:" + self.identities["relay"]}
-        if network != expected[role]:
+        if role.startswith("worker-"):
+            if "NMRNET_FAKE_ACQ_WORKER_MODES" in os.environ:
+                modes = json.loads(os.environ["NMRNET_FAKE_ACQ_WORKER_MODES"])
+                expected_mode = {"offline": "none", "online": "container:" + self.identities["relay"]}[modes[role]]
+                if network != expected_mode:
+                    reject("worker network differs from the fixture's declared mode")
+            if network != "none":
+                relay = self.identities["relay"]
+                if (
+                    network != "container:" + relay
+                    or relay not in self.containers
+                    or self.containers[relay]["phase"] != "running"
+                ):
+                    reject("online worker requires its running admitted relay")
+        elif network != {"gateway": "host", "relay": "none"}[role]:
             reject("role network mode differs from its admitted contract")
         if option(arguments, "--user") != os.environ["NMRNET_FAKE_IDENTITY_OWNER"].replace(" ", ":"):
             reject("role user differs from the admitted mapping")
@@ -56,7 +69,7 @@ class AcquisitionEngine:
         self.containers[identifier] = {"role": role, "network": network, "mounts": mounts, "phase": "created"}
         self.save()
         receipt.write_text(identifier + "\n")
-        if role == "worker-1":
+        if role.startswith("worker-"):
             (self.root / "worker-cid-path").write_text(str(receipt))
         sys.stdout.write(f"{identifier}\n")
         return 0
@@ -101,9 +114,14 @@ class AcquisitionEngine:
                 sys.stderr.write(os.environ["NMRNET_FAKE_WORKER_STDERR"])
                 sys.stderr.flush()
             record["phase"] = "exited"
-            record["exit_status"] = int(os.environ["NMRNET_FAKE_WORKER_STATUS"])
+            statuses = (
+                json.loads(os.environ["NMRNET_FAKE_ACQ_WORKER_STATUSES"])
+                if "NMRNET_FAKE_ACQ_WORKER_STATUSES" in os.environ
+                else {}
+            )
+            record["exit_status"] = int(statuses[role] if role in statuses else os.environ["NMRNET_FAKE_WORKER_STATUS"])
         self.save()
-        if role == "worker-1":
+        if role.startswith("worker-"):
             if "NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT" in os.environ:
                 receipt = Path((self.root / "worker-cid-path").read_text())
                 receipt.write_text(os.environ["NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT"] + "\n")
