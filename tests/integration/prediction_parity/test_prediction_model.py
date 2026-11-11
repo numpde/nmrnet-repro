@@ -542,9 +542,8 @@ class PredictionModelParityTests(unittest.TestCase):
             "BINPERSID": b"\x80\x02U\x03keyQ.",
         }
         for opcode, content in fixtures.items():
-            with self.subTest(opcode=opcode):
-                with self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
-                    load_reference_pickle(content)
+            with self.subTest(opcode=opcode), self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
+                load_reference_pickle(content)
 
     def test_one_and_maximum_atoms_match_upstream_for_h_and_c(self):
         samples = (
@@ -614,14 +613,14 @@ class PredictionModelParityTests(unittest.TestCase):
         with (
             patch("scipy.spatial.distance_matrix") as pairwise,
             patch.dict("sys.modules", {"numpy": None, "torch": None, "scipy": None}),
+            self.assertRaisesRegex(ValueError, "1 through 128 symbols"),
         ):
-            with self.assertRaisesRegex(ValueError, "1 through 128 symbols"):
-                compose_for_tensor_parity(
-                    ["H"] * 129,
-                    [[float(index), 0.0, 0.0] for index in range(129)],
-                    self.dictionary,
-                    "H",
-                )
+            compose_for_tensor_parity(
+                ["H"] * 129,
+                [[float(index), 0.0, 0.0] for index in range(129)],
+                self.dictionary,
+                "H",
+            )
         pairwise.assert_not_called()
 
     def test_coordinate_rows_must_match_atom_count_and_three_axes(self):
