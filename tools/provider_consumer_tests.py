@@ -100,6 +100,23 @@ def stage_support(release, pool, target):
         shutil.copytree(root / "run/tests", target / "tests")
 
 
+def discover_suite(start, root, patterns):
+    """Select only the requested consumer tests, or unittest's default selection."""
+    loader = unittest.defaultTestLoader
+    if patterns is None:
+        suite = loader.discover(str(start), top_level_dir=str(root))
+        if suite.countTestCases() == 0:
+            raise RuntimeError("Default NMRNet consumer discovery contains no tests")
+        return suite
+    suite = unittest.TestSuite()
+    for pattern in patterns:
+        selected = loader.discover(str(start), pattern=pattern, top_level_dir=str(root))
+        if selected.countTestCases() == 0:
+            raise RuntimeError(f"Selected NMRNet consumer pattern contains no tests: {pattern}")
+        suite.addTests(selected)
+    return suite
+
+
 def run_suite(release, pool, patterns):
     prefix = Path(sys.prefix).resolve()
     specification = find_spec("provider_core")
@@ -118,14 +135,7 @@ def run_suite(release, pool, patterns):
         with chdir(run):
             sys.path.insert(0, str(run))
             sys.path.append("/consumer")
-            suite = unittest.TestSuite()
-            for pattern in patterns:
-                selected = unittest.defaultTestLoader.discover(
-                    str(run / "tests/integration/nmrnet"), pattern=pattern, top_level_dir=str(run)
-                )
-                if selected.countTestCases() == 0:
-                    raise RuntimeError(f"Selected NMRNet consumer pattern contains no tests: {pattern}")
-                suite.addTests(selected)
+            suite = discover_suite(run / "tests/integration/nmrnet", run, patterns)
             sys.stdout.write(
                 f"NMRNet consumer tests use provider-core {distribution.version} from {origin}; support SHA-256 {source_sha256}.\n"
             )
@@ -142,7 +152,7 @@ if __name__ == "__main__":
     entrypoint = parser.add_mutually_exclusive_group()
     entrypoint.add_argument("--script", type=Path)
     entrypoint.add_argument("--module", choices=("unittest",))
-    parser.add_argument("--pattern", nargs="+", default=["test*.py"])
+    parser.add_argument("--pattern", nargs="+")
     args, remaining = parser.parse_known_args()
     if args.action in {"stage-support", "fixture"}:
         if args.target is None:

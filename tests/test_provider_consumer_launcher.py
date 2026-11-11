@@ -3,11 +3,36 @@
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from tools.provider_consumer_tests import discover_suite
 
 
 class ConsumerLauncherTests(unittest.TestCase):
+    def test_discovery_uses_default_or_explicit_patterns_and_refuses_empty_selection(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules), patch.object(sys, "path", list(sys.path)):
+            root = Path(directory)
+            package = root / "consumer_discovery_fixture"
+            package.mkdir()
+            (package / "__init__.py").write_text("")
+            for name in ("test_default.py", "chosen_extra.py"):
+                (package / name).write_text("import unittest\nclass Case(unittest.TestCase):\n    def test_case(self): pass\n")
+            for patterns in (None, ["chosen*.py"]):
+                with self.subTest(patterns=patterns):
+                    result = unittest.TestResult()
+                    discover_suite(package, root, patterns).run(result)
+                    self.assertTrue(result.wasSuccessful())
+                    self.assertEqual(1, result.testsRun)
+            with self.assertRaisesRegex(RuntimeError, "contains no tests"):
+                discover_suite(package, root, ["missing*.py"])
+            (package / "test_default.py").unlink()
+            with self.assertRaisesRegex(RuntimeError, "Default NMRNet consumer discovery contains no tests"):
+                discover_suite(package, root, None)
+
     def test_focused_lanes_are_offline_and_do_not_select_displaced_generic_tests(self):
         selections = {
             "config": ["test_nmrnet_config.py"],
