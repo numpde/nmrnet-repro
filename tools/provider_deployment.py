@@ -288,7 +288,7 @@ def seal_deployment_bundle(bundle, uid, gid):
     for path in files:
         secret = path.is_relative_to(bundle / "secrets")
         mode = 0o400 if secret else 0o444
-        os.chmod(path, mode, follow_symlinks=False)
+        path.chmod(mode, follow_symlinks=False)
         if rootless:
             owner_uid, owner_gid = (uid, gid) if secret else (0, 0)
             os.chown(path, owner_uid, owner_gid, follow_symlinks=False)
@@ -301,7 +301,7 @@ def seal_deployment_bundle(bundle, uid, gid):
             os.chown(directory, 0, 0, follow_symlinks=False)
         elif directory.stat().st_uid != uid:
             raise ConfigurationRejected("deployment helper did not create provider-owned input directories.")
-        os.chmod(directory, 0o555, follow_symlinks=False)
+        directory.chmod(0o555, follow_symlinks=False)
 
 
 def lifetime_owner(bundle):
