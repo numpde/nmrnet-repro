@@ -61,11 +61,12 @@ build_core_image() {
         --file "containers/$kind/Dockerfile" -)
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
     source "$image_input_directory/context/tools/streamed_build.sh"
-    prepare_streamed_inputs "$description" "$inputs_digest" runtime:provider-core-install.lock
+    local -a stream_inventories=("$image_input_directory/inputs" . "$inputs_digest")
+    prepare_streamed_inputs "$description" container_native stream_inventories runtime:provider-core-install.lock
     build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
         --iidfile "$image_input_directory/built-image-id" --build-arg "${kind^^}_INPUTS=$inputs_digest"
         --build-arg "${kind^^}_WHEELS=$stream_selection" --file "containers/$kind/Dockerfile" -)
-    if build_streamed_context "$description image build" "$build_timeout" stdio "${build[@]}"; then :; else
+    if build_streamed_context "$description image build" "$build_timeout" stdio container_native "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     if [[ -f "$image_input_directory/built-image-id" && ! -L "$image_input_directory/built-image-id" ]] \

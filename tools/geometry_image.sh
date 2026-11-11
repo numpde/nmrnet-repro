@@ -63,11 +63,12 @@ build_geometry_image() {
         --build-arg "GEOMETRY_INPUTS=$inputs_digest" --file containers/geometry/Dockerfile -)
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
     source "$image_input_directory/context/tools/streamed_build.sh"
-    prepare_streamed_inputs RDKit "$inputs_digest" preparation:preparation.lock runtime:provider-core-native-install.lock
+    local -a stream_inventories=("$image_input_directory/inputs" . "$inputs_digest")
+    prepare_streamed_inputs RDKit container_native stream_inventories preparation:preparation.lock runtime:provider-core-native-install.lock
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "GEOMETRY_INPUTS=$inputs_digest" --build-arg "GEOMETRY_WHEELS=$stream_selection"
         --file containers/geometry/Dockerfile -)
-    if build_streamed_context 'RDKit image build' "$build_timeout" image-id "${build[@]}"; then :; else
+    if build_streamed_context 'RDKit image build' "$build_timeout" image-id container_native "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     image_id=$inference_result
