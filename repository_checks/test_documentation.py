@@ -149,7 +149,7 @@ class DocumentationTests(unittest.TestCase):
                                 7624: "https://model.example/v1", 7706: "https://model.example/v1",
                                 7994: "https://model.example/v1"}
                     if path.name == "003_nmr_api_provider_20261018.html" and index in redacted:
-                        source_line = re.sub(r"https?://[^\s,;]+", lambda _: redacted[index], source_line, count=1)
+                        source_line = re.sub(r"https?://[^\s,;]+", redacted[index], source_line, count=1)
                     self.assertTrue(source_line.endswith(text), (path, index, text))
                 self.assertEqual("".join(page.record), "".join(text for _, text in retained))
                 records += 1

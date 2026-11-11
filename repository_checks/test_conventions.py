@@ -13,7 +13,6 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-import os
 import re
 import shlex
 import subprocess
@@ -76,12 +75,11 @@ def unguarded_sources(root):
     }
     # The shared guard must be importable before its caller checks the marker.
     sources.discard(root / "tools" / "container_guard.py")
-    failures = [
+    return [
         str(path.relative_to(root))
         for path in sorted(sources)
         if not has_early_guard(path.read_text(), package_marker=path.name == "__init__.py")
     ]
-    return failures
 
 
 def make_targets(source):

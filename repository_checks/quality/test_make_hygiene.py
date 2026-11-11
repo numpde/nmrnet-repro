@@ -70,7 +70,7 @@ class RepositoryHygieneTest(unittest.TestCase):
                         (root / "tools/cleanup-called").unlink(missing_ok=True)
                         result = subprocess.run(["make", "--no-print-directory", "-C", str(root), target],
                                                 env={**os.environ, "TEST_BUILD_STATUS": str(build_status)},
-                                                capture_output=True, text=True, timeout=5)
+                                                capture_output=True, text=True, timeout=5, check=False)
                         self.assertEqual(result.returncode == 0, build_status == 0, result.stderr)
                         self.assertEqual((root / "tools/cleanup-called").exists(), build_status == 0)
                         if build_status == 0:
@@ -91,7 +91,7 @@ class RepositoryHygieneTest(unittest.TestCase):
                 with self.subTest(up_status=up_status):
                     result = subprocess.run(["make", "--no-print-directory", "-C", str(root), "provider/deployment/up"],
                                             env={**os.environ, "TEST_UP_STATUS": str(up_status)},
-                                            capture_output=True, text=True, timeout=5)
+                                            capture_output=True, text=True, timeout=5, check=False)
                     self.assertEqual(result.returncode == 0, up_status == 0, result.stderr)
                     self.assertEqual((root / "tools/cleanup-called").exists(), up_status == 0)
                     if up_status == 0:

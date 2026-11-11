@@ -35,7 +35,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 (["stat", "-c", "%u:%g", "--", str(fixture.root / ".work")], b"2100:2200\n"),
             ):
                 with self.subTest(command=command):
-                    result = subprocess.run(command, env=environment, capture_output=True)
+                    result = subprocess.run(command, env=environment, capture_output=True, check=False)
                     self.assertEqual((0, expected, b""), (result.returncode, result.stdout, result.stderr))
 
     def test_fixture_stat_preserves_other_metadata_paths_and_errors(self):
@@ -57,8 +57,8 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             ):
                 with self.subTest(output=output, path=path):
                     command = ["stat", "-c", output, "--", str(path)]
-                    actual = subprocess.run(command, executable="/usr/bin/stat", capture_output=True)
-                    observed = subprocess.run(command, env=fixture.environment, capture_output=True)
+                    actual = subprocess.run(command, executable="/usr/bin/stat", capture_output=True, check=False)
+                    observed = subprocess.run(command, env=fixture.environment, capture_output=True, check=False)
                     self.assertEqual(
                         (actual.returncode, actual.stdout, actual.stderr),
                         (observed.returncode, observed.stdout, observed.stderr),
@@ -79,10 +79,10 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
             command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py")]
-            verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
+            verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
             self.assertEqual(0, verified.returncode, verified.stderr)
             (fixture.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
-            rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
+            rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
             self.assertEqual(1, rejected.returncode, rejected.stderr)
             self.assertIn("bootstrap files differ from the release inventory", rejected.stderr)
             self.assertEqual([], fixture.calls())
