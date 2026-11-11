@@ -107,7 +107,6 @@ class AcquisitionClientTests(unittest.TestCase):
             "NMRNET_ACQUISITION_FIXTURE_ROOT": str(self.root),
         }
         image = "docker.io/library/python"
-        self.proxy_image = self.environment["NMRNET_SHARED_RUNTIME_IMAGE_INPUT"]
         worker_version = "3.12.12-slim-bookworm"
         worker_sha = "593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
         self.worker_image = f"{image}:{worker_version}@sha256:{worker_sha}"
@@ -123,7 +122,7 @@ class AcquisitionClientTests(unittest.TestCase):
             subprocess.run(["/bin/rm", "-rf", "--", str(path)], check=True)
 
     def _remember(self, stderr=""):
-        for path in re.findall(r"/tmp/nmrnet-(?:docker-client|inference-native|proxy)\.[A-Za-z0-9]+", stderr):
+        for path in re.findall(r"/tmp/nmrnet-(?:docker-client|inference-native|preflight|proxy)\.[A-Za-z0-9]+", stderr):
             self.retained.add(Path(path))
         for call in self.fixture.calls():
             if call["client_config"] is not None:
@@ -299,7 +298,7 @@ class AcquisitionClientTests(unittest.TestCase):
             ("check-interface",),
             ("require-images",),
             ("--print", "require-images", "sha256:" + "b" * 64),
-            ("--print", "run", "sha256:" + "b" * 64),
+            ("--print", "--pool-owner", "1000:1000", "map-owner", self.worker_image),
         ):
             with self.subTest(arguments=arguments):
                 result = self.caller(*arguments, additions={"docker_client_directory": str(ambient)})
@@ -308,13 +307,13 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertTrue(ambient.is_dir())
         self.assertIn("image inspect", self.caller("--print", "require-images", "sha256:" + "b" * 64).stdout)
 
-    def test_missing_shared_image_points_to_its_owner(self):
-        result = self.caller("require-images", self.proxy_image, additions={"NMRNET_FAKE_INSPECT_STATUS": "1"})
+    def test_unavailable_image_reports_preflight_uncertainty(self):
+        result = self.caller("require-images", self.worker_image, additions={"NMRNET_FAKE_INSPECT_STATUS": "1"})
         self.assertEqual(2, result.returncode)
-        self.assertIn("shared runtime image", result.stderr)
-        self.assertIn("nmr-provider-tools", result.stderr)
-        self.assertNotIn("preload it through an independently interface-bound process", result.stderr)
-        self.assertEqual([["image", "inspect", self.proxy_image]], [call["arguments"] for call in self.fixture.calls()])
+        self.assertIn("inspection status 1", result.stderr)
+        self.assertIn("does not show whether the image is absent or the Docker daemon is unavailable", result.stderr)
+        self.assertIn("preload it through an independently interface-bound process", result.stderr)
+        self.assertEqual([["image", "inspect", self.worker_image]], [call["arguments"] for call in self.fixture.calls()])
 
     def test_python_base_download_print_needs_no_interface_or_existing_image(self):
         result = self.fixture.run("container.sh", "--print", "download-base-image")
@@ -518,7 +517,7 @@ class AcquisitionClientTests(unittest.TestCase):
     def test_silent_preflight_status_keeps_private_cause_after_config_cleanup(self):
         allocation = (
             '() { local selected; if selected=$(command mktemp "$@"); then :; else return "$?"; fi; '
-            'if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-proxy.XXXXXXXX ]]; then '
+            'if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-preflight.XXXXXXXX ]]; then '
             'printf "%s\\n" "$selected" > "$NMRNET_ACQUISITION_SCRATCH_OBSERVATION"; fi; '
             'printf "%s\\n" "$selected"; }'
         )
@@ -543,7 +542,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.assertEqual("", result.stderr)
                 scratch = Path(observation.read_text().strip())
                 self.assertEqual(Path("/tmp"), scratch.parent)
-                self.assertTrue(scratch.name.startswith("nmrnet-proxy."))
+                self.assertTrue(scratch.name.startswith("nmrnet-preflight."))
                 self.retained.add(scratch)
                 self.assertEqual(0o700, scratch.stat().st_mode & 0o777)
                 diagnostic = scratch / "preload-1.stderr"
@@ -1210,8 +1209,9 @@ class AcquisitionClientTests(unittest.TestCase):
             'printf "%s\\n" "$4" > "$NMRNET_PREPARATION_OBSERVATION"; '
             'printf "private config setup cause\\n" >&2; return 42; fi; command mkdir "$@"; }'
         )
-        process, descriptor, prefill = self._start(
-            {"BASH_FUNC_mkdir%%": fault, "NMRNET_PREPARATION_OBSERVATION": str(observation)}, full_stderr=True
+        command = ["bash", str(self.root / "tools/docker.sh"), "require-images", self.worker_image]
+        process, descriptor, prefill = self._start_command(
+            command, {"BASH_FUNC_mkdir%%": fault, "NMRNET_PREPARATION_OBSERVATION": str(observation)}, full_stderr=True
         )
         deadline = time.monotonic() + 5
         while not observation.exists() and time.monotonic() < deadline:
@@ -1227,10 +1227,10 @@ class AcquisitionClientTests(unittest.TestCase):
             "(up to 4096 bytes; it may be absent or incomplete).\n"
         )
         source = (self.root / "tools/docker.sh").read_text()
-        start = "if inference_native 'acquisition cleanup reporting' untimed stdio bash -eu -c '"
+        start = "if inference_native 'image preflight reporting' untimed stdio bash -eu -c '"
         self.assertEqual(1, source.count(start))
         program = source.split(start)[1].split("' bash ", 1)[0].encode()
-        expected = [b"bash", b"-eu", b"-c", program, b"bash", diagnostic.encode(), b"", b"0", b"", b"0", b""]
+        expected = [b"bash", b"-eu", b"-c", program, b"bash", b"", diagnostic.encode(), b""]
         publisher = self._observe_reporter(process, expected)
         anchor = os.getpgid(publisher)
         children = Path("/proc", str(process.pid), "task", str(process.pid), "children").read_text().split()
