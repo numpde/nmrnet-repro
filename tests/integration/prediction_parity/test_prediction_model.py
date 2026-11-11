@@ -355,12 +355,14 @@ class PredictionModelParityTests(unittest.TestCase):
             "atoms": ["H"],
             "coordinates": [[0, 0, 0]],
         }
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}):
-            with self.assertRaisesRegex(
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}),
+            self.assertRaisesRegex(
                 ValueError,
                 r"one scalar row per selected atom \(expected shape \(1, 1\), received \(1, 2\)\)",
-            ):
-                predict_element(request, "H", WrongShapeModel(), self.dictionary, scaler)
+            ),
+        ):
+            predict_element(request, "H", WrongShapeModel(), self.dictionary, scaler)
         scaler.inverse_transform.assert_not_called()
 
     def test_predict_element_rejects_non_float32_output_before_inverse_scaling(self):
@@ -374,9 +376,11 @@ class PredictionModelParityTests(unittest.TestCase):
             "atoms": ["H"],
             "coordinates": [[0, 0, 0]],
         }
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}):
-            with self.assertRaisesRegex(ValueError, "output must be CPU float32"):
-                predict_element(request, "H", WrongDtypeModel(), self.dictionary, scaler)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}),
+            self.assertRaisesRegex(ValueError, "output must be CPU float32"),
+        ):
+            predict_element(request, "H", WrongDtypeModel(), self.dictionary, scaler)
         scaler.inverse_transform.assert_not_called()
 
     def test_predict_element_rejects_nonfinite_model_and_inverse_scaled_values(self):
@@ -425,9 +429,11 @@ class PredictionModelParityTests(unittest.TestCase):
             "atoms": ["H"],
             "coordinates": [[0, 0, 0]],
         }
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": None}):
-            with self.assertRaisesRegex(RuntimeError, "has not been qualified"):
-                predict_element(request, "H", model, self.dictionary, scaler)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": None}),
+            self.assertRaisesRegex(RuntimeError, "has not been qualified"),
+        ):
+            predict_element(request, "H", model, self.dictionary, scaler)
         model.eval.assert_not_called()
         model.assert_not_called()
         scaler.inverse_transform.assert_not_called()
