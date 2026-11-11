@@ -6,7 +6,7 @@
 provider_image_inputs=(containers/provider/Dockerfile containers/provider/Dockerfile.dockerignore
     requirements/provider-core-install.lock requirements/wheelhouse-tool-assets.in nmrnet_provider/about/hello.md
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py
-    tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/streamed_build.sh tools/git_stream_sources.py tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
+    tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/streamed_build.sh host/git_stream_sources.py tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
 # Capture controller bindings; shared runtime code enters only as a locked wheel.
 for provider_input in "$repository_root"/nmrnet_provider/*.py; do
     case "$provider_input" in

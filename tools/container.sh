@@ -502,6 +502,7 @@ case "$1" in
             test/integration/wheelhouse/acquisition)
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements,dst=/input,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
@@ -519,6 +520,7 @@ case "$1" in
                 fi
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$package_test_image" python3 -B -m unittest -v)
                 if [[ "$1" == test/unit/packages/images ]]; then
@@ -698,7 +700,7 @@ case "$1" in
                 fi
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
-                    --mount "type=bind,src=$repository_root/host/acquisition_bootstrap.py,dst=/workspace/host/acquisition_bootstrap.py,readonly"
+                    --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
                     --env PROVIDER_CORE_IN_CONTAINER=1

@@ -251,7 +251,7 @@ if [[ "$1" == download ]]; then
         exit
     fi
     python3 -B "$repository_root/host/acquisition_bootstrap.py"
-    source "$repository_root/tools/bootstrap/acquisition/acquisition_tool/owner.sh"
+    source "$repository_root/host/bootstrap/acquisition/acquisition_tool/owner.sh"
     source "$repository_root/tools/acquisition_wheelhouse.sh"
     wheelhouse_warm=false
     if acquisition_scope --endpoint "$NMRNET_DOCKER_ENDPOINT_INPUT" --bootstrap-image "$image" -- nmrnet_acquire_wheelhouse; then :; else exit "$?"; fi

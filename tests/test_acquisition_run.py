@@ -22,7 +22,7 @@ class AcquisitionRunTests(unittest.TestCase):
             shutil.copyfile(ROOT / "tools" / name, tools / name)
         (tools / "docker_client.sh").write_text('docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }\n')
         (self.root / "host/acquisition_bootstrap.py").write_text("# Verification has separate tests.\n")
-        owner = tools / "bootstrap/acquisition/acquisition_tool"
+        owner = self.root / "host/bootstrap/acquisition/acquisition_tool"
         owner.mkdir(parents=True)
         (owner / "owner.sh").write_text('''
 acquisition_scope() { shift 5; "$@"; }

@@ -63,7 +63,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 "-I",
                 "-S",
                 "-B",
-                str(self.root / "tools/bootstrap/acquisition/acquisition_tool/identity.py"),
+                str(self.root / "host/bootstrap/acquisition/acquisition_tool/identity.py"),
                 "--endpoint",
                 "unix:///var/run/docker.sock",
                 "--image",

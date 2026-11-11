@@ -28,7 +28,7 @@ class SharedAcquisitionIntegrationTests(unittest.TestCase):
         wheel_url, wheel_hash = wheel_pin.rsplit("#sha256=", 1)
         wheel = Path(urllib.parse.urlsplit(wheel_url).path).name
         self.assertLessEqual((pool / wheel).stat().st_size, 1024 * 1024)
-        source = Path("/workspace/tools/git_stream_sources.py")
+        source = Path("/workspace/host/git_stream_sources.py")
         source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
         with tempfile.TemporaryDirectory(prefix="nmrnet-stream-proof-") as temporary:
             root = Path(temporary)
@@ -40,7 +40,7 @@ class SharedAcquisitionIntegrationTests(unittest.TestCase):
                 wheelhouse.select_wheels(Path("/input/provider-core-native-install.lock"), pool,
                                          report_output=report_output, lock_fd=descriptor)
             report.write_text(report_output.getvalue())
-            allowlist.write_text(json.dumps([{"path": str(source), "destination": "tools/git_stream_sources.py",
+            allowlist.write_text(json.dumps([{"path": str(source), "destination": "host/git_stream_sources.py",
                                               "sha256": source_hash, "executable": bool(source.stat().st_mode & 0o111)}]))
             projected = subprocess.run([sys.executable, "-I", "-S", str(tool), "report", "--report", str(report),
                                         "--pool", str(pool), "--directory", "wheelhouse/runtime"],
@@ -57,7 +57,7 @@ class SharedAcquisitionIntegrationTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(process.stdout), mode="r:") as archive:
                 observed = {entry.name: hashlib.sha256(archive.extractfile(entry).read()).hexdigest()
                             for entry in archive if entry.isfile()}
-        self.assertEqual({"tools/git_stream_sources.py": source_hash, "wheelhouse/runtime/" + wheel: wheel_hash}, observed)
+        self.assertEqual({"host/git_stream_sources.py": source_hash, "wheelhouse/runtime/" + wheel: wheel_hash}, observed)
 
     def test_source_bound_projection_and_cached_publisher(self):
         pool = Path("/wheelhouse")

@@ -33,7 +33,7 @@ if "$print_command"; then
     exit
 fi
 python3 -B "$repository_root/host/acquisition_bootstrap.py"
-source "$repository_root/tools/bootstrap/acquisition/acquisition_tool/owner.sh"
+source "$repository_root/host/bootstrap/acquisition/acquisition_tool/owner.sh"
 run_worker() {
     local worker_status
     acquisition_set_route "$interface" || return $?

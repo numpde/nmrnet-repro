@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORD = ROOT / "requirements/provider-core-release.json"
-SNAPSHOT = ROOT / "tools/bootstrap/acquisition"
+SNAPSHOT = ROOT / "host/bootstrap/acquisition"
 
 
 def inventory(record):

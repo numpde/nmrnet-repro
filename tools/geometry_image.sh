@@ -5,7 +5,7 @@
 geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Dockerfile.dockerignore
     requirements/preparation.lock tools/artifacts.py tools/container_guard.py
     tools/rdkit_environment.py tools/wheelhouse.py
-    requirements/provider-core-native-install.lock requirements/wheelhouse-tool-assets.in tools/streamed_build.sh tools/git_stream_sources.py
+    requirements/provider-core-native-install.lock requirements/wheelhouse-tool-assets.in tools/streamed_build.sh host/git_stream_sources.py
     nmrnet_provider nmrnet_inference tools/provider_environment.py
     tools/baseline_prepare.py tools/container_resources.py)
 

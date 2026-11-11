@@ -1,15 +1,19 @@
 """Model the shared acquisition engine protocol with an explicit live registry."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import json
 import os
-from pathlib import Path
 import re
 import socket
 import sys
+from pathlib import Path
 
 
 def reject(reason):
-    print(f"Acquisition engine fixture refused operation: {reason}", file=sys.stderr)
+    sys.stderr.write(f"Acquisition engine fixture refused operation: {reason}\n")
     raise SystemExit(97)
 
 
@@ -51,7 +55,7 @@ class AcquisitionEngine:
         self.containers[identifier] = {"role": role, "network": network, "mounts": mounts, "phase": "created"}
         self.save()
         receipt.write_text(identifier + "\n")
-        print(identifier)
+        sys.stdout.write(f"{identifier}\n")
         return 0
 
     def start(self, arguments):
@@ -94,11 +98,12 @@ class AcquisitionEngine:
         record = self.containers[arguments[2]]
         projection = arguments[1]
         if projection == "{{.HostConfig.NetworkMode}}":
-            print(record["network"])
+            sys.stdout.write(f"{record['network']}\n")
         elif projection == "{{.HostConfig.NetworkMode}} {{.State.Running}}":
-            print(record["network"], "true" if record["phase"] == "running" else "false")
+            running = "true" if record["phase"] == "running" else "false"
+            sys.stdout.write(f"{record['network']} {running}\n")
         elif projection == "{{.State.Running}} {{.State.ExitCode}}" and record["phase"] == "exited":
-            print("false", record["exit_status"])
+            sys.stdout.write(f"false {record['exit_status']}\n")
         else:
             reject("inspect projection is outside the modeled lifecycle")
         return 0
@@ -117,7 +122,7 @@ class AcquisitionEngine:
         if not selector.startswith("id=") or re.fullmatch("[0-9a-f]{64}", selector[3:]) is None:
             reject("absence selector must be one complete container ID")
         if selector[3:] in self.containers:
-            print(selector[3:])
+            sys.stdout.write(selector[3:] + "\n")
         return 0
 
     def run(self, arguments):

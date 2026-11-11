@@ -32,7 +32,7 @@ class WheelhouseLauncherTests(unittest.TestCase):
         (self.root / "host/acquisition_bootstrap.py").write_text("# fixture: verification is tested separately\n")
         (self.root / "tools/docker_client.sh").write_text('''docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }
 ''')
-        owner = self.root / "tools/bootstrap/acquisition/acquisition_tool"
+        owner = self.root / "host/bootstrap/acquisition/acquisition_tool"
         owner.mkdir(parents=True)
         (owner / "owner.sh").write_text('''
 acquisition_scope() { shift 5; "$@"; }

@@ -32,7 +32,9 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / 'tools'
         tools.mkdir()
-        for name in ('compose_deployment.sh', 'compose_image_ids.py', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
+        (self.root / 'host').mkdir()
+        shutil.copyfile(ROOT / 'host/compose_image_ids.py', self.root / 'host/compose_image_ids.py')
+        for name in ('compose_deployment.sh', 'provider_deployment.sh', 'image_lifecycle.sh', 'user_namespace_map.sh'):
             shutil.copyfile(ROOT / 'tools' / name, tools / name)
         # Tests can opt into a rootless host mapping. The map parser itself is
         # exercised against synthetic maps by its own tests.

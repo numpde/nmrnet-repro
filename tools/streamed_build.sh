@@ -25,7 +25,7 @@ prepare_streamed_inputs() {
     if [[ -n ${stream_submodule_inventory-} ]]; then
         inventories+=("$stream_submodule_inventory" NMRNetplusplus "$stream_submodule_digest")
     fi
-    python3 -I -B "$image_input_directory/context/tools/git_stream_sources.py" "$image_input_directory/context" \
+    python3 -I -B "$image_input_directory/context/host/git_stream_sources.py" "$image_input_directory/context" \
         "${inventories[@]}" > "$stream_sources"
     for item in "$@"; do
         role=${item%%:*}; lock=${item#*:}

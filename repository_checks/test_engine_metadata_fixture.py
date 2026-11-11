@@ -81,7 +81,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py")]
             verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
             self.assertEqual(0, verified.returncode, verified.stderr)
-            (fixture.root / "tools/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
+            (fixture.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
             rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True)
             self.assertEqual(1, rejected.returncode, rejected.stderr)
             self.assertIn("bootstrap files differ from the release inventory", rejected.stderr)

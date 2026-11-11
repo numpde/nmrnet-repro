@@ -7,7 +7,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "tools/compose_image_ids.py"
+SCRIPT = ROOT / "host/compose_image_ids.py"
 IMAGE = "sha256:" + "a" * 64
 SERVICES = ("provider", "prediction", "reader", "smiles", "interpreter", "store")
 

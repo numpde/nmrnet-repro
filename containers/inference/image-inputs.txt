@@ -2,6 +2,7 @@ artifacts/nmrnet-source.paths
 artifacts/nmrnet-source.sha256
 containers/inference/Dockerfile
 containers/inference/Dockerfile.dockerignore
+host/git_stream_sources.py
 nmrnet_inference
 nmrnet_provider
 requirements/inference.lock
@@ -13,7 +14,6 @@ tools/baseline_prepare.py
 tools/build_unicore.py
 tools/container_guard.py
 tools/container_resources.py
-tools/git_stream_sources.py
 tools/provider_environment.py
 tools/streamed_build.sh
 tools/wheelhouse.py
