@@ -599,23 +599,44 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertTrue(Path(calls[-1]["client_config"]["path"]).is_dir())
 
     def test_ordinary_post_start_corruption_still_reports_cause_even_at_status143(self):
-        result = self.caller(
-            "run",
-            "sha256:" + "b" * 64,
-            additions={
+        retired = self.root / "scope-retired"
+        result = self.fixture.run(
+            "acquisition_run.sh",
+            "--retired-receipt",
+            str(retired),
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
+            additions=self.environment
+            | {
+                "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
                 "NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT": "damaged-started-worker",
                 "NMRNET_FAKE_WORKER_STATUS": "143",
             },
+            timeout=30,
         )
+        self._remember(result.stderr)
         self.assertEqual(143, result.returncode, result.stderr)
+        self.assertNotIn("Acquisition was interrupted", result.stderr)
         self.assertTrue((self.root / "attach-completed").is_file())
-        self.assertIn("worker removal", result.stderr)
-        self.assertIn("not admitted", result.stderr)
-        self.assertIn("proxy while a dependent container remains unconfirmed", result.stderr)
+        self.assertIn(
+            "Cannot remove acquisition worker-1: its container identity no longer matches its creation receipt.", result.stderr
+        )
+        self.assertIn("Acquisition worker-1 completed with status 143; its removal also failed.", result.stderr)
+        self.assertIn("Cannot confirm acquisition retirement", result.stderr)
         self.assertEqual([], [call["arguments"] for call in self.fixture.calls() if call["arguments"][0] == "rm"])
         receipt = Path((self.root / "worker-cid-path").read_text())
+        self.retained.add(receipt.parent.parent)
         self.assertEqual(b"damaged-started-worker\n", receipt.read_bytes())
-        self.assertTrue(receipt.parent.is_dir())
+        self.assertEqual(("3" * 64 + "\n").encode(), (receipt.parent / "stdout").read_bytes())
+        self.assertFalse(retired.exists())
+        self.assertEqual({"1" * 64, "2" * 64, "3" * 64}, set(json.loads((self.root / "acquisition-containers.json").read_text())))
+        self.assertTrue(Path(self.fixture.calls()[-1]["client_config"]["path"]).is_dir())
 
     def test_scope_attach_interrupt_finishes_without_draining_full_stderr(self):
         receipt = self.root / "scope-retired"
