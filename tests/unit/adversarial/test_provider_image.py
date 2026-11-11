@@ -61,6 +61,9 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
             "unconfirmed",
             "inspect",
             "label",
+            "wheel-label",
+            "missing-tool",
+            "corrupt-tool",
         ):
             with self.subTest(form=form), ImageSource() as fixture:
                 directory = fixture.repository / ".work/provider"
@@ -68,6 +71,11 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 record = directory / "image-id"
                 previous = b"previous image evidence\n"
                 record.write_bytes(previous)
+                tool = fixture.wheelhouse / "wheelhouse-tool-1.0.0.pyz"
+                if form == "missing-tool":
+                    tool.unlink()
+                elif form == "corrupt-tool":
+                    tool.write_bytes(b"damaged tool")
                 result = subprocess.run(
                     ["bash", "tests/fixtures/provider_image_build.sh", str(fixture.repository), form],
                     capture_output=True,
@@ -78,7 +86,7 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(record.read_bytes(), previous)
                 calls = (directory / "native-calls").read_text().splitlines()
-                if form not in ("inspect", "label"):
+                if form not in ("inspect", "label", "wheel-label"):
                     self.assertNotIn("controller built-image admission", calls)
                     self.assertNotIn("controller image-input admission", calls)
                 if form == "failed":

@@ -431,6 +431,7 @@ case "$1" in
                     "$api_test_image" -B -m unittest -v test_api_prediction_normative test_api_prediction_adversarial)
                 ;;
             test/unit/provider/image)
+                command+=(--mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly")
                 for directory in tools tests requirements; do require_source_directory "$directory"; done
                 if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
                     printf -v pending_diagnostic '%s\n' 'Cannot check provider image commands: Makefile must be a regular file without a symlink.'

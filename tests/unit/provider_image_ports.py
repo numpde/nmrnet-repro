@@ -1,5 +1,6 @@
 """Small committed source scaffold; no engine or dependency installation authority."""
 
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -27,6 +28,9 @@ class ImageSource:
             "containers/provider/Dockerfile",
             "containers/provider/Dockerfile.dockerignore",
             "requirements/provider-core-install.lock",
+            "requirements/wheelhouse-tool-assets.in",
+            "tools/streamed_build.sh",
+            "host/git_stream_sources.py",
             "nmrnet_provider/about/hello.md",
             "nmrnet_inference/predict.py",
             "nmrnet_inference/model.py",
@@ -67,6 +71,8 @@ class ImageSource:
                 "tools/wheelhouse.py",
                 "tools/artifacts.py",
                 "tools/container_guard.py",
+                "tools/streamed_build.sh",
+                "host/git_stream_sources.py",
             ):
                 body = Path(name).read_bytes()
             elif name == "requirements/provider-core-install.lock":
@@ -77,6 +83,33 @@ class ImageSource:
         runtime_wheel = wheel(wheelhouse, "providerfixture", "1.0")
         alternate_runtime = wheel(wheelhouse, "providerfixture", "2.0")
         unrelated = wheel(wheelhouse, "unrelated-project", "9.0")
+        streamer = wheelhouse / "wheelhouse-tool-1.0.0.pyz"
+        streamer.write_text('''import hashlib, json, pathlib, sys, tarfile
+from urllib.parse import urlsplit
+args = sys.argv
+if args[1] == "report":
+    report = json.loads(pathlib.Path(args[args.index("--report") + 1]).read_text())
+    directory = args[args.index("--directory") + 1]
+    items = [{"directory": directory, "filename": pathlib.Path(urlsplit(item["download_info"]["url"]).path).name,
+              "sha256": item["download_info"]["archive_info"]["hashes"]["sha256"]} for item in report["install"]]
+    print(json.dumps(items))
+elif args[1] == "identity":
+    items = json.loads(pathlib.Path(args[args.index("--manifest") + 1]).read_text())
+    print(hashlib.sha256(json.dumps(items, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest())
+elif args[1] == "stream":
+    sources = json.loads(pathlib.Path(args[args.index("--source-allowlist") + 1]).read_text())
+    items = json.loads(pathlib.Path(args[args.index("--manifest") + 1]).read_text())
+    pool = pathlib.Path(args[args.index("--pool") + 1])
+    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
+        for item in sources:
+            tar.add(item["path"], arcname=item["destination"])
+        for item in items:
+            tar.add(pool / item["filename"], arcname=item["directory"] + "/" + item["filename"])
+''')
+        pin = hashlib.sha256(streamer.read_bytes()).hexdigest()
+        (self.repository / "requirements/wheelhouse-tool-assets.in").write_text(
+            f"https://github.com/numpde/nmr-provider-tools/releases/download/v1/{streamer.name}#sha256={pin}\n"
+        )
         locked(
             self.repository / "requirements/provider-core-install.lock",
             [("providerfixture", "1.0", [runtime_wheel])],

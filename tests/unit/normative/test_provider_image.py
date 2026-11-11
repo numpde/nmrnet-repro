@@ -113,7 +113,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
             captures = [command for command in commands if "tools.wheelhouse" in command]
             self.assertEqual(captures, [], result.stdout)
-            (build_command,) = [command for command in commands if "--build-context" in command]
+            (build_command,) = [command for command in commands if "build" in command]
             capture = root / ".work/provider/.build.PRINT"
             command = build_command
             self.assertEqual(command[command.index("--network") + 1], "none")
@@ -122,9 +122,8 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--progress") + 1], "plain")
             self.assertNotIn("--quiet", command)
             self.assertEqual(command[command.index("--iidfile") + 1], str(capture / "built-image-id"))
-            self.assertEqual(command[-1], str(capture / "context"))
-            contexts = {command[index + 1] for index, word in enumerate(command) if word == "--build-context"}
-            self.assertEqual(contexts, {f"runtime-wheels={root}/.work/wheelhouse"})
+            self.assertEqual(command[-1], "-")
+            self.assertNotIn("--build-context", command)
             self.assertFalse(capture.exists())
             self.assertFalse((root / ".work/provider").exists())
             self.assertNotIn("--secret", command)
