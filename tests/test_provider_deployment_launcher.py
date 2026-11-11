@@ -257,6 +257,19 @@ esac
         (root / "current").symlink_to("bundles/generation-original")
         return bundle
 
+    def current_target(self):
+        descriptor = os.open(self.provider, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            return os.readlink("current", dir_fd=descriptor)
+        finally:
+            os.close(descriptor)
+
+    def test_current_target_preserves_exact_link_spelling(self):
+        current = self.provider / "current"
+        current.unlink()
+        current.symlink_to("bundles/./generation-original")
+        self.assertEqual("bundles/./generation-original", self.current_target())
+
     def existing_runtime(self):
         runtime = self.provider / "runtime"
         runtime.mkdir(mode=0o700)
@@ -399,7 +412,7 @@ esac
         self.assertEqual(freeze_call[freeze_call.index("--image-id") + 1], scientific_image)
         self.assertEqual(freeze_call[freeze_call.index("--geometry-image-id") + 1], geometry_image)
         self.assertEqual(probe_create[probe_create.index("--pull") + 1], "never")
-        self.assertNotEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertNotEqual(self.current_target(), "bundles/generation-original")
 
     def test_update_admits_every_recorded_scientific_image_before_draining(self):
         self.existing_runtime()
@@ -410,7 +423,7 @@ esac
         result = self.run_command("update", changes={"TEST_IMAGE_INSPECT_FAILURE": inference_image})
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(call[0] == "stop" for call in self.calls()))
-        self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertEqual(self.current_target(), "bundles/generation-original")
         self.assertTrue(any(call[0:5] == ["image", "inspect", "--format", "{{.Id}}", inference_image] for call in self.calls()))
 
     def test_running_image_verification_rejects_partial_stdout_from_failed_engine_client(self):
@@ -556,7 +569,7 @@ esac
         self.assertEqual(len([call for call in self.calls() if call[0] == "compose"]), 1)
         self.assertIn("actual Compose cause", result.stderr)
         self.assertIn("No automatic retry", result.stderr)
-        self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertEqual(self.current_target(), "bundles/generation-original")
 
     def test_up_rejects_a_running_service_with_an_image_other_than_its_frozen_plan(self):
         result = self.run_command("up", changes={"TEST_RUNNING_IMAGE": "sha256:" + "b" * 64})
@@ -625,7 +638,7 @@ esac
         self.assertEqual(self.calls()[0][0:2], ["ps", "--quiet"])
         self.assertEqual(len(self.calls()), 1)
         self.assertIn("stop this deployment", result.stderr)
-        self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertEqual(self.current_target(), "bundles/generation-original")
 
     def test_install_reuses_the_current_generation_shared_runtime_image(self):
         result = self.run_command("install", changes={"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": ""})
@@ -812,7 +825,7 @@ fi
         self.assertIn("retire the old API route", result.stderr)
         self.assertTrue(route.exists())
         self.assertTrue(self.bundle.exists())
-        self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertEqual(self.current_target(), "bundles/generation-original")
         self.assertFalse(any("freeze" in call for call in self.calls()))
 
     def test_unretired_install_preflight_retains_client_and_recipe(self):
@@ -846,7 +859,7 @@ fi
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("still mounts", result.stderr)
         self.assertTrue(self.bundle.exists())
-        self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertEqual(self.current_target(), "bundles/generation-original")
         self.assertFalse(any("freeze" in call for call in self.calls()))
 
     def test_retire_api_route_refuses_any_overlapping_container_mount(self):
@@ -947,7 +960,7 @@ fi
         name = runs[0][runs[0].index("--name") + 1]
         self.assertEqual(calls[-1], ["rm", "--force", name])
         self.assertIn("actual helper cause", result.stderr)
-        self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+        self.assertEqual(self.current_target(), "bundles/generation-original")
 
     def test_unretired_local_helper_never_dispatches_a_new_cleanup_client(self):
         result = self.run_command(
@@ -993,7 +1006,7 @@ fi
                 self.assertEqual(len(runs), 1)
                 name = runs[0][runs[0].index("--name") + 1]
                 self.assertEqual(calls[-1], ["rm", "--force", name])
-                self.assertEqual(os.readlink(self.provider / "current"), "bundles/generation-original")
+                self.assertEqual(self.current_target(), "bundles/generation-original")
 
     def test_client_inputs_uses_selected_prediction_image_and_readonly_bundle(self):
         output = Path(self.temporary.name) / "client"
