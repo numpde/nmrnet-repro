@@ -50,12 +50,15 @@ prepare_step() {
         NMRNET_SUPPRESS_NEXT_ACTIONS=1
         "NMRNET_WHEELHOUSE_INPUT=$wheelhouse_directory" NMRNET_WHEELHOUSE_INPUT_ORIGIN='command line'
         "NMRNET_NETWORK_INTERFACE_INPUT=$interface" NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN='command line'
-        "NMRNET_ARCHIVE_INPUT=$archive"
-        "NMRNET_DOCKER_CONTEXT_INPUT=${NMRNET_DOCKER_CONTEXT_INPUT-}"
-        NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN='command line'
-        "NMRNET_DOCKER_ENDPOINT_INPUT=${NMRNET_DOCKER_ENDPOINT_INPUT-}"
-        bash "$repository_root/tools/$owner")
-    command+=("$action")
+        "NMRNET_ARCHIVE_INPUT=$archive")
+    if [[ -v NMRNET_DOCKER_CONTEXT_INPUT ]]; then
+        command+=("NMRNET_DOCKER_CONTEXT_INPUT=$NMRNET_DOCKER_CONTEXT_INPUT")
+    fi
+    command+=(NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN='command line')
+    if [[ -v NMRNET_DOCKER_ENDPOINT_INPUT ]]; then
+        command+=("NMRNET_DOCKER_ENDPOINT_INPUT=$NMRNET_DOCKER_ENDPOINT_INPUT")
+    fi
+    command+=(bash "$repository_root/tools/$owner" "$action")
     if "$print_command"; then
         command=("${command[@]:0:${#command[@]}-1}" --print "${command[@]: -1}")
         printf '%q ' "${command[@]}"; printf '\n'
