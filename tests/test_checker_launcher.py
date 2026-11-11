@@ -151,7 +151,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         for name in names:
             target = self.root / "bin" / name
             if not target.exists():
-                target.symlink_to(ROOT / "tests/test_checker_engine.py")
+                target.symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
 
     # silent-defaults: allow-contract -- Capture both streams unless a blocked-pipe scenario supplies its own descriptor; the removal-signal case checks exact stdout and quiet stderr; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_removal_signal_finishes_quiet_cleanup_without_new_report
     def _start(self, action, additions, *, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
@@ -477,7 +477,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                 self.assertFalse(Path(evidence["dependencies"]).exists())
 
     def test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture(self):
-        (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
+        (self.root / "bin/rm").symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         record = self.root / ".work/checker/image-id"
         record.write_text("sha256:" + "c" * 64 + "\n")
         result = self.launch("build", additions={"CHECKER_FIXTURE_BUILD_FAIL": "1", "CHECKER_FIXTURE_CAPTURE_CLEANUP_FAIL": "1"})
@@ -495,7 +495,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         )
 
     def test_successful_build_with_failed_capture_cleanup_fails_and_keeps_published_record(self):
-        (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
+        (self.root / "bin/rm").symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         result = self.launch("build", additions={"CHECKER_FIXTURE_CAPTURE_CLEANUP_FAIL": "1"})
         self.assertEqual(13, result.returncode, msg=result.stderr)
         self.assertEqual("sha256:" + "d" * 64 + "\n", (self.root / ".work/checker/image-id").read_text())
@@ -511,7 +511,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_failed_record_rename_retires_only_owned_temporary_and_preserves_predecessor(self):
         for command in ("mv", "rm"):
-            (self.root / "bin" / command).symlink_to(ROOT / "tests/test_checker_engine.py")
+            (self.root / "bin" / command).symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         record = self.root / ".work/checker/image-id"
         predecessor = "sha256:" + "c" * 64 + "\n"
         record.write_text(predecessor)
@@ -534,7 +534,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_failed_record_cleanup_reports_retained_temporary_and_preserves_rename_status(self):
         for command in ("mv", "rm"):
-            (self.root / "bin" / command).symlink_to(ROOT / "tests/test_checker_engine.py")
+            (self.root / "bin" / command).symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         record = self.root / ".work/checker/image-id"
         predecessor = "sha256:" + "c" * 64 + "\n"
         record.write_text(predecessor)
