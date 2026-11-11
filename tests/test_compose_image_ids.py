@@ -51,6 +51,7 @@ class ComposeImageIdsTests(unittest.TestCase):
             {"provider": {"image": IMAGE}},
             {**{role: {"image": IMAGE} for role in SERVICES}, "unexpected": {"image": IMAGE}},
             {**{role: {"image": IMAGE} for role in SERVICES}, "provider": {"image": "local:latest"}},
+            {**{role: {"image": IMAGE} for role in SERVICES}, "provider": []},
         ):
             with self.subTest(services=services):
                 self.write_services(services)

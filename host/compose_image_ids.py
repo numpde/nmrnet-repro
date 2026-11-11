@@ -24,7 +24,9 @@ def service_image_ids(path):
     images = {}
     for role in SERVICES:
         service = services[role]
-        image = service.get("image") if type(service) is dict else None
+        if type(service) is not dict:
+            raise ValueError("frozen Compose plan contains a non-immutable service image")
+        image = service.get("image")
         if type(image) is not str or IMAGE_ID.fullmatch(image) is None:
             raise ValueError("frozen Compose plan contains a non-immutable service image")
         images[role] = image
