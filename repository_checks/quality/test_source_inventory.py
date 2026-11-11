@@ -358,18 +358,23 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
                 self.assertTrue(discover_source_files(root=ROOT, subtree=subtree))
 
     def test_repository_checker_grants_complete_read_only_source_trees(self):
-        result = subprocess.run(
-            ["bash", str(ROOT / "tools/container.sh"), "--print", "test/repository"],
-            env=os.environ
-            | {
-                "NMRNET_DOCKER_CONTEXT_INPUT": "fixture-local",
-                "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
-                "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///tmp/test-docker.sock",
-            },
-            text=True,
-            capture_output=True,
-            check=True,
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "id").symlink_to(ROOT / "repository_checks/fixtures/containers/id.sh")
+            result = subprocess.run(
+                ["bash", str(ROOT / "tools/container.sh"), "--print", "test/repository"],
+                env=os.environ
+                | {
+                    "PATH": directory + os.pathsep + os.environ["PATH"],
+                    "NMRNET_FIXTURE_UID": "1000",
+                    "NMRNET_FIXTURE_GID": "1000",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "fixture-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///tmp/test-docker.sock",
+                },
+                text=True,
+                capture_output=True,
+                check=True,
+            )
         arguments = shlex.split(result.stdout)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         for subtree in ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider"):
