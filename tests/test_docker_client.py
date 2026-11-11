@@ -1019,6 +1019,22 @@ def _fake_command():
     arguments = sys.argv[1:]
     name = Path(sys.argv[0]).name
     if name == "rm":
+        root = Path(os.environ["FAKE_DOCKER_OBSERVATION"]).parent
+        if len(arguments) >= 3 and arguments[:2] == ["-f", "--"]:
+            paths = [Path(value) for value in arguments[2:]]
+            directory = paths[0].parent
+            if (
+                directory.parent == root / ".work"
+                and directory.name.startswith("repository-check-inputs.")
+                and paths
+                == [
+                    directory / "root-entries",
+                    directory / "mapped-owner",
+                    directory / "module-name",
+                    directory / "module-pointer",
+                ]
+            ):
+                return subprocess.run(["/bin/rm", *arguments], check=False).returncode
         if len(arguments) >= 3 and arguments[:2] == ["-f", "--"]:
             paths = [Path(value) for value in arguments[2:]]
             directory = paths[0].parent
@@ -1031,7 +1047,6 @@ def _fake_command():
         if len(arguments) != 3 or arguments[1] != "--":
             return 97
         destination = Path(arguments[2])
-        root = Path(os.environ["FAKE_DOCKER_OBSERVATION"]).parent
         configuration = arguments[0] == "-rf" and destination.name.startswith("nmrnet-docker-client.")
         native_control = (
             arguments[0] == "-rf"
@@ -1043,9 +1058,7 @@ def _fake_command():
             arguments[0] == "-rf" and destination.parent == root / ".work/checker" and destination.name.startswith(".inspect.")
         )
         scaffold = destination.parent.parent == root / ".work" and destination.parent.name.startswith("repository-check-inputs.")
-        checker_scaffold = scaffold and (
-            (arguments[0] == "-rf" and destination.name == "git") or (arguments[0] == "-f" and destination.name == "root-entries")
-        )
+        checker_scaffold = scaffold and arguments[0] == "-rf" and destination.name == "git"
         if not (configuration or native_control or probe_output or checker_receipt or checker_scaffold):
             return 97
         if configuration:
