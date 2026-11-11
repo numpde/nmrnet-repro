@@ -1,10 +1,9 @@
 """Read the exact immutable image selections from a frozen provider plan."""
 
 import json
-from pathlib import Path
 import re
 import sys
-
+from pathlib import Path
 
 SERVICES = ("provider", "prediction", "reader", "smiles", "interpreter", "store")
 IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
@@ -35,15 +34,15 @@ def main(arguments):
     if arguments[0] == "shared-runtime":
         if images["interpreter"] != images["store"]:
             raise ValueError("interpreter and store proxies do not share one runtime image")
-        print(images["interpreter"])
+        sys.stdout.write(images["interpreter"] + "\n")
     else:
         for role in SERVICES:
-            print(f"{role}\t{images[role]}")
+            sys.stdout.write(f"{role}\t{images[role]}\n")
 
 
 if __name__ == "__main__":
     try:
         main(sys.argv[1:])
     except ValueError as error:
-        print(f"Cannot read frozen Compose image IDs: {error}.", file=sys.stderr)
+        sys.stderr.write(f"Cannot read frozen Compose image IDs: {error}.\n")
         raise SystemExit(2) from None

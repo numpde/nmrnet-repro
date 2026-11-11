@@ -8,7 +8,6 @@ import stat
 import sys
 from pathlib import Path, PurePosixPath
 
-
 RECORD = re.compile(rb"(100644|100755) blob ([0-9a-f]{40})\t([A-Za-z0-9_./-]+)")
 
 
@@ -47,7 +46,12 @@ def source_allowlist(context, inventories):
                 mode, object_id, raw_name = match.groups()
                 name = raw_name.decode("ascii")
                 relative = prefix / name
-                if name in (".", "..") or name.startswith("/") or any(part in (".", "..") for part in relative.parts) or str(PurePosixPath(name)) != name:
+                if (
+                    name in (".", "..")
+                    or name.startswith("/")
+                    or any(part in (".", "..") for part in relative.parts)
+                    or str(PurePosixPath(name)) != name
+                ):
                     raise ValueError("Git source inventory contains a noncanonical path.")
                 destination = relative.as_posix()
                 if destination in entries:
@@ -78,8 +82,12 @@ def source_allowlist(context, inventories):
                         sha256.update(block)
                     if size != metadata.st_size or git_hash.hexdigest().encode() != object_id:
                         raise ValueError(f"Captured Git source {destination!r} differs from its committed blob.")
-                entries[destination] = {"path": str(context / destination), "destination": destination,
-                                        "sha256": sha256.hexdigest(), "executable": executable}
+                entries[destination] = {
+                    "path": str(context / destination),
+                    "destination": destination,
+                    "sha256": sha256.hexdigest(),
+                    "executable": executable,
+                }
     finally:
         os.close(root)
     return [entries[name] for name in sorted(entries)]
@@ -88,13 +96,13 @@ def source_allowlist(context, inventories):
 def main():
     if len(sys.argv) < 5 or (len(sys.argv) - 2) % 3 != 0:
         raise ValueError("usage: git_stream_sources.py CONTEXT INVENTORY PREFIX INVENTORY_SHA256 [...]")
-    inventories = list(zip(sys.argv[2::3], sys.argv[3::3], sys.argv[4::3]))
-    print(json.dumps(source_allowlist(sys.argv[1], inventories), sort_keys=True))
+    inventories = list(zip(sys.argv[2::3], sys.argv[3::3], sys.argv[4::3], strict=True))
+    sys.stdout.write(json.dumps(source_allowlist(sys.argv[1], inventories), sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":
     try:
         main()
     except (OSError, ValueError) as error:
-        print(f"Cannot prepare streamed Git inputs: {error}", file=sys.stderr)
-        raise SystemExit(2)
+        sys.stderr.write(f"Cannot prepare streamed Git inputs: {error}\n")
+        raise SystemExit(2) from error
