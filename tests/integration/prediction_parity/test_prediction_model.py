@@ -462,9 +462,11 @@ class PredictionModelParityTests(unittest.TestCase):
                     yield Reader(stream)
 
             identity = {"size": 1, "sha256": hashlib.sha256(b"x").hexdigest()}
-            with mock.patch.object(artifacts, "regular_file", side_effect=observe_reads):
-                with self.assertRaisesRegex(ValueError, "source exceeds its receipted size"):
-                    read_receipted_bytes(path, identity)
+            with (
+                mock.patch.object(artifacts, "regular_file", side_effect=observe_reads),
+                self.assertRaisesRegex(ValueError, "source exceeds its receipted size"),
+            ):
+                read_receipted_bytes(path, identity)
             self.assertEqual(read_sizes, [])
 
     def test_receipted_fixture_bytes_cap_growth_after_size_check(self):
@@ -498,9 +500,11 @@ class PredictionModelParityTests(unittest.TestCase):
                     yield Reader(stream)
 
             identity = {"size": len(original), "sha256": hashlib.sha256(original).hexdigest()}
-            with mock.patch.object(artifacts, "regular_file", side_effect=grow_after_fstat):
-                with self.assertRaisesRegex(ValueError, "bytes differ from their receipt"):
-                    read_receipted_bytes(path, identity)
+            with (
+                mock.patch.object(artifacts, "regular_file", side_effect=grow_after_fstat),
+                self.assertRaisesRegex(ValueError, "bytes differ from their receipt"),
+            ):
+                read_receipted_bytes(path, identity)
             self.assertEqual(read_sizes, [len(original) + 1])
             self.assertEqual(path.stat().st_size, len(original) + 1)
 
@@ -873,9 +877,11 @@ class VerifiedModelArtifactTests(unittest.TestCase):
             with real_regular_file(source, flags) as stream:
                 yield Reader(stream) if source == path else stream
 
-        with mock.patch.object(artifacts, "regular_file", side_effect=observe_reads):
-            with self.assertRaisesRegex(ValueError, "size exceeds selection max_bytes=4"):
-                baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
+        with (
+            mock.patch.object(artifacts, "regular_file", side_effect=observe_reads),
+            self.assertRaisesRegex(ValueError, "size exceeds selection max_bytes=4"),
+        ):
+            baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
         self.assertEqual(read_sizes, [])
         self.assertEqual(path.read_bytes(), content)
 
@@ -907,9 +913,11 @@ class VerifiedModelArtifactTests(unittest.TestCase):
             with real_regular_file(source, flags) as stream:
                 yield Reader(stream) if source == path else stream
 
-        with mock.patch.object(artifacts, "regular_file", side_effect=grow_after_size_check):
-            with self.assertRaisesRegex(ValueError, "source exceeds selection max_bytes"):
-                baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
+        with (
+            mock.patch.object(artifacts, "regular_file", side_effect=grow_after_size_check),
+            self.assertRaisesRegex(ValueError, "source exceeds selection max_bytes"),
+        ):
+            baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
         self.assertEqual(read_sizes, [len(content) + 1])
         self.assertEqual(path.stat().st_size, len(content) + 1)
 
