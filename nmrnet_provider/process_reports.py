@@ -44,6 +44,8 @@ from provider_core.diagnostics import failure_evidence as core_failure_evidence
 from provider_core.failure_projection import owned_details as core_owned_details
 from provider_core.failure_projection import owned_relationships as core_owned_relationships
 
+# Private result summaries project at most this many interpreter diagnostic entries.
+# repo-check: allow-module-constant
 _MAX_FAILURE_NODES = 64
 
 

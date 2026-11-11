@@ -30,6 +30,8 @@ from provider_core.ownership import AttemptClaims, LiveCapacityFull
 from provider_core.task_boundary import contain_task_exit
 from provider_core.uploads import UploadRecoveryExhausted
 
+# This module retains its process-local logger handle; entrypoints configure logging.
+# repo-check: allow-module-constant
 LOGGER = logging.getLogger(__name__)
 
 

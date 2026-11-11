@@ -15,6 +15,8 @@ from nmrnet_provider.input_geometry import UploadMemberSource, UploadSource
 from nmrnet_provider.smiles import GeneratedConformers
 from provider_core.result_verbosity import ResultVerbosity
 
+# NMRNet owns this default presentation precision for omitted output settings.
+# repo-check: allow-module-constant
 DEFAULT_SHIFT_SIGNIFICANT_DIGITS = 4
 
 
@@ -53,6 +55,8 @@ class OutputSettings:
         return {"verbosity": self.verbosity.value, "shift_significant_digits": self.shift_significant_digits}
 
 
+# Frozen output settings supply the same presentation defaults to every input path.
+# repo-check: allow-module-constant
 DEFAULT_OUTPUT = OutputSettings()
 
 

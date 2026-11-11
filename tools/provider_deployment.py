@@ -33,6 +33,8 @@ from provider_core.chat import ChatEndpoint
 from provider_core.response_json import ResponseRejected, read_document
 from provider_core.shared_grants import SharedGrants
 
+# Deployment capture admits the provider input files under this fixed container mount.
+# repo-check: allow-module-constant
 INPUT_ROOT = Path("/srv/nmrnet/input")
 
 

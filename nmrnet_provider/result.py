@@ -32,16 +32,26 @@ from nmrnet_provider.prepared_input import (
 )
 from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
+# Published results identify this provider-owned document schema.
+# repo-check: allow-module-constant
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v2"
+# Result planning and interpretation admission share this fixed serialization ceiling.
+# repo-check: allow-module-constant
 MAX_RESULT_BYTES = 786432
+# Public warning projection copies this reviewed scaler-compatibility notice.
+# repo-check: allow-module-constant
 SCALER_WARNING = {
     "code": "scaler_version_mismatch",
     "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
 }
+# Public warning projection copies this notice without publishing arbitrary warning text.
+# repo-check: allow-module-constant
 ADDITIONAL_WARNING = {
     "code": "additional_scaler_warnings",
     "message": "Additional warnings occurred while loading the listed scalers. Their details are retained in protected diagnostics for review.",
 }
+# Direct-coordinate results publish these limitations of the qualified prediction path.
+# repo-check: allow-module-constant
 SCIENTIFIC_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
     "Only H and C atoms receive shifts; other supplied atoms provide molecular context.",
@@ -53,6 +63,8 @@ SCIENTIFIC_LIMITS = (
     "Coordinates affect predictions. No experimental spectrum, confidence interval or bond assignment is inferred.",
     "Float32 coordinates describe admitted numeric inputs; model centering and padding occur later.",
 )
+# Generated-coordinate results publish these limitations of generation and prediction.
+# repo-check: allow-module-constant
 GENERATED_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
     "Each returned conformer receives its own prediction; generated conformers are not guaranteed to be distinct.",

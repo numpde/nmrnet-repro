@@ -57,6 +57,8 @@ from provider_core.result_verbosity import ResultVerbosity
 from provider_core.upload_response import require_upload_ref
 from provider_core.uploads import UploadInputRejected
 
+# The interpreter uses this code-owned selection contract and records its digest as evidence.
+# repo-check: allow-module-constant
 PROMPT = f"""Select molecular structures for NMRNet H/C chemical-shift prediction.
 
 Task and authority
@@ -159,8 +161,14 @@ def _tool(name, description, properties):
     }
 
 
+# Tool declarations share this fixed JSON Schema integer vocabulary.
+# repo-check: allow-module-constant
 _INTEGER = {"type": "integer"}
+# Tool declarations share this fixed JSON Schema string vocabulary.
+# repo-check: allow-module-constant
 _TEXT = {"type": "string"}
+# Admitted input-problem codes map to these provider-authored public explanations.
+# repo-check: allow-module-constant
 _PROBLEM_GUIDANCE = {
     "source_unit_unclear": (
         "The language model could not determine the coordinate unit. Specify angstrom, nm or bohr in the request instructions."
@@ -179,6 +187,8 @@ _PROBLEM_GUIDANCE = {
         "or SMILES with an explicit conformer count."
     ),
 }
+# Each interpreter decodes its own tool declarations from this fixed serialized contract.
+# repo-check: allow-module-constant
 _TOOLS = json.dumps(
     [
         _tool(

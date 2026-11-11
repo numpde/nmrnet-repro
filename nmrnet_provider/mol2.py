@@ -22,14 +22,17 @@ from nmrnet_provider.xyz import MAX_RECORDS
 
 # Source IDs reach JSON result consumers. Keep them exact even in a binary64
 # reader; this is our transport bound, not a claimed Tripos integer-width rule.
+# repo-check: allow-module-constant
 MAX_ATOM_ID = 2**53 - 1
 
 # float() also accepts Python digit separators. File coordinates use decimal
 # numbers with an optional exponent; they must not silently reinterpret 1_0.
+# repo-check: allow-module-constant
 _COORDINATE_NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
 # These are the concrete dotted types in the cited pp. 53-54 table. Prefix
 # guessing would turn Du.C into carbon or accept an unknown producer type.
+# repo-check: allow-module-constant
 _SYBYL_SUFFIXES = {
     "C": {"3", "2", "1", "ar", "cat"},
     "N": {"3", "2", "1", "ar", "am", "pl3", "4"},

@@ -25,6 +25,8 @@ from pathlib import Path
 
 from tools.artifacts import regular_file
 
+# Consumer qualification selects this maintained inventory from the captured SDK test support.
+# repo-check: allow-module-constant
 SUPPORT_MODULES = (
     "acquisition",
     "api",

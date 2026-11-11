@@ -8,6 +8,8 @@ import stat
 import sys
 from pathlib import Path, PurePosixPath
 
+# Captured source inventories admit this exact Git blob record grammar.
+# repo-check: allow-module-constant
 RECORD = re.compile(rb"(100644|100755) blob ([0-9a-f]{40})\t([A-Za-z0-9_./-]+)")
 
 

@@ -10,6 +10,8 @@ require_container()
 
 from pathlib import Path
 
+# Contained resource observations read the kernel cgroup v2 mount at this fixed path.
+# repo-check: allow-module-constant
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 

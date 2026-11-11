@@ -5,7 +5,11 @@ import re
 import sys
 from pathlib import Path
 
+# The frozen provider plan must contain this complete maintained service set.
+# repo-check: allow-module-constant
 SERVICES = ("provider", "prediction", "reader", "smiles", "interpreter", "store")
+# Frozen plans select full image IDs using this fixed Engine identity grammar.
+# repo-check: allow-module-constant
 IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
 
 

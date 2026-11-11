@@ -15,6 +15,8 @@ import math
 import struct
 import time
 
+# Each worker frame body is capped at 2 MiB when encoded or read; exchange budgets are separate.
+# repo-check: allow-module-constant
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 
 

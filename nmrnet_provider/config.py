@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 # The scientific offering is code-owned, as in SECS main.py:48-59. G01 uses this
 # API kind for forward prediction: Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
 # models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/identity.py.
+# repo-check: allow-module-constant
 ANALYSIS_KIND_REF = "peaks_from_mol"
 
 

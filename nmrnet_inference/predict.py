@@ -13,13 +13,22 @@ import math
 import re
 import struct
 
+# The scientific request decoder owns this fixed byte ceiling.
+# repo-check: allow-module-constant
 MAX_INPUT_BYTES = 1 << 20
+# Prediction input and source readers share this admitted atom-count ceiling.
+# repo-check: allow-module-constant
 MAX_ATOMS = 128
+# Scientific batch preparation owns this fixed geometry-count ceiling.
+# repo-check: allow-module-constant
 MAX_GEOMETRIES = 128
+# These fields define the coordinate request document consumed by the worker.
+# repo-check: allow-module-constant
 REQUEST_FIELDS = ("coordinate_unit", "atoms", "coordinates")
 # Qualify each selected element checkpoint independently. Evidence for one
 # checkpoint must not admit the other by accident.
 # The repository adopts the released H/C model input convention as angstroms.
+# repo-check: allow-module-constant
 QUALIFIED_MODEL_COORDINATE_UNITS = {"H": "angstrom", "C": "angstrom"}
 
 
