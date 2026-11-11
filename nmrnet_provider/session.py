@@ -174,9 +174,11 @@ def _generation_failure(cause):
 
 
 def _interpretation_failure_message(cause):
+    """Publish provider-owned guidance only for an unambiguous final report."""
     failures = cause.failures
     if not failures:
         return str(cause)
+    # The SDK groups failures by visit, not by occurrence within each visit.
     final_visit = max(visit for visit, _ in failures)
     reports = [
         failure for visit, failure in failures if visit == final_visit and type(failure) is ModelReportedInterpretationProblem
