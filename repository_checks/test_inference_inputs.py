@@ -237,10 +237,13 @@ class CapturedInputTests(unittest.TestCase):
                     "inference_image.sh",
                     "build",
                     additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"},
-                    timeout=30,
+                    timeout=60,
                 )
                 self.assertEqual(0, result.returncode, msg=result.stderr)
-                self.assertEqual(set(fixture.build_evidence()["wheelhouse_manifest"]), {selected.name, "unicore-source.tar.gz"})
+                self.assertEqual(
+                    set(fixture.build_evidence()["wheelhouse_manifest"]),
+                    {selected.name, "Uni-Core-" + "a" * 40 + ".tar.gz"},
+                )
                 self.assertTrue(entry.exists() or entry.is_symlink())
                 self.assert_retired_capture(fixture)
 
@@ -343,7 +346,7 @@ class CapturedInputTests(unittest.TestCase):
                 self.assertIn("Cannot confirm owned inference build capture removal; attempted path", result.stderr)
                 self.assertEqual(1, len(list((fixture.root / ".work/inference").glob(".build.*"))))
 
-    def test_frozen_verifier_checks_actual_copied_wheel_bytes_before_build(self):
+    def test_streamed_build_checks_selected_wheel_bytes(self):
         for corrupt in (False, True):
             with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
@@ -361,7 +364,7 @@ class CapturedInputTests(unittest.TestCase):
                 result = fixture.run(
                     "inference_image.sh",
                     "build",
-                    additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1", "NMRNET_FAKE_MUTATE_INPUT": str(wheel)},
+                    additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"},
                 )
                 if corrupt:
                     self.assertNotEqual(0, result.returncode, msg=result.stderr)

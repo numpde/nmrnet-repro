@@ -85,67 +85,56 @@ if command in {"build", "create", "start", "stop", "inspect", "rm"}:
     log = Path(log_path)
 if command == "build":
     import hashlib
-    import shlex
+    import tarfile
 
-    context = Path(arguments[-1])
-    named_contexts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--build-context"]
-    if any("=" not in value for value in named_contexts):
-        sys.stderr.write("unexpected fake docker invocation: named context has no name/path separator\n")
+    dockerfile = arguments[arguments.index("--file") + 1]
+    captures_by_dockerfile = {
+        "containers/inference/Dockerfile": "inference",
+        "containers/geometry/Dockerfile": "preparation",
+    }
+    if arguments[-1] != "-" or dockerfile not in captures_by_dockerfile:
+        sys.stderr.write("unexpected fake docker invocation: expected a streamed image context\n")
         raise SystemExit(97)
-    contexts = dict(value.split("=", 1) for value in named_contexts)
-    if len(named_contexts) != 2 or set(contexts) != {"wheelhouse", "runtime-wheels"}:
-        sys.stderr.write("unexpected fake docker invocation: exact science and released-core wheel contexts are required" + "\n")
+    captures = list((Path(os.environ["NMRNET_FIXTURE_ROOT"]) / ".work" / captures_by_dockerfile[dockerfile]).glob(".build.*"))
+    if len(captures) != 1:
         raise SystemExit(97)
-    wheelhouse = Path(contexts["wheelhouse"])
-    dockerfile = Path(arguments[arguments.index("--file") + 1])
-    if not context.is_dir() or not dockerfile.is_file() or not dockerfile.is_relative_to(context):
-        sys.stderr.write("unexpected fake docker invocation: build requires an existing owned context and Dockerfile" + "\n")
-        raise SystemExit(97)
+    capture = captures[0]
+    context = capture / "context"
     mutation = os.environ.get("NMRNET_FAKE_MUTATE_INPUT")
     if mutation:
         Path(mutation).write_bytes(b"concurrent worktree mutation\n")
         Path(mutation).chmod(0o755)
     manifest = {}
-    for instruction in dockerfile.read_text().splitlines():
-        if not instruction.startswith("COPY ") or "--from=" in instruction:
-            continue
-        sources = shlex.split(instruction)[1:-1]
-        sources = [source for source in sources if not source.startswith("--")]
-        for source in sources:
-            path = context / source
-            if not path.exists() or path.is_symlink():
-                sys.stderr.write("unexpected fake docker invocation: required COPY input is absent or symlinked" + "\n")
-                raise SystemExit(97)
-            # silent-defaults: allow-contract -- Admitted COPY directories contribute their recursive file leaves; a single-file source contributes that file; proof=repository_checks/test_inference_inputs.py::CapturedInputTests.test_source_executable_mode_is_materialized_from_the_committed_tree
-            files = sorted(path.rglob("*")) if path.is_dir() else [path]
-            for file in files:
-                if file.is_file():
-                    manifest[str(file.relative_to(context))] = {
-                        "sha256": hashlib.sha256(file.read_bytes()).hexdigest(),
-                        "mode": stat.S_IMODE(file.stat().st_mode),
-                    }
-    wheelhouse_manifest = {
-        file.name: {"sha256": hashlib.sha256(file.read_bytes()).hexdigest(), "mode": stat.S_IMODE(file.stat().st_mode)}
-        for file in wheelhouse.iterdir()
+    wheelhouse_manifest = {}
+    directory_modes = {
+        str(directory.relative_to(context)): stat.S_IMODE(directory.stat().st_mode)
+        for directory in sorted(context.rglob("*")) if directory.is_dir()
     }
-    (log.parent / "build-evidence.json").write_text(
-        json.dumps(
-            {
-                "context": str(context),
-                "wheelhouse": str(wheelhouse),
-                "capture_mode": stat.S_IMODE(context.parent.stat().st_mode),
-                "capture_uid": context.parent.stat().st_uid,
-                "directory_modes": {
-                    str(directory.relative_to(context)): stat.S_IMODE(directory.stat().st_mode)
-                    for directory in sorted(context.rglob("*"))
-                    if directory.is_dir()
-                },
-                "manifest": manifest,
-                "wheelhouse_manifest": wheelhouse_manifest,
-                "content_identity": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
-            }
-        )
-    )
+    seen = set()
+    with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
+        for member in archive:
+            name = member.name.removeprefix("./").rstrip("/")
+            if name in seen or name.startswith("/") or ".." in Path(name).parts:
+                raise SystemExit("unexpected fake docker invocation: duplicate or unsafe archive path")
+            seen.add(name)
+            if member.isdir():
+                directory_modes[name] = member.mode
+            elif member.isfile():
+                content = archive.extractfile(member).read()
+                evidence = {"sha256": hashlib.sha256(content).hexdigest(), "mode": member.mode}
+                if name.startswith("wheelhouse/"):
+                    wheelhouse_manifest[Path(name).name] = evidence
+                else:
+                    manifest[name] = evidence
+            else:
+                raise SystemExit("unexpected fake docker invocation: unsupported archive member")
+    (log.parent / "build-evidence.json").write_text(json.dumps({
+        "context": str(context), "wheelhouse": os.environ["NMRNET_WHEELHOUSE_INPUT"],
+        "capture_mode": stat.S_IMODE(capture.stat().st_mode), "capture_uid": capture.stat().st_uid,
+        "directory_modes": directory_modes, "manifest": manifest,
+        "wheelhouse_manifest": wheelhouse_manifest,
+        "content_identity": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
+    }))
     if os.environ.get("NMRNET_FAKE_BUILD_BYTES"):
         build_output = "x" * int(os.environ["NMRNET_FAKE_BUILD_BYTES"])
     else:
@@ -176,7 +165,9 @@ elif arguments[:2] == ["image", "inspect"]:
     label_projection = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
     geometry_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-inputs"}}'
     inference_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}'
-    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection, inference_projection}:
+    wheels_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}'
+    geometry_wheels_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-wheels"}}'
+    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection, inference_projection, wheels_projection, geometry_wheels_projection}:
         sys.stderr.write("unexpected fake docker invocation: unmodeled image inspect format\n")
         raise SystemExit(97)
     if os.environ.get("NMRNET_FAKE_INSPECT_PRIVATE_ERROR"):
@@ -189,8 +180,8 @@ elif arguments[:2] == ["image", "inspect"]:
         response = identity
     elif projection == label_projection:
         response = revision
-    elif projection in (geometry_projection, inference_projection):
-        label = "GEOMETRY_INPUTS" if projection == geometry_projection else "INFERENCE_INPUTS"
+    elif projection in (geometry_projection, inference_projection, wheels_projection, geometry_wheels_projection):
+        label = {geometry_projection: "GEOMETRY_INPUTS", inference_projection: "INFERENCE_INPUTS", wheels_projection: "INFERENCE_WHEELS", geometry_wheels_projection: "GEOMETRY_WHEELS"}[projection]
         fault = "NMRNET_FAKE_" + label
         if fault in os.environ:
             response = os.environ[fault]
@@ -334,6 +325,31 @@ elif command == "logs":
     sys.stderr.write("private native fixture output" + "\n")
     raise SystemExit(int(os.environ["NMRNET_FAKE_PROXY_LOG_STATUS"]))
 elif command == "run":
+    if "python3" in arguments and arguments[arguments.index("python3") :][:5] == [
+        "python3", "-B", "-m", "tools.wheelhouse", "report"
+    ]:
+        import subprocess
+
+        mounts = {}
+        for index, value in enumerate(arguments[:-1]):
+            if value == "--mount":
+                fields = dict(field.split("=", 1) for field in arguments[index + 1].split(",") if "=" in field)
+                mounts[fields["dst"]] = fields["src"]
+        lock = mounts["/input/requirements.lock"]
+        pool = mounts["/wheelhouse"]
+        requested_hash = arguments[arguments.index("--lock-sha256") + 1]
+        result = subprocess.run([
+            sys.executable, "-B", "-m", "tools.wheelhouse", "report", "--lock", lock,
+            "--lock-sha256", requested_hash, "--pool", pool,
+        ], check=False, capture_output=True, text=True, cwd=Path(mounts["/workspace/tools/wheelhouse.py"]).parent.parent)
+        sys.stderr.write(result.stderr)
+        if result.returncode == 0:
+            report = json.loads(result.stdout)
+            for item in report["install"]:
+                url = item["download_info"]["url"]
+                item["download_info"]["url"] = "file:///wheelhouse/" + url.rsplit("/", 1)[-1]
+            json.dump(report, sys.stdout)
+        raise SystemExit(result.returncode)
     if os.environ.get("NMRNET_FAKE_HOLD_MODE"):
         import subprocess
         import time

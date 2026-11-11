@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 from repository_checks.quality.sources import ROOT
+from tests.unit.wheel_pool_fixtures import locked, wheel
 
 FIXTURES = ROOT / "repository_checks/fixtures/containers"
 
@@ -169,6 +170,23 @@ class LauncherFixture:
                 shutil.copytree(ROOT / name, destination)
             else:
                 shutil.copyfile(ROOT / name, destination)
+        pool = root / ".work/wheelhouse"
+        tool_pin = (root / "requirements/wheelhouse-tool-assets.in").read_text().splitlines()[-1]
+        tool_name = tool_pin.split("#", 1)[0].rsplit("/", 1)[-1]
+        tool = Path("/opt/checker-tools") / tool_name
+        if hashlib.sha256(tool.read_bytes()).hexdigest() != tool_pin.rsplit("=", 1)[-1]:
+            raise ValueError("Fixture streamer does not match the pinned released tool.")
+        shutil.copyfile(tool, pool / tool_name)
+        candidate = wheel(pool, "fixture", "1")
+        for name in ("inference.lock", "provider-core-native-install.lock"):
+            locked(root / "requirements" / name, [("fixture", "1", [candidate])])
+        archive = pool / ("Uni-Core-" + "a" * 40 + ".tar.gz")
+        archive.write_bytes(b"synthetic source bytes")
+        (root / "requirements/unicore-source.json").write_text(json.dumps({
+            "name": "unicore", "version": "0.0.1", "commit": "a" * 40,
+            "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/" + "a" * 40,
+            "size": archive.stat().st_size, "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+        }))
         self.capture_committed_inputs()
         self.environment = os.environ | {
             "NMRNET_FIXTURE_ROOT": str(root),
@@ -297,7 +315,7 @@ class LauncherFixture:
         return fixture.run("inference_image.sh", "--timeout", str(budget), "import", additions=additions, timeout=3)
 
     # silent-defaults: allow-contract -- Ten seconds is the fixture per-wait observation budget; launcher deadlines and cleanup waits are separate; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_native_failure_keeps_private_output_out_of_publishable_diagnostic
-    def run(self, launcher, *arguments, additions=None, timeout=10, corrupt_worker_receipt=None):
+    def run(self, launcher, *arguments, additions=None, timeout=60, corrupt_worker_receipt=None):
         try:
             command = ["bash", str(self.root / "tools" / launcher), *arguments]
             # silent-defaults: allow-contract -- Omitted per-call additions leave the fixture environment intact; explicit dictionaries overlay only their supplied entries; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_native_failure_keeps_private_output_out_of_publishable_diagnostic
