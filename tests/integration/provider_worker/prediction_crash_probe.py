@@ -238,6 +238,7 @@ async def controller():
         execution_identity={"fixture": "synthetic native exit"},
         selected_artifacts=ARTIFACTS,
         input_preparation=FixedJsonPreparation(),
+        max_retries=0,
     )
     lifecycle = AttemptController.live(
         api,

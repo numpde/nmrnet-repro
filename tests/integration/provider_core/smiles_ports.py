@@ -130,6 +130,7 @@ class SessionPorts(InputPorts):
             execution_identity={"image_id": "fixture"},
             selected_artifacts=self.worker.artifacts,
             input_preparation=preparation,
+            max_retries=0,
         )
 
     async def allocate_prediction(self):

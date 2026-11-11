@@ -266,6 +266,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                 execution_identity={"image_id": "fixture"},
                 selected_artifacts=self.artifacts,
                 input_preparation=preparation,
+                max_retries=0,
             )
             recovery_scope = replace(scope(), api_origin=peer.origin)
             self.claims = AttemptClaims.live()

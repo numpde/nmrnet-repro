@@ -212,7 +212,7 @@ class NMRNetSession:
         selected_artifacts,
         input_preparation,
         on_prediction_failure=None,
-        max_retries=0,
+        max_retries,
         prediction_seconds=None,
     ):
         if not callable(allocate_prediction):
@@ -602,6 +602,7 @@ class NMRNetSession:
             self._raise_retirement_failure(failures)
         self._phase = _Phase.RETIRED
 
+    # silent-defaults: allow-contract -- Join the original prediction retirement task; only final session retirement may retry a failed cleanup task.
     async def _retire_prediction(self, worker, retirement, *, retry=False):
         task = self._prediction_retirement_task
         failed = task is not None and task.done() and (task.cancelled() or task.exception() is not None or bool(task.result()))

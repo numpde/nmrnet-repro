@@ -180,6 +180,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture"},
             selected_artifacts=ports.worker.artifacts,
             input_preparation=ports.preparation,
+            max_retries=0,
         )
         controller, transport, delivery = self.controller(ports, session, claims, stopping, retry)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
@@ -246,6 +247,7 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture"},
             selected_artifacts=ports.worker.artifacts,
             input_preparation=preparation,
+            max_retries=0,
         )
         controller, transport, delivery = self.controller(ports, session, claims, stopping, retry)
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):

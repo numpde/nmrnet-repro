@@ -129,6 +129,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture"},
             selected_artifacts=self.worker.artifacts,
             input_preparation=preparation,
+            max_retries=0,
         )
 
     async def test_initial_prediction_is_acquired_after_input_and_before_result_planning(self):
@@ -352,6 +353,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture", "tool_sources": manifest},
             selected_artifacts=self.worker.artifacts,
             input_preparation=CoordinateJsonPreparation(output=OutputSettings(verbosity=ResultVerbosity.LOW)),
+            max_retries=0,
         )
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await self.session.prepare(acknowledged, verified, report_condition=unexpected_condition)

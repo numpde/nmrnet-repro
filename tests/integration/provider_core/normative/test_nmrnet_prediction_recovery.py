@@ -338,6 +338,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture"},
             selected_artifacts=ports.worker.artifacts,
             input_preparation=ports.preparation,
+            max_retries=0,
         )
         original = PredictionExecutionFailed("private diagnostic")
         ports.worker.execute = AsyncMock(side_effect=original)
@@ -373,6 +374,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
                     execution_identity={"image_id": "fixture"},
                     selected_artifacts=ports.worker.artifacts,
                     input_preparation=ports.preparation,
+                    max_retries=0,
                 )
                 ports.worker.execute = AsyncMock(side_effect=failure)
                 prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
