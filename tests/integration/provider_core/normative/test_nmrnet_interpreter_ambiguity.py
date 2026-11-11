@@ -29,7 +29,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                loop, "add_signal_handler", side_effect=lambda number, callback: callbacks.__setitem__(number, callback)
+                loop, "add_signal_handler", side_effect=callbacks.__setitem__
             ),
             patch.object(loop, "remove_signal_handler") as remove,
             patch("interpreter_ambiguity.signal.signal") as restore,
