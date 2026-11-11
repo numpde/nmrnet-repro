@@ -282,6 +282,7 @@ esac
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
 
     def remove_retained_identity_metadata(self, result):
@@ -1017,6 +1018,7 @@ fi
                 capture_output=True,
                 text=True,
                 timeout=3,
+                check=False,
             )
             self.assertEqual(result.returncode, status, result.stderr)
             self.assertEqual(result.stdout, f"started\t{operation}\t14\nretired\t{operation}\t-15\towner_lost\n")

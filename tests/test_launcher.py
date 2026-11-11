@@ -165,6 +165,7 @@ class LauncherTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 timeout=5,
+                check=False,
             )
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual(2, len((checkout / "engine-log").read_text().splitlines()))

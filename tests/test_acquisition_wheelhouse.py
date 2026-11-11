@@ -38,6 +38,7 @@ class CallbackTests(unittest.TestCase):
                 env={**os.environ, "OUTCOMES": outcomes, "EVENTS": event_path},
                 capture_output=True,
                 text=True,
+                check=False,
             )
             with open(event_path, encoding="utf-8") as receipt:
                 events = receipt.read().splitlines()
