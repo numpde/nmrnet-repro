@@ -122,7 +122,13 @@ class LauncherFixture:
         for directory in ("tests", "repository_checks"):
             (root / directory).mkdir()
         (root / "bin").mkdir()
-        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh"), ("stat", "stat.py"), ("python3", "python.sh")):
+        for name, source in (
+            ("docker", "docker.py"),
+            ("git", "git.sh"),
+            ("id", "id.sh"),
+            ("stat", "stat.py"),
+            ("python3", "python.sh"),
+        ):
             (root / "bin" / name).symlink_to(FIXTURES / source)
         shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
         (root / ".work/wheelhouse").mkdir(parents=True)
@@ -135,7 +141,14 @@ class LauncherFixture:
         for name in ("inference.in", "build.in", "unicore-source.json"):
             (root / "requirements" / name).write_text("fixture\n")
         (root / "requirements/inference.lock").write_text("fixture==1\n")
-        for name in ("preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in", "wheelhouse-acquirer-assets.in", "wheelhouse-tool-assets.in"):
+        for name in (
+            "preparation.lock",
+            "provider-core-install.lock",
+            "provider-core-native-install.lock",
+            "provider-core-assets.in",
+            "wheelhouse-acquirer-assets.in",
+            "wheelhouse-tool-assets.in",
+        ):
             shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
         shutil.copyfile(ROOT / "requirements/provider-core-release.json", root / "requirements/provider-core-release.json")
         (root / "artifacts").mkdir()
@@ -341,8 +354,15 @@ class LauncherFixture:
             if name in environment:
                 del environment[name]
         return subprocess.run(
-            ["make", "--no-print-directory", "-C", str(self.root), "DOCKER_CONTEXT=fixture-local",
-             f"WHEELHOUSE={self.root / '.work/wheelhouse'}", *arguments],
+            [
+                "make",
+                "--no-print-directory",
+                "-C",
+                str(self.root),
+                "DOCKER_CONTEXT=fixture-local",
+                f"WHEELHOUSE={self.root / '.work/wheelhouse'}",
+                *arguments,
+            ],
             env=environment,
             text=True,
             capture_output=True,

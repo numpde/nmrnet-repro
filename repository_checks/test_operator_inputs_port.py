@@ -131,7 +131,9 @@ class OperatorInputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             sentinel = fixture.root / "expanded"
-            result = fixture.make("weights/download", "ARCHIVE=weight.zip", "NETWORK_INTERFACE=$(shell touch " + str(sentinel) + ")")
+            result = fixture.make(
+                "weights/download", "ARCHIVE=weight.zip", "NETWORK_INTERFACE=$(shell touch " + str(sentinel) + ")"
+            )
             self.assertEqual(2, result.returncode)
             self.assertFalse(sentinel.exists(), msg="GNU Make executed literal operator input.")
             self.assertFalse(fixture.calls())

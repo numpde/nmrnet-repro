@@ -58,8 +58,8 @@ class RepositoryHygieneTest(unittest.TestCase):
             (root / "Makefile").write_text(read_text(repo_path("Makefile")))
             (root / "tools").mkdir()
             (root / "tools/docker_client.sh").write_text(
-                'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
-                'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
+                "docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; "
+                "NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n"
             )
             for script in ("container.sh", "inference_image.sh", "checker.sh"):
                 (root / "tools" / script).write_text('exit "${TEST_BUILD_STATUS}"\n')
@@ -68,9 +68,14 @@ class RepositoryHygieneTest(unittest.TestCase):
                 for build_status in (7, 0):
                     with self.subTest(target=target, build_status=build_status):
                         (root / "tools/cleanup-called").unlink(missing_ok=True)
-                        result = subprocess.run(["make", "--no-print-directory", "-C", str(root), target],
-                                                env={**os.environ, "TEST_BUILD_STATUS": str(build_status)},
-                                                capture_output=True, text=True, timeout=5, check=False)
+                        result = subprocess.run(
+                            ["make", "--no-print-directory", "-C", str(root), target],
+                            env={**os.environ, "TEST_BUILD_STATUS": str(build_status)},
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            check=False,
+                        )
                         self.assertEqual(result.returncode == 0, build_status == 0, result.stderr)
                         self.assertEqual((root / "tools/cleanup-called").exists(), build_status == 0)
                         if build_status == 0:
@@ -82,16 +87,21 @@ class RepositoryHygieneTest(unittest.TestCase):
             (root / "Makefile").write_text(read_text(repo_path("Makefile")))
             (root / "tools").mkdir()
             (root / "tools/docker_client.sh").write_text(
-                'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
-                'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
+                "docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; "
+                "NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n"
             )
             (root / "tools/provider_deployment.sh").write_text('exit "${TEST_UP_STATUS}"\n')
             (root / "tools/image_retirement.sh").write_text('touch "$(dirname "$0")/cleanup-called"\nexit 7\n')
             for up_status in (7, 0):
                 with self.subTest(up_status=up_status):
-                    result = subprocess.run(["make", "--no-print-directory", "-C", str(root), "provider/deployment/up"],
-                                            env={**os.environ, "TEST_UP_STATUS": str(up_status)},
-                                            capture_output=True, text=True, timeout=5, check=False)
+                    result = subprocess.run(
+                        ["make", "--no-print-directory", "-C", str(root), "provider/deployment/up"],
+                        env={**os.environ, "TEST_UP_STATUS": str(up_status)},
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                    )
                     self.assertEqual(result.returncode == 0, up_status == 0, result.stderr)
                     self.assertEqual((root / "tools/cleanup-called").exists(), up_status == 0)
                     if up_status == 0:

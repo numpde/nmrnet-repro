@@ -52,8 +52,13 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             cycle = fixture.root / "stat-cycle"
             cycle.symlink_to(cycle)
             for output, path in (
-                ("%a:%s:%F", owned), ("%u:%a", owned), ("%u:%g", Path(outside)),
-                ("%u", link), ("%u", ancestor / "checker"), ("%u", cycle), ("%u", fixture.root / "missing"),
+                ("%a:%s:%F", owned),
+                ("%u:%a", owned),
+                ("%u:%g", Path(outside)),
+                ("%u", link),
+                ("%u", ancestor / "checker"),
+                ("%u", cycle),
+                ("%u", fixture.root / "missing"),
             ):
                 with self.subTest(output=output, path=path):
                     command = ["stat", "-c", output, "--", str(path)]

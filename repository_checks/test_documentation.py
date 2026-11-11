@@ -73,11 +73,15 @@ class DocumentationTests(unittest.TestCase):
         )
         # Pages use HTML; the API offering is a packaged Markdown input.
         # The remaining exceptions are the README, data and a plain-text design record.
-        exceptions = {"README.md", "nmrnet_provider/about/hello.md",
-                      "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
-                      "docs/notes/022_shared_delivery_deferred_20261024.txt",
-                      "notes/023_shared_api_proxy_adoption_20261030.txt",
-                      "notes/024_shared_wheelhouse_followups.txt"}
+        exceptions = {
+            "README.md",
+            "nmrnet_provider/about/hello.md",
+            "containers/inference/image-inputs.txt",
+            "tests/fixtures/small_chloromethanes.txt",
+            "docs/notes/022_shared_delivery_deferred_20261024.txt",
+            "notes/023_shared_api_proxy_adoption_20261030.txt",
+            "notes/024_shared_wheelhouse_followups.txt",
+        }
         release = json.loads((ROOT / "requirements/provider-core-release.json").read_text())
         exceptions.update("host/bootstrap/acquisition/" + name for name in release["acquisition_source_files"])
         leftovers = [
@@ -145,10 +149,15 @@ class DocumentationTests(unittest.TestCase):
                     # the remaining wording must be an exact source suffix.
                     source_line = source_lines[index - 1]
                     # These published historical lines replace private endpoint URLs.
-                    redacted = {6161: "https://storage.example", 6807: "https://model.example/v1",
-                                7108: "https://storage.example", 7144: "https://model.example/v1",
-                                7624: "https://model.example/v1", 7706: "https://model.example/v1",
-                                7994: "https://model.example/v1"}
+                    redacted = {
+                        6161: "https://storage.example",
+                        6807: "https://model.example/v1",
+                        7108: "https://storage.example",
+                        7144: "https://model.example/v1",
+                        7624: "https://model.example/v1",
+                        7706: "https://model.example/v1",
+                        7994: "https://model.example/v1",
+                    }
                     if path.name == "003_nmr_api_provider_20261018.html" and index in redacted:
                         source_line = re.sub(r"https?://[^\s,;]+", redacted[index], source_line, count=1)
                     self.assertTrue(source_line.endswith(text), (path, index, text))

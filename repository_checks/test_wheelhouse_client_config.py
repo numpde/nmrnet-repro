@@ -70,11 +70,14 @@ class WheelhouseClientTests(unittest.TestCase):
             command = next(command for command in commands if "tools.wheelhouse" in command)
             mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
             inputs = [mount for mount in mounts if ",dst=/input/" in mount]
-            self.assertEqual([
-                f"type=bind,src={lock},dst=/input/preparation.lock,readonly",
-                f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
-                f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
-            ], inputs)
+            self.assertEqual(
+                [
+                    f"type=bind,src={lock},dst=/input/preparation.lock,readonly",
+                    f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
+                    f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
+                ],
+                inputs,
+            )
             self.assertNotIn("--source", command)
             self.assertEqual("preparation", command[command.index("--profile") + 1])
             self.assertEqual("/wheelhouse", command[command.index("--pool") + 1])

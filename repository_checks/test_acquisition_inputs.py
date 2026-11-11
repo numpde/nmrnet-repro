@@ -28,7 +28,7 @@ from repository_checks.quality.sources import ROOT
 
 class AcquisitionInputTests(unittest.TestCase):
     def test_wheelhouse_adapter_orders_workers_and_preserves_failure_kind(self):
-        program = r'''
+        program = r"""
 set -euo pipefail
 source "$1"
 image=fixture:pinned
@@ -61,7 +61,7 @@ status=0
 nmrnet_acquire_wheelhouse || status=$?
 printf 'warm=%s\n' "$wheelhouse_warm"
 exit "$status"
-'''
+"""
         cold = ["worker offline", "route lo", "worker online", "worker offline"]
         cases = (
             ("warm", 0, 0, 0, 0, 0, True, ["worker offline"]),
@@ -78,11 +78,18 @@ exit "$status"
                 result = subprocess.run(
                     ["bash", "-c", program, "bash", str(self.root / "tools/acquisition_wheelhouse.sh")],
                     cwd=self.root,
-                    env=self.fixture.environment | {
-                        "EVENTS": str(log), "INITIAL_STATUS": str(initial),
-                        "ONLINE_STATUS": str(online), "FINAL_STATUS": str(final), "OWNER_STATUS": str(owner),
+                    env=self.fixture.environment
+                    | {
+                        "EVENTS": str(log),
+                        "INITIAL_STATUS": str(initial),
+                        "ONLINE_STATUS": str(online),
+                        "FINAL_STATUS": str(final),
+                        "OWNER_STATUS": str(owner),
                     },
-                    capture_output=True, text=True, timeout=5, check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
                 )
                 self.assertEqual(status, result.returncode, result.stderr)
                 self.assertEqual(f"warm={str(warm).lower()}\n", result.stdout)

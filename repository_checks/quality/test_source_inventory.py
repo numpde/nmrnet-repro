@@ -30,8 +30,13 @@ from .source_inventory import SourceInventoryError, discover_source_files, inven
 from .sources import ROOT
 
 REVIEWED_DOCKERFILES = frozenset(
-    {"containers/inference/Dockerfile", "containers/packages/Dockerfile.lock", "containers/checker/Dockerfile",
-     "containers/provider/Dockerfile", "containers/geometry/Dockerfile"}
+    {
+        "containers/inference/Dockerfile",
+        "containers/packages/Dockerfile.lock",
+        "containers/checker/Dockerfile",
+        "containers/provider/Dockerfile",
+        "containers/geometry/Dockerfile",
+    }
 )
 REVIEWED_CONTAINER_SUPPORT_FILES = frozenset(
     {

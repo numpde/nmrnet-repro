@@ -94,7 +94,9 @@ class GitInputTests(unittest.TestCase):
         result = self.prepare()
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("nmrnet\n", result.stdout)
-        self.assertEqual({path.name for path in self.destination.iterdir()}, {"HEAD", "config", "index", "objects", "refs", "modules"})
+        self.assertEqual(
+            {path.name for path in self.destination.iterdir()}, {"HEAD", "config", "index", "objects", "refs", "modules"}
+        )
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o700)
         self.assertNotIn("private-config-marker", (self.destination / "config").read_text())
         self.assertEqual([], list((self.destination / "refs").iterdir()))
@@ -134,8 +136,13 @@ class GitInputTests(unittest.TestCase):
         result = self.prepare()
         self.assertEqual(0, result.returncode, msg=result.stderr)
         environment = self.environment | {"GIT_INDEX_FILE": str(self.destination / "index")}
-        projected = subprocess.run([self.git_binary, "-C", str(self.repository), "ls-files", "--stage"],
-                                   env=environment, text=True, capture_output=True, check=True).stdout
+        projected = subprocess.run(
+            [self.git_binary, "-C", str(self.repository), "ls-files", "--stage"],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
         self.assertEqual(self.git(self.repository, "ls-files", "--stage"), projected)
         self.assertIn("tracked.md", projected)
         self.assertIn("staged.txt", projected)

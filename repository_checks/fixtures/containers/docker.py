@@ -161,9 +161,7 @@ elif arguments[:2] == ["image", "pull"]:
     image = "docker.io/library/python"
     worker_version = "3.12.12-slim-bookworm"
     worker_sha = "593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
-    if arguments not in (
-        ["image", "pull", f"{image}:{worker_version}@sha256:{worker_sha}"],
-    ):
+    if arguments not in (["image", "pull", f"{image}:{worker_version}@sha256:{worker_sha}"],):
         sys.stderr.write("unexpected fake docker invocation: unmodeled image pull argv\n")
         raise SystemExit(97)
     if os.environ["NMRNET_FAKE_ENGINE_STATUS"] != "0":

@@ -105,7 +105,9 @@ class ProxyResolverInputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture, resolver = self.mapped_fixture(Path(directory))
             resolver.write_text("private-resolver-content-canary\n")
-            result = fixture.run("docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_NETWORK_INTERFACE_INPUT": ""})
+            result = fixture.run(
+                "docker.sh", "run", "sha256:" + "b" * 64, "true", additions={"NMRNET_NETWORK_INTERFACE_INPUT": ""}
+            )
             self.assertEqual(2, result.returncode)
             self.assertIn("supply NETWORK_INTERFACE=", result.stderr)
             self.assertEqual([], fixture.calls())

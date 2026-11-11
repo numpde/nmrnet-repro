@@ -649,7 +649,8 @@ class AcquisitionClientTests(unittest.TestCase):
             "python3",
             "-c",
             "pass",
-            additions=self.environment | {
+            additions=self.environment
+            | {
                 "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
                 "NMRNET_FAKE_WORKER_STATUS": "0",
                 "NMRNET_ACQUISITION_READY_FAULT": "scope-removal",
@@ -708,8 +709,18 @@ class AcquisitionClientTests(unittest.TestCase):
     def test_scope_attach_interrupt_finishes_without_draining_full_stderr(self):
         receipt = self.root / "scope-retired"
         command = [
-            "bash", str(self.root / "tools/acquisition_run.sh"), "--retired-receipt", str(receipt),
-            "--image", self.worker_image, "--", "--read-only", "--", "python3", "-c", "pass",
+            "bash",
+            str(self.root / "tools/acquisition_run.sh"),
+            "--retired-receipt",
+            str(receipt),
+            "--image",
+            self.worker_image,
+            "--",
+            "--read-only",
+            "--",
+            "python3",
+            "-c",
+            "pass",
         ]
         process, descriptor, prefill = self._start_command(
             command,

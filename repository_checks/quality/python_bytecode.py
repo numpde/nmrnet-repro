@@ -29,9 +29,34 @@ class Finding:
 
 
 _COMPILERS = {"pip", "venv", "ensurepip", "build", "setuptools", "compileall", "py_compile"}
-_SKIP = {"NMRNetplusplus", ".git", ".agents", ".codex", ".aws", "secrets", "tests", "test", "fixtures", "docs", "notes",
-         "vendor", "vendored", "third_party", "bootstrap", "generated", "node_modules", "dependencies",
-         ".venv", "venv", "__pycache__", ".work", ".cache", "build", "dist", "release-artifacts"}
+_SKIP = {
+    "NMRNetplusplus",
+    ".git",
+    ".agents",
+    ".codex",
+    ".aws",
+    "secrets",
+    "tests",
+    "test",
+    "fixtures",
+    "docs",
+    "notes",
+    "vendor",
+    "vendored",
+    "third_party",
+    "bootstrap",
+    "generated",
+    "node_modules",
+    "dependencies",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".work",
+    ".cache",
+    "build",
+    "dist",
+    "release-artifacts",
+}
 _PYTHON = re.compile(r"python(?:3(?:\.\d+)?)?$")
 _ENV = "PYTHONDONTWRITEBYTECODE"
 
@@ -39,12 +64,18 @@ _ENV = "PYTHONDONTWRITEBYTECODE"
 def production_files(root):
     files = []
     for directory, children, names in os.walk(root):
-        children[:] = [name for name in children if name not in _SKIP and not name.startswith(".")
-                       and not (Path(directory) / name).is_symlink()]
+        children[:] = [
+            name
+            for name in children
+            if name not in _SKIP and not name.startswith(".") and not (Path(directory) / name).is_symlink()
+        ]
         for name in names:
             path = Path(directory) / name
-            if (not path.is_symlink() and path.is_file()
-                    and (path.suffix in {".sh", ".py", ".mk"} or name in {"Makefile", "GNUmakefile"})):
+            if (
+                not path.is_symlink()
+                and path.is_file()
+                and (path.suffix in {".sh", ".py", ".mk"} or name in {"Makefile", "GNUmakefile"})
+            ):
                 files.append(path)
     return sorted(files)
 
@@ -59,8 +90,7 @@ def _inline_imports(source):
     except SyntaxError:
         return False
     modules = {name.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for name in node.names}
-    modules.update(node.module.split(".")[0] for node in ast.walk(tree)
-                   if isinstance(node, ast.ImportFrom) and node.module)
+    modules.update(node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module)
     return bool(modules - sys.stdlib_module_names - _COMPILERS)
 
 
@@ -135,7 +165,7 @@ def shell_findings(path, source):
             if path.as_posix() == "tools/compose_deployment.sh" and tokens[0] == "helper":
                 continue  # This helper supplies -I -B in its own Docker command.
             entrypoint = index > 0 and tokens[index - 1] == "--entrypoint"
-            arguments = tokens[index + (2 if entrypoint else 1):]
+            arguments = tokens[index + (2 if entrypoint else 1) :]
             if entrypoint and index + 1 < len(tokens) and tokens[index + 1].startswith("--"):
                 continue  # Docker option/environment ordering is not parsed.
             # An array declaration ending at the entrypoint has no program.
@@ -143,8 +173,12 @@ def shell_findings(path, source):
                 continue
             if entrypoint and line.lstrip().startswith("command+=(") and not line.rstrip().endswith(")"):
                 continue  # A partial Docker argv has not yet selected an image.
-            if (index > 0 and not entrypoint and not arguments[0].startswith("-")
-                    and not arguments[0].rstrip(")").endswith((".py", ".pyz"))):
+            if (
+                index > 0
+                and not entrypoint
+                and not arguments[0].startswith("-")
+                and not arguments[0].rstrip(")").endswith((".py", ".pyz"))
+            ):
                 continue  # E.g. helper(image, python3, uid, gid), not a launch.
             prefix = tokens[:index]
             enabled = False if entrypoint else global_env
@@ -155,7 +189,8 @@ def shell_findings(path, source):
                     enabled = False
                 elif value.startswith(_ENV + "="):
                     if (entrypoint and position > 0 and prefix[position - 1] == "--env") or (
-                            not entrypoint and (position == 0 or prefix[position - 1] != "--env")):
+                        not entrypoint and (position == 0 or prefix[position - 1] != "--env")
+                    ):
                         enabled = value == _ENV + "=1"
             isolated = _needs_flag(arguments, True)
             if entrypoint and any("[@]" in value for value in prefix) and not isolated:
@@ -168,7 +203,12 @@ def shell_findings(path, source):
 def _value(node):
     if isinstance(node, ast.Constant) and type(node.value) is str:
         return node.value
-    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "sys" and node.attr == "executable":
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "sys"
+        and node.attr == "executable"
+    ):
         return "python3"
     return None
 

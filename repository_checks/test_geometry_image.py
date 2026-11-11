@@ -29,10 +29,19 @@ class GeometryImageTests(unittest.TestCase):
         (self.root / "bin/git").symlink_to(shutil.which("git"))
         shutil.rmtree(self.root / ".git")
         self.git("init", "-q", "--initial-branch=main")
-        self.inputs = tuple(subprocess.check_output(
-            ["bash", "-eu", "-c", 'repository_root=$1; source "$1/tools/geometry_image.sh"; printf "%s\\n" "${geometry_image_inputs[@]}"',
-             "bash", str(ROOT)], text=True,
-        ).splitlines())
+        self.inputs = tuple(
+            subprocess.check_output(
+                [
+                    "bash",
+                    "-eu",
+                    "-c",
+                    'repository_root=$1; source "$1/tools/geometry_image.sh"; printf "%s\\n" "${geometry_image_inputs[@]}"',
+                    "bash",
+                    str(ROOT),
+                ],
+                text=True,
+            ).splitlines()
+        )
         for name in (*self.inputs, "tools/geometry_image.sh"):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)

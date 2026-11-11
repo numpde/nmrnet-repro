@@ -105,8 +105,17 @@ class ImageSelectorDetectionTests(unittest.TestCase):
         self.declaration.write_text("\n".join(sorted(self.selectors)) + "\n")
         source.git(self.root, "init", "--quiet")
         source.git(self.root, "add", ".")
-        source.git(self.root, "-c", "user.name=Check", "-c", "user.email=check@example.test",
-                   "commit", "--quiet", "-m", "Selected image inputs")
+        source.git(
+            self.root,
+            "-c",
+            "user.name=Check",
+            "-c",
+            "user.email=check@example.test",
+            "commit",
+            "--quiet",
+            "-m",
+            "Selected image inputs",
+        )
 
     def test_committed_package_root_expands_and_private_host_mode_is_accepted(self):
         (self.root / "binding/worker.py").chmod(0o600)
