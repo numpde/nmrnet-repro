@@ -89,11 +89,14 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
         self.assertIn("--init", arguments)
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
-        self.assertEqual(9, len(mounts))
+        self.assertEqual(12, len(mounts))
         self.assertEqual(
             {
                 "/workspace/tools",
                 "/workspace/tests",
+                "/workspace/Makefile",
+                "/workspace/host",
+                "/workspace/requirements",
                 "/workspace/nmrnet_inference",
                 "/workspace/nmrnet_provider",
                 "/consumer/tools",

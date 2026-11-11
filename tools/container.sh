@@ -672,7 +672,7 @@ case "$1" in
                 require_source_directory nmrnet_inference
                 require_source_directory nmrnet_provider
                 unit_image=$image
-                if [[ "$1" == test/unit/provider || "$1" == test/unit/provider/deployment ]]; then
+                if [[ "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider/deployment ]]; then
                     # Host composition fixtures need the checker-owned Make/Git tools.
                     checker_image
                     unit_image=$checker_image_id
