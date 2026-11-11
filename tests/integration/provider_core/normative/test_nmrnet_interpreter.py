@@ -22,7 +22,7 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import PreparedUploadMember
-from nmrnet_provider.interpreter import PROMPT, InputInterpreter
+from nmrnet_provider.interpreter import PROMPT
 from nmrnet_provider.upload_archive import inspect_upload, select_member
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.upload_response import UploadMember, UploadSet

@@ -11,9 +11,7 @@ import sys
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from tests.fakes.api import response_headers
 from tests.fakes.api_tls import verify_signed_request
@@ -24,7 +22,6 @@ from tests.integration.nmrnet.process_ports import ProcessPeers
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
-from nmrnet_provider.native_session import NativeOperation
 from nmrnet_provider.process import _runtime_facts, _write_api_notice, route_provider_config, run_provider
 from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ServiceFailed
@@ -35,7 +32,6 @@ from provider_core.attempt_record import acknowledge_start
 from provider_core.controller import ControllerFailed
 from provider_core.conversation import ConversationRetirementFailed
 from provider_core.execution import ExecutionFailed
-from provider_core.runner_session import Retirement
 from provider_core.transport import HttpResponse
 
 

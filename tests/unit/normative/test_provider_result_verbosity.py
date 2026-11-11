@@ -11,7 +11,7 @@ from dataclasses import replace
 
 from tests.unit.result_fakes import precision_documents, supplied_documents
 
-from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan, ResultRejected
+from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan
 from provider_core.result_verbosity import ResultVerbosity
 
 

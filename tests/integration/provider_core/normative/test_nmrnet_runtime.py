@@ -5,7 +5,7 @@ import hashlib
 import json
 import unittest
 from dataclasses import replace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 from tests.fakes.attempts import start_response
 from tests.fakes.execution import unexpected_condition

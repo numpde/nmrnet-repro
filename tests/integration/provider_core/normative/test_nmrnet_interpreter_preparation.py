@@ -18,7 +18,7 @@ from tests.integration.nmrnet.interpreter_ports import UploadPorts, chat_endpoin
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.interpreter import _TOOLS, InputInterpreter
+from nmrnet_provider.interpreter import _TOOLS
 from provider_core.analysis import AnalysisFailure
 
 OBSERVATION = b'{"endpoint":{"configuration_id":"fixture","model":"fixture-model"},"prompt_sha256":"authored-test-identity"}'
