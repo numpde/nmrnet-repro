@@ -40,13 +40,20 @@ ALLOWED_MAKE_DEFAULTS = {}
 # contracts, not operator input choices; changes require a new inventory review.
 ALLOWED_DOCKER_DEFAULTS = {
     ("ENV", "containers/checker/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/checker/Dockerfile", "NMR_PROVIDER_TOOLS_IN_CONTAINER", "1"),
     ("ENV", "containers/checker/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
     ("ENV", "containers/inference/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
     ("ENV", "containers/inference/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
-    ("ENV", "containers/inference/Dockerfile", "PYTHONPATH", "/opt/nmrnet"),
+    ("ENV", "containers/inference/Dockerfile", "PROVIDER_CORE_IN_CONTAINER", "1"),
     ("ENV", "containers/inference/Dockerfile", "OMP_NUM_THREADS", "2"),
     ("ENV", "containers/inference/Dockerfile", "MKL_NUM_THREADS", "2"),
     ("ENV", "containers/packages/Dockerfile.lock", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/geometry/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/geometry/Dockerfile", "PROVIDER_CORE_IN_CONTAINER", "1"),
+    ("ENV", "containers/geometry/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
+    ("ENV", "containers/provider/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/provider/Dockerfile", "PROVIDER_CORE_IN_CONTAINER", "1"),
+    ("ENV", "containers/provider/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
 }
 ALLOWED_SHELL_DEFAULTS = set()
 
