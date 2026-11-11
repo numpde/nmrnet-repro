@@ -34,7 +34,12 @@ class ProviderUpdateTests(unittest.TestCase):
         )
         environment.update(changes)
         return subprocess.run(
-            ["bash", str(self.root / "tools/provider_update.sh")], env=environment, capture_output=True, text=True, timeout=5, check=False
+            ["bash", str(self.root / "tools/provider_update.sh")],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
 
     def test_update_uses_one_selected_endpoint_and_existing_lifecycle_order(self):

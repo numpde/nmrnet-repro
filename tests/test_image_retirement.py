@@ -90,7 +90,9 @@ else: raise SystemExit(91)
         (self.root / "state.json").write_text(json.dumps(self.state))
 
     def retire(self):
-        return subprocess.run(["bash", str(self.root / "tools/image_retirement.sh")], capture_output=True, text=True, timeout=5, check=False)
+        return subprocess.run(
+            ["bash", str(self.root / "tools/image_retirement.sh")], capture_output=True, text=True, timeout=5, check=False
+        )
 
     def removed(self):
         path = self.root / "removed"

@@ -73,9 +73,7 @@ record_engine_call(
 )
 # silent-defaults: allow-contract -- Empty argv selects only the rejection sentinel, never a supported engine verb; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_unknown_formats_and_nonexact_argv_reject_before_fault_responses
 command = arguments[0] if arguments else ""
-for fault_name, accepted_values in (
-    ("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),
-):
+for fault_name, accepted_values in (("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),):
     if fault_name in os.environ and os.environ[fault_name] not in accepted_values:
         sys.stderr.write("unexpected fake docker invocation: unmodeled acquisition fault selector\n")
         raise SystemExit(97)
