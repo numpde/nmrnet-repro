@@ -12,6 +12,8 @@ require_container()
 import logging
 import sys
 
+# These namespaces receive owned verbosity; other loggers retain the dependency WARNING floor.
+# repo-check: allow-module-constant
 _OWNED_LOGGERS = ("nmrnet_provider", "nmrnet_inference", "provider_core.runner")
 
 

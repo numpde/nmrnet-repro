@@ -22,8 +22,14 @@ from pathlib import Path
 from nmrnet_provider.worker_protocol import require_seconds, send
 from tools.container_resources import cgroup_snapshot
 
+# Deployment mounts admitted startup declarations at this fixed container path.
+# repo-check: allow-module-constant
 INPUT_ROOT = Path("/input")
+# The inference image embeds its installation declarations here for comparison before scientific imports.
+# repo-check: allow-module-constant
 INFERENCE_ROOT = Path("/opt/inference")
+# Retain this process's named logger handle; logging configuration owns its levels and handlers.
+# repo-check: allow-module-constant
 LOGGER = logging.getLogger("nmrnet_provider.native_child")
 
 
