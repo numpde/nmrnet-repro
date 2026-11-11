@@ -36,6 +36,8 @@ class CheckerDependencyFixture(unittest.TestCase):
         self.path = self.root / "dependencies.json"
         self.directory = self.root / "dependencies"
         self.directory.mkdir()
+        self.shared = self.root / "shared"
+        self.shared.mkdir()
         self.document = {
             "schema": "nmrnet.checker-dependencies.v1",
             "platform": "linux/amd64",
@@ -64,7 +66,7 @@ class CheckerDependencyFixture(unittest.TestCase):
                     "sha256": hashlib.sha256(body).hexdigest(),
                 }
             )
-            (self.directory / filename).write_bytes(body)
+            ((self.shared if name == "ruff" else self.directory) / filename).write_bytes(body)
         self.write()
         self.complete()
 
@@ -72,7 +74,7 @@ class CheckerDependencyFixture(unittest.TestCase):
         self.path.write_text(json.dumps(self.document))
 
     def complete(self):
-        (self.directory / ".complete").write_text(json.dumps(checker.inventory(self.path, self.directory)))
+        (self.directory / ".complete").write_text(json.dumps(checker.inventory(self.path, self.directory, self.shared)))
 
 
 class CheckerDeclarationTests(CheckerDependencyFixture):
@@ -118,7 +120,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         pool = self.root / "pool"
         pool.mkdir()
         wheel = next(package["file"] for package in self.document["packages"] if package["name"] == "ruff")
-        shutil.copyfile(self.directory / wheel, pool / wheel)
+        shutil.copyfile(self.shared / wheel, pool / wheel)
         stream = pool / "wheelhouse-tool-fixture.pyz"
         stream.write_bytes(b"verified stream fixture")
         pins = self.root / "stream.in"
@@ -218,15 +220,15 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
 
     def test_valid_exact_inputs_and_receipt_are_accepted(self):
         self.assertEqual(
-            checker.check(self.path, self.directory, self.document["base"]), checker.inventory(self.path, self.directory)
+            checker.check(self.path, self.directory, self.document["base"], self.shared),
+            checker.inventory(self.path, self.directory, self.shared),
         )
 
     def test_shared_wheel_validates_existing_receipt_without_private_wheel(self):
         wheel = next(package for package in self.document["packages"] if package["name"] == "ruff")
         pool = self.root / "pool"
         pool.mkdir()
-        (pool / wheel["file"]).write_bytes((self.directory / wheel["file"]).read_bytes())
-        (self.directory / wheel["file"]).unlink()
+        (pool / wheel["file"]).write_bytes((self.shared / wheel["file"]).read_bytes())
         receipt = checker.check(self.path, self.directory, self.document["base"], pool)
         self.assertEqual(receipt["files"][wheel["file"]]["sha256"], wheel["sha256"])
         (pool / wheel["file"]).write_bytes(b"wrong")
@@ -237,7 +239,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         wheel = next(package for package in self.document["packages"] if package["name"] == "ruff")
         pool = self.root / "pool"
         pool.mkdir()
-        (pool / wheel["file"]).write_bytes((self.directory / wheel["file"]).read_bytes())
+        (pool / wheel["file"]).write_bytes((self.shared / wheel["file"]).read_bytes())
         (self.directory / "unexpected").write_text("unexpected")
         with self.assertRaisesRegex(ValueError, "inventory differs"):
             checker.check(self.path, self.directory, self.document["base"], pool)
@@ -253,21 +255,32 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
             checker_acquisition.download(self.path, self.directory, self.document["base"], pool, None, None)
         acquire.assert_not_called()
 
-    def test_private_only_wheel_is_preserved_without_redownload(self):
-        pool = self.root / "pool"
-        pool.mkdir()
-        pins = self.root / "pins.in"
-        pins.write_text("https://github.com/numpde/nmr-provider-tools/releases/download/v1/tool.pyz#sha256=" + "a" * 64 + "\n")
-        with patch.object(checker.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "private cached wheel exists"):
-            checker_acquisition.acquire_ruff(self.document, pool, pins, pins, self.directory)
-        run.assert_not_called()
-        self.assertEqual([], list(pool.iterdir()))
+    def test_private_wheel_is_preserved_and_refused_before_shared_acquisition(self):
+        wheel = self.document["packages"][-1]["file"]
+        private = self.directory / wheel
+        private.write_bytes((self.shared / wheel).read_bytes())
+        before = private.read_bytes()
+        with (
+            patch.object(checker_acquisition, "acquire_ruff") as acquire,
+            self.assertRaisesRegex(ValueError, "inventory differs"),
+        ):
+            checker_acquisition.download(self.path, self.directory, self.document["base"], self.shared)
+        acquire.assert_not_called()
+        self.assertEqual(before, private.read_bytes())
+
+    def test_existing_receipt_allows_reacquiring_missing_shared_wheel(self):
+        wheel = self.document["packages"][-1]["file"]
+        content = (self.shared / wheel).read_bytes()
+        (self.shared / wheel).unlink()
+        with patch.object(checker_acquisition, "acquire_ruff", side_effect=lambda *_: (self.shared / wheel).write_bytes(content)):
+            checker_acquisition.download(self.path, self.directory, self.document["base"], self.shared)
+        self.assertEqual(content, (self.shared / wheel).read_bytes())
 
     def test_warm_checker_assets_do_not_wait_for_another_shared_pool_reader(self):
         wheel = self.document["packages"][-1]
         pool = self.root / "pool"
         pool.mkdir()
-        shutil.copyfile(self.directory / wheel["file"], pool / wheel["file"])
+        shutil.copyfile(self.shared / wheel["file"], pool / wheel["file"])
         tool = pool / "wheelhouse-tool-1.0.0.pyz"
         tool.write_bytes(b"cached tool")
         pins = self.root / "pins.in"
@@ -282,7 +295,7 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
 
         def run():
             try:
-                checker_acquisition.acquire_ruff(self.document, pool, pins, pins, self.directory)
+                checker_acquisition.acquire_ruff(self.document, pool, pins, pins)
             except Exception as error:
                 failures.append(error)
 
@@ -305,12 +318,11 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         prefix = "https://github.com/numpde/nmr-provider-tools/releases/download/v1/"
         acquirer.write_text(prefix + "acquirer.pyz#sha256=" + "a" * 64 + "\n")
         stream.write_text(prefix + "stream.pyz#sha256=" + "b" * 64 + "\n")
-        empty_legacy = self.root / "no-legacy"
         with (
             patch.object(checker_acquisition, "checker_proxy") as proxy,
             self.assertRaisesRegex(ValueError, "cached bytes differ"),
         ):
-            checker_acquisition.acquire_ruff(self.document, pool, acquirer, stream, empty_legacy)
+            checker_acquisition.acquire_ruff(self.document, pool, acquirer, stream)
         proxy.assert_not_called()
 
     def test_unknown_missing_and_wrong_container_fields_are_rejected(self):
@@ -376,16 +388,16 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         original = path.read_bytes()
         path.write_bytes(b"changed")
         with self.assertRaises(ValueError) as caught:
-            checker.check(self.path, self.directory, self.document["base"])
+            checker.check(self.path, self.directory, self.document["base"], self.shared)
         self.assertIn("artifact bytes differ from declaration", str(caught.exception))
         self.assertIn(repr(filename), str(caught.exception))
         path.unlink()
         with self.assertRaisesRegex(ValueError, "inventory"):
-            checker.check(self.path, self.directory, self.document["base"])
+            checker.check(self.path, self.directory, self.document["base"], self.shared)
         path.write_bytes(original)
         (self.directory / "extra.deb").write_bytes(b"extra")
         with self.assertRaisesRegex(ValueError, "inventory"):
-            checker.check(self.path, self.directory, self.document["base"])
+            checker.check(self.path, self.directory, self.document["base"], self.shared)
 
     def test_symlinked_artifact_cannot_reuse_a_valid_receipt(self):
         path = self.directory / self.document["packages"][0]["file"]
@@ -393,13 +405,13 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         path.rename(original)
         path.symlink_to(original)
         with self.assertRaises(OSError):
-            checker.check(self.path, self.directory, self.document["base"])
+            checker.check(self.path, self.directory, self.document["base"], self.shared)
 
     def test_changed_declaration_invalidates_an_existing_receipt(self):
         self.document["base"] = self.document["base"].replace("a" * 64, "b" * 64)
         self.write()
         with self.assertRaisesRegex(ValueError, "completion receipt"):
-            checker.check(self.path, self.directory, self.document["base"])
+            checker.check(self.path, self.directory, self.document["base"], self.shared)
 
     def test_declaration_replacement_cannot_rebind_admitted_artifact_bytes(self):
         admitted_bytes = self.path.read_bytes()
@@ -415,18 +427,21 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
             return original_identity(path)
 
         with patch.object(checker, "file_identity", side_effect=replace_declaration_before_artifact_hash):
-            receipt = checker.inventory(self.path, self.directory)
+            receipt = checker.inventory(self.path, self.directory, self.shared)
         self.assertTrue(replaced)
         self.assertEqual(receipt["declaration_sha256"], hashlib.sha256(admitted_bytes).hexdigest())
         self.assertNotEqual(receipt["declaration_sha256"], original_identity(self.path)["sha256"])
         (self.directory / ".complete").write_text(json.dumps(receipt))
         with self.assertRaisesRegex(ValueError, "completion receipt"):
-            checker.check(self.path, self.directory, self.document["base"])
+            checker.check(self.path, self.directory, self.document["base"], self.shared)
 
 
 class CheckerAcquisitionTests(CheckerDependencyFixture):
     def setUp(self):
         super().setUp()
+        acquisition = patch.object(checker_acquisition, "acquire_ruff")
+        acquisition.start()
+        self.addCleanup(acquisition.stop)
         self.proxy = dict.fromkeys(("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"), "http://127.0.0.1:4321")
         self.proxy.update(dict.fromkeys(("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"), ""))
 
@@ -441,14 +456,14 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             patch.dict(os.environ, self.proxy, clear=True),
             patch.object(checker_acquisition, "open_url", side_effect=opener or response),
         ):
-            checker_acquisition.download(self.path, output, self.document["base"])
+            checker_acquisition.download(self.path, output, self.document["base"], self.shared)
         return output
 
     def test_acquisition_publishes_only_exact_verified_artifacts(self):
         output = self.acquire()
         self.assertEqual(
-            checker.check(self.path, output, self.document["base"]),
-            checker.check(self.path, self.directory, self.document["base"]),
+            checker.check(self.path, output, self.document["base"], self.shared),
+            checker.check(self.path, self.directory, self.document["base"], self.shared),
         )
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
 
@@ -459,7 +474,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             patch.object(checker_acquisition, "open_url", side_effect=failure) as network,
             self.assertRaises(WheelhouseNetworkError) as stopped,
         ):
-            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
         network.assert_called_once()
         rendered = "".join(traceback.format_exception(stopped.exception))
         self.assertIn("HTTP 503", rendered)
@@ -477,7 +492,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             patch.object(checker_acquisition, "open_url", return_value=response) as network,
             self.assertRaises(WheelhouseNetworkError) as stopped,
         ):
-            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
         network.assert_called_once()
         self.assertIn("connection timed out", str(stopped.exception))
         self.assertNotIn("private", "".join(traceback.format_exception(stopped.exception)))
@@ -493,7 +508,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         shutil.copyfile(self.directory / first["file"], stage / first["file"])
         pool = self.root / "pool"
         pool.mkdir()
-        shutil.copyfile(self.directory / wheel["file"], pool / wheel["file"])
+        shutil.copyfile(self.shared / wheel["file"], pool / wheel["file"])
         requested = []
 
         def response(request, **kwargs):
@@ -534,7 +549,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         pool = self.root / "pool"
         pool.mkdir()
         wheel = self.document["packages"][-1]["file"]
-        shutil.copyfile(self.directory / wheel, pool / wheel)
+        shutil.copyfile(self.shared / wheel, pool / wheel)
         with (
             patch.dict(os.environ, self.proxy, clear=True),
             patch.object(checker_acquisition, "acquire_ruff"),
@@ -560,14 +575,14 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             return io.BytesIO((self.directory / name).read_bytes())
 
         self.acquire(opener=response)
-        self.assertEqual(len(self.document["packages"]), len(observed))
+        self.assertEqual(len(self.document["packages"]) - 1, len(observed))
 
     def test_invalid_declaration_and_proxy_fail_before_staging_or_network(self):
         with patch.object(checker_acquisition, "open_url") as network:
             self.document["unreviewed"] = True
             self.write()
             with self.assertRaises(ValueError):
-                checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+                checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
             network.assert_not_called()
         del self.document["unreviewed"]
         self.write()
@@ -583,7 +598,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                 patch.object(checker_acquisition, "open_url") as network,
             ):
                 with self.assertRaisesRegex(ValueError, "launcher-owned"):
-                    checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+                    checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
                 network.assert_not_called()
         self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
 
@@ -616,7 +631,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                 patch.object(checker_acquisition, "open_url") as network,
                 self.assertRaisesRegex(ValueError, "launcher-owned"),
             ):
-                checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+                checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
             stage.assert_not_called()
             network.assert_not_called()
 
@@ -636,11 +651,11 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                 ):
                     if value in (None, ""):
                         with self.assertRaisesRegex(RuntimeError, "stage reached"):
-                            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+                            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
                         stage.assert_called_once()
                     else:
                         with self.assertRaisesRegex(ValueError, "launcher-owned"):
-                            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"])
+                            checker_acquisition.download(self.path, self.root / "acquired", self.document["base"], self.shared)
                         stage.assert_not_called()
                 network.assert_not_called()
 
@@ -674,7 +689,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             patch.object(checker.tempfile, "mkdtemp") as stage,
             patch.object(checker_acquisition, "open_url") as network,
         ):
-            checker_acquisition.download(self.path, self.directory, self.document["base"])
+            checker_acquisition.download(self.path, self.directory, self.document["base"], self.shared)
         stage.assert_not_called()
         network.assert_not_called()
 
@@ -696,7 +711,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             patch.object(checker_acquisition, "open_url") as network,
             self.assertRaisesRegex(ValueError, "completion receipt"),
         ):
-            checker_acquisition.download(self.path, self.directory, base)
+            checker_acquisition.download(self.path, self.directory, base, self.shared)
         network.assert_not_called()
 
     def test_concurrent_output_is_not_replaced_at_publication(self):
@@ -727,7 +742,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             "--base",
             self.document["base"],
             "--wheelhouse",
-            str(self.directory),
+            str(self.shared),
         ]
         with patch.object(sys, "argv", argv), patch.object(sys, "stdout", output):
             checker.main()
@@ -736,7 +751,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
     def test_offline_install_refuses_changed_artifacts_before_any_installation(self):
         (self.directory / self.document["packages"][0]["file"]).write_bytes(b"changed")
         with patch.object(checker.subprocess, "run") as command, self.assertRaises(ValueError):
-            checker.install(self.path, self.directory, self.document["base"])
+            checker.install(self.path, self.directory, self.document["base"], self.shared)
         command.assert_not_called()
 
     def test_offline_install_uses_only_declared_artifacts_and_checks_versions(self):
@@ -756,7 +771,7 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             return SimpleNamespace(stdout="")
 
         with patch.object(checker.subprocess, "run", side_effect=command):
-            checker.install(self.path, self.directory, self.document["base"])
+            checker.install(self.path, self.directory, self.document["base"], self.shared)
         expected = [str(self.directory / package["file"]) for package in self.document["packages"] if package["name"] != "ruff"]
         self.assertEqual(calls[0], ["dpkg", "--install", *expected])
 
@@ -764,6 +779,6 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
         with patch.object(checker_acquisition, "open_url") as network, patch.object(checker.subprocess, "run") as command:
             for action in (checker_acquisition.download, checker.check, checker.install):
                 with self.subTest(action=action.__name__), self.assertRaisesRegex(ValueError, "another base"):
-                    action(self.path, self.directory, "wrong base")
+                    action(self.path, self.directory, "wrong base", self.shared)
         network.assert_not_called()
         command.assert_not_called()

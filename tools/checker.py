@@ -128,45 +128,48 @@ def declaration(path):
     return admitted_declaration(path)[0]
 
 
-def inventory_for_declaration(document, declaration_sha256, directory, wheelhouse=None):
-    """Recompute identities against one already admitted declaration read."""
+def private_inventory(document, declaration_sha256, directory):
+    """Verify private inputs and receipt identities without requiring the shared wheel."""
     directory = Path(directory)
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("Cannot verify checker dependencies: directory is missing or a symlink")
     expected = {package["file"]: {"size": package["size"], "sha256": package["sha256"]} for package in document["packages"]}
-    actual = {entry.name for entry in directory.iterdir()} - {".complete"}
     wheel = next(package["file"] for package in document["packages"] if package["name"] == "ruff")
-    required = set(expected) if wheelhouse is None else set(expected) - {wheel}
-    if not required <= actual or actual - set(expected):
+    required = set(expected) - {wheel}
+    actual = {entry.name for entry in directory.iterdir()} - {".complete"}
+    if actual != required:
         raise ValueError(
             "Cannot verify checker dependencies: file inventory differs from declaration "
-            f"({len(required - actual)} missing, {len(actual - set(expected))} unexpected); "
+            f"({len(required - actual)} missing, {len(actual - required)} unexpected); "
             "preserve this directory for inspection; move it aside before reacquiring at the same path"
         )
-    for filename, identity in expected.items():
-        artifact = Path(wheelhouse) / filename if wheelhouse is not None and filename == wheel else directory / filename
-        if file_identity(artifact) != identity:
+    for filename in required:
+        if file_identity(directory / filename) != expected[filename]:
             raise ValueError(
                 f"Cannot verify checker dependencies: artifact bytes differ from declaration for {filename!r}; "
                 "preserve this directory for inspection; move it aside before reacquiring at the same path"
             )
-        if (
-            wheelhouse is not None
-            and filename == wheel
-            and filename in actual
-            and file_identity(directory / filename) != identity
-        ):
-            raise ValueError("Cannot verify checker dependencies: retained private Ruff wheel differs from declaration")
     return {"declaration_sha256": declaration_sha256, "files": expected}
 
 
-def inventory(path, directory):
+def inventory_for_declaration(document, declaration_sha256, directory, wheelhouse):
+    """Recompute identities against one already admitted declaration read."""
+    if wheelhouse is None:
+        raise ValueError("Cannot verify checker dependencies without the shared wheelhouse")
+    expected = private_inventory(document, declaration_sha256, directory)
+    wheel = next(package["file"] for package in document["packages"] if package["name"] == "ruff")
+    if file_identity(Path(wheelhouse) / wheel) != expected["files"][wheel]:
+        raise ValueError(f"Cannot verify checker dependencies: artifact bytes differ from declaration for {wheel!r}")
+    return expected
+
+
+def inventory(path, directory, wheelhouse):
     """Recompute exact membership and identities; reject links and extra inputs."""
     document, declaration_sha256 = admitted_declaration(path)
-    return inventory_for_declaration(document, declaration_sha256, directory)
+    return inventory_for_declaration(document, declaration_sha256, directory, wheelhouse)
 
 
-def check(path, directory, base, wheelhouse=None):
+def check(path, directory, base, wheelhouse):
     document, declaration_sha256 = admitted_declaration(path)
     if document["base"] != base:
         raise ValueError("Cannot verify checker dependencies: declaration names another base image")
@@ -176,7 +179,7 @@ def check(path, directory, base, wheelhouse=None):
     return expected
 
 
-def install(path, directory, base, wheelhouse=None):
+def install(path, directory, base, wheelhouse):
     """Install verified local artifacts during the networkless checker build only.
 
     This owner uses the closed Debian closure rather than a live resolver or
@@ -208,7 +211,7 @@ def install(path, directory, base, wheelhouse=None):
                 "--no-cache-dir",
                 "--disable-pip-version-check",
                 "--find-links",
-                str(wheelhouse if wheelhouse is not None else directory),
+                str(wheelhouse),
                 "--requirement",
                 str(lock),
             ],

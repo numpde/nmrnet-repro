@@ -18,7 +18,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from tools.artifacts import fsync_directory, open_url, publish_directory
-from tools.checker import admitted_declaration, check, file_identity, inventory_for_declaration, parse_arguments, read_document
+from tools.checker import (
+    admitted_declaration,
+    check,
+    file_identity,
+    inventory_for_declaration,
+    parse_arguments,
+    private_inventory,
+    read_document,
+)
 from tools.wheelhouse import WheelhouseNetworkError, network_request, prepare_core_assets
 from tools.wheelhouse_acquire import run_shared, shared_asset_present
 
@@ -35,17 +43,17 @@ def checker_proxy():
         raise ValueError("Cannot acquire checker dependencies: launcher-owned loopback proxy configuration is required")
 
 
-def acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
+def acquire_ruff(document, wheelhouse, tool_assets, stream_assets):
     with tempfile.TemporaryDirectory(prefix="checker-asset-pins-") as temporary:
         root = Path(temporary)
         frozen_tool = root / "acquirer.in"
         frozen_stream = root / "stream.in"
         shutil.copyfile(tool_assets, frozen_tool)
         shutil.copyfile(stream_assets, frozen_stream)
-        _acquire_ruff(document, wheelhouse, frozen_tool, frozen_stream, legacy)
+        _acquire_ruff(document, wheelhouse, frozen_tool, frozen_stream)
 
 
-def _acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
+def _acquire_ruff(document, wheelhouse, tool_assets, stream_assets):
     """Reuse the declared wheel or publish it through the shared tool."""
     wheel = next(package for package in document["packages"] if package["name"] == "ruff")
     pool = Path(wheelhouse)
@@ -76,10 +84,6 @@ def _acquire_ruff(document, wheelhouse, tool_assets, stream_assets, legacy):
                 raise ValueError("Cannot acquire checker Ruff wheel: cached bytes differ from declaration")
             wheel_ready = True
         stream_ready = shared_asset_present(stream_assets, pool)
-        if not wheel_ready and (Path(legacy) / wheel["file"]).exists():
-            raise ValueError(
-                "Cannot acquire checker Ruff wheel: a private cached wheel exists but the shared pool is missing it; preserve it and resolve the cache migration before retrying"
-            )
         acquirer_ready = wheel_ready or shared_asset_present(tool_assets, pool)
         if not stream_ready:
             checker_proxy()
@@ -153,7 +157,7 @@ def resumed_stage(stage, output, document, declaration_sha256):
         os.close(descriptor)
 
 
-def download(path, output, base, wheelhouse=None, tool_assets=None, stream_assets=None, resume=None):
+def download(path, output, base, wheelhouse, tool_assets=None, stream_assets=None, resume=None):
     """Publish only a complete verified dependency set; retain failed staging.
 
     The existing acquisition launcher supplies one loopback interface-bound
@@ -163,9 +167,9 @@ def download(path, output, base, wheelhouse=None, tool_assets=None, stream_asset
     document, declaration_sha256 = admitted_declaration(path)
     if document["base"] != base:
         raise ValueError("Cannot acquire checker dependencies: declaration names another base image")
+    if wheelhouse is None:
+        raise ValueError("Cannot acquire checker dependencies without the shared wheelhouse")
     if resume is not None:
-        if wheelhouse is None:
-            raise ValueError("Cannot resume checker dependencies without the shared wheelhouse")
         with resumed_stage(resume, output, document, declaration_sha256) as stage:
             return _download(document, declaration_sha256, output, wheelhouse, tool_assets, stream_assets, stage)
     return _download(document, declaration_sha256, output, wheelhouse, tool_assets, stream_assets, None)
@@ -173,14 +177,11 @@ def download(path, output, base, wheelhouse=None, tool_assets=None, stream_asset
 
 def _download(document, declaration_sha256, output, wheelhouse, tool_assets, stream_assets, resume):
     output = Path(output)
-    if wheelhouse is not None and (output.exists() or output.is_symlink()):
-        legacy_wheel = next(package["file"] for package in document["packages"] if package["name"] == "ruff")
-        verification_pool = None if (output / legacy_wheel).exists() else wheelhouse
-        expected = inventory_for_declaration(document, declaration_sha256, output, verification_pool)
+    if output.exists() or output.is_symlink():
+        expected = private_inventory(document, declaration_sha256, output)
         if read_document(output / ".complete") != expected:
             raise ValueError("Cannot acquire checker dependencies: completion receipt differs from admitted declaration")
-    if wheelhouse is not None:
-        acquire_ruff(document, wheelhouse, tool_assets, stream_assets, output)
+    acquire_ruff(document, wheelhouse, tool_assets, stream_assets)
     if output.exists() or output.is_symlink():
         expected = inventory_for_declaration(document, declaration_sha256, output, wheelhouse)
         if read_document(output / ".complete") != expected:
@@ -208,7 +209,7 @@ def _finish_download(document, declaration_sha256, output, wheelhouse, staged, r
     sys.stdout.write(f"Acquiring checker dependencies into {staged}; incomplete staging is retained on failure.\n")
     sys.stdout.flush()
     for package in document["packages"]:
-        if wheelhouse is not None and package["name"] == "ruff":
+        if package["name"] == "ruff":
             continue
         destination = staged / package["file"]
         if resume and destination.exists():
