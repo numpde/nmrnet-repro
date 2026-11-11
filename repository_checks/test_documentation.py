@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import json
 import re
 import subprocess
 import unittest
@@ -76,9 +77,9 @@ class DocumentationTests(unittest.TestCase):
                       "containers/inference/image-inputs.txt", "tests/fixtures/small_chloromethanes.txt",
                       "docs/notes/022_shared_delivery_deferred_20261024.txt",
                       "notes/023_shared_api_proxy_adoption_20261030.txt",
-                      "notes/024_shared_wheelhouse_followups.txt",
-                      "tools/bootstrap/acquisition/linux_idmap-0.3.0.dist-info/entry_points.txt",
-                      "tools/bootstrap/acquisition/linux_idmap-0.3.0.dist-info/top_level.txt"}
+                      "notes/024_shared_wheelhouse_followups.txt"}
+        release = json.loads((ROOT / "requirements/provider-core-release.json").read_text())
+        exceptions.update("host/bootstrap/acquisition/" + name for name in release["acquisition_source_files"])
         leftovers = [
             name
             for name in paths
