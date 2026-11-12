@@ -694,6 +694,9 @@ case "$1" in
                 if [[ "$1" == test/unit/prediction-input ]]; then
                     unit_tests=(-v tests.test_prediction_input tests.test_provider_input)
                 fi
+                if [[ "$1" == test/unit/baseline-launcher ]]; then
+                    unit_tests=(-v tests.test_baseline_launcher tests.test_baseline_admission tests.test_baseline_client)
+                fi
                 if [[ "$1" == test/unit/provider/deployment ]]; then
                     unit_tests=(-v tests.test_provider_bundle_sealing tests.test_provider_deployment_launcher
                         tests.test_compose_image_ids tests.test_provider_update
@@ -748,7 +751,7 @@ case "$1" in
                 elif [[ "$1" == test/unit/baseline-prepare ]]; then
                     command+=(-p test_baseline_prepare.py -v)
                 elif [[ "$1" == test/unit/baseline-launcher ]]; then
-                    command+=(-p test_baseline_launcher.py -v)
+                    : # Launcher admission and client lifecycle share this focused lane.
                 elif [[ "$1" == test/unit/baseline-model ]]; then
                     command+=(-p test_baseline_model.py -v)
                 else
