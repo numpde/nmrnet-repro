@@ -378,6 +378,7 @@ def main():
             parser.error("test support cannot combine probe with check or tool-only")
         result = prepare_test_support(args.assets, args.pool, download=not args.check, probe=args.probe)
         if args.probe:
+            # silent-defaults: allow-contract -- A support probe reports present as 0 and missing as 3; the acquisition owner uses 3 to select download.
             return 0 if result else 3
     elif args.tool_only:
         if (
@@ -392,6 +393,7 @@ def main():
         ):
             parser.error("tool-only probe requires only --assets and --pool")
         with pool_lock(args.pool, exclusive=False):
+            # silent-defaults: allow-contract -- A tool-only probe reports present as 0 and missing as 3; inspection errors propagate instead of selecting acquisition.
             return 0 if shared_asset_present(args.assets, args.pool) else 3
     elif args.check:
         if args.probe:
@@ -402,6 +404,7 @@ def main():
     elif args.probe:
         if not args.lock or args.assets is None or args.tool_assets is None:
             parser.error("acquisition probe requires locks, release assets and the shared tool pin")
+        # silent-defaults: allow-contract -- Readiness reports selected wheels, optional source and stream assets present as 0, or missing as 3; the owner downloads on the first 3 and rejects a repeated 3.
         return 0 if readiness(args.lock, args.pool, args.source, args.stream_assets) else 3
     else:
         if not args.lock or args.assets is None or args.tool_assets is None:
