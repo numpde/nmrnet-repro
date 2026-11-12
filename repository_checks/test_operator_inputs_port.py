@@ -504,27 +504,34 @@ class AcquisitionRetirementTests(unittest.TestCase):
         # adaptation: Bash substitution discards NUL before string comparison.
         # Preserve the source's exact-identity authority at the current launcher.
         # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py#L343-L370
-        for role in ("proxy", "worker"):
+        for role, identifier, starts in (
+            ("gateway", "1", []),
+            ("relay", "2", [["start", "1" * 64]]),
+            ("worker-1", "3", [["start", "1" * 64], ["start", "2" * 64]]),
+        ):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 self.addCleanup(fixture.dispose)
                 result = fixture.run(
-                    "docker.sh",
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_NUL_RECEIPT_ROLE": role},
+                    "acquisition_run.sh", "--retired-receipt", str(fixture.root / "retired"),
+                    "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                    additions={
+                        "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
+                        "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                        "NMRNET_FAKE_NUL_RECEIPT_ROLE": role,
+                    },
                 )
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 calls = [call["arguments"] for call in fixture.calls()]
                 effects = [call for call in calls if call[0] in {"start", "rm"}]
-                # silent-defaults: allow-contract -- A malformed proxy receipt permits no start or removal; a malformed worker receipt permits only the previously admitted proxy's start and removal; proof=repository_checks/test_operator_inputs_port.py::AcquisitionRetirementTests.test_full_container_id_with_nul_receipt_never_authorizes_unadmitted_effects
-                expected = [] if role == "proxy" else [["start", "c" * 64], ["rm", "--force", "c" * 64]]
-                self.assertEqual(effects, expected)
-                receipt = Path((fixture.root / (role + "-cid-path")).read_text())
-                # silent-defaults: allow-contract -- This role table expects the fixture's proxy c or worker d identity followed by the deliberately raw NUL; the retained receipt is compared byte-for-byte; proof=repository_checks/test_operator_inputs_port.py::AcquisitionRetirementTests.test_full_container_id_with_nul_receipt_never_authorizes_unadmitted_effects
-                self.assertEqual(receipt.read_bytes(), ("c" if role == "proxy" else "d").encode() * 64 + b"\0")
+                self.assertEqual(effects, starts)
+                create = [call for call in calls if call[0] == "create"][-1]
+                receipt = Path(create[create.index("--cidfile") + 1])
+                self.assertEqual(receipt.read_bytes(), identifier.encode() * 64 + b"\0")
+                self.assertEqual(identifier.encode() * 64 + b"\n", (receipt.parent / "stdout").read_bytes())
                 self.assertTrue(receipt.parent.exists(), msg="Unadmitted CID receipt evidence was discarded.")
-                self.assertIn("not admitted", result.stderr)
+                self.assertFalse((fixture.root / "retired").exists())
+                self.assertIn("Cannot admit " + role, result.stderr)
                 self.assertNotIn("ignored null byte", result.stderr)
 
     def test_corrupted_started_worker_receipt_preserves_cancellation_and_joins_owned_client(self):
@@ -537,26 +544,31 @@ class AcquisitionRetirementTests(unittest.TestCase):
             damaged = b"unadmitted-worker-receipt\n"
             try:
                 result = fixture.run(
-                    "docker.sh",
-                    "run",
-                    "sha256:" + "b" * 64,
-                    additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_HOLD_ATTACH": "1"},
+                    "acquisition_run.sh", "--retired-receipt", str(fixture.root / "retired"),
+                    "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                    additions={
+                        "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
+                        "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                        "NMRNET_FAKE_HOLD_ATTACH": "1",
+                    },
                     corrupt_worker_receipt=damaged,
                     timeout=3,
                 )
-            except subprocess.TimeoutExpired:
-                self.fail(
-                    "Cancellation did not join the owned attach client after CID admission failed; the fixture had to retire its process group."
-                )
+            except subprocess.TimeoutExpired as failure:
+                if failure.cmd == "attach-ready before SIGTERM":
+                    self.fail("The attach client did not become ready; no cancellation signal was sent by the probe.")
+                self.fail("The probe timed out after attach readiness; its process group was retired by the fixture.")
             self.assertEqual(143, result.returncode, msg=result.stderr)
             calls = [call["arguments"] for call in fixture.calls()]
             starts = [call for call in calls if call[0] == "start"]
-            self.assertEqual(starts, [["start", "c" * 64], ["start", "--attach", "d" * 64]])
-            self.assertEqual([call for call in calls if call[0] == "rm"], [["rm", "--force", "c" * 64]])
-            self.assertEqual("", result.stderr, msg="Actual cancellation must not start a new cleanup publisher.")
+            self.assertEqual(starts, [["start", "1" * 64], ["start", "2" * 64], ["start", "--attach", "3" * 64]])
+            self.assertEqual([call for call in calls if call[0] == "rm"], [])
+            self.assertIn("Cannot remove acquisition worker-1: its container identity no longer matches", result.stderr)
+            self.assertIn("Cannot confirm acquisition retirement; retained operation", result.stderr)
             receipt = Path((fixture.root / "worker-cid-path").read_text())
             self.assertEqual(receipt.read_bytes(), damaged)
             self.assertTrue(receipt.parent.exists())
+            self.assertFalse((fixture.root / "retired").exists())
             self.assertEqual((fixture.root / "attach-retired").read_text(), (fixture.root / "attach-ready").read_text())
             pid = int((fixture.root / "attach-ready").read_text())
             self.assertFalse(Path(f"/proc/{pid}").exists(), msg="The owned attach client was not joined.")

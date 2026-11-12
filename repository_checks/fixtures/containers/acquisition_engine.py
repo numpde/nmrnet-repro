@@ -68,7 +68,10 @@ class AcquisitionEngine:
                 mounts[fields["dst"]] = fields["src"]
         self.containers[identifier] = {"role": role, "network": network, "mounts": mounts, "phase": "created"}
         self.save()
-        receipt.write_text(identifier + "\n")
+        if os.environ.get("NMRNET_FAKE_NUL_RECEIPT_ROLE") == role:
+            receipt.write_bytes(identifier.encode("ascii") + b"\0")
+        else:
+            receipt.write_text(identifier + "\n")
         if role.startswith("worker-"):
             (self.root / "worker-cid-path").write_text(str(receipt))
         sys.stdout.write(f"{identifier}\n")

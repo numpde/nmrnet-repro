@@ -302,11 +302,11 @@ class LauncherFixture:
                     # Mutate only after the exact fixture attach client is
                     # running. This is a probe deadline, never operator policy.
                     ready = self.root / "attach-ready"
-                    deadline = time.monotonic() + timeout
+                    deadline = time.monotonic() + 10
                     while not ready.exists() and time.monotonic() < deadline:
                         time.sleep(0.01)
                     if not ready.exists():
-                        raise subprocess.TimeoutExpired(command, timeout)
+                        raise subprocess.TimeoutExpired("attach-ready before SIGTERM", 10)
                     receipt = Path((self.root / "worker-cid-path").read_text())
                     receipt.write_bytes(corrupt_worker_receipt)
                     process.send_signal(signal.SIGTERM)
@@ -329,6 +329,8 @@ class LauncherFixture:
                     path = Path(values[values.index("--cidfile") + 1]).parent
                     if path.parent == Path("/tmp") and path.name.startswith("nmrnet-proxy."):
                         self.scratch.add(path)
+                    if path.parent.parent == Path("/tmp") and path.parent.name.startswith("acquisition."):
+                        self.scratch.add(path.parent)
 
     def make(self, *arguments, additions=None):
         # silent-defaults: allow-contract -- Omitted Make additions leave the fixture environment intact; supplied entries remain inputs subject to the launcher's literal operator gates; proof=repository_checks/test_operator_inputs_port.py::OperatorInputTests.test_ambient_archive_and_stage_cannot_authorize_writes
