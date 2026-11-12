@@ -57,6 +57,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
         async def generate(*_arguments):
             try:
                 await asyncio.Event().wait()
+            # silent-defaults: allow-exception-outcome -- The generator deliberately completes after cancellation so the test can verify that the deadline waits for retirement and still reports its timeout.
             except asyncio.CancelledError:
                 interrupted.set()
                 await release.wait()

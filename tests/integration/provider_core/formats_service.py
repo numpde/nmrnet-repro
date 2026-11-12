@@ -13,6 +13,8 @@ from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
 
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
+
 FORMAT_CASES = (
     "json",
     "table",
@@ -26,8 +28,6 @@ FORMAT_CASES = (
     "sdf-carbon-only",
 )
 
-
-from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
 
 class FormatFixture:
     """Keep independent molecular facts beside their selected source records."""

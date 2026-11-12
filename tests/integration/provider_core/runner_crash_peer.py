@@ -108,6 +108,7 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
             )
             try:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # silent-defaults: allow-contract -- Contention is the expected evidence that the stopped reader still owns the lease; acquiring it is an assertion failure.
             except BlockingIOError:
                 pass
             else:
@@ -160,6 +161,7 @@ def reader_crash_witness(root, leaf, publish, publish_bytes):
         if bound_identity is not None:
             try:
                 observed = probe_path.lstat()
+            # silent-defaults: allow-contract -- An already absent probe socket needs no cleanup; an existing socket is removed only if its identity matches this owner.
             except FileNotFoundError:
                 pass
             else:

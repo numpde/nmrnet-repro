@@ -12,6 +12,7 @@ def feed_response(**changes):
 
 
 class AdmissionPeers(RuntimePeers):
+    # silent-defaults: allow-contract -- Admission fixtures normally have two live slots; ServicePeers forwards explicit limits for capacity and recovery cases.
     def __init__(self, ports, *, maximum_live_attempts=2):
         super().__init__(ports, "smiles", maximum_live_attempts=maximum_live_attempts)
         self.feed_replies = None

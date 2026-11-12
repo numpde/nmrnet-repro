@@ -124,7 +124,7 @@ def _require_exact_population(observed, expected, subject):
             f"{subject} keys differ: {len(missing)} missing, {len(unexpected)} unexpected; "
             f"first five missing {sorted(missing)[:5]}, unexpected {sorted(unexpected)[:5]}"
         )
-    for (key, value) in expected.items():
+    for key, value in expected.items():
         if observed[key] != value:
             raise AssertionError(f"{subject} differs at {key}: observed {observed[key]!r}, original {value!r}")
 

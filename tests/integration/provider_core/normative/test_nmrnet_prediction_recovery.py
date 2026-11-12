@@ -308,9 +308,7 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_large_diagnostic_preserves_original_failure_and_bounded_private_rendering(self):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
-        original = PredictionExecutionFailed(
-            "Authored allocator failure; api_key=PRIVATE_DIAGNOSTIC_KEY; " + "💧" * 300000
-        )
+        original = PredictionExecutionFailed("Authored allocator failure; api_key=PRIVATE_DIAGNOSTIC_KEY; " + "💧" * 300000)
         original_cause = OSError("Authored allocator cause")
         original.__cause__ = original_cause
         ports.worker.execute = AsyncMock(side_effect=original)

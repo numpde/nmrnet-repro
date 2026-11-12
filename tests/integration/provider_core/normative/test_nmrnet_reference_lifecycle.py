@@ -13,8 +13,8 @@ from tests.integration.nmrnet.reference_fixtures import (
 )
 from tests.integration.nmrnet.reference_ports import authored_populations
 
-
 from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
+
 
 class ReferenceFixtureTests(unittest.TestCase):
     def test_full_population_and_independent_historical_mask_are_compared_exactly(self):
@@ -30,12 +30,16 @@ class ReferenceFixtureTests(unittest.TestCase):
         reference["elements"]["H"]["predictions"][0]["prediction_ppm"] = original
         output = next(item for item in predictions[0] if item["element"] == "H")
         output["shift_ppm"] = 1.234567891
-        require_reference_predictions(records, predictions, reference, production, significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS)
+        require_reference_predictions(
+            records, predictions, reference, production, significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS
+        )
         with self.assertRaisesRegex(AssertionError, "Complete connected population"):
             require_reference_predictions(records, predictions, reference, production, significant_digits=None)
         output["shift_ppm"] = 1.234567892
         with self.assertRaisesRegex(AssertionError, "Complete connected population"):
-            require_reference_predictions(records, predictions, reference, production, significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS)
+            require_reference_predictions(
+                records, predictions, reference, production, significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS
+            )
 
     def test_original_request_identity_and_executed_encoding_are_distinct_but_values_exact(self):
         original = b'{"coordinate_unit": "angstrom", "atoms": ["H"], "coordinates": [[0.1, 0.0, 0.0]]}'

@@ -49,6 +49,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
             for value in (None, "0", "-1", "true", '"64"'):
                 with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
                     files = ConfigFiles(directory)
+                    # silent-defaults: allow-contract -- None removes the required setting; other cases write the declared invalid value, and each must fail before state creation.
                     replacement = b"" if value is None else f"{field} = {value}\n".encode()
                     files.write(files.raw.replace(f"{field} = {current}\n".encode(), replacement))
                     with self.assertRaises(ConfigurationRejected):
