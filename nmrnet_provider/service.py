@@ -256,6 +256,7 @@ class ProviderService:
         stopped = asyncio.create_task(self._stop.wait())
         try:
             await asyncio.wait({self.work_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            # silent-defaults: allow-contract -- A completed startup task supplies its result or exception even when stop also completes; an unfinished startup returns False so run enters shutdown and settles that same task.
             return self.work_task.result() if self.work_task.done() else False
         finally:
             stopped.cancel()

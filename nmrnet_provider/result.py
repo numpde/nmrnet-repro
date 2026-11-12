@@ -251,6 +251,7 @@ class ResultPlan:
                     rounded = float(format(row["shift_ppm"], f".{envelope['output']['shift_significant_digits']}g"))
                     if not math.isfinite(rounded):
                         raise ResultRejected("Cannot round the admitted shift to a finite binary64 output value.")
+                    # silent-defaults: allow-contract -- Public numeric shifts normalize signed zero after finite precision rounding; the original worker outcome remains unchanged in protected scientific evidence.
                     row["shift_ppm"] = 0.0 if rounded == 0 else rounded
             except ResultRejected as cause:
                 raise ResultRejected(f"{geometry['geometry_id']}: {cause}") from cause
@@ -578,6 +579,7 @@ def _public_warnings(observed, loaded_heads):
             compatibility[head] = None
         else:
             compatibility[head] = versions
+    # silent-defaults: allow-contract -- Every scaler compatibility warning remains public; version_details reports whether bounded, consistent version identifiers can accompany it, while original observations remain private.
     result = [
         {
             **SCALER_WARNING,
