@@ -752,13 +752,11 @@ class PackagesClientTests(unittest.TestCase):
             target = self.root / "bin" / name
             target.unlink()
             target.symlink_to(Path("/bin") / name)
-        release = self.root / "composition-remove-release"
-        remove_ready = self.root / "composition-remove-ready"
+        release = self.root / "worker-removal-release"
+        remove_ready = self.root / "worker-removal-ready.json"
         attach_ready = self.root / "attach-ready"
-        for cancellation, remove_mode, hold_attach, worker_status in (
-            (True, "hold", "1", "0"),
-            (False, "pass", "0", "143"),
-        ):
+        identities = json.loads(self.environment["NMRNET_FAKE_ACQ_CIDS"])
+        for cancellation in (True, False):
             with self.subTest(cancellation=cancellation):
                 for path in (release, remove_ready, attach_ready):
                     path.unlink(missing_ok=True)
@@ -767,37 +765,29 @@ class PackagesClientTests(unittest.TestCase):
                 environment = self.environment | {
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "NMRNET_PACKAGE_ENGINE_MODE": "composition",
-                    "NMRNET_PACKAGE_REMOVE_MODE": remove_mode,
-                    "NMRNET_FAKE_HOLD_ATTACH": hold_attach,
-                    "NMRNET_FAKE_WORKER_STATUS": worker_status,
+                    "NMRNET_FAKE_HOLD_ATTACH": "1" if cancellation else "0",
+                    "NMRNET_FAKE_WORKER_STATUS": "0" if cancellation else "143",
                     "NMRNET_FAKE_WORKER_STDOUT": "composition worker stdout\n",
                     "NMRNET_FAKE_WORKER_STDERR": "composition worker stderr\n",
                 }
+                environment["NMRNET_FAKE_ACQ_REMOVE_HOLD_ROLE"] = "worker-1"
                 process = subprocess.Popen(
                     ["bash", str(self.root / "tools/packages.sh"), "stage"],
-                    env=environment,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    start_new_session=True,
+                    env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
                 )
                 observed = {}
                 before_capture = None
                 try:
                     if cancellation:
-                        deadline = time.monotonic() + 5
-                        raw = b""
-                        while time.monotonic() < deadline:
-                            if attach_ready.exists():
-                                raw = attach_ready.read_bytes()
-                                if re.fullmatch(rb"[1-9][0-9]*", raw):
-                                    break
+                        deadline = time.monotonic() + 20
+                        while not attach_ready.is_file() and process.poll() is None and time.monotonic() < deadline:
                             time.sleep(0.01)
-                        self.assertRegex(raw, rb"\A[1-9][0-9]*\Z")
-                        client = int(raw)
+                        self.assertTrue(attach_ready.is_file(), msg="Acquisition worker did not reach attached start")
+                        client = int(attach_ready.read_text())
                         client_arguments = Path("/proc", str(client), "cmdline").read_bytes().split(b"\0")
                         self.assertEqual([os.fsencode(sys.executable), os.fsencode(FIXTURES / "docker.py")], client_arguments[:2])
                         self.assertEqual(
-                            [b"--host", b"unix:///var/run/docker.sock", b"start", b"--attach", b"d" * 64, b""],
+                            [b"--host", b"unix:///var/run/docker.sock", b"start", b"--attach", identities["worker-1"].encode(), b""],
                             client_arguments[4:],
                         )
                         self.assertEqual(b"--config", client_arguments[2])
@@ -805,7 +795,7 @@ class PackagesClientTests(unittest.TestCase):
                         controller = int(Path("/proc", str(group), "cmdline").read_bytes().split(b"\0")[5])
                         observed[group] = self._composition_anchor(group, process.pid, controller)
                         controller_arguments = Path("/proc", str(controller), "cmdline").read_bytes().split(b"\0")
-                        self.assertEqual([b"bash", os.fsencode(self.root / "tools/docker.sh"), b"run"], controller_arguments[:3])
+                        self.assertEqual([b"bash", os.fsencode(self.root / "tools/acquisition_run.original.sh")], controller_arguments[:2])
                         outer = os.getpgid(controller)
                         observed[outer] = self._composition_anchor(outer, process.pid, process.pid)
                         calls = self.fixture.calls()[start:]
@@ -818,54 +808,72 @@ class PackagesClientTests(unittest.TestCase):
                         stage = stages.pop()
                         capture = stage / ".inputs"
                         before_capture = {
-                            str(path.relative_to(capture)): (
-                                path.read_bytes(),
-                                stat.S_IMODE(path.stat().st_mode),
-                                path.stat().st_ino,
-                            )
-                            for path in capture.rglob("*")
-                            if path.is_file()
+                            str(path.relative_to(capture)): (path.read_bytes(), stat.S_IMODE(path.stat().st_mode), path.stat().st_ino)
+                            for path in capture.rglob("*") if path.is_file()
                         }
                         self.assertTrue(before_capture)
                         os.kill(process.pid, signal.SIGTERM)
-                        self._wait_path(remove_ready)
-                        removal = json.loads(remove_ready.read_text())
-                        self.assertEqual(["rm", "--force", "d" * 64], removal["arguments"])
-                        self.assertEqual(removal["group"], os.getpgid(removal["pid"]))
-                        remove_arguments = Path("/proc", str(removal["pid"]), "cmdline").read_bytes().split(b"\0")
-                        self.assertEqual(
-                            [
-                                os.fsencode(self.root / "bin/docker"),
-                                b"--config",
-                                client_arguments[3],
-                                b"--host",
-                                b"unix:///var/run/docker.sock",
-                                b"rm",
-                                b"--force",
-                                b"d" * 64,
-                                b"",
-                            ],
-                            remove_arguments[1:],
-                        )
-                        self.assertTrue(Path("/proc", str(removal["pid"]), "exe").samefile(sys.executable))
-                        observed[removal["group"]] = self._composition_anchor(removal["group"], process.pid, controller)
-                        self.assertEqual(str(Path(client_arguments[3].decode())), removal["config"])
-                        deadline = time.monotonic() + 2.25
-                        while time.monotonic() < deadline:
-                            self.assertIsNone(os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG))
-                            self.assertEqual(
-                                observed[removal["group"]], self._composition_anchor(removal["group"], process.pid, controller)
-                            )
-                            self.assertTrue(Path("/proc", str(controller)).exists())
-                            time.sleep(0.01)
-                        self.assertEqual(
-                            {"c" * 64: "proxy", "d" * 64: "worker"}, json.loads((self.root / "containers.json").read_text())
-                        )
-                        release.write_text("release\n")
-                    deadline = time.monotonic() + 8
+                    deadline = time.monotonic() + 20
+                    while not remove_ready.is_file() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(remove_ready.is_file(), msg="Worker removal did not reach held barrier")
+                    removal = json.loads(remove_ready.read_text())
+                    self.assertEqual("worker-1", removal["role"])
+                    self.assertEqual(identities["worker-1"], removal["identifier"])
+                    self.assertEqual(["--force", identities["worker-1"]], removal["arguments"])
+                    self.assertEqual(removal["group"], os.getpgid(removal["pid"]))
+                    remove_arguments = Path("/proc", str(removal["pid"]), "cmdline").read_bytes().split(b"\0")
+                    self.assertEqual([os.fsencode(sys.executable), os.fsencode(FIXTURES / "docker.py"), b"--config"], remove_arguments[:3])
+                    configuration = Path(remove_arguments[3].decode())
+                    self.assertEqual(
+                        [b"--host", b"unix:///var/run/docker.sock", b"rm", b"--force", identities["worker-1"].encode(), b""],
+                        remove_arguments[4:],
+                    )
+                    if cancellation:
+                        self.assertEqual(client_arguments[3], remove_arguments[3])
+                    removal_controller = int(Path("/proc", str(removal["group"]), "cmdline").read_bytes().split(b"\0")[5])
+                    if cancellation:
+                        self.assertEqual(controller, removal_controller)
+                    controller = removal_controller
+                    self.assertEqual(
+                        [b"bash", os.fsencode(self.root / "tools/acquisition_run.original.sh")],
+                        Path("/proc", str(controller), "cmdline").read_bytes().split(b"\0")[:2],
+                    )
+                    observed[removal["group"]] = self._composition_anchor(removal["group"], process.pid, controller)
+                    outer = os.getpgid(controller)
+                    observed[outer] = self._composition_anchor(outer, process.pid, process.pid)
+                    calls = self.fixture.calls()[start:]
+                    build = [call for call in calls if call["arguments"][:1] == ["build"]]
+                    self.assertEqual(1, len(build))
+                    self.assertFalse(Path(build[0]["config"]).parent.exists())
+                    self.assertNotEqual(build[0]["config"], str(configuration))
+                    stages = set(self.stage.parent.iterdir()) - stages_before
+                    self.assertEqual(1, len(stages))
+                    capture = stages.pop() / ".inputs"
+                    held_capture = {
+                        str(path.relative_to(capture)): (path.read_bytes(), stat.S_IMODE(path.stat().st_mode), path.stat().st_ino)
+                        for path in capture.rglob("*") if path.is_file()
+                    }
+                    self.assertTrue(held_capture)
+                    if cancellation:
+                        self.assertEqual(before_capture, held_capture)
+                    before_capture = held_capture
+                    deadline = time.monotonic() + 2.25
+                    while time.monotonic() < deadline:
+                        self.assertIsNone(os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG))
+                        self.assertEqual(observed[removal["group"]], self._composition_anchor(removal["group"], process.pid, controller))
+                        self.assertTrue(Path("/proc", str(controller)).exists())
+                        self.assertTrue(configuration.is_dir())
+                        time.sleep(0.01)
+                    registry = json.loads((self.root / "acquisition-containers.json").read_text())
+                    self.assertEqual({identities[role] for role in ("gateway", "relay", "worker-1")}, set(registry))
+                    self.assertEqual({"gateway", "relay", "worker-1"}, {item["role"] for item in registry.values()})
+                    release.write_text("release\n")
+                    deadline = time.monotonic() + 20
                     while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
                         self.assertLess(time.monotonic(), deadline, msg="composition caller did not finish")
                         time.sleep(0.01)
+                    deadline = time.monotonic() + 5
                     for group in observed:
                         while True:
                             try:
@@ -877,15 +885,15 @@ class PackagesClientTests(unittest.TestCase):
                     stdout, stderr = process.communicate(timeout=1)
                     self._remember(stderr.decode())
                     self.assertEqual(143, process.returncode, msg=stderr.decode())
-                    self.assertEqual(b"composition worker stdout\n", stdout)
-                    self.assertEqual(b"composition worker stderr\n", stderr)
+                    self.assertEqual(b"" if cancellation else b"composition worker stdout\n", stdout)
+                    self.assertEqual(b"" if cancellation else b"composition worker stderr\n", stderr)
                     self.assertFalse((self.root / "controller-returned").exists())
                     calls = self.fixture.calls()[start:]
                     self.assertEqual(
-                        [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
+                        [["rm", "--force", identities[role]] for role in ("worker-1", "relay", "gateway")],
                         [call["arguments"] for call in calls if call["arguments"][:1] == ["rm"]],
                     )
-                    self.assertEqual({}, json.loads((self.root / "containers.json").read_text()))
+                    self.assertEqual({}, json.loads((self.root / "acquisition-containers.json").read_text()))
                     for call in calls:
                         if "client_config" in call:
                             configuration = call["client_config"]
@@ -905,8 +913,7 @@ class PackagesClientTests(unittest.TestCase):
                         if path.is_file()
                     }
                     self.assertTrue(after_capture)
-                    if cancellation:
-                        self.assertEqual(before_capture, after_capture)
+                    self.assertEqual(before_capture, after_capture)
                 finally:
                     if process.returncode is None:
                         # Release only this case's known fixture barrier, then
@@ -1338,55 +1345,13 @@ def fake_command(name):
         if hold != "1":
             return 97
     if mode == "composition":
-        remove_mode = os.environ["NMRNET_PACKAGE_REMOVE_MODE"]
-        if remove_mode not in {"hold", "pass"}:
-            return 97
         python_image = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
         uv_image = "ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d"
-        routed = arguments in (
-            ["image", "inspect", python_image],
-            ["image", "inspect", uv_image],
-            ["start", "c" * 64],
-            ["start", "--attach", "d" * 64],
-            ["inspect", "--format", "{{.State.Running}}", "c" * 64],
-            ["logs", "c" * 64],
-            ["rm", "--force", "c" * 64],
-            ["rm", "--force", "d" * 64],
-        )
-        if len(arguments) > 5 and arguments[:2] == ["create", "--cidfile"]:
-            receipt = Path(arguments[2])
-            routed = (
-                receipt.parent.parent == Path("/tmp")
-                and receipt.parent.name.startswith("nmrnet-proxy.")
-                and receipt.name in {"proxy.cid", "worker.cid"}
-                and (
-                    (receipt.name == "proxy.cid" and arguments[3:7] == ["--pull", "never", "--network", "host"])
-                    or (receipt.name == "worker.cid" and arguments[3:5] == ["--network", "host"])
-                )
-                and arguments.count("--cidfile") == 1
-            )
-        if routed:
-            if arguments == ["rm", "--force", "d" * 64] and remove_mode == "hold":
-                pending = root / "composition-remove-pending"
-                pending.write_text(
-                    json.dumps(
-                        {
-                            "pid": os.getpid(),
-                            "group": os.getpgrp(),
-                            "arguments": arguments,
-                            "config": str(config),
-                        }
-                    )
-                )
-                pending.replace(root / "composition-remove-ready")
-                release = root / "composition-remove-release"
-                while not release.exists():
-                    time.sleep(0.01)
-                if release.read_bytes() != b"release\n":
-                    return 97
-            # Reuse the actual finite acquisition model without double-recording
-            # a call or adding a wrapper process around its native client.
+        if arguments in (["image", "inspect", python_image], ["image", "inspect", uv_image]):
             os.execv(sys.executable, [sys.executable, str(FIXTURES / "docker.py"), *sys.argv[1:]])
+        if arguments and arguments[0] in {"create", "start", "inspect", "logs", "rm", "ps"}:
+            environment = os.environ | {"NMRNET_FAKE_ACQUISITION_SCOPE": "1"}
+            os.execve(sys.executable, [sys.executable, str(FIXTURES / "docker.py"), *sys.argv[1:]], environment)
         admission = ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]
         if arguments != admission:
             if not arguments or arguments[0] != "build":

@@ -10,6 +10,7 @@ import re
 import signal
 import socket
 import sys
+import time
 from pathlib import Path
 
 
@@ -169,9 +170,28 @@ class AcquisitionEngine:
     def remove(self, arguments):
         if len(arguments) != 2 or arguments[0] != "--force":
             reject("removal requires an exact forced identity")
-        if os.environ.get("NMRNET_FAKE_ACQ_REMOVE_FAIL") == self.containers[arguments[1]]["role"]:
+        identifier = arguments[1]
+        record = self.containers[identifier]
+        held_role = os.environ.get("NMRNET_FAKE_ACQ_REMOVE_HOLD_ROLE")
+        if held_role is not None:
+            worker_roles = {role for role in self.identities if role.startswith("worker-")}
+            if held_role not in worker_roles:
+                reject("held removal must select one modeled worker role")
+            if record["role"] == held_role:
+                ready = self.root / "worker-removal-ready.json"
+                release = self.root / "worker-removal-release"
+                pending = ready.with_suffix(".pending")
+                with pending.open("x") as receipt:
+                    json.dump({"pid": os.getpid(), "group": os.getpgrp(), "role": held_role,
+                               "arguments": arguments, "identifier": identifier}, receipt)
+                pending.replace(ready)
+                while not release.exists():
+                    time.sleep(0.01)
+                if release.is_symlink() or release.read_bytes() != b"release\n":
+                    reject("held worker removal release must contain the exact fixture signal")
+        if os.environ.get("NMRNET_FAKE_ACQ_REMOVE_FAIL") == record["role"]:
             return 37
-        del self.containers[arguments[1]]
+        del self.containers[identifier]
         self.save()
         return 0
 
