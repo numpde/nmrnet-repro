@@ -217,6 +217,7 @@ class ProcessPeers:
         # Each child invokes the actual foreground process entrypoint. Native
         # allocation ports are limited to the explicitly selected child script.
         environment["PYTHONPATH"] += os.pathsep + str(Path.cwd())
+        # silent-defaults: allow-contract -- Omission selects the ordinary startup child; interruption and held-lifetime cases select their own scripts.
         script = child_script if child_script is not None else "startup_process.py"
         command = [str(Path(__file__).with_name(script))]
         self.process = await asyncio.create_subprocess_exec(
