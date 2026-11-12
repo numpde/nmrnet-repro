@@ -456,7 +456,7 @@ provider/prepare:
 .PHONY: provider/deployment/retire-generations provider/deployment/retire-api-route
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
-	bash tools/compose_qualification.sh
+	bash tools/compose_qualification.sh pasted
 
 .PHONY: test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery
 test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:

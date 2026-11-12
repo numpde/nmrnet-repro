@@ -311,8 +311,8 @@ compose_witness_finish() {
 compose_witness_main() {
     set -euo pipefail
     umask 077
-    [[ $# -le 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
-    local scientific_case=${1-pasted}
+    [[ $# -eq 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
+    local scientific_case=$1
     case $scientific_case in pasted|smiles|references|capacity|successive|recovery) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     print_command=false
