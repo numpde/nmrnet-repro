@@ -291,9 +291,11 @@ def seal_deployment_bundle(bundle, uid, gid):
         raise ConfigurationRejected("deployment bundle has no retained Compose recipe to seal.")
     for path in files:
         secret = path.is_relative_to(bundle / "secrets")
+        # silent-defaults: allow-contract -- Secrets are owner-readable only; public bundle files are readable by the container users. test_rootless_sealing_keeps_public_files_root_owned_and_secrets_private covers both.
         mode = 0o400 if secret else 0o444
         path.chmod(mode, follow_symlinks=False)
         if rootless:
+            # silent-defaults: allow-contract -- The rootless helper assigns secrets to the provider UID/GID and public files to container root; test_rootless_sealing_keeps_public_files_root_owned_and_secrets_private checks the requested chown calls.
             owner_uid, owner_gid = (uid, gid) if secret else (0, 0)
             os.chown(path, owner_uid, owner_gid, follow_symlinks=False)
         elif path.stat().st_uid != uid:
