@@ -301,7 +301,11 @@ esac
             TEST_CALLER_GID=str(os.getgid()),
         )
         if changes is not None:
-            environment.update(changes)
+            for name, value in changes.items():
+                if value is None:
+                    del environment[name]
+                else:
+                    environment[name] = value
         return subprocess.run(
             ["bash", str(self.root / "tools/provider_deployment.sh"), action],
             env=environment,
@@ -677,6 +681,25 @@ esac
         self.assertTrue(any(call[0:5] == ["image", "inspect", "--format", "{{.Id}}", IMAGE] for call in calls))
         self.assertTrue(any("--shared-image-id" in call and IMAGE in call for call in calls))
 
+    def test_install_reuses_current_image_when_selector_is_unset(self):
+        result = self.run_command("install", changes={"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": None})
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertTrue(any("--shared-image-id" in call and IMAGE in call for call in self.calls()))
+
+    def test_install_refuses_invalid_image_even_with_current_generation(self):
+        result = self.run_command("install", changes={"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "mutable:latest"})
+        self.assertEqual(2, result.returncode)
+        self.assertIn("first install requires SHARED_RUNTIME_IMAGE", result.stderr)
+        self.assertEqual("bundles/generation-original", self.current_target())
+
+    def test_first_install_requires_shared_image_when_selector_is_unset(self):
+        (self.provider / "current").unlink()
+        result = self.run_command("install", changes={"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": None})
+        self.assertEqual(2, result.returncode)
+        self.assertIn("first install requires SHARED_RUNTIME_IMAGE", result.stderr)
+        self.assertFalse((self.provider / "current").exists())
+        self.assertFalse((self.provider / "current").is_symlink())
+
     def test_install_can_retain_previous_generations(self):
         original = self.provider / "bundles/generation-original"
         obsolete = self.provider / "bundles/generation-obsolete"
@@ -727,6 +750,7 @@ esac
         )
         self.assertFalse(any(f"src={self.provider}," in mount or "unselected-directory" in mount for mount in mounts))
         self.assertIn("freeze", call)
+        self.assertEqual("sha256:" + format(9, "064d"), call[call.index("--shared-image-id") + 1])
         self.assertIn("--source-root", call)
         self.assertIn("/opt/provider/environment/bin/python", call)
         selected = self.provider / (self.provider / "current").readlink()

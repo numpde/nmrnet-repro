@@ -361,8 +361,9 @@ helper() {
     helper_name=
 }
 select_shared_runtime() {
-    shared_runtime_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
-    if [[ -z $shared_runtime_image && ( -e $root/current || -L $root/current ) ]]; then
+    if [[ -v NMRNET_SHARED_RUNTIME_IMAGE_INPUT && -n $NMRNET_SHARED_RUNTIME_IMAGE_INPUT ]]; then
+        shared_runtime_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
+    elif [[ -e $root/current || -L $root/current ]]; then
         local current_target current_bundle
         [[ -L $root/current ]] \
             || { refuse 'the selected deployment is not a generation link; supply SHARED_RUNTIME_IMAGE explicitly to replace it.'; return 2; }
@@ -379,6 +380,9 @@ select_shared_runtime() {
             refuse 'the selected generation does not identify one shared runtime image; supply SHARED_RUNTIME_IMAGE explicitly.'
             return 2
         fi
+    else
+        refuse 'first install requires SHARED_RUNTIME_IMAGE=<immutable image ID> from nmr-provider-tools.'
+        return 2
     fi
     [[ $shared_runtime_image =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { refuse 'first install requires SHARED_RUNTIME_IMAGE=<immutable image ID> from nmr-provider-tools.'; return 2; }
