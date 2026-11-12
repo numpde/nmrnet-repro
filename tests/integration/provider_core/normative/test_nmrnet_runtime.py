@@ -21,7 +21,7 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
 from provider_core.attempt_record import AcknowledgedAttempt
-from provider_core.controller import StartDeferred
+from provider_core.controller import ControllerFailed, StartDeferred
 from provider_core.job_input import verify_job_input
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.uploads import UploadInputRejected
@@ -299,31 +299,31 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1, len(notices))
             self.assertIs(notices[0][1], failure)
 
-    async def test_prediction_failure_is_delivered_once_with_private_diagnostic_separate(self):
+    async def test_prediction_operator_failure_retains_attempt_and_original_diagnostic_without_terminal_report(self):
         ports = SessionPorts()
-        failure = ModelCallFailed("PRIVATE_PREDICTION_DIAGNOSTIC" + "💧" * 300000)
-        ports.worker.execute = AsyncMock(side_effect=failure)
+        original = ModelCallFailed(
+            "Authored prediction failure; api_key=PRIVATE_PREDICTION_DIAGNOSTIC; " + "💧" * 300000
+        )
+        ports.worker.execute = AsyncMock(side_effect=original)
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(fixture.settle_controller, controller)
-            outcome = await controller.run(pending)
-            self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
-            await fixture.wait_published()
-            fail_bodies = [
-                body
-                for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True)
-                if b"/fail HTTP/1.1" in request.split(b"\r\n", 1)[0]
-            ]
-            self.assertEqual(1, len(fail_bodies))
-            body = json.loads(fail_bodies[0])
-            self.assertEqual("prediction_execution_failed", body["failure_code"])
-            self.assertNotIn("PRIVATE_PREDICTION_DIAGNOSTIC", fail_bodies[0].decode())
-            notices = [item for item in fixture.operator_notices if item[0] == "prediction_failed"]
-            self.assertEqual(1, len(notices))
-            self.assertIs(notices[0][1], failure)
-            ports.worker.execute.assert_awaited_once()
+            (failure,) = await asyncio.gather(controller.run(pending), return_exceptions=True)
+            self.assertIsInstance(failure, ControllerFailed)
+            self.assertIs(controller.last_failure, failure)
+            self.assertTrue(controller.shutdown_ready)
+            self.assertIs(failure.cause.cause, original)
             self.assertTrue(ports.host.confirmed)
+            self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
+            fixture.allocate_prediction.assert_awaited_once()
+            ports.worker.execute.assert_awaited_once()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+            rendered = json.dumps(failure_evidence(failure, secrets=("PRIVATE_PREDICTION_DIAGNOSTIC",)))
+            self.assertIn("Authored prediction failure", rendered)
+            self.assertIn("omitted_characters", rendered)
+            self.assertNotIn("PRIVATE_PREDICTION_DIAGNOSTIC", rendered)
 
     async def test_late_start_ack_after_admission_stop_does_not_enter_science(self):
         ports = SessionPorts()

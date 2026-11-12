@@ -26,7 +26,7 @@ from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
-from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut, WorkerResultRejected
+from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
 from provider_core.analysis import (
     AnalysisFailure,
     AnalysisOutcomeUnresolved,
@@ -354,34 +354,13 @@ class NMRNetSession:
         return AnalysisFailure(code, message, evidence)
 
     async def execute(self, handle, *, report_condition):
+        """Run the prepared batch with configured retry and preserve operator failures."""
         if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:
             raise ValueError("Scientific execution requires this session's current prepared handle.")
         prepared = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
-        try:
-            result = await self._predict(prepared.requests, report_condition.require_execution)
-        except PredictionExecutionFailed as cause:
-            if self._phase is not _Phase.EXECUTING:
-                raise ValueError("Scientific failure arrived after retirement began; it cannot be accepted.") from cause
-            try:
-                diagnostic = json.dumps(cause.diagnostic, ensure_ascii=True).encode("ascii")
-                prediction_failure = {
-                    "diagnostic_encoding": "JSON string encoded as ASCII",
-                    "diagnostic_bytes": len(diagnostic),
-                    "diagnostic_sha256": hashlib.sha256(diagnostic).hexdigest(),
-                }
-                if type(cause) is ModelCallFailed and cause.retry_not_started is not None:
-                    prediction_failure["retry_not_started"] = cause.retry_not_started
-                evidence = _evidence({"prediction_failure": prediction_failure})
-            except Exception as evidence_failure:
-                raise evidence_failure from cause
-            if self._on_prediction_failure is not None:
-                self._on_prediction_failure(cause, self._acknowledged)
-            self._phase = _Phase.FINISHED
-            return AnalysisFailure(
-                "prediction_execution_failed", "Prediction did not return a complete verified result.", evidence
-            )
+        result = await self._predict(prepared.requests, report_condition.require_execution)
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")

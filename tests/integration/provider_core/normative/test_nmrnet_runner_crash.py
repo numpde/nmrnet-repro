@@ -24,6 +24,7 @@ from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.session import NMRNetSession
+from nmrnet_provider.worker_client import ModelCallFailed
 from provider_core.controller import AttemptController, LiveStartPolicy
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 from provider_core.job_input import verify_job_input
@@ -80,13 +81,14 @@ with socket.socket(fileno=args.session_fd) as channel:
 
 
 class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
-    async def test_two_native_model_failures_retire_both_children_and_report_once(self):
+    async def test_two_native_model_failures_preserve_both_causes_and_retire_both_children(self):
         ports, claims = SessionPorts(), AttemptClaims.live()
         runner = RunningSupervisor(role="prediction", worker_argv=[sys.executable, "-c", MODEL_FAILURE_CHILD])
         self.addCleanup(runner.close)
         factory = self.factory(ports, claims)
         factory.execution_identity["prediction_declaration_sha256"] = "d" * 64
         operations = []
+        notices = []
 
         def operation(**arguments):
             owned = NativeOperation(**(arguments | {"endpoint": runner.path}))
@@ -100,12 +102,20 @@ class NativeCrashTests(unittest.IsolatedAsyncioTestCase):
             input_preparation=ports.preparation,
             max_retries=1,
             prediction_seconds=2,
+            on_prediction_failure=lambda failure, _attempt: notices.append(failure),
         )
         with patch("nmrnet_provider.native_factory.NativeOperation", side_effect=operation):
-            prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=Mock())
-            result = await session.execute(prepared, report_condition=Mock())
-            await session.retire()
-        self.assertEqual("prediction_execution_failed", result.code)
+            try:
+                prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=Mock())
+                with self.assertRaises(ModelCallFailed) as caught:
+                    await session.execute(prepared, report_condition=Mock())
+            finally:
+                await session.retire()
+        self.assertEqual(1, len(notices))
+        self.assertIsInstance(notices[0], ModelCallFailed)
+        self.assertIsNot(caught.exception, notices[0])
+        self.assertIs(caught.exception.__context__, notices[0])
+        self.assertEqual("authored model-call failure", caught.exception.diagnostic)
         self.assertEqual(2, len(operations))
         self.assertNotEqual(operations[0].allocation, operations[1].allocation)
         self.assertTrue(all(item._retirement.done() for item in operations))
