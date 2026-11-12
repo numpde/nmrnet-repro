@@ -133,7 +133,6 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
                 self.assertEqual(1, len(values))
                 self.assertRegex(values[0], r"^[a-z0-9.-]+/[A-Za-z0-9_./:@-]+@sha256:[0-9a-f]{64}$")
                 if name == "inference_image.sh":
-                    # silent-defaults: allow-contract -- Inference uses a digest-pinned Dockerfile FROM and separately admits that exact base locally before the streamed build; it has no base build argument; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_launcher_binds_every_external_base_to_a_full_digest
                     dockerfile = (ROOT / "containers/inference/Dockerfile").read_text()
                     self.assertIn("FROM " + values[0] + "\n", dockerfile)
                     self.assertIn('image inspect --format \'{{.Id}}\' "$python_image"', source)
@@ -310,7 +309,6 @@ class ImmutableBuildInputTests(unittest.TestCase):
                         self.assertEqual(runs[0][-1], "sha256:" + "b" * 64)
                         self.assertNotIn("--mount", runs[0])
                     else:
-                        # silent-defaults: allow-contract -- The builder selects science and runtime wheels in separate offline containers, each with only read-only inputs; proof=repository_checks/test_build_inputs_port.py::ImmutableBuildInputTests.test_inference_build_and_import_are_offline_without_secret_device_grants
                         self.assertEqual(2, len(runs))
                         selected_locks = []
                         for run in runs:
