@@ -174,8 +174,8 @@ class PackageInputCaptureTests(unittest.TestCase):
         self.assertFalse(list(self.stage_directory().glob(".apply.*")))
         self.assertTrue((stage / ".inputs").is_dir())
 
-    def test_committed_execution_rejects_dirty_bytes_modes_links_and_wrong_inventory(self):
-        for mutation in ("bytes", "mode", "link", "inventory"):
+    def test_committed_execution_rejects_dirty_bytes_links_and_wrong_inventory(self):
+        for mutation in ("bytes", "link", "inventory"):
             with self.subTest(mutation=mutation):
                 probe = clients.PackagesClientTests()
                 probe.setUp()
@@ -183,8 +183,6 @@ class PackageInputCaptureTests(unittest.TestCase):
                     source = probe.root / "tools/package_lock.py"
                     if mutation == "bytes":
                         source.write_bytes(b"dirty execution\n")
-                    elif mutation == "mode":
-                        source.chmod(0o755)
                     elif mutation == "link":
                         source.rename(probe.root / "saved-tool")
                         source.symlink_to(probe.root / "saved-tool")

@@ -12,7 +12,7 @@ git_input_failure() {
 copy_git_blobs() {
     local operation=$1 repository=$2 commit=$3 destination=$4 inventory=$5
     shift 5
-    local metadata name mode kind object_id ancestor part live_mode selector matched
+    local metadata name mode kind object_id ancestor part selector matched
     local -a parts
     # Callers may invoke capture in a conditional, which disables errexit inside
     # this function. Every effect must propagate its own failure explicitly.
@@ -43,13 +43,8 @@ copy_git_blobs() {
         if [[ "$name" == */* ]]; then (umask 022; mkdir -p -- "$destination/${name%/*}") || return $?; fi
         repository_git -C "$repository" cat-file blob "$object_id" > "$destination/$name" || return $?
         chmod "${mode#100}" -- "$destination/$name" || return $?
-        # Git owns executable bits, not effective execution permission: a noexec
-        # mount must not erase an executable file's recorded mode.
-        live_mode=$(stat -c '%a' -- "$repository/$name") || return $?
-        if ! cmp -s -- "$repository/$name" "$destination/$name" \
-            || { [[ "$mode" == 100755 ]] && (( (8#$live_mode & 8#111) == 0 )); } \
-            || { [[ "$mode" == 100644 ]] && (( (8#$live_mode & 8#111) != 0 )); }; then
-            git_input_failure "$operation" 'live input bytes or executable mode differ from the captured commit.'
+        if ! cmp -s -- "$repository/$name" "$destination/$name"; then
+            git_input_failure "$operation" 'live input bytes differ from the captured commit.'
             return 2
         fi
         printf '%s\n' "$name" >> "$inventory.paths" || return $?

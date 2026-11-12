@@ -90,6 +90,51 @@ class GitInputTests(unittest.TestCase):
         self.assertFalse(self.destination.exists())
         return result
 
+    def test_blob_capture_uses_committed_modes_and_rejects_changed_bytes(self):
+        committed = {"regular.py": (0o644, b"regular input\n"), "executable.py": (0o755, b"executable input\n")}
+        for name, (mode, contents) in committed.items():
+            path = self.repository / name
+            path.write_bytes(contents)
+            path.chmod(mode)
+            self.git(self.repository, "add", name)
+            self.git(self.repository, "update-index", "--chmod=" + ("+x" if mode == 0o755 else "-x"), name)
+        self.commit(self.repository)
+        for name, (mode, _) in committed.items():
+            (self.repository / name).chmod(0o755 if mode == 0o644 else 0o644)
+
+        def capture(destination):
+            destination.mkdir(mode=0o700)
+            return subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'repository_root=$1; source "$repository_root/tools/git_inputs.sh" || exit $?; '
+                    'copy_git_blobs "test inputs" "$2" HEAD "$3" "$4" regular.py executable.py',
+                    "capture",
+                    str(Path.cwd()),
+                    str(self.repository),
+                    str(destination),
+                    str(self.root / (destination.name + ".inventory")),
+                ],
+                env=self.environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        destination = self.root / "captured-blobs"
+        result = capture(destination)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        for name, (mode, contents) in committed.items():
+            with self.subTest(name=name):
+                captured = destination / name
+                self.assertEqual(contents, captured.read_bytes())
+                self.assertEqual(mode, captured.stat().st_mode & 0o777)
+        (self.repository / "regular.py").write_bytes(b"changed live input\n")
+        result = capture(self.root / "dirty-blobs")
+        self.assertEqual(2, result.returncode, msg=result.stderr)
+        self.assertIn("live input bytes differ from the captured commit", result.stderr)
+
     def test_projection_resolves_current_gitlink_upstream_and_historical_producer(self):
         result = self.prepare()
         self.assertEqual(0, result.returncode, msg=result.stderr)

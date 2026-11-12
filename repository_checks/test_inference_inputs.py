@@ -180,15 +180,13 @@ class CapturedInputTests(unittest.TestCase):
             self.assertEqual([], fixture.calls())
             self.assert_retired_capture(fixture)
 
-    def test_live_bytes_modes_and_linked_ancestors_must_match_committed_inputs(self):
-        for mutation in ("bytes", "mode", "ancestor"):
+    def test_live_bytes_and_linked_ancestors_must_match_committed_inputs(self):
+        for mutation in ("bytes", "ancestor"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 source = fixture.root / "tools/wheelhouse.py"
                 if mutation == "bytes":
                     source.write_bytes(b"dirty\n")
-                elif mutation == "mode":
-                    source.chmod(0o755)
                 else:
                     tools = fixture.root / "tools"
                     tools.rename(fixture.root / "outside-tools")
@@ -215,9 +213,26 @@ class CapturedInputTests(unittest.TestCase):
             source = fixture.root / "NMRNetplusplus/uninmr/infer.py"
             source.chmod(0o755)
             fixture.capture_committed_inputs()
+            source.chmod(0o644)
+            # The finite Git status double does not inspect live chmod changes.
+            # This isolates materialization from the stored committed tree.
             result = fixture.run("inference_image.sh", "build")
             self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(0o755, fixture.build_evidence()["manifest"]["NMRNetplusplus/uninmr/infer.py"]["mode"])
+            self.assert_retired_capture(fixture)
+
+    def test_live_chmod_does_not_change_captured_committed_nonexecutable_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            source = fixture.root / "tools/wheelhouse.py"
+            original = hashlib.sha256(source.read_bytes()).hexdigest()
+            source.chmod(0o755)
+            # The finite Git status double admits this change; real Git status
+            # remains responsible for its own worktree cleanliness report.
+            result = fixture.run("inference_image.sh", "build")
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual({"sha256": original, "mode": 0o644}, fixture.build_evidence()["manifest"]["tools/wheelhouse.py"])
+            self.assertEqual(0o755, source.stat().st_mode & 0o777)
             self.assert_retired_capture(fixture)
 
     def test_unrelated_pool_entries_are_not_opened_or_copied_into_image_capture(self):
