@@ -32,6 +32,7 @@ from provider_core.job_input import verify_job_input
 
 
 class ServicePeers(AdmissionPeers):
+    # silent-defaults: allow-contract -- The ordinary service fixture starts with two live slots; capacity tests supply their own limit.
     def __init__(self, *, maximum_live_attempts=2):
         super().__init__(InputPorts(), maximum_live_attempts=maximum_live_attempts)
         self.started_jobs = set()
@@ -59,6 +60,7 @@ class ServicePeers(AdmissionPeers):
             "Fixture NMRNet", "Local coordinator proof", (AnalysisOffering("peaks_from_mol", "Authored test"),)
         )
 
+    # silent-defaults: allow-contract -- Use short fixture shutdown bounds and infrequent Hello ticks; announcement and drain tests explicitly select different timings.
     def service(self, *, drain_seconds=0.1, hello_seconds=30, **changes):
         # Only announcement tests opt into fast periodic ticks. Unrelated
         # lifecycle proofs must not race a new Hello handshake during shutdown.
@@ -202,6 +204,7 @@ class SuccessiveServicePeers(ServicePeers):
     The generator and predictor remain recording ports, not native science.
     """
 
+    # silent-defaults: allow-contract -- The three-Job fixture allows four live slots and loses Job 2's first completion acknowledgement; focused scenarios override capacity or acknowledgement loss.
     def __init__(self, *, maximum_live_attempts=4, lose_second_completion=True):
         super().__init__(maximum_live_attempts=maximum_live_attempts)
         self.lose_second_completion = lose_second_completion

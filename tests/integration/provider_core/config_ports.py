@@ -8,6 +8,7 @@ from tests.fakes.credential import document, encoded
 
 
 def ca_line(path):
+    # silent-defaults: allow-contract -- An absent fixture CA omits the optional TOML field; supplied paths are serialized explicitly.
     return "" if path is None else "ca_file = " + json.dumps(str(path)) + "\n"
 
 
@@ -23,6 +24,7 @@ def execution_source_files(root):
 
 
 class ConfigFiles:
+    # silent-defaults: allow-contract -- Author a valid disposable configuration with inert example origins and two live slots; tests replace origins, trust and capacity for their scenario.
     def __init__(
         self,
         root,
