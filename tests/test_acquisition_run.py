@@ -38,9 +38,8 @@ acquisition_worker() {
 }
 """)
         self.events = self.root / "events"
-        self.env = {
-            name: value for name, value in os.environ.items() if name != "NMRNET_SUPPRESS_NEXT_ACTIONS"
-        } | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "EVENTS": str(self.events)}
+        self.env = {name: value for name, value in os.environ.items() if name != "NMRNET_SUPPRESS_NEXT_ACTIONS"}
+        self.env.update({"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "EVENTS": str(self.events)})
 
     def run_worker(self, **extra):
         return subprocess.run(

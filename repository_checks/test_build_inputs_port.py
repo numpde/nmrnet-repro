@@ -117,12 +117,24 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
             self.assertTrue(
                 all(
                     path.split("/")[0]
-                    in {"containers", "host", "tools", "requirements", "NMRNetplusplus", "nmrnet_provider", "nmrnet_inference", "wheelhouse"}
+                    in {
+                        "containers",
+                        "host",
+                        "tools",
+                        "requirements",
+                        "NMRNetplusplus",
+                        "nmrnet_provider",
+                        "nmrnet_inference",
+                        "wheelhouse",
+                    }
                     for path in admissions
                 )
             )
             self.assertFalse(
-                any(path in admissions for path in (".git/", ".work/", "secrets/", ".env", "NMRNetplusplus/**", "tools/**", "host/**"))
+                any(
+                    path in admissions
+                    for path in (".git/", ".work/", "secrets/", ".env", "NMRNetplusplus/**", "tools/**", "host/**")
+                )
             )
 
     def test_launcher_binds_every_external_base_to_a_full_digest(self):
@@ -135,7 +147,7 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
                 if name == "inference_image.sh":
                     dockerfile = (ROOT / "containers/inference/Dockerfile").read_text()
                     self.assertIn("FROM " + values[0] + "\n", dockerfile)
-                    self.assertIn('image inspect --format \'{{.Id}}\' "$python_image"', source)
+                    self.assertIn("image inspect --format '{{.Id}}' \"$python_image\"", source)
                 else:
                     # silent-defaults: allow-contract -- The package launcher passes each pinned base through its corresponding build argument; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_launcher_binds_every_external_base_to_a_full_digest
                     argument = "UV_IMAGE" if variable == "uv_image" else "PYTHON_BASE"
