@@ -38,7 +38,9 @@ acquisition_worker() {
 }
 """)
         self.events = self.root / "events"
-        self.env = os.environ | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "EVENTS": str(self.events)}
+        self.env = {
+            name: value for name, value in os.environ.items() if name != "NMRNET_SUPPRESS_NEXT_ACTIONS"
+        } | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "EVENTS": str(self.events)}
 
     def run_worker(self, **extra):
         return subprocess.run(
@@ -78,6 +80,15 @@ acquisition_worker() {
         result = self.run_worker(NMRNET_SUPPRESS_NEXT_ACTIONS="1")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertNotIn("next", result.stderr)
+
+    def test_only_one_suppresses_guidance(self):
+        self.assertNotIn("NMRNET_SUPPRESS_NEXT_ACTIONS", self.env)
+        self.assertIn("next", self.run_worker().stderr)
+        for value in ("", "0", "other"):
+            with self.subTest(value=value):
+                result = self.run_worker(NMRNET_SUPPRESS_NEXT_ACTIONS=value)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
+                self.assertIn("next", result.stderr)
 
 
 if __name__ == "__main__":
