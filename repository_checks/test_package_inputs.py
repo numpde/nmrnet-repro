@@ -191,7 +191,7 @@ class PackageInputCaptureTests(unittest.TestCase):
                         tree.write_bytes(b"\0".join(tree.read_bytes().split(b"\0")[:-2]) + b"\0")
                     result = probe.caller("stage", environment=probe.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
                     self.assertEqual(2, result.returncode, msg=result.stderr)
-                    self.assertIn("Cannot complete inference package input capture", result.stderr)
+                    self.assertIn("Cannot complete package input capture", result.stderr)
                     evidence = re.search(
                         r"private capped output retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command.log)",
                         result.stderr,
@@ -220,7 +220,7 @@ class PackageInputCaptureTests(unittest.TestCase):
                     additions={"BASH_FUNC_cp%%": function, "NMRNET_COPY_MUTATION": mutation, "NMRNET_COPY_ROOT": str(self.root)}
                 )
                 self.assertEqual(2, result.returncode, msg=result.stderr)
-                self.assertIn("Cannot complete inference package input capture", result.stderr)
+                self.assertIn("Cannot complete package input capture", result.stderr)
                 evidence = re.search(
                     r"private capped output retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command.log)", result.stderr
                 )
