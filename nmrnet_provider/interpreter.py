@@ -44,7 +44,7 @@ import json
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.prepared_input import DEFAULT_OUTPUT, MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS
+from nmrnet_provider.prepared_input import DEFAULT_OUTPUT, MAX_SHIFT_SIGNIFICANT_DIGITS, MIN_SHIFT_SIGNIFICANT_DIGITS
 from provider_core.conversation import (
     ToolFinished,
     ToolRejected,
@@ -140,7 +140,11 @@ def _tool(name, description, properties):
                 "type": "object",
                 "properties": {
                     "verbosity": {"type": "string", "enum": [choice.value for choice in ResultVerbosity]},
-                    "shift_significant_digits": {"type": "integer", "minimum": MIN_SHIFT_SIGNIFICANT_DIGITS, "maximum": MAX_SHIFT_SIGNIFICANT_DIGITS},
+                    "shift_significant_digits": {
+                        "type": "integer",
+                        "minimum": MIN_SHIFT_SIGNIFICANT_DIGITS,
+                        "maximum": MAX_SHIFT_SIGNIFICANT_DIGITS,
+                    },
                 },
                 "additionalProperties": False,
                 "default": DEFAULT_OUTPUT.as_dict(),

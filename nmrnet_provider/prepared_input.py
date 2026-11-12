@@ -34,7 +34,7 @@ class OutputSettings:
 
     def __post_init__(self):
         for f in fields(self):
-            if not (type(value := getattr(self, f.name)) is f.type):
+            if type(value := getattr(self, f.name)) is not f.type:
                 raise TypeError(f"Unexpected {f.name} {type(value) = }")
 
         (min, max) = (MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS)
@@ -44,11 +44,11 @@ class OutputSettings:
 
     @classmethod
     def from_json(cls, settings_json: dict):
-        if not (type(settings_json) is dict):
+        if type(settings_json) is not dict:
             raise TypeError(f"Unexpected {type(settings_json) = }")
 
-        defaults = { f.name: f.default for f in fields(cls) }
-        settings = { **defaults, **settings_json }
+        defaults = {f.name: f.default for f in fields(cls)}
+        settings = {**defaults, **settings_json}
 
         if unknown := settings.keys() - defaults.keys():
             log.warning("Ignoring unknown output settings: %s", unknown)
