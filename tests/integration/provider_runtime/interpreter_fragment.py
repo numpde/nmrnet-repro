@@ -31,6 +31,7 @@ def interpreter_fragment(path):
     inputs = {
         "configuration_sha256": hashlib.sha256(raw).hexdigest(),
         "key_file": str(_bind_path(endpoint["key_file"])),
+        # silent-defaults: allow-contract -- An omitted CA has no file to stage; a supplied CA path passes bind-path validation before staging copies it. StageApiConfigTests covers both selections.
         "ca_file": str(_bind_path(endpoint["ca_file"])) if "ca_file" in endpoint else None,
     }
     return endpoint, inputs
