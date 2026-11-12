@@ -291,7 +291,7 @@ esac
             (directory / ".owner-session.lock").write_text("")
             (directory / ".owner-session.lock").chmod(0o600)
 
-    def run_command(self, action, role="provider", *, changes=None, extra=()):
+    def run_command(self, action, *, changes=None):
         environment = dict(
             os.environ,
             HOME=str(self.home),
@@ -300,9 +300,10 @@ esac
             TEST_CALLER_UID=str(os.getuid()),
             TEST_CALLER_GID=str(os.getgid()),
         )
-        environment.update(changes or {})
+        if changes is not None:
+            environment.update(changes)
         return subprocess.run(
-            ["bash", str(self.root / "tools" / f"{role}_deployment.sh"), action, *extra],
+            ["bash", str(self.root / "tools/provider_deployment.sh"), action],
             env=environment,
             capture_output=True,
             text=True,
@@ -318,6 +319,7 @@ esac
 
     def calls(self):
         """Read engine argv and check the code boundary shared by deployment helpers."""
+        # silent-defaults: allow-contract -- The recording engine creates its counter on invocation; an absent counter records no fixture engine calls.
         count = int((self.root / "count").read_text()) if (self.root / "count").exists() else 0
         calls = [
             [item.decode() for item in (self.root / f"call-{index}").read_bytes().split(b"\0")[:-1]]
@@ -357,41 +359,40 @@ esac
             "status": ["ps", "--all"],
             "logs": ["logs", "--no-color", "--tail", "80"],
         }
-        for role in ("provider",):
-            for action, suffix in expected.items():
-                with self.subTest(role=role, action=action):
-                    result = self.run_command(action, role)
-                    self.assertEqual(0, result.returncode, msg=result.stderr)
-                    calls = self.calls()
-                    call = (
-                        next((item for item in calls if item[0] == "compose" and "up" in item), calls[-1])
-                        if action == "up"
-                        else calls[-1]
-                    )
-                    project = "nmrnet-" + hashlib.sha256((str(self.root) + "\0fixture").encode()).hexdigest()[:20]
-                    bundle = self.bundle
-                    directory = self.root
+        for action, suffix in expected.items():
+            with self.subTest(action=action):
+                result = self.run_command(action)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
+                calls = self.calls()
+                call = (
+                    next((item for item in calls if item[0] == "compose" and "up" in item), calls[-1])
+                    if action == "up"
+                    else calls[-1]
+                )
+                project = "nmrnet-" + hashlib.sha256((str(self.root) + "\0fixture").encode()).hexdigest()[:20]
+                bundle = self.bundle
+                directory = self.root
+                self.assertEqual(
+                    call,
+                    [
+                        "compose",
+                        "--env-file",
+                        "/dev/null",
+                        "--project-name",
+                        project,
+                        "--project-directory",
+                        str(directory),
+                        "--file",
+                        str(bundle / "compose.json"),
+                        *suffix,
+                    ],
+                )
+                if action == "up":
+                    self.assertIn("Verified running image IDs for all 6 provider services.", result.stdout)
                     self.assertEqual(
-                        call,
-                        [
-                            "compose",
-                            "--env-file",
-                            "/dev/null",
-                            "--project-name",
-                            project,
-                            "--project-directory",
-                            str(directory),
-                            "--file",
-                            str(bundle / "compose.json"),
-                            *suffix,
-                        ],
+                        6, len([item for item in calls if item[0] == "inspect" and ".Config.Labels" in " ".join(item)])
                     )
-                    if action == "up":
-                        self.assertIn("Verified running image IDs for all 6 provider services.", result.stdout)
-                        self.assertEqual(
-                            6, len([item for item in calls if item[0] == "inspect" and ".Config.Labels" in " ".join(item)])
-                        )
-                    self.assertTrue((bundle / "compose.json").exists())
+                self.assertTrue((bundle / "compose.json").exists())
         self.assertFalse(any("--volumes" in call or "-v" in call for call in self.calls()))
         self.assertTrue((self.root / "cleanup").exists())
 
