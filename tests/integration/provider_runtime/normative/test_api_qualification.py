@@ -304,6 +304,12 @@ api_witness_stop_deployment 0
             ("scripted-missing-deployment", 2),
             ("scripted-empty-deployment", 2),
             ("scripted-invalid-deployment", 2),
+            ("missing-image", 2),
+            ("empty-image", 2),
+            ("invalid-image", 2),
+            ("scripted-missing-image", 2),
+            ("scripted-empty-image", 2),
+            ("scripted-invalid-image", 2),
         ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -381,6 +387,12 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     environment["NMRNET_DEPLOYMENT_INPUT"] = ""
                 elif scenario in ("invalid-deployment", "scripted-invalid-deployment"):
                     environment["NMRNET_DEPLOYMENT_INPUT"] = "../invalid"
+                elif scenario in ("missing-image", "scripted-missing-image"):
+                    del environment["NMRNET_API_CLIENT_IMAGE_INPUT"]
+                elif scenario in ("empty-image", "scripted-empty-image"):
+                    environment["NMRNET_API_CLIENT_IMAGE_INPUT"] = ""
+                elif scenario in ("invalid-image", "scripted-invalid-image"):
+                    environment["NMRNET_API_CLIENT_IMAGE_INPUT"] = "mutable:latest"
                 result = subprocess.run(
                     ["bash", str(script), mode],
                     env=environment,
@@ -395,6 +407,17 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         self.assertIn("Select a named local deployment", result.stderr)
                     else:
                         self.assertIn("Missing explicit command-line selector: DEPLOYMENT", result.stderr)
+                    self.assertFalse(output.exists())
+                    self.assertFalse((records / "deployment-invocations").exists())
+                    self.assertFalse((records / "query").exists())
+                    self.assertFalse((records / "creates").exists())
+                    continue
+                if scenario.endswith("-image"):
+                    self.assertEqual(expected_status, result.returncode, msg=result.stderr)
+                    if scenario.endswith("invalid-image"):
+                        self.assertIn("immutable", result.stderr)
+                    else:
+                        self.assertIn("Missing explicit command-line selector: API_CLIENT_IMAGE", result.stderr)
                     self.assertFalse(output.exists())
                     self.assertFalse((records / "deployment-invocations").exists())
                     self.assertFalse((records / "query").exists())

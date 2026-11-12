@@ -389,7 +389,7 @@ api_witness_main() {
         provider_host_path "$NMRNET_INTERPRETER_CONFIG_INPUT" || return $?
         provider_host_disjoint "$NMRNET_INTERPRETER_CONFIG_INPUT" "$provider_host_root" || return $?
     fi
-    local client_image=${NMRNET_API_CLIENT_IMAGE_INPUT-}
+    local client_image=$NMRNET_API_CLIENT_IMAGE_INPUT
     provider_host_ipv4 "$NMRNET_ADDRESS_INPUT" \
         && [[ $NMRNET_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $client_image =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { provider_host_refuse 'Qualification requires an explicit API interface, literal IPv4 publication and immutable client image ID.'; return 2; }
