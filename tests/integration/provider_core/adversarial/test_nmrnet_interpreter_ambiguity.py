@@ -10,11 +10,39 @@ from unittest.mock import patch
 from interpreter_ambiguity import admit_selection, load_cases, run_batch
 from tests.integration.nmrnet.ambiguity_ports import format_carrier, scripted_carrier, selected_files, settings
 
-from nmrnet_provider.config import read_startup_file
+from nmrnet_provider.config import ConfigurationRejected, read_startup_file
 from provider_core.chat_errors import ChatFailed
 
 
 class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_malformed_case_documents_keep_schema_and_count_refusals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cases.json"
+            for probe in ("ambiguity", "formats"):
+                authored = json.loads(Path(f"/fixture/interpreter_{probe}.json").read_text())["cases"]
+                malformed = (
+                    None,
+                    [],
+                    "text",
+                    {},
+                    {"cases": None},
+                    {"cases": {}},
+                    {"cases": "text"},
+                    {"cases": [1]},
+                    {"cases": [{}]},
+                    {"cases": [authored[0] | {"unexpected": True}]},
+                )
+                for document in malformed:
+                    with self.subTest(probe=probe, document=document):
+                        path.write_text(json.dumps(document))
+                        with self.assertRaisesRegex(ConfigurationRejected, "complete local cases"):
+                            load_cases(path, probe=probe)
+                for cases in (authored[:-1], [authored[0]] * len(authored)):
+                    with self.subTest(probe=probe, cases=cases):
+                        path.write_text(json.dumps({"cases": cases}))
+                        with self.assertRaisesRegex(ConfigurationRejected, "wrong number of distinct authored cases"):
+                            load_cases(path, probe=probe)
+
     async def test_malformed_preparation_stops_before_argument_feedback_or_a_later_correct_report(self):
         cases = load_cases(Path("/fixture/interpreter_ambiguity.json"), probe="ambiguity")
         for name, arguments in (

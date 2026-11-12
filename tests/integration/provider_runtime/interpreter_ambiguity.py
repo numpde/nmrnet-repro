@@ -144,12 +144,17 @@ def load_cases(path, *, probe):
         document = json.loads(raw)
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("the authored interpreter fixture must contain valid UTF-8 JSON.", cause=cause) from None
-    cases = document.get("cases") if type(document) is dict else None
     fields = {"id", "expected_issue", "specification", "attachment"}
     if probe == "formats":
         fields = {"id", "filename", "byte_length", "sha256", "source_format", "source_unit", "selection", "specification"}
-    if type(cases) is not list or any(type(case) is not dict or set(case) != fields for case in cases):
+    if (
+        type(document) is not dict
+        or "cases" not in document
+        or type(document["cases"]) is not list
+        or any(type(case) is not dict or set(case) != fields for case in document["cases"])
+    ):
         raise ConfigurationRejected("the authored interpreter fixture must contain complete local cases for this probe.")
+    cases = document["cases"]
     if len(cases) != _CASE_COUNTS[probe] or len({case["id"] for case in cases}) != _CASE_COUNTS[probe]:
         raise ConfigurationRejected("the interpreter fixture has the wrong number of distinct authored cases.")
     return cases
