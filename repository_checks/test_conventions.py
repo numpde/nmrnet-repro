@@ -108,6 +108,7 @@ class RepositoryConventionTests(unittest.TestCase):
                 env={
                     **os.environ,
                     "PATH": str(binary) + os.pathsep + os.environ["PATH"],
+                    "PYTHONPATH": str(ROOT),
                     "FAKE_CONTEXT_CALLS": str(context_calls),
                     "FAKE_LOCAL_ENDPOINT": "unix:///fixture.sock",
                 },
@@ -221,11 +222,25 @@ class ConventionDetectionTests(unittest.TestCase):
             for name in public_files:
                 (root / name).write_text("fixture\n")
             package = root / "nmrnet_inference"
+            host_bin = root / "host-bin"
+            host_bin.mkdir()
+            (host_bin / "id").symlink_to(ROOT / "repository_checks/fixtures/containers/id.sh")
+            environment = os.environ | {
+                "PATH": str(host_bin) + ":" + os.environ["PATH"],
+                "NMRNET_FIXTURE_UID": "1000",
+                "NMRNET_FIXTURE_GID": "1000",
+                "NMRNET_DOCKER_CONTEXT_INPUT": "fixture-local",
+                "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///fixture.sock",
+            }
             for packages in ((), ("nmrnet_provider",), ("nmrnet_inference",), ("nmrnet_inference", "nmrnet_provider")):
                 for name in packages:
                     (root / name).mkdir()
                 result = subprocess.run(
-                    ["bash", str(launcher), "--print", "test/repository"], text=True, capture_output=True, check=True
+                    ["bash", str(launcher), "--print", "test/repository"],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=True,
                 )
                 arguments = shlex.split(result.stdout)
                 mounts = {arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"}
@@ -264,7 +279,11 @@ class ConventionDetectionTests(unittest.TestCase):
                     (root / name).rmdir()
             package.symlink_to(root / "elsewhere")
             result = subprocess.run(
-                ["bash", str(launcher), "--print", "test/repository"], text=True, capture_output=True, check=False
+                ["bash", str(launcher), "--print", "test/repository"],
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual("", result.stdout)

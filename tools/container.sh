@@ -832,7 +832,8 @@ case "$1" in
                     --mount "type=bind,src=$check_input_directory/git,dst=/workspace/.git,readonly"
                     --mount "type=bind,src=$repository_root/.git/objects,dst=/workspace/.git/objects,readonly"
                     --mount "type=bind,src=$repository_root/.git/modules/$module_name/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
-                    --env "NMRNET_EXPECTED_UID=$checker_uid" --env "NMRNET_EXPECTED_GID=$checker_gid")
+                    --env "NMRNET_EXPECTED_UID=$checker_uid" --env "NMRNET_EXPECTED_GID=$checker_gid"
+                    --env "NMRNET_HOST_UID=$caller_uid" --env "NMRNET_HOST_GID=$caller_gid")
                 for source_input in host tests containers requirements artifacts notes docs NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
                         if [[ -L "$repository_root/$source_input" || ( ! -f "$repository_root/$source_input" && ! -d "$repository_root/$source_input" ) ]]; then
