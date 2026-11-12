@@ -38,6 +38,12 @@ class BaselineClientTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertFalse(Path("/proc", str(identifier)).exists())
 
+    def stop_client(self, process):
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                process.send_signal(signal.SIGTERM)
+        process.communicate(timeout=4)
+
     def test_owned_same_empty_config_and_scrubbed_environment_both_phases(self):
         names = (
             "DOCKER_HOST",
@@ -102,9 +108,10 @@ class BaselineClientTests(unittest.TestCase):
         process = subprocess.Popen(
             command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
         )
-        self.await_file(observation)
-        observed = json.loads(observation.read_text())
+        observed = None
         try:
+            self.await_file(observation)
+            observed = json.loads(observation.read_text())
             for pipe, expected in ((process.stdout, b"stdout\0\r\n"), (process.stderr, b"stderr\0\r\n")):
                 self.assertEqual([pipe], select.select([pipe], [], [], 2)[0])
                 self.assertEqual(expected, os.read(pipe.fileno(), len(expected)))
@@ -113,11 +120,12 @@ class BaselineClientTests(unittest.TestCase):
             self.assertEqual(143, process.wait(timeout=4))
             self.assertFalse(Path(observed["config"]).parent.exists())
         finally:
-            self.retire_fixture(observed["pid"])
-            self.retire_fixture(observed["descendant"])
-            if process.poll() is None:
-                os.killpg(process.pid, signal.SIGKILL)
-            process.communicate(timeout=4)
+            try:
+                if observed is not None:
+                    self.retire_fixture(observed["pid"])
+                    self.retire_fixture(observed["descendant"])
+            finally:
+                self.stop_client(process)
 
     def test_unread_native_output_cancellation_removes_config_before_drain(self):
         for stream in ("stdout", "stderr"):
@@ -384,9 +392,10 @@ class BaselineClientTests(unittest.TestCase):
                 process = subprocess.Popen(
                     command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
                 )
-                self.await_file(observation)
-                observed = json.loads(observation.read_text())
+                observed = None
                 try:
+                    self.await_file(observation)
+                    observed = json.loads(observation.read_text())
                     channel = Path("/proc", str(observed["pid"]), "wchan")
                     deadline = time.monotonic() + 2
                     while channel.read_text().strip() not in {"pipe_write", "anon_pipe_write"} and time.monotonic() < deadline:
@@ -402,11 +411,12 @@ class BaselineClientTests(unittest.TestCase):
                     _, stderr = process.communicate(timeout=2)
                     self.assertNotIn(b"Cannot confirm baseline Docker", stderr)
                 finally:
-                    self.retire_fixture(observed["pid"])
-                    self.retire_fixture(observed["descendant"])
-                    if process.poll() is None:
-                        process.send_signal(signal.SIGTERM)
-                    process.communicate(timeout=4)
+                    try:
+                        if observed is not None:
+                            self.retire_fixture(observed["pid"])
+                            self.retire_fixture(observed["descendant"])
+                    finally:
+                        self.stop_client(process)
         self.setUp()
         command, environment = self.command(
             "run",
