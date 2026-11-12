@@ -3,15 +3,18 @@
 set -euo pipefail
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 print_command=false
-if [[ ${1-} == --print ]]; then print_command=true; shift; fi
+if [[ $# -gt 0 && $1 == --print ]]; then print_command=true; shift; fi
 pool_owner=
-if [[ ${1-} == --pool-owner ]]; then
+if [[ $# -gt 0 && $1 == --pool-owner ]]; then
     [[ $# -ge 2 && $2 =~ ^([0-9]+):([0-9]+)$ ]] || { printf '%s\n' 'Supply --pool-owner UID:GID.' >&2; exit 2; }
     pool_owner=$2
     shift 2
 fi
-operation=${1-}
-[[ $# -gt 0 ]] && shift
+operation=
+if [[ $# -gt 0 ]]; then
+    operation=$1
+    shift
+fi
 case $operation in
     check-interface)
         source "$repository_root/tools/acquisition_interface.sh"
