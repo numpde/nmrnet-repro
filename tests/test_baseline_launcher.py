@@ -57,6 +57,7 @@ class BaselineLauncherTests(unittest.TestCase):
         (self.root / "tools/baseline.sh").write_bytes(Path("tools/baseline.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
+        (self.root / "tools/docker.sh").write_text('printf "%s\\n" "${BASELINE_MAPPED_OWNER-0:0}"\n')
         (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         (self.root / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
         for name in (
@@ -118,7 +119,7 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertIn("--init", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertIn("sha256:" + "a" * 64, args)
-        self.assertEqual(args[args.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
+        self.assertEqual(args[args.index("--user") + 1], "MAPPED_UID:MAPPED_GID")
         self.assertEqual("ALL", args[args.index("--cap-drop") + 1])
         for flag in ("--cpus", "--memory", "--memory-swap", "--pids-limit", "--tmpfs"):
             self.assertIn(flag, args)
@@ -277,7 +278,7 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
         self.assertIn("--read-only", args)
         self.assertEqual("ALL", args[args.index("--cap-drop") + 1])
         self.assertIn("no-new-privileges:true", args)
-        self.assertEqual(f"{os.getuid()}:{os.getgid()}", args[args.index("--user") + 1])
+        self.assertEqual("MAPPED_UID:MAPPED_GID", args[args.index("--user") + 1])
         environments = [args[index + 1] for index, item in enumerate(args) if item == "--env"]
         self.assertIn("NMRNET_IN_CONTAINER=1", environments)
         self.assertIn('"/workspace/tests/integration/prediction_parity"', " ".join(args))

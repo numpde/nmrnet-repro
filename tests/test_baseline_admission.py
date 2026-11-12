@@ -46,6 +46,7 @@ class BaselineAdmissionTests(unittest.TestCase):
             "BASELINE_PRIVATE_ERROR": "",
             "BASELINE_RECEIPT_TYPE": "",
             "BASELINE_REMOVE": "",
+            "BASELINE_MAPPED_OWNER": "0:0",
         }
 
     def command(self, action, additions):
@@ -100,11 +101,18 @@ class BaselineAdmissionTests(unittest.TestCase):
         self.assertEqual("sha256:" + "a" * 64, inspect[-1])
         self.assertIn("{{.Id}}|", inspect[3])
         self.assertIn(inspect[-1], calls[1]["arguments"])
+        self.assertEqual("0:0", calls[1]["arguments"][calls[1]["arguments"].index("--user") + 1])
         observed = json.loads(self.observation.read_text())
         self.assertEqual(0o700, observed["directory_mode"])
         self.assertEqual([0o600, 0o600], observed["receipt_modes"])
         self.assertFalse(Path(observed["directory"]).exists())
         self.assertTrue(calls[1]["admission_removed"])
+
+    def test_invalid_mapped_owner_blocks_scientific_dispatch(self):
+        result = self.call(additions={"BASELINE_MAPPED_OWNER": "invalid"})
+        self.assertEqual(2, result.returncode, msg=result.stderr)
+        self.assertIn("mapped owner output is invalid", result.stderr)
+        self.assert_no_run()
 
     def test_prepare_admits_only_observed_image_id(self):
         subprocess.run(["/bin/rm", "-rf", "--", str(self.root / ".work/baseline")], check=True)

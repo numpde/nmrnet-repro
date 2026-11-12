@@ -276,13 +276,51 @@ else
     admission_removing=false
     if [[ $baseline_cancelled != 0 ]]; then exit "$baseline_cancelled"; fi
     admission_directory=
+    admission_removal_started=false
+fi
+container_owner=MAPPED_UID:MAPPED_GID
+if ! "$print_command"; then
+    admission_directory=$(umask 077; mktemp -d /tmp/nmrnet-baseline-admission.XXXXXXXX)
+    if controller_native 'baseline owner mapping' untimed stdio \
+        bash "$repository_root/tools/docker.sh" --pool-owner "$caller_uid:$caller_gid" map-owner "$image_id" \
+        > "$admission_directory/mapped-owner"; then mapping_status=0; else mapping_status=$?; fi
+    if [[ $inference_cancellation_status != 0 ]]; then
+        mapping_cancelled=$inference_cancellation_status
+        if "$inference_retirement_confirmed"; then
+            admission_removal_started=true
+            admission_removing=true
+            if rm -r -- "$admission_directory"; then admission_directory=; fi
+            admission_removing=false
+        fi
+        exit "$mapping_cancelled"
+    fi
+    if ! "$inference_retirement_confirmed" || [[ $mapping_status != 0 ]]; then
+        [[ $mapping_status != 0 ]] || mapping_status=1
+        exit "$mapping_status"
+    fi
+    if ! IFS=: read -r mapped_uid mapped_gid < "$admission_directory/mapped-owner" \
+        || [[ ! $mapped_uid =~ ^[0-9]+$ || ! $mapped_gid =~ ^[0-9]+$ ]] \
+        || ! cmp -s "$admission_directory/mapped-owner" <(printf '%s:%s\n' "$mapped_uid" "$mapped_gid"); then
+        printf -v inference_diagnostic '%s\n' 'Cannot run baseline: mapped owner output is invalid.'
+        exit 2
+    fi
+    container_owner="$mapped_uid:$mapped_gid"
+    admission_removal_started=true
+    admission_removing=true
+    if rm -r -- "$admission_directory"; then :; else exit "$?"; fi
+    admission_removing=false
+    if [[ $baseline_cancelled != 0 ]]; then
+        exit "$baseline_cancelled"
+    fi
+    admission_directory=
+    admission_removal_started=false
 fi
 if [[ "$action" != *parity ]] && ! "$print_command"; then mkdir -p -- "$output_parent"; fi
 # Follow tools/container.sh's test lane: Python must not be PID 1, whose default
 # signal behavior would make local Docker-client cancellation insufficient.
 command=("${engine[@]}" run --rm --init --network none --pull never --read-only
     --env NMRNET_IN_CONTAINER=1
-    --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
+    --user "$container_owner" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m --workdir /workspace)
 identity_arguments=(--image-id "$image_id" --repository-revision "$repository_revision")
