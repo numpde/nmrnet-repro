@@ -402,6 +402,20 @@ class InferenceClientConfigTests(unittest.TestCase):
                         "Cannot complete inference build: native client exited with status 7; "
                         f"private capped output retained at {scratch / 'command.log'}.\n"
                     )
+            if phase == "mismatch":
+                # The built-image inspection follows the offline build and its
+                # wheel report. Wait for the owned config-removal receipt before
+                # measuring the separate caller-reporting phase.
+                phase_deadline = time.monotonic() + 30
+                while not observation.is_file() and process.poll() is None and time.monotonic() < phase_deadline:
+                    time.sleep(0.01)
+                if not observation.is_file():
+                    calls = [call["arguments"] for call in fixture.calls()]
+                    self.fail(
+                        "Inference image mismatch did not reach owned client cleanup within 30 seconds; "
+                        f"runner exit status: {process.poll()!r}; expected diagnostic {diagnostic!r}; "
+                        f"engine calls: {calls!r}"
+                    )
             deadline = time.monotonic() + 3
             writer = None
             observed = []
@@ -447,7 +461,28 @@ class InferenceClientConfigTests(unittest.TestCase):
                     self.assertFalse(Path(path).exists(), msg="Caller diagnostics preceded quiet owned cleanup")
             if phase in {"mismatch", "native", "capture"}:
                 self.assertTrue(removed[1], msg="The mismatch case did not exercise a captured build")
-            self.assertEqual({"validation": 0, "mismatch": 4, "native": 3, "capture": 0}[phase], len(fixture.calls()))
+            engine_calls = [call["arguments"] for call in fixture.calls()]
+            if phase == "mismatch":
+                self.assertEqual(["image", "run", "run", "build", "image"], [call[0] for call in engine_calls])
+                self.assertEqual(
+                    ["docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"],
+                    [engine_calls[0][-1]],
+                )
+                lock_names = []
+                for call in engine_calls[1:3]:
+                    mount = next(
+                        value for option, value in zip(call, call[1:])
+                        if option == "--mount" and ",dst=/input/requirements.lock,readonly" in value
+                    )
+                    lock_names.append(Path(mount.split(",src=", 1)[1].split(",dst=", 1)[0]).name)
+                self.assertEqual(["inference.lock", "provider-core-native-install.lock"], lock_names)
+                dockerfile = engine_calls[3][engine_calls[3].index("--file") + 1]
+                self.assertEqual("containers/inference/Dockerfile", dockerfile)
+                self.assertEqual(
+                    ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "d" * 64], engine_calls[4]
+                )
+            else:
+                self.assertEqual({"validation": 0, "native": 3, "capture": 0}[phase], len(engine_calls))
             self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
             process.send_signal(signum)
             # Keep stderr unread until exit; the one signal must retire the
@@ -457,6 +492,7 @@ class InferenceClientConfigTests(unittest.TestCase):
             self.assertFalse(Path("/proc", str(anchor)).exists())
             self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
             self.assertEqual({"image-id"}, {path.name for path in record.parent.iterdir()})
+            self.assertEqual(engine_calls, [call["arguments"] for call in fixture.calls()])
             self.assertEqual(b"", process.stdout.read())
             for caller in caller_paths:
                 self.assertTrue((caller / "config.json").is_file())
