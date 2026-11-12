@@ -345,7 +345,7 @@ class LockPublicationTests(unittest.TestCase):
                 patch.object(os, "replace", side_effect=fail_second),
                 self.assertRaises(OSError),
             ):
-                package_lock.apply()
+                package_lock.apply("inference")
             for name, body in old.items():
                 self.assertEqual(
                     (mounts["/output"] / name).read_bytes(),
