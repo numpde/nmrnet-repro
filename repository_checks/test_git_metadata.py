@@ -140,7 +140,7 @@ class GitMetadataTests(unittest.TestCase):
                     self.git(module, "update-index", "--add", "--cacheinfo", "160000," + parent + ",NMRNetplusplus")
                 result = subprocess.run(
                     ["bash", str(fixture.root / "tools/inference_image.sh"), "--print", "build"],
-                    env=os.environ | poison,
+                    env=os.environ | fixture.git_environment | {"PATH": os.environ["PATH"]} | poison,
                     capture_output=True,
                     text=True,
                     timeout=5,
