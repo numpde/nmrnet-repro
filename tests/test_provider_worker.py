@@ -202,6 +202,7 @@ class RecordingConnection:
             raise self.failure
 
 
+# silent-defaults: allow-contract -- Framing tests share a request and allocation unless exercising a different value.
 def prepare_frame(raw=b"request", allocation="test-allocation"):
     return frame({"operation": "prepare", "allocation": allocation, "requests_base64": [base64.b64encode(raw).decode("ascii")]})
 
@@ -473,6 +474,7 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
                 encode.assert_not_called()
                 self.assertEqual([], writer.sent)
 
+    # silent-defaults: allow-contract -- Client tests use a one-second test budget and the matching fixture declaration unless overridden.
     def client(self, reply_bytes, seconds=1, declaration_sha256="d" * 64):
         reader = asyncio.StreamReader()
         reader.feed_data(reply_bytes)

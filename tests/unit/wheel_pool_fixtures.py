@@ -8,6 +8,7 @@ import hashlib
 import zipfile
 
 
+# silent-defaults: allow-contract -- Wheel-pool fixtures use a universal wheel and arbitrary payload unless a test selects a different tag or content.
 def wheel(directory, name, version, tag="py3-none-any", payload=b"fixture wheel\n"):
     stem = f"{name.replace('-', '_')}-{version}"
     path = directory / f"{stem}-{tag}.whl"

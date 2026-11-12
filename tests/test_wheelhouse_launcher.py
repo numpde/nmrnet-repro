@@ -80,9 +80,11 @@ acquisition_worker() {
         for name in ("NMRNET_NETWORK_INTERFACE_INPUT", "NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN"):
             self.env.pop(name, None)
 
+    # silent-defaults: allow-contract -- Omitted profile and statuses select the inference fixture with one successful offline probe; callers select other profiles or probe outcomes explicitly.
     def launch(self, profile="inference", *, statuses=(0,), additions=None):
         for index, status in enumerate(statuses, 1):
             (self.root / "state" / f"probe-{index}").write_text(f"{status}\n")
+        # silent-defaults: allow-contract -- Omitted or empty additions leave the fixture environment unchanged; supplied entries override it for this launch.
         return subprocess.run(
             ["bash", str(self.root / "tools/wheelhouse.sh"), "download", profile],
             env=self.env | (additions or {}),
@@ -95,6 +97,7 @@ acquisition_worker() {
 
     def events(self):
         path = self.root / "state/events"
+        # silent-defaults: allow-contract -- The fixture appends its event file on worker dispatch; an absent file means no recorded fixture worker call.
         return path.read_text().splitlines() if path.exists() else []
 
     def test_warm_profiles_do_not_select_a_route(self):
