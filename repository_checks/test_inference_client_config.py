@@ -322,10 +322,11 @@ class InferenceClientConfigTests(unittest.TestCase):
             with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
                 self.full_stderr_caller_failure_case(Path(directory), phase="native", signum=signum)
 
-    def test_full_stderr_capture_failure_reports_after_cleanup_before_drain(self):
+    def test_full_stderr_capture_cancellation_retires_owned_work_before_drain(self):
+        publication = '() { case "$*" in */image-id.*) return 11;; *) command mv "$@";; esac; }'
         for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
             with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
-                self.full_stderr_caller_failure_case(Path(directory), phase="capture", signum=signum)
+                self.full_stderr_cleanup_case(Path(directory), phase="capture", signum=signum, publication=publication)
 
     def full_stderr_caller_failure_case(self, directory, *, phase, signum):
         fixture = LauncherFixture(directory)
@@ -352,8 +353,6 @@ class InferenceClientConfigTests(unittest.TestCase):
         elif phase == "mismatch":
             additions["NMRNET_FAKE_BUILD_RESULT"] = "sha256:" + "d" * 64
             diagnostic = "Cannot record inference image: observed local image identity differs from the built image ID.\n"
-        elif phase == "capture":
-            additions["BASH_FUNC_cp%%"] = "() { head -c 8388672 /dev/zero >&2; return 37; }"
         else:
             additions["NMRNET_FAKE_BUILD_STATUS"] = "7"
         record = fixture.root / ".work/inference/image-id"
@@ -382,26 +381,26 @@ class InferenceClientConfigTests(unittest.TestCase):
             )
             os.close(write_fd)
             write_fd = None
-            if phase in {"native", "capture"}:
-                deadline = time.monotonic() + 3
-                while not native_receipt.exists() and time.monotonic() < deadline:
+            if phase == "native":
+                phase_deadline = time.monotonic() + 30
+                while (
+                    not native_receipt.is_file()
+                    and process.poll() is None
+                    and time.monotonic() < phase_deadline
+                ):
                     time.sleep(0.01)
-                self.assertTrue(native_receipt.is_file(), msg="Captured failure control removal was not observed")
+                if not native_receipt.is_file():
+                    self.fail(
+                        f"{phase} failure control removal was not observed within 30 seconds; "
+                        f"runner exit status: {process.poll()!r}"
+                    )
                 scratch = Path(native_receipt.read_text().strip())
                 self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(scratch)], check=True)
-                if phase == "capture":
-                    self.assertEqual(b"\0" * 8388608, (scratch / "command.log").read_bytes())
-                    self.assertEqual(0o700, (scratch.stat().st_mode & 0o777))
-                    diagnostic = (
-                        "Cannot complete inference input capture: native client exited with status 37; "
-                        f"private capped output retained at {scratch / 'command.log'}.\n"
-                    )
-                else:
-                    self.assertEqual(("sha256:" + "b" * 64 + "\n").encode(), (scratch / "command.log").read_bytes())
-                    diagnostic = (
-                        "Cannot complete inference build: native client exited with status 7; "
-                        f"private capped output retained at {scratch / 'command.log'}.\n"
-                    )
+                self.assertEqual(("sha256:" + "b" * 64 + "\n").encode(), (scratch / "command.log").read_bytes())
+                diagnostic = (
+                    "Cannot complete build: native client exited with status 7; "
+                    f"private capped output retained at {scratch / 'command.log'}.\n"
+                )
             if phase == "mismatch":
                 # The built-image inspection follows the offline build and its
                 # wheel report. Wait for the owned config-removal receipt before
@@ -459,14 +458,17 @@ class InferenceClientConfigTests(unittest.TestCase):
             for path in removed:
                 if path:
                     self.assertFalse(Path(path).exists(), msg="Caller diagnostics preceded quiet owned cleanup")
-            if phase in {"mismatch", "native", "capture"}:
-                self.assertTrue(removed[1], msg="The mismatch case did not exercise a captured build")
+            if phase in {"mismatch", "native"}:
+                self.assertTrue(removed[1], msg="The failure case did not exercise a captured build")
             engine_calls = [call["arguments"] for call in fixture.calls()]
-            if phase == "mismatch":
-                self.assertEqual(["image", "run", "run", "build", "image"], [call[0] for call in engine_calls])
+            if phase in {"mismatch", "native"}:
+                expected_operations = ["image", "run", "run", "build"]
+                if phase == "mismatch":
+                    expected_operations.append("image")
+                self.assertEqual(expected_operations, [call[0] for call in engine_calls])
                 self.assertEqual(
-                    ["docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"],
-                    [engine_calls[0][-1]],
+                    ["image", "inspect", "--format", "{{.Id}}", "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"],
+                    engine_calls[0],
                 )
                 lock_names = []
                 for call in engine_calls[1:3]:
@@ -478,11 +480,12 @@ class InferenceClientConfigTests(unittest.TestCase):
                 self.assertEqual(["inference.lock", "provider-core-native-install.lock"], lock_names)
                 dockerfile = engine_calls[3][engine_calls[3].index("--file") + 1]
                 self.assertEqual("containers/inference/Dockerfile", dockerfile)
-                self.assertEqual(
-                    ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "d" * 64], engine_calls[4]
-                )
+                if phase == "mismatch":
+                    self.assertEqual(
+                        ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "d" * 64], engine_calls[4]
+                    )
             else:
-                self.assertEqual({"validation": 0, "native": 3, "capture": 0}[phase], len(engine_calls))
+                self.assertEqual({"validation": 0, "native": 3}[phase], len(engine_calls))
             self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
             process.send_signal(signum)
             # Keep stderr unread until exit; the one signal must retire the
@@ -640,7 +643,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                 os.close(write_fd)
             os.close(read_fd)
             if process is not None:
-                if process.poll() is None:
+                if process.returncode is None:
                     os.killpg(process.pid, signal.SIGKILL)
                 process.communicate(timeout=2)
 
@@ -702,18 +705,25 @@ class InferenceClientConfigTests(unittest.TestCase):
                                 shutil.rmtree(retained)
 
     def full_stderr_cleanup_case(self, directory, *, phase, signum, publication):
-        # silent-defaults: allow-contract -- Only the removal-phase stub sends the signal itself; the reporting phase waits for a blocked writer before its caller sends the signal; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stderr_pipe_cancellation_follows_all_confirmed_cleanup
+        # silent-defaults: allow-contract -- Removal sends cancellation at the injected cleanup failure; reporting and capture cases wait for their exact blocked writer before cancellation; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stderr_pipe_cancellation_follows_all_confirmed_cleanup
+        environment, caller_paths = self.caller_configuration(Path(directory))
         removal = (
             '() { case "$*" in *nmrnet-docker-client.*) '
             'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_CLEANUP_OBSERVATION"; '
             'command rm "$@"; '
             + (f'builtin kill -{signum} "$BASHPID"; ' if phase == "removal" else "")
-            + 'return 9;; *) command rm "$@";; esac; }'
+            + ("" if phase == "capture" else "return 9;")
+            + ';; *) command rm "$@";; esac; }'
+        )
+        chmod = (
+            '() { case "$3" in */context/*) head -c 64 /dev/zero >&2; return 37;; '
+            'esac; command chmod "$@"; }'
         )
         fixture = LauncherFixture(Path(directory))
         observation = fixture.root / "cleanup-observation"
         read_fd, write_fd = os.pipe()
         process = None
+        observed_capture_group = None
         try:
             os.set_blocking(write_fd, False)
             while True:
@@ -725,10 +735,12 @@ class InferenceClientConfigTests(unittest.TestCase):
             process = subprocess.Popen(
                 ["bash", str(fixture.root / "tools/inference_image.sh"), "build"],
                 env=fixture.environment
+                | environment
                 | {
                     "BASH_FUNC_rm%%": removal,
                     "BASH_FUNC_mv%%": publication,
                     "NMRNET_CLEANUP_OBSERVATION": str(observation),
+                    **({"BASH_FUNC_chmod%%": chmod} if phase == "capture" else {}),
                 },
                 stdout=subprocess.PIPE,
                 stderr=write_fd,
@@ -737,11 +749,12 @@ class InferenceClientConfigTests(unittest.TestCase):
             os.close(write_fd)
             write_fd = None
             reporting_processes = []
-            if phase == "reporting":
-                deadline = time.monotonic() + 3
-                while not observation.exists() and time.monotonic() < deadline:
+            if phase in {"reporting", "capture"}:
+                deadline = time.monotonic() + (30 if phase == "capture" else 3)
+                while phase == "reporting" and not observation.exists() and time.monotonic() < deadline:
                     time.sleep(0.01)
-                self.assertTrue(observation.exists())
+                if phase == "reporting":
+                    self.assertTrue(observation.exists())
                 blocked = False
                 while not blocked and time.monotonic() < deadline:
                     pending = [process.pid]
@@ -759,35 +772,115 @@ class InferenceClientConfigTests(unittest.TestCase):
                     for identifier in reporting_processes:
                         channel = Path("/proc", str(identifier), "wchan")
                         with suppress(FileNotFoundError, ProcessLookupError):
-                            if channel.read_text().strip() in {"pipe_write", "anon_pipe_write"}:
+                            is_capture_writer = False
+                            if phase == "capture":
+                                command = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                                is_capture_writer = command[:4] == [b"head", b"-c", b"64", b"/dev/zero"]
+                            if channel.read_text().strip() in {"pipe_write", "anon_pipe_write"} and (
+                                phase == "reporting" or is_capture_writer
+                            ):
                                 blocked = True
+                                if phase == "capture":
+                                    writer = identifier
                     if not blocked:
                         time.sleep(0.01)
-                self.assertTrue(blocked, msg="The native-owned cleanup reporter did not reach the full stderr pipe")
+                self.assertTrue(
+                    blocked,
+                    msg=(
+                        "The injected context chmod did not block its marker writer on stderr"
+                        if phase == "capture"
+                        else "The native-owned cleanup reporter did not reach the full stderr pipe"
+                    ),
+                )
+                if phase == "capture":
+                    anchor = os.getpgid(writer)
+                    self.assertEqual(process.pid, os.getsid(anchor))
+                    self.assertEqual(anchor, os.getpgid(anchor))
+                    anchors = []
+                    source = (fixture.root / "tools/inference_image.sh").read_text()
+                    capture_payload = source.split(
+                        "inference_native 'input capture' untimed stdio bash -eu -c '", 1
+                    )[1].split("' bash ", 1)[0]
+                    capture_workers = []
+                    for identifier in reporting_processes:
+                        with suppress(FileNotFoundError, ProcessLookupError):
+                            arguments = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                            if (
+                                len(arguments) >= 6
+                                and arguments[:2] == [b"bash", b"-c"]
+                                and b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6"
+                                in arguments[2]
+                                and arguments[5] == str(process.pid).encode()
+                            ):
+                                anchors.append(identifier)
+                            if arguments[1:4] == [b"-eu", b"-c", capture_payload.encode()]:
+                                capture_workers.append((identifier, arguments))
+                    self.assertEqual([anchor], anchors, msg="The blocked chmod writer had no unique native owner")
+                    self.assertEqual(1, len(capture_workers), msg="The blocked writer had no unique input-capture command")
+                    capture_worker, worker_arguments = capture_workers[0]
+                    self.assertEqual(anchor, os.getpgid(capture_worker))
+                    self.assertEqual([b"bash", str(fixture.root).encode()], worker_arguments[4:6])
+                    self.assertEqual(
+                        (fixture.root / ".work/inference").as_posix().encode(),
+                        Path(worker_arguments[6].decode()).parent.as_posix().encode(),
+                    )
+                    owned = []
+                    for identifier in reporting_processes:
+                        with suppress(ProcessLookupError):
+                            if os.getpgid(identifier) == anchor:
+                                owned.append(identifier)
+                    self.assertIn(writer, owned)
+                    self.assertEqual([], fixture.calls(), msg="Input capture reached an engine effect before admission")
+                    observed_capture_group = anchor
             else:
                 # The only signal is sent by rm. No consumer drains stderr
                 # and no second signal releases a report started too late.
                 self.assertEqual(128 + signum, process.wait(timeout=3))
-            self.assertTrue(observation.exists())
-            for removed in observation.read_text().splitlines():
-                self.assertFalse(Path(removed).exists(), msg="Diagnostics blocked before owned cleanup finished")
-            self.assertEqual({"image-id"}, {path.name for path in (fixture.root / ".work/inference").iterdir()})
-            if phase == "reporting":
+            if phase != "capture":
+                self.assertTrue(observation.exists())
+                for removed in observation.read_text().splitlines():
+                    self.assertFalse(Path(removed).exists(), msg="Diagnostics blocked before owned cleanup finished")
+                self.assertEqual({"image-id"}, {path.name for path in (fixture.root / ".work/inference").iterdir()})
+            if phase in {"reporting", "capture"}:
                 process.send_signal(signum)
             # Keep stderr unread until exit: draining it would conceal a
             # blocking diagnostic before removal or during cancellation.
-            self.assertEqual(128 + signum, process.wait(timeout=2))
+            self.assertEqual(128 + signum, process.wait(timeout=4 if phase == "capture" else 2))
+            if phase == "capture":
+                self.assertTrue(observation.is_file(), msg="Caller cleanup did not observe its owned paths")
+                removed_paths = observation.read_text().splitlines()
+                self.assertEqual(2, len(removed_paths))
+                self.assertTrue(all(removed_paths), msg="Caller cleanup receipt omitted an owned path")
+                self.assertEqual(removed_paths[1], worker_arguments[6].decode())
+                for removed in removed_paths:
+                    self.assertFalse(Path(removed).exists(), msg="Cancellation returned before owned cleanup finished")
+                self.assertEqual({"image-id"}, {path.name for path in (fixture.root / ".work/inference").iterdir()})
+                self.assertFalse(any(Path("/proc", str(identifier)).exists() for identifier in owned))
+                self.assertEqual([], fixture.calls())
+                for caller in caller_paths:
+                    self.assertTrue((caller / "config.json").is_file())
             deadline = time.monotonic() + 2
-            while (
-                any(Path("/proc", str(identifier)).exists() for identifier in reporting_processes) and time.monotonic() < deadline
-            ):
+            retired_processes = owned if phase == "capture" else reporting_processes
+            while any(Path("/proc", str(identifier)).exists() for identifier in retired_processes) and time.monotonic() < deadline:
                 time.sleep(0.01)
-            self.assertFalse(any(Path("/proc", str(identifier)).exists() for identifier in reporting_processes))
+            self.assertFalse(any(Path("/proc", str(identifier)).exists() for identifier in retired_processes))
         finally:
             if write_fd is not None:
                 os.close(write_fd)
             os.close(read_fd)
             if process is not None:
-                if process.poll() is None:
+                if process.returncode is None:
                     os.killpg(process.pid, signal.SIGKILL)
+                    if observed_capture_group is not None:
+                        with suppress(FileNotFoundError, ProcessLookupError):
+                            if os.getsid(observed_capture_group) == process.pid and os.getpgid(observed_capture_group) == observed_capture_group:
+                                os.killpg(observed_capture_group, signal.SIGKILL)
+                                deadline = time.monotonic() + 2
+                                while True:
+                                    try:
+                                        os.killpg(observed_capture_group, 0)
+                                    except ProcessLookupError:
+                                        break
+                                    self.assertLess(time.monotonic(), deadline, msg="Observed capture owner survived rescue")
+                                    time.sleep(0.01)
                 process.communicate(timeout=2)
