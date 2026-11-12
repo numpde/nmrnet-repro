@@ -89,7 +89,7 @@ finish() {
     if [[ -n $map_query && -z $map_probe_name && $inference_retirement_confirmed == true ]]; then
         rm -f -- "$map_query" || cleanup=$?
     fi
-    if [[ $inference_retirement_confirmed == true && -n ${lifetime_query-} ]]; then
+    if [[ $inference_retirement_confirmed == true && -n $lifetime_query ]]; then
         rm -f -- "$lifetime_query" || cleanup=$?
     fi
     if [[ -n $stop_query ]]; then

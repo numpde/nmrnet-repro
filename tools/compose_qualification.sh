@@ -44,7 +44,7 @@ qualification_delivery_up() {
 }
 
 qualification_delivery_down() {
-    [[ ${qualification_delivery_selected-false} == true ]] || return 0
+    [[ $qualification_delivery_selected == true ]] || return 0
     qualification_delivery_command down || return $?
     qualification_delivery_up_attempted=false
 }
@@ -264,7 +264,7 @@ compose_witness_finish() {
             exit 2
         }
     fi
-    if [[ ${qualification_delivery_selected-false} == true ]]; then
+    if [[ $qualification_delivery_selected == true ]]; then
         qualification_delivery_down || {
             [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || :
             printf 'Private delivery shutdown is unconfirmed; its fixture peer remains: %s\n' "$scratch" >&2
