@@ -21,8 +21,7 @@ def fake_docker():
     with Path(os.environ["FAKE_CONTEXT_CALLS"]).open("a") as stream:
         stream.write(" ".join(arguments) + "\n")
     if arguments[:2] == ["context", "ls"]:
-        names = os.environ.get("FAKE_CONTEXT_NAMES", "default\nlocal-a\nlocal-b\nremote")
-        sys.stdout.write(names)
+        sys.stdout.write("default\nlocal-a\nlocal-b\nremote")
         sys.stdout.write("\n")
         return 0
     if (
@@ -33,13 +32,13 @@ def fake_docker():
         return 9
     context = arguments[4]
     if context == "default":
-        endpoint = os.environ.get("FAKE_DEFAULT_ENDPOINT", "unix:///run/user/1000/docker-default.sock")
+        endpoint = "unix:///run/user/1000/docker-default.sock"
     elif context == "local-a":
         endpoint = Path(os.environ["FAKE_CONTEXT_ENDPOINTS"]).read_text().splitlines()[0]
     elif context == "local-b":
         endpoint = Path(os.environ["FAKE_CONTEXT_ENDPOINTS"]).read_text().splitlines()[1]
     elif context == "fixture-local":
-        endpoint = os.environ.get("FAKE_LOCAL_ENDPOINT", "unix:///run/user/1000/fixture.sock")
+        endpoint = os.environ["FAKE_LOCAL_ENDPOINT"]
     elif context == "remote":
         endpoint = "ssh://example.invalid"
     else:
@@ -60,9 +59,13 @@ class DockerContextSelectionTests(unittest.TestCase):
         self.endpoints = self.directory / "endpoints"
         self.endpoints.write_text("unix:///run/user/1000/docker-a.sock\nunix:///run/user/1000/docker-b.sock\n")
         self.context_calls = self.directory / "context-calls"
-        self.environment = os.environ | {
+        self.environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"NMRNET_DOCKER_CONTEXT_INPUT", "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN", "NMRNET_DOCKER_ENDPOINT_INPUT"}
+        } | {
             "PATH": str(binary) + ":" + os.environ["PATH"],
-            "PYTHONPATH": str(Path.cwd()) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+            "PYTHONPATH": str(Path.cwd()),
             "FAKE_CONTEXT_ENDPOINTS": str(self.endpoints),
             "FAKE_CONTEXT_CALLS": str(self.context_calls),
         }
@@ -72,6 +75,34 @@ class DockerContextSelectionTests(unittest.TestCase):
             'printf "CONTEXT=%s ENDPOINT=%s\\n" "$NMRNET_DOCKER_CONTEXT_INPUT" "$NMRNET_DOCKER_ENDPOINT_INPUT"; '
             'printf "%s\\n" "${engine[@]}"'
         )
+
+    def test_context_fixture_ignores_ambient_fake_defaults_and_requires_its_local_endpoint(self):
+        environment = self.environment | {
+            "FAKE_CONTEXT_NAMES": "poison",
+            "FAKE_DEFAULT_ENDPOINT": "ssh://poison.invalid",
+        }
+        result = subprocess.run(
+            ["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}", "default"],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("unix:///run/user/1000/docker-default.sock\n", result.stdout)
+        listing = subprocess.run(["docker", "context", "ls"], env=environment, capture_output=True, text=True, check=False)
+        self.assertEqual(0, listing.returncode, msg=listing.stderr)
+        self.assertEqual("default\nlocal-a\nlocal-b\nremote\n", listing.stdout)
+        environment = {key: value for key, value in environment.items() if key != "FAKE_LOCAL_ENDPOINT"}
+        missing = subprocess.run(
+            ["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}", "fixture-local"],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(0, missing.returncode)
+        self.assertEqual("", missing.stdout)
 
     def command(self, environment, program=None, *, input_text=None):
         return subprocess.run(
