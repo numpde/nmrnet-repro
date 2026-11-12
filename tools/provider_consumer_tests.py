@@ -140,6 +140,7 @@ def run_suite(release, pool, patterns):
                 f"NMRNet consumer tests use provider-core {distribution.version} from {origin}; support SHA-256 {source_sha256}.\n"
             )
             sys.stdout.flush()
+            # silent-defaults: allow-contract -- A nonempty consumer suite returns status 0 on unittest success and 1 otherwise; discovery and execution exceptions propagate.
             return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 
