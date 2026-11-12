@@ -590,9 +590,24 @@ class InferenceClientConfigTests(unittest.TestCase):
             )
             os.close(write_fd)
             write_fd = None
+            if action == "build":
+                publication = (identity + "\n").encode()
+                publication_deadline = time.monotonic() + 30
+                while (
+                    (record.read_bytes() != publication or record.stat().st_ino == before[1])
+                    and process.poll() is None
+                    and time.monotonic() < publication_deadline
+                ):
+                    time.sleep(0.01)
+                if record.read_bytes() != publication or record.stat().st_ino == before[1]:
+                    self.fail(
+                        "Build did not publish the committed image identity within 30 seconds; "
+                        f"caller status {process.poll()!r}; engine calls "
+                        f"{[call['arguments'] for call in fixture.calls()]!r}"
+                    )
             deadline = time.monotonic() + 3
             writer = None
-            while writer is None and time.monotonic() < deadline:
+            while writer is None and process.poll() is None and time.monotonic() < deadline:
                 pending = [process.pid]
                 observed = []
                 while pending:
@@ -632,16 +647,55 @@ class InferenceClientConfigTests(unittest.TestCase):
                         anchors.append(identifier)
             self.assertEqual([anchor], anchors, msg="The reporter must be the sole remaining native anchor")
             calls = fixture.calls()
-            # silent-defaults: allow-contract -- Build and import scenarios expect four and two recorded engine calls before the independently observed held success reporter; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stdout_success_report_cancellation_retires_owner_before_cleanup
-            self.assertEqual(4 if action == "build" else 2, len(calls))
+            # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls before the independently observed held success reporter; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stdout_success_report_cancellation_retires_owner_before_cleanup
+            engine_calls = [call["arguments"] for call in calls]
+            expected_operations = (
+                ["image", "run", "run", "build", "image", "image", "image"]
+                if action == "build" else ["image", "run"]
+            )
+            self.assertEqual(expected_operations, [call[0] for call in engine_calls])
             configuration = Path(calls[0]["client_config"]["path"])
             self.assertTrue(configuration.is_dir())
             if action == "build":
                 self.assertEqual((identity + "\n").encode(), record.read_bytes())
                 self.assertNotEqual(before[1], record.stat().st_ino)
                 self.assertEqual(1, len(list(record.parent.glob(".build.*"))))
+                self.assertEqual(
+                    [
+                        "image", "inspect", "--format", "{{.Id}}",
+                        "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+                    ],
+                    engine_calls[0],
+                )
+                lock_names = []
+                for call in engine_calls[1:3]:
+                    mount = next(
+                        value for option, value in zip(call, call[1:])
+                        if option == "--mount" and ",dst=/input/requirements.lock,readonly" in value
+                    )
+                    lock_names.append(Path(mount.split(",src=", 1)[1].split(",dst=", 1)[0]).name)
+                self.assertEqual(["inference.lock", "provider-core-native-install.lock"], lock_names)
+                self.assertEqual("containers/inference/Dockerfile", engine_calls[3][engine_calls[3].index("--file") + 1])
+                self.assertEqual(
+                    ["image", "inspect", "--format", "{{.Id}}", identity], engine_calls[4]
+                )
+                for index, label in ((5, "inference-inputs"), (6, "inference-wheels")):
+                    self.assertEqual(
+                        [
+                            "image", "inspect", "--format",
+                            f'{{{{index .Config.Labels "io.nmrnet-repro.{label}"}}}}',
+                            identity,
+                        ],
+                        engine_calls[index],
+                    )
             else:
                 self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+                self.assertEqual(
+                    ["image", "inspect", "--format", "{{.Id}}", before[0].decode().strip()],
+                    engine_calls[0],
+                )
+                self.assertEqual("run", engine_calls[1][0])
+                self.assertEqual(before[0].decode().strip(), engine_calls[1][-1])
             process.send_signal(signum)
             # Do not drain stdout: the sole signal must retire the held writer
             # and let EXIT remove its configuration and captured build inputs.
