@@ -147,6 +147,18 @@ case $1 in
           destination=${arguments[i+1]}; mkdir -p "$destination/bindings"
           source="$root/secrets/deployments/fixture/current/compose.json"
           [[ $source -ef $destination/compose.json ]] || cp "$source" "$destination/compose.json"
+          if [[ " $* " == *' freeze '* ]]; then
+            python3 -B -c '
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+arguments = sys.argv[2:]
+plan = json.loads(path.read_text())
+for role, option in (("prediction", "--image-id"), ("reader", "--geometry-image-id"), ("smiles", "--geometry-image-id")):
+    plan["services"][role]["image"] = arguments[arguments.index(option) + 1]
+path.write_text(json.dumps(plan))
+' "$destination/compose.json" "$@"
+          fi
           printf '[delivery]\n' > "$destination/daemon.toml"
           chmod 444 "$destination/compose.json"; chmod 555 "$destination"
           ;;
@@ -397,8 +409,8 @@ esac
         result = self.run_command(
             "update",
             changes={
-                "TEST_PREDICTION_IMAGE": scientific_image,
-                "TEST_GEOMETRY_IMAGE": geometry_image,
+                "TEST_PREDICTION_IMAGE": "sha256:" + "d" * 64,
+                "TEST_GEOMETRY_IMAGE": "sha256:" + "e" * 64,
             },
         )
         self.assertEqual(0, result.returncode, msg=result.stderr)
@@ -428,17 +440,15 @@ esac
         self.assertIn("type=bind,src=" + str(self.provider / "runtime") + ",dst=/runtime,readonly", check_call)
         self.assertIn("DAC_OVERRIDE", check_call)
         self.assertNotIn("CHOWN", check_call)
-        self.assertEqual(freeze_call[freeze_call.index("--image-id") + 1], scientific_image)
-        self.assertEqual(freeze_call[freeze_call.index("--geometry-image-id") + 1], geometry_image)
+        self.assertEqual("sha256:" + "d" * 64, freeze_call[freeze_call.index("--image-id") + 1])
+        self.assertEqual("sha256:" + "e" * 64, freeze_call[freeze_call.index("--geometry-image-id") + 1])
         self.assertEqual("never", probe_create[probe_create.index("--pull") + 1])
         self.assertNotEqual(self.current_target(), "bundles/generation-original")
 
     def test_update_admits_every_recorded_scientific_image_before_draining(self):
         self.existing_runtime()
         inference_image = "sha256:" + "b" * 64
-        plan = json.loads((self.bundle / "compose.json").read_text())
-        plan["services"]["prediction"]["image"] = inference_image
-        (self.bundle / "compose.json").write_text(json.dumps(plan) + "\n")
+        (self.root / ".work/inference/image-id").write_text(inference_image + "\n")
         result = self.run_command("update", changes={"TEST_IMAGE_INSPECT_FAILURE": inference_image})
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(call[0] == "stop" for call in self.calls()))

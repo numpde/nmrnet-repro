@@ -422,14 +422,6 @@ initialize_lifetime() {
 if [[ $action == install || $action == update ]]; then
     if [[ $action == update ]]; then
         select_bundle
-        current_image_map=$(python3 -B "$repository_root/host/compose_image_ids.py" services "$bundle/compose.json") \
-            || { refuse 'the selected generation has no complete immutable image plan.'; exit 2; }
-        declare -A current_image_ids=()
-        while IFS=$'\t' read -r current_role current_image; do
-            current_image_ids[$current_role]=$current_image
-        done <<< "$current_image_map"
-        current_scientific_image=${current_image_ids[prediction]}
-        current_geometry_image=${current_image_ids[reader]}
         compose=(compose --env-file /dev/null --project-name "$project" --project-directory "$project_directory" --file "$bundle/compose.json")
     else
         stop_query=$(umask 077; mktemp /tmp/nmrnet-provider-stop.XXXXXXXX)
@@ -464,11 +456,9 @@ if [[ $action == install || $action == update ]]; then
         --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid" --check-only
     helper_add_chown=$runtime_helper_add_chown helper_add_dac_override=false
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
-    if [[ $action == update ]]; then scientific_image=$current_scientific_image
-    else image_record inference; scientific_image=$selected_image; fi
+    image_record inference; scientific_image=$selected_image
     admit_recorded_image inference "$scientific_image"
-    if [[ $action == update ]]; then geometry_image=$current_geometry_image
-    else image_record preparation; geometry_image=$selected_image; fi
+    image_record preparation; geometry_image=$selected_image
     admit_recorded_image geometry "$geometry_image"
     source "$repository_root/tools/git_metadata.sh"
     source "$repository_root/tools/provider_image.sh"
