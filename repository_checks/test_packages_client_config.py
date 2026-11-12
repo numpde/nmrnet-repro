@@ -176,7 +176,7 @@ class PackagesClientTests(unittest.TestCase):
 }"""
         polling_sleep = """() {
     if [[ $# == 1 && "$1" == 0.01 && -v operation && -v ready && -v cancelled
-        && "$operation" == "acquisition pinned-image inspection" && "$ready" == true && "$cancelled" == 0 ]]; then
+        && "$operation" == "acquisition image preflight" && "$ready" == true && "$cancelled" == 0 ]]; then
         printf '%s\\n' "$BASHPID" > "$NMRNET_PREFLIGHT_POLL_READY.pending"
         /bin/mv -- "$NMRNET_PREFLIGHT_POLL_READY.pending" "$NMRNET_PREFLIGHT_POLL_READY"
         command sleep 60
@@ -205,11 +205,11 @@ class PackagesClientTests(unittest.TestCase):
             self._wait_path(ready)
             client = int(ready.read_text())
             arguments = Path("/proc", str(client), "cmdline").read_bytes().split(b"\0")
-            self.assertEqual(os.fsencode(self.root / "bin/docker"), arguments[1])
-            self.assertEqual(b"--config", arguments[2])
+            self.assertEqual([os.fsencode(sys.executable), b"-B", os.fsencode(self.root / "bin/docker")], arguments[:3])
+            self.assertEqual(b"--config", arguments[3])
             self.assertEqual(
                 [b"--host", b"unix:///var/run/docker.sock", b"image", b"inspect", os.fsencode(self.preflight_image), b""],
-                arguments[4:],
+                arguments[5:],
             )
             inner = os.getpgid(client)
             controller = int(Path("/proc", str(inner), "cmdline").read_bytes().split(b"\0")[5])
@@ -243,7 +243,7 @@ class PackagesClientTests(unittest.TestCase):
             self.assertIsNotNone(sleeper, msg="controller did not enter the observed foreground poll sleep")
             self.assertEqual(outer, os.getpgid(sleeper))
             self.assertEqual(process.pid, os.getsid(sleeper))
-            configuration = Path(arguments[3].decode()).parent
+            configuration = Path(arguments[4].decode()).parent
             self.assertEqual(0o700, stat.S_IMODE(configuration.stat().st_mode))
             os.kill(process.pid, signal.SIGTERM)
             self._wait_path(removal)
@@ -710,22 +710,28 @@ class PackagesClientTests(unittest.TestCase):
                     text=True,
                     start_new_session=True,
                 )
-                self.addCleanup(self._retire_failed_probe, process)
-                self._wait_path(ready)
-                observed = self.fixture.calls()[-1]
-                self.assertEqual(
-                    ["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()], observed["arguments"]
-                )
-                process.send_signal(interrupt)
-                _, stderr = process.communicate(timeout=5)
-                self._remember(stderr)
-                self.assertEqual(status, process.returncode, msg=stderr)
-                self.assertFalse(Path("/proc", str(observed["pid"])).exists())
-                self.assertFalse(Path(observed["config"]).parent.exists())
-                self.assertFalse((self.root / "controller-returned").exists())
-                for stage in self.stage.parent.iterdir():
-                    if stage != self.stage:
-                        self.assertFalse((stage / "image-id").exists())
+                try:
+                    deadline = time.monotonic() + 20
+                    while not ready.is_file() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(ready.is_file(), msg="Built-image inspection did not reach the held client")
+                    observed = self.fixture.calls()[-1]
+                    self.assertEqual(
+                        ["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()], observed["arguments"]
+                    )
+                    process.send_signal(interrupt)
+                    _, stderr = process.communicate(timeout=5)
+                    self._remember(stderr)
+                    self.assertEqual(status, process.returncode, msg=stderr)
+                    self.assertFalse(Path("/proc", str(observed["pid"])).exists())
+                    self.assertFalse(Path(observed["config"]).parent.exists())
+                    self.assertFalse((self.root / "controller-returned").exists())
+                    for stage in self.stage.parent.iterdir():
+                        if stage != self.stage:
+                            self.assertFalse((stage / "image-id").exists())
+
+                finally:
+                    self._retire_failed_probe(process)
 
     def _wait_path(self, path):
         deadline = time.monotonic() + 5
