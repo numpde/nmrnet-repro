@@ -29,25 +29,27 @@ class ServiceAdmissionRefusalTests(unittest.IsolatedAsyncioTestCase):
             await ports.session.retire()
 
     async def test_cycle_exhaustion_and_failed_second_page_never_mean_empty(self):
-        for failure in ("cycle", "bound", "bad_body"):
+        scenarios = (
+            ("cycle", feed_response(next_cursor="YQ"), AdmissionIncomplete, 3, "repeated a page cursor"),
+            ("bound", feed_response(next_cursor="Yg"), AdmissionIncomplete, 2, "exceeded its page bound"),
+            ("bad_body", b"PRIVATE malformed second page", ApiFailure, 2, None),
+        )
+        for failure, second_page, expected_exception, page_limit, expected_reason in scenarios:
             with self.subTest(failure=failure):
                 ports = SessionPorts()
                 async with AdmissionPeers(ports) as fixture:
-                    fixture.feed_replies = [
-                        feed_response(next_cursor="YQ"),
-                        b"PRIVATE malformed second page"
-                        if failure == "bad_body"
-                        else feed_response(next_cursor="YQ" if failure == "cycle" else "Yg"),
-                    ]
-                    with self.assertRaises(ApiFailure if failure == "bad_body" else AdmissionIncomplete) as caught:
+                    fixture.feed_replies = [feed_response(next_cursor="YQ"), second_page]
+                    with self.assertRaises(expected_exception) as caught:
                         await select_pending_start(
                             fixture.config,
                             fixture.api,
-                            policy=AdmissionPolicy(1, 3 if failure == "cycle" else 2),
+                            policy=AdmissionPolicy(1, page_limit),
                             owner=self,
                             claims=fixture.claims,
                         )
                     self.assertNotIn("PRIVATE", str(caught.exception))
+                    if expected_reason is not None:
+                        self.assertIn(expected_reason, str(caught.exception))
                     self.assertEqual(2, len(fixture.api_peer.requests))
                     self.assertEqual([], ports.worker.events)
                     await ports.session.retire()
