@@ -22,7 +22,7 @@ case $operation in
         source "$repository_root/tools/docker_client.sh"
         docker_client_prepare print || { printf '%s' "$docker_client_diagnostic" >&2; exit 2; }
         if "$print_command"; then printf '%s\n' 'Map the host owner through a verified offline engine probe.'; exit; fi
-        python3 -B "$repository_root/host/acquisition_bootstrap.py" --root "$repository_root"
+        python3 -I -S -B "$repository_root/host/bootstrap/acquisition/acquisition_tool/source_update.py" verify --source-dir "$repository_root/host/bootstrap/acquisition"
         source "$repository_root/host/bootstrap/acquisition/acquisition_tool/owner.sh"
         NMR_SELECTED_DOCKER_ENDPOINT=$NMRNET_DOCKER_ENDPOINT_INPUT
         host_uid=${pool_owner%:*} host_gid=${pool_owner#*:}

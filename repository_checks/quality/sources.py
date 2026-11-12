@@ -9,10 +9,9 @@ from tools.container_guard import require_container
 
 require_container()
 
-import json
 from pathlib import Path
 
-from host.acquisition_bootstrap import inventory
+from host.bootstrap.acquisition.acquisition_tool.source_update import read_manifest
 
 ROOT = Path("/workspace")
 REPOSITORY_ROOT = ROOT
@@ -61,8 +60,10 @@ def generated_sdk_sources():
     General text and symlink inventories still inspect the complete subtree.
     Unlisted acquisition files remain authored inputs to semantic policies.
     """
-    record = json.loads((ROOT / "requirements/provider-core-release.json").read_bytes())
-    paths = (ROOT / "host/bootstrap/acquisition" / name for name in inventory(record))
+    snapshot = ROOT / "host/bootstrap/acquisition"
+    manifest = read_manifest((snapshot / "acquisition-manifest.json").read_bytes())
+    names = set(manifest["payload_files"]) | {"acquisition-manifest.json"}
+    paths = (snapshot / name for name in names)
     return {path for path in paths if path.is_file() and not path.is_symlink()}
 
 

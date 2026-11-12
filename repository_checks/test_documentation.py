@@ -82,8 +82,9 @@ class DocumentationTests(unittest.TestCase):
             "notes/023_shared_api_proxy_adoption_20261030.txt",
             "notes/024_shared_wheelhouse_followups.txt",
         }
-        release = json.loads((ROOT / "requirements/provider-core-release.json").read_text())
-        exceptions.update("host/bootstrap/acquisition/" + name for name in release["acquisition_source_files"])
+        manifest = json.loads((ROOT / "host/bootstrap/acquisition/acquisition-manifest.json").read_text())
+        names = set(manifest["payload_files"]) | {"acquisition-manifest.json"}
+        exceptions.update("host/bootstrap/acquisition/" + name for name in names)
         leftovers = [
             name
             for name in paths

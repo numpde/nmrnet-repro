@@ -92,9 +92,11 @@ class SharedScannerTest(unittest.TestCase):
             generated.write_text('value = config.get("mode", "generated")\n')
             unlisted = snapshot / "unlisted.py"
             unlisted.write_text('value = config.get("mode", "unreviewed")\n')
-            record = root / "requirements/provider-core-release.json"
-            record.parent.mkdir()
-            record.write_text(json.dumps({"acquisition_source_files": {"generated.py": {}}}))
+            manifest = root / "host/bootstrap/acquisition/acquisition-manifest.json"
+            manifest.write_text(json.dumps({
+                "release_version": "1.2.3", "source_revision": "a" * 40, "dependency_inputs": {},
+                "payload_files": {"generated.py": {"sha256": "0" * 64, "size": 0, "mode": 0o644}},
+            }))
             with patch(__name__ + ".ROOT", root), patch.object(sources, "ROOT", root):
                 scanned = repo_files(("host/**/*.py",))
                 self.assertEqual([unlisted], scanned)

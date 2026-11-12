@@ -254,7 +254,7 @@ if [[ "$1" == download ]]; then
         printf '%s\n' 'After acquisition, repeat the offline probe.'
         exit
     fi
-    python3 -B "$repository_root/host/acquisition_bootstrap.py" --root "$repository_root"
+    python3 -I -S -B "$repository_root/host/bootstrap/acquisition/acquisition_tool/source_update.py" verify --source-dir "$repository_root/host/bootstrap/acquisition"
     source "$repository_root/host/bootstrap/acquisition/acquisition_tool/owner.sh"
     source "$repository_root/tools/acquisition_wheelhouse.sh"
     wheelhouse_warm=false

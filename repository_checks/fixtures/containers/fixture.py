@@ -62,7 +62,6 @@ class LauncherFixture:
         ):
             shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
         (root / "host").mkdir()
-        shutil.copyfile(ROOT / "host/acquisition_bootstrap.py", root / "host/acquisition_bootstrap.py")
         shutil.copytree(ROOT / "host/bootstrap/acquisition", root / "host/bootstrap/acquisition")
         shutil.copyfile(ROOT / "Makefile", root / "Makefile")
         shutil.copytree(ROOT / "containers", root / "containers")

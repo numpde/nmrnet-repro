@@ -542,7 +542,7 @@ case "$1" in
                         repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_retirement_runs_after_success_without_changing_deployment_health
                         repository_checks.quality.test_make_hygiene.RepositoryHygieneTest.test_image_build_retirement_follows_success_and_reports_failure)
                 elif [[ "$1" == test/unit/packages/wheelhouse ]]; then
-                    command+=(tests.test_acquisition_bootstrap tests.test_acquisition_wheelhouse tests.test_acquisition_run
+                    command+=(tests.test_acquisition_wheelhouse tests.test_acquisition_run
                         tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_wheelhouse_launcher
                         tests.test_checker
                         tests.test_checker_launcher.CheckerLauncherTests.test_actual_operation_deadlines_stop_client_before_checker_teardown

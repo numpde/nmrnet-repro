@@ -85,13 +85,13 @@ class EngineMetadataFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
-            command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py"), "--root", str(fixture.root)]
+            command = [sys.executable, "-B", str(fixture.root / "host/bootstrap/acquisition/acquisition_tool/source_update.py"), "verify", "--source-dir", str(fixture.root / "host/bootstrap/acquisition")]
             verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
             self.assertEqual(0, verified.returncode, msg=verified.stderr)
             (fixture.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
             rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
             self.assertEqual(1, rejected.returncode, msg=rejected.stderr)
-            self.assertIn("bootstrap files differ from the release inventory", rejected.stderr)
+            self.assertIn("Acquisition source is missing files from its recorded release.", rejected.stderr)
             self.assertEqual([], fixture.calls())
 
     def inspect(self, fixture, arguments, additions):

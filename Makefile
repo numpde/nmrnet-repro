@@ -87,20 +87,17 @@ test/integration/rdkit-runtime:
 .PHONY: packages/shared-tool/wheelhouse packages/shared-tool/wheelhouse/check
 .PHONY: packages/provider-core/test-support packages/provider-core/test-support/check
 .PHONY: packages/images/retire test/unit/packages/images
-.PHONY: packages/acquisition-bootstrap/check packages/acquisition-bootstrap/refresh
+.PHONY: provider-tools/verify-checked-in-source-hashes provider-tools/update-checked-in-source-from-pinned-release provider-tools/import-checked-in-source
+provider-tools/verify-checked-in-source-hashes:
+	python3 -I -S -B host/bootstrap/acquisition/acquisition_tool/source_update.py verify --source-dir host/bootstrap/acquisition
 
-override export NMRNET_ACQUISITION_ARCHIVE_INPUT := $(if $(filter command line,$(origin ACQUISITION_ARCHIVE)),$(value ACQUISITION_ARCHIVE))
-unexport ACQUISITION_ARCHIVE
-override export NMRNET_ACQUISITION_ISSUER_INPUT := $(if $(filter command line,$(origin ACQUISITION_ISSUER)),$(value ACQUISITION_ISSUER))
-unexport ACQUISITION_ISSUER
+provider-tools/update-checked-in-source-from-pinned-release:
+	python3 -I -S -B host/bootstrap/acquisition/acquisition_tool/source_update.py update --source-dir host/bootstrap/acquisition --pin-file requirements/provider-tools-source.json
 
-packages/acquisition-bootstrap/check:
-	python3 -B host/acquisition_bootstrap.py --root "$(CURDIR)"
-
-packages/acquisition-bootstrap/refresh:
-	@test -n "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ARCHIVE=<release archive> on the make command line.' >&2; exit 2; }
-	@test -n "$$NMRNET_ACQUISITION_ISSUER_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ISSUER=<incoming release record> on the make command line.' >&2; exit 2; }
-	python3 -B host/acquisition_bootstrap.py --root "$(CURDIR)" --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" --issuer "$$NMRNET_ACQUISITION_ISSUER_INPUT"
+provider-tools/import-checked-in-source: private export SOURCE_ARCHIVE_INPUT := $(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))
+provider-tools/import-checked-in-source:
+	@test -n "$${SOURCE_ARCHIVE_INPUT}" || { printf '%s\n' 'Set INPUT_RELEASE_ARCHIVE=<archive path> on the Make command line.' >&2; exit 2; }
+	python3 -I -S -B host/bootstrap/acquisition/acquisition_tool/source_update.py import --source-dir host/bootstrap/acquisition --pin-file requirements/provider-tools-source.json --archive "$${SOURCE_ARCHIVE_INPUT}"
 
 packages/images/retire:
 	bash tools/image_retirement.sh
@@ -238,7 +235,7 @@ unexport LOG_LEVEL
 unexport DOCKER_CONTEXT NMRNET_DOCKER_CONTEXT_INPUT NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN NMRNET_DOCKER_ENDPOINT_INPUT
 override export NMRNET_DOCKER_CONTEXT_INPUT := $(if $(filter command line,$(origin DOCKER_CONTEXT)),$(value DOCKER_CONTEXT))
 override export NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN := $(origin DOCKER_CONTEXT)
-ifneq ($(filter-out help packages/acquisition-bootstrap/check packages/acquisition-bootstrap/refresh,$(MAKECMDGOALS)),)
+ifneq ($(filter-out help provider-tools/verify-checked-in-source-hashes provider-tools/update-checked-in-source-from-pinned-release provider-tools/import-checked-in-source,$(MAKECMDGOALS)),)
 # Resolve once in the Make process so every recipe, nested launcher and cleanup
 # in this invocation inherits the same context endpoint snapshot.
 make_shell_quote = '$(subst ','\'',$(1))'
@@ -303,8 +300,9 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 help:
 	@printf '%s\n' \
 		'make help                              List maintained commands; also the default goal.' \
-		'make packages/acquisition-bootstrap/check Verify the pinned acquisition bootstrap snapshot.' \
-		'make packages/acquisition-bootstrap/refresh ACQUISITION_ARCHIVE=<path> ACQUISITION_ISSUER=<path> Refresh the bootstrap from a release.' \
+		'make provider-tools/verify-checked-in-source-hashes Verify acquisition source offline.' \
+		'make provider-tools/update-checked-in-source-from-pinned-release Download and admit the reviewed acquisition release.' \
+		'make provider-tools/import-checked-in-source INPUT_RELEASE_ARCHIVE=<path> Import it offline; quiesce acquisitions/builds first.' \
 		'make packages/provider-core/test-support/check Verify the shared provider test-support wheels.' \
 		'Every Docker-using command needs DOCKER_CONTEXT=<name> on the make command line, or an interactive local Unix-socket context selection.' \
 		'Without a command-line context, unattended Docker commands fail; no current/default context is assumed.' \

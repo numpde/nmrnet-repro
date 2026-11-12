@@ -128,9 +128,11 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("pass\n")
-            record = root / "requirements/provider-core-release.json"
-            record.parent.mkdir()
-            record.write_text(json.dumps({"acquisition_source_files": {"generated.py": {}}}))
+            manifest = root / "host/bootstrap/acquisition/acquisition-manifest.json"
+            manifest.write_text(json.dumps({
+                "release_version": "1.2.3", "source_revision": "a" * 40, "dependency_inputs": {},
+                "payload_files": {"generated.py": {"sha256": "0" * 64, "size": 0, "mode": 0o644}},
+            }))
             with patch.object(sources, "ROOT", root):
                 self.assertEqual(
                     [
@@ -172,11 +174,16 @@ class SourceInventoryUnitTests(unittest.TestCase):
             unlisted.write_text("unlisted source\n")
             link = snapshot / "linked.py"
             link.symlink_to(generated)
-            record = root / "requirements/provider-core-release.json"
-            record.parent.mkdir()
-            record.write_text(json.dumps({"acquisition_source_files": {"generated.py": {}, "linked.py": {}}}))
+            manifest = root / "host/bootstrap/acquisition/acquisition-manifest.json"
+            manifest.write_text(json.dumps({
+                "release_version": "1.2.3", "source_revision": "a" * 40, "dependency_inputs": {},
+                "payload_files": {
+                    name: {"sha256": "0" * 64, "size": 0, "mode": 0o644}
+                    for name in ("generated.py", "linked.py")
+                },
+            }))
             with patch.object(sources, "ROOT", root):
-                self.assertEqual({generated}, sources.generated_sdk_sources())
+                self.assertEqual({generated, manifest}, sources.generated_sdk_sources())
                 visible = sources.iter_repo_text_files()
                 self.assertIn(generated, visible)
                 self.assertIn(unlisted, visible)

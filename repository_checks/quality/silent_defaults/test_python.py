@@ -718,7 +718,8 @@ class PythonSilentDefaultsTest(unittest.TestCase):
         scanned = {path.relative_to(ROOT).as_posix() for path in python_files()}
 
         self.assertIn("tools/artifacts.py", scanned)
-        self.assertIn("host/acquisition_bootstrap.py", scanned)
+        self.assertIn("host/git_stream_sources.py", scanned)
+        self.assertNotIn("host/bootstrap/acquisition/acquisition_tool/source_update.py", scanned)
         self.assertIn("repository_checks/test_conventions.py", scanned)
 
     def test_python_files_do_not_default_operator_inputs(self) -> None:
