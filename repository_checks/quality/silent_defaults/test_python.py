@@ -410,9 +410,12 @@ def _typed_pass_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool
             reference = reference.value
         if not isinstance(reference, ast.Name) or reference.id in broad:
             return False
-    # A Pass mentions no input itself; inspect what its protected suite can
-    # swallow. Reviewers judge type semantics; aliases are not resolved here.
-    return not any(
+    return not _protected_operator_inputs(protected)
+
+
+def _protected_operator_inputs(protected: ast.Try) -> bool:
+    # The handler can swallow any input consumed in its protected suite.
+    return any(
         contains_env_access(statement)
         or contains_raw_args_access(statement)
         or any(
@@ -425,6 +428,25 @@ def _typed_pass_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool
             for child in ast.walk(statement)
         )
         for statement in protected.body
+    )
+
+
+def _timeout_false_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool:
+    return (
+        isinstance(handler.type, ast.Name)
+        and handler.type.id == "TimeoutError"
+        and len(handler.body) == 1
+        and isinstance(handler.body[0], ast.Return)
+        and isinstance(handler.body[0].value, ast.Constant)
+        and handler.body[0].value.value is False
+        and not _protected_operator_inputs(protected)
+        and not any(
+            isinstance(child, ast.Attribute)
+            and isinstance(child.value, ast.Name)
+            and child.value.id == "sys"
+            and child.attr == "argv"
+            for statement in protected.body for child in ast.walk(statement)
+        )
     )
 
 
@@ -476,7 +498,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     only signature defaults, including multiline signatures. Decorators, type
     annotations and the body remain outside that boundary. An annotation before
     a typed, Pass-only except header covers just that handler; operator access
-    in its protected Try suite remains strict. The existing allow-pop-default tag
+    in its protected Try suite remains strict. The allow-exception-outcome tag
+    covers only an immediate TimeoutError handler whose sole statement returns
+    literal False, with no protected operator inputs. The existing allow-pop-default tag
     covers only a discarded fixed-key ENV pop(None), using the same explanation
     requirement. The legacy production ENV-default rule remains separate and strict.
     Each tag requires a nonblank explanation; reviewers judge its meaning.
@@ -499,7 +523,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
     lambda_bodies = [node.body for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT or not token.string.startswith(
-            ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default", "# silent-defaults: allow-lambda-body")
+            ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default", "# silent-defaults: allow-lambda-body", "# silent-defaults: allow-exception-outcome")
         ):
             continue
         prefix, separator, reason = token.string.partition(" -- ")
@@ -509,7 +533,15 @@ def python_operator_default_findings(path: Path) -> list[str]:
         following_handlers = [(handler, owner) for handler, owner in handlers if handler.lineno == next_line]
         following_entries = [(key, value, owner) for key, value, owner in entries if key is not None and key.lineno == next_line]
         protected = None
-        if prefix == "# silent-defaults: allow-lambda-body":
+        if prefix == "# silent-defaults: allow-exception-outcome":
+            following = [handler for handler, _owner in following_handlers]
+            selected = [(node, label) for node, label in candidates if node in following]
+            boundary = (
+                len(following_handlers) == len(selected) == 1
+                and selected[0][1] == "python exception fallback"
+                and _timeout_false_contract(*following_handlers[0])
+            )
+        elif prefix == "# silent-defaults: allow-lambda-body":
             # This placement owns one callable result, never its signature or container.
             following = [body for body in lambda_bodies if body.lineno == next_line]
             selected = [(node, label) for node, label in candidates if len(following) == 1 and node in ast.walk(following[0])]
@@ -610,6 +642,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 "# silent-defaults: allow-contract",
                 "# silent-defaults: allow-pop-default",
                 "# silent-defaults: allow-lambda-body",
+                "# silent-defaults: allow-exception-outcome",
             }
             and separator
             and reason.strip()
@@ -617,16 +650,18 @@ def python_operator_default_findings(path: Path) -> list[str]:
             and len(following) == 1
             and following[0].col_offset == token.start[1]
             and boundary
-            # Only the pop-specific boundary admits this discarded ENV access;
-            # every ordinary contract keeps the shared operator/header guards.
+            # These special boundaries enforce their own stricter shapes;
+            # ordinary contracts use the shared operator/header guards.
             and (
-                prefix == "# silent-defaults: allow-pop-default"
+                prefix in {"# silent-defaults: allow-pop-default", "# silent-defaults: allow-exception-outcome"}
                 or all(_contract_candidate(node, label, protected=protected) for node, label in selected)
             )
         ):
             accepted.update(node for node, _ in selected)
         else:
-            if prefix == "# silent-defaults: allow-lambda-body":
+            if prefix == "# silent-defaults: allow-exception-outcome":
+                requirement = "an explanation and one immediate TimeoutError handler returning only False without protected operator inputs"
+            elif prefix == "# silent-defaults: allow-lambda-body":
                 requirement = "an explanation and one immediate generic lambda result at the same column, without nested lambdas or operator inputs"
             else:
                 requirement = "an explanation and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"

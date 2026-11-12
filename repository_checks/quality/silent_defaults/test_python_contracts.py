@@ -1074,6 +1074,67 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertIn("an explanation", diagnostic)
                 self.assertNotIn("proof=", diagnostic)
 
+    def test_timeout_false_exception_contract_is_exact_and_local(self):
+        tag = "# silent-defaults: allow-exception-outcome -- Timeout completes the wait without a stop.\n"
+        source = "def wait():\n    try:\n        run()\n    " + tag + "    except TimeoutError:\n        return False\n"
+        raw, applicable = self.exercise_property(source, accepted=True)
+        self.assertEqual(1, len(raw))
+        self.assertEqual([], applicable)
+        neighboring = source + "    return options.get('mode', 'other')\n"
+        raw, applicable = self.exercise_property(neighboring, accepted=False)
+        self.assertEqual(2, len(raw))
+        self.assertEqual([raw[1]], applicable)
+
+        for exception in ("Exception", "OSError", "errors.TimeoutError", "TimeoutAlias", "(TimeoutError, OSError)"):
+            with self.subTest(exception=exception):
+                raw, applicable = self.exercise_property(source.replace("except TimeoutError:", f"except {exception}:"), accepted=False)
+                self.assertTrue(raw)
+                self.assertTrue(all(finding in applicable for finding in raw))
+        for body in ("return True", "return 0", "return None", "return flag", "return False; log()", "if flag: return False"):
+            with self.subTest(body=body):
+                raw, applicable = self.exercise_property(source.replace("return False", body), accepted=False)
+                self.assertTrue(applicable)
+                self.assertTrue(all(finding in applicable for finding in raw))
+        nested = source.replace("return False", "try:\n            run()\n        except OSError:\n            return False")
+        raw, applicable = self.exercise_property(nested, accepted=False)
+        self.assertTrue(applicable)
+        self.assertTrue(all(finding in applicable for finding in raw))
+        for protected in ("os.environ['X']", "sys.argv[1]", "args.mode", "parser.add_argument('--mode')", "parser.parse_args()"):
+            with self.subTest(protected=protected):
+                raw, applicable = self.exercise_property(source.replace("run()", protected), accepted=False)
+                self.assertTrue(raw)
+                self.assertTrue(all(finding in applicable for finding in raw))
+        for replacement in (
+            "# silent-defaults: allow-exception-outcome\n",
+            "# silent-defaults: allow-exception-outcome --   \n",
+            tag + "\n",
+            "    " + tag,
+        ):
+            with self.subTest(annotation=replacement):
+                raw, applicable = self.exercise_property(source.replace(tag, replacement), accepted=False)
+                self.assertTrue(raw)
+                self.assertTrue(all(finding in applicable for finding in raw))
+
+    def test_timeout_contract_applies_only_to_service_pause(self):
+        path = policy.ROOT / "nmrnet_provider/service.py"
+        raw = policy.python_default_findings(path)
+        applicable = policy.python_operator_default_findings(path)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "nmrnet_provider/service.py"
+            baseline.parent.mkdir()
+            baseline.write_text("\n".join(line for line in path.read_text().splitlines()
+                                          if "silent-defaults: allow-exception-outcome" not in line) + "\n")
+            with patch.object(policy, "ROOT", root):
+                prior_raw = policy.python_default_findings(baseline)
+                prior_applicable = policy.python_operator_default_findings(baseline)
+        # Compare source snippets: adding a comment shifts subsequent line numbers.
+        snippets = lambda findings: [finding.split(": ", 1)[1] for finding in findings]
+        self.assertEqual(snippets(prior_raw), snippets(raw))
+        timeout = [finding for finding in snippets(prior_applicable) if "except TimeoutError: return False" in finding]
+        self.assertEqual(1, len(timeout))
+        self.assertEqual([finding for finding in snippets(prior_applicable) if finding not in timeout], snippets(applicable))
+
     def test_stale_annotation_is_a_finding_even_without_a_raw_default(self):
         raw, applicable = self.exercise_property(self.annotation + "value = required\n", accepted=False)
         self.assertEqual([], raw)

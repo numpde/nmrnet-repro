@@ -501,6 +501,7 @@ class ProviderService:
             async with asyncio.timeout(seconds):
                 await self._stop.wait()
             return True
+        # silent-defaults: allow-exception-outcome -- Timer expiry completes the wait with False; a stop returns True and cancellation propagates.
         except TimeoutError:
             return False
 
