@@ -474,32 +474,31 @@ elif command == "run":
             raise SystemExit(97)
         original = arguments[index + 1 :]
         if original[:1] == ["python3"]:
-            if original != ["python3", "-B", "-m", "unittest", "discover", "-s", "tests", "-v"]:
+            if original != ["python3", "-B", "-m", "tools.provider_test_environment", "unit", "discover", "-s", "tests", "-v"]:
                 sys.stderr.write("unexpected fake docker invocation: unmodeled Python discovery argv" + "\n")
                 raise SystemExit(97)
-            mapped = original.copy()
-            mapped[6] = empty
+            mapped = ["python3", "-B", "-m", "unittest", "discover", "-s", empty, "-v"]
             completed = subprocess.run(mapped, check=False)
             record = {"original": original, "mapped": mapped, "status": completed.returncode}
         elif original[:1] == ["bash"]:
             wrapper = (
                 'mkdir -m 700 /tmp/checker-home; printf "%s\\n" "[safe]" '
                 '"directory = /workspace" "directory = /workspace/NMRNetplusplus" '
-                "> /tmp/checker-home/.gitconfig; exec python3 -B -m unittest discover -s repository_checks -v"
+                '> /tmp/checker-home/.gitconfig; exec python3 -B -m unittest "$@"'
             )
             homes = [
                 arguments[index + 1]
                 for index, value in enumerate(arguments[:-1])
                 if value == "--env" and arguments[index + 1].startswith("HOME=")
             ]
-            if original != ["bash", "-eu", "-c", wrapper] or homes != ["HOME=/tmp/checker-home"]:
+            if original != ["bash", "-eu", "-c", wrapper, "bash", "discover", "-s", "repository_checks", "-v"] or homes != ["HOME=/tmp/checker-home"]:
                 sys.stderr.write("unexpected fake docker invocation: unmodeled checker discovery wrapper" + "\n")
                 raise SystemExit(97)
             with tempfile.TemporaryDirectory(prefix="fake-container-home-", dir=evidence.parent) as directory:
                 home = Path(directory) / "checker-home"
                 mapped = original.copy()
                 mapped[3] = wrapper.replace("/tmp/checker-home", shlex.quote(str(home)))
-                mapped[3] = mapped[3].removesuffix("repository_checks -v") + shlex.quote(empty) + " -v"
+                mapped[7] = empty
                 completed = subprocess.run(mapped, env=os.environ | {"HOME": str(home)}, check=False)
                 record = {
                     "original": original,

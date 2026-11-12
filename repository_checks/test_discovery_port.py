@@ -5,9 +5,9 @@ Magnet's custom runner rejects zero tests with status 2. Our pinned Python
 3.12.12 unittest runner owns status 5 and the NO TESTS RAN diagnostic. Preserve
 the refusal to report an empty suite as success, rather than invent a wrapper
 merely to copy Magnet's numeric status. The fake engine executes the selected
-Python argv or exact image Bash wrapper without a socket or mounts; its fixed
-container HOME is mapped to private fixture storage, and only discovery input
-is replaced by the empty proof directory.
+unittest discovery or exact image Bash wrapper without a socket or mounts. It
+maps the provider environment invocation to unittest directly, maps container
+HOME to private fixture storage, and substitutes the empty proof directory.
 """
 
 from tools.container_guard import require_container
@@ -16,6 +16,7 @@ require_container()
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -80,6 +81,7 @@ class UnittestRunnerTests(unittest.TestCase):
             commands = [
                 ["bash", "-eu", "-c", "printf 'unmodeled child ran'"],
                 ["python3", "-B", "-m", "unittest", "discover", "-s", "other-tests", "-v"],
+                ["python3", "-B", "-m", "tools.provider_test_environment", "unit", "discover", "-s", "other-tests", "-v"],
                 ["bash", "-eu", "-c", "printf unmodeled", "python3", "-B", "-m", "unittest", "discover", "-s", "tests", "-v"],
                 ["python3", "-B", "-m", "unittest", "discover", "-s", "tests", "-v", ";", "printf", "unmodeled"],
             ]
@@ -125,6 +127,23 @@ class UnittestRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = LauncherFixture(root)
+            # Exercise the real Git input projection, including index round-trip.
+            shutil.rmtree(root / ".git")
+            (root / "NMRNetplusplus/.git").unlink()
+            (root / "bin/git").unlink()
+            (root / "bin/git").symlink_to(shutil.which("git", path=os.defpath))
+            def git(*args):
+                subprocess.run(
+                    [str(root / "bin/git"), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", *args],
+                    cwd=root, env=fixture.environment, capture_output=True, check=True,
+                )
+            git("init", "-q")
+            (root / ".git/modules").mkdir()
+            git("init", "-q", "--separate-git-dir", str(root / ".git/modules/nmrnet"), str(root / "NMRNetplusplus"))
+            git("-C", "NMRNetplusplus", "add", "LICENSE", "uninmr")
+            git("-C", "NMRNetplusplus", "commit", "-qm", "Fixture module")
+            git("add", "NMRNetplusplus")
+            git("commit", "-qm", "Fixture parent")
             empty = root / "empty"
             empty.mkdir()
             additions = {"NMRNET_FAKE_EMPTY_DISCOVERY": "1", "NMRNET_FAKE_EMPTY_DIRECTORY": str(empty)}
@@ -139,12 +158,12 @@ class UnittestRunnerTests(unittest.TestCase):
                     record = json.loads((root / "discovery-evidence.jsonl").read_text().splitlines()[-1])
                     self.assertEqual(5, record["status"])
                     if lane == "test":
-                        self.assertEqual("tests", record["original"][6])
+                        self.assertEqual("tests", record["original"][7])
                         self.assertEqual(str(empty), record["mapped"][6])
                     else:
                         self.assertEqual(["bash", "-eu", "-c"], record["original"][:3])
-                        self.assertIn("discover -s repository_checks -v", record["original"][3])
-                        self.assertIn("discover -s " + str(empty) + " -v", record["mapped"][3])
+                        self.assertEqual(["discover", "-s", "repository_checks", "-v"], record["original"][5:])
+                        self.assertEqual(["discover", "-s", str(empty), "-v"], record["mapped"][5:])
                         self.assertEqual(0o700, record["home_mode"])
                         self.assertEqual(
                             "[safe]\ndirectory = /workspace\ndirectory = /workspace/NMRNetplusplus\n", record["home_config"]
