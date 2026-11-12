@@ -688,22 +688,101 @@ class InferenceClientConfigTests(unittest.TestCase):
                             stderr=stderr,
                             start_new_session=True,
                         )
+                        deadline = time.monotonic() + 30
+                        while not observation.is_file() and process.poll() is None and time.monotonic() < deadline:
+                            time.sleep(0.01)
+                        if not observation.is_file():
+                            calls = [call["arguments"] for call in fixture.calls()]
+                            self.fail(
+                                "Success-report retirement was not observed within 30 seconds; "
+                                f"caller status {process.poll()!r}; engine calls {calls!r}"
+                            )
                         self.assertEqual(1, process.wait(timeout=3))
                         stderr.seek(0)
                         diagnostic = stderr.read().decode()
                     self.assertIn("native anchor retirement could not be confirmed", diagnostic)
                     self.assertIn("private Docker client state retained", diagnostic)
-                    # silent-defaults: allow-contract -- Build and import scenarios expect four and two recorded engine calls; retained inputs and record effects separately check denied reporter retirement; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record
-                    self.assertEqual(4 if action == "build" else 2, len(fixture.calls()))
+                    # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls; retained inputs and record effects separately check denied reporter retirement; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record
+                    engine_calls = [call["arguments"] for call in fixture.calls()]
+                    expected_operations = (
+                        ["image", "run", "run", "build", "image", "image", "image"]
+                        if action == "build" else ["image", "run"]
+                    )
+                    self.assertEqual(expected_operations, [call[0] for call in engine_calls])
                     self.assert_owned_configuration(fixture, caller_paths, retired=False)
                     observed = observation.read_text().splitlines()
-                    self.assertTrue(Path(observed[1]).is_dir())
+                    self.assertEqual(4, len(observed))
+                    leader = int(observed[0])
+                    scratch, client_directory, capture_directory = map(Path, observed[1:])
+                    self.assertTrue(scratch.is_dir())
+                    self.assertTrue(client_directory.is_dir())
+                    arguments = Path("/proc", str(leader), "cmdline").read_bytes().split(b"\0")
+                    self.assertEqual(process.pid, os.getsid(leader))
+                    self.assertEqual(leader, os.getpgid(leader))
+                    self.assertEqual([b"bash", b"-c"], arguments[:2])
+                    self.assertIn(
+                        b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6",
+                        arguments[2],
+                    )
+                    self.assertEqual(str(process.pid).encode(), arguments[5])
                     if action == "build":
+                        self.assertEqual(
+                            [
+                                "image", "inspect", "--format", "{{.Id}}",
+                                "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+                            ],
+                            engine_calls[0],
+                        )
+                        lock_names = []
+                        for call in engine_calls[1:3]:
+                            mount = next(
+                                value for option, value in zip(call, call[1:])
+                                if option == "--mount" and ",dst=/input/requirements.lock,readonly" in value
+                            )
+                            lock_names.append(Path(mount.split(",src=", 1)[1].split(",dst=", 1)[0]).name)
+                        self.assertEqual(["inference.lock", "provider-core-native-install.lock"], lock_names)
+                        dockerfile = engine_calls[3][engine_calls[3].index("--file") + 1]
+                        self.assertEqual("containers/inference/Dockerfile", dockerfile)
+                        self.assertEqual(
+                            ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64], engine_calls[4]
+                        )
+                        self.assertEqual(
+                            [
+                                "image", "inspect", "--format",
+                                '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}',
+                                "sha256:" + "b" * 64,
+                            ],
+                            engine_calls[5],
+                        )
+                        self.assertEqual(
+                            [
+                                "image", "inspect", "--format",
+                                '{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}',
+                                "sha256:" + "b" * 64,
+                            ],
+                            engine_calls[6],
+                        )
                         self.assertNotEqual(before[1], record.stat().st_ino)
-                        self.assertTrue((Path(observed[3]) / "context").is_dir())
-                        self.assertTrue((Path(observed[3]) / "wheelhouse").is_dir())
+                        self.assertTrue((capture_directory / "context").is_dir())
+                        for inventory in (
+                            "authored",
+                            "source",
+                            "sources.json",
+                            "manifest.json",
+                            "science.report.json",
+                            "science.manifest.json",
+                            "runtime.report.json",
+                            "runtime.manifest.json",
+                        ):
+                            self.assertTrue((capture_directory / inventory).is_file(), msg=inventory)
                         self.assertIn("private build capture retained", diagnostic)
                     else:
+                        self.assertEqual(
+                            ["image", "inspect", "--format", "{{.Id}}", before[0].decode().strip()],
+                            engine_calls[0],
+                        )
+                        self.assertEqual("run", engine_calls[1][0])
+                        self.assertEqual(before[0].decode().strip(), engine_calls[1][-1])
                         self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
                     self.assertEqual(before[0], record.read_bytes())
                 finally:
