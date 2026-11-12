@@ -413,13 +413,19 @@ def _typed_pass_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool
     return not _protected_operator_inputs(protected)
 
 
-def _protected_operator_inputs(protected: ast.Try) -> bool:
+def _protected_operator_inputs(protected: ast.Try | ast.ExceptHandler) -> bool:
     # The handler can swallow any input consumed in its protected suite.
     return any(
         contains_env_access(statement)
         or contains_raw_args_access(statement)
         or any(
             args_attribute_name(child) is not None
+            or (
+                isinstance(child, ast.Attribute)
+                and isinstance(child.value, ast.Name)
+                and child.value.id == "sys"
+                and child.attr == "argv"
+            )
             or (
                 isinstance(child, ast.Call)
                 and isinstance(child.func, ast.Attribute)
@@ -431,22 +437,18 @@ def _protected_operator_inputs(protected: ast.Try) -> bool:
     )
 
 
-def _timeout_false_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool:
+def _exception_outcome_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool:
+    # Review owns the outcome's meaning. This pragma covers the handler finding,
+    # never defaults in its body or inputs consumed by either suite.
+    types = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
     return (
-        isinstance(handler.type, ast.Name)
-        and handler.type.id == "TimeoutError"
-        and len(handler.body) == 1
-        and isinstance(handler.body[0], ast.Return)
-        and isinstance(handler.body[0].value, ast.Constant)
-        and handler.body[0].value.value is False
+        bool(types)
+        and all(isinstance(declared, ast.Name | ast.Attribute) for declared in types)
+        and not any(isinstance(node, ast.Call | ast.Subscript) for declared in types for node in ast.walk(declared))
+        and isinstance(handler.body[-1], ast.Return)
+        and handler.body[-1].value is not None
         and not _protected_operator_inputs(protected)
-        and not any(
-            isinstance(child, ast.Attribute)
-            and isinstance(child.value, ast.Name)
-            and child.value.id == "sys"
-            and child.attr == "argv"
-            for statement in protected.body for child in ast.walk(statement)
-        )
+        and not _protected_operator_inputs(handler)
     )
 
 
@@ -499,8 +501,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     annotations and the body remain outside that boundary. An annotation before
     a typed, Pass-only except header covers just that handler; operator access
     in its protected Try suite remains strict. The allow-exception-outcome tag
-    covers only an immediate TimeoutError handler whose sole statement returns
-    literal False, with no protected operator inputs. The existing allow-pop-default tag
+    covers one immediate typed handler ending in an explicit returned outcome,
+    with no operator inputs in its protected suite or handler. Body and sibling
+    candidates remain independent. The existing allow-pop-default tag
     covers only a discarded fixed-key ENV pop(None), using the same explanation
     requirement. The legacy production ENV-default rule remains separate and strict.
     Each tag requires a nonblank explanation; reviewers judge its meaning.
@@ -539,7 +542,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
             boundary = (
                 len(following_handlers) == len(selected) == 1
                 and selected[0][1] == "python exception fallback"
-                and _timeout_false_contract(*following_handlers[0])
+                and _exception_outcome_contract(*following_handlers[0])
             )
         elif prefix == "# silent-defaults: allow-lambda-body":
             # This placement owns one callable result, never its signature or container.
@@ -660,7 +663,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
             accepted.update(node for node, _ in selected)
         else:
             if prefix == "# silent-defaults: allow-exception-outcome":
-                requirement = "an explanation and one immediate TimeoutError handler returning only False without protected operator inputs"
+                requirement = "an explanation and one immediate typed handler ending in a returned outcome without operator inputs"
             elif prefix == "# silent-defaults: allow-lambda-body":
                 requirement = "an explanation and one immediate generic lambda result at the same column, without nested lambdas or operator inputs"
             else:

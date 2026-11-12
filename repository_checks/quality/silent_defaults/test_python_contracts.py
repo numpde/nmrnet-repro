@@ -1074,7 +1074,7 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertIn("an explanation", diagnostic)
                 self.assertNotIn("proof=", diagnostic)
 
-    def test_timeout_false_exception_contract_is_exact_and_local(self):
+    def test_exception_outcome_contract_is_explicit_and_local(self):
         tag = "# silent-defaults: allow-exception-outcome -- Timeout completes the wait without a stop.\n"
         source = "def wait():\n    try:\n        run()\n    " + tag + "    except TimeoutError:\n        return False\n"
         raw, applicable = self.exercise_property(source, accepted=True)
@@ -1087,10 +1087,15 @@ class PythonContractApplicabilityTests(unittest.TestCase):
 
         for exception in ("Exception", "OSError", "errors.TimeoutError", "TimeoutAlias", "(TimeoutError, OSError)"):
             with self.subTest(exception=exception):
-                raw, applicable = self.exercise_property(source.replace("except TimeoutError:", f"except {exception}:"), accepted=False)
-                self.assertTrue(raw)
+                raw, applicable = self.exercise_property(source.replace("except TimeoutError:", f"except {exception}:"), accepted=True)
+                self.assertEqual(1, len(raw))
+                self.assertEqual([], applicable)
+        for exception in ("", "select_errors()", "errors[0]", "factory().Error"):
+            with self.subTest(exception=exception):
+                header = f"except {exception}:" if exception else "except:"
+                raw, applicable = self.exercise_property(source.replace("except TimeoutError:", header), accepted=False)
                 self.assertTrue(all(finding in applicable for finding in raw))
-        for body in ("return True", "return 0", "return None", "return flag", "return False; log()", "if flag: return False"):
+        for body in ("return None", "pass", "return False; log()", "if flag: return False"):
             with self.subTest(body=body):
                 raw, applicable = self.exercise_property(source.replace("return False", body), accepted=False)
                 self.assertTrue(applicable)
@@ -1104,6 +1109,8 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 raw, applicable = self.exercise_property(source.replace("run()", protected), accepted=False)
                 self.assertTrue(raw)
                 self.assertTrue(all(finding in applicable for finding in raw))
+                raw, applicable = self.exercise_property(source.replace("return False", f"{protected}\n        return False"), accepted=False)
+                self.assertTrue(all(finding in applicable for finding in raw))
         for replacement in (
             "# silent-defaults: allow-exception-outcome\n",
             "# silent-defaults: allow-exception-outcome --   \n",
@@ -1115,6 +1122,26 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertTrue(raw)
                 self.assertTrue(all(finding in applicable for finding in raw))
 
+    def test_exception_outcome_contract_keeps_nested_and_sibling_defaults(self):
+        tag = "# silent-defaults: allow-exception-outcome -- Return the retained failure to its owner.\n"
+        for body in (
+            "remember(cause)\n        return cause",
+            "return failed_input(cause)",
+            "if type(cause) is not Failed:\n            raise\n        return await retry(cause)",
+        ):
+            source = "async def run():\n    try:\n        await work()\n    " + tag + "    except Failed as cause:\n        " + body + "\n"
+            with self.subTest(body=body):
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual(1, len(raw))
+                self.assertEqual([], applicable)
+        source = source.replace("return await retry(cause)", "return options.get('result', False)")
+        source += "    except OSError:\n        return False\n"
+        raw, applicable = self.exercise_property(source, accepted=False)
+        self.assertEqual(3, len(raw))
+        self.assertEqual(2, len(applicable))
+        self.assertTrue(any("options.get" in finding for finding in applicable))
+        self.assertTrue(any("except OSError" in finding for finding in applicable))
+
     def test_timeout_contract_applies_only_to_service_pause(self):
         path = policy.ROOT / "nmrnet_provider/service.py"
         raw = policy.python_default_findings(path)
@@ -1124,7 +1151,7 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             baseline = root / "nmrnet_provider/service.py"
             baseline.parent.mkdir()
             baseline.write_text("\n".join(line for line in path.read_text().splitlines()
-                                          if "silent-defaults: allow-exception-outcome" not in line) + "\n")
+                                          if "Timer expiry completes the wait" not in line) + "\n")
             with patch.object(policy, "ROOT", root):
                 prior_raw = policy.python_default_findings(baseline)
                 prior_applicable = policy.python_operator_default_findings(baseline)
