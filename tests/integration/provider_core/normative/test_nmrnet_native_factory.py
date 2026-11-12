@@ -39,7 +39,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
         stopping_events = []
 
         async def opened(role, *, job_ref):
-            self.assertEqual(job_ref, "job:example" if role == "prediction" else None)
+            self.assertEqual(job_ref, {"prediction": "job:example", "reader": None, "smiles": None}[role])
             worker = Mock(close=Mock(), wait_closed=AsyncMock())
             allocation = Mock(role=role, runtime={}, retire=AsyncMock(), settle=AsyncMock())
             allocation.retirement = allocation
