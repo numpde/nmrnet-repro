@@ -30,6 +30,7 @@ class ComposePlanTests(ComposeFixture, unittest.TestCase):
                 },
                 service["logging"],
             )
+            # silent-defaults: allow-contract -- Prediction receives 4g; the other five explicitly admitted roles receive 512m.
             self.assertEqual(service["mem_limit"], "4g" if role == "prediction" else "512m")
             self.assertEqual(service["memswap_limit"], service["mem_limit"])
             self.assertNotIn("/workspace", str(service))

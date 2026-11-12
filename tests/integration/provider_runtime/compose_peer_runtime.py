@@ -231,14 +231,11 @@ async def serve(root, seconds, case, delivery_project):
         instructions = f"Predict Upload {UPLOAD_REF}, all {maximum_records} records, in angstroms.".encode()
         expected_model_calls = 2
     peer.ports.instructions = verify_job_input(response(instructions), feed=facts(instructions))
-    successive_inputs = (
-        [
+    if case == "successive":
+        successive_inputs = [
             verify_job_input(response(instructions, job_ref=job), feed=replace(facts(instructions), job_ref=job))
             for job in ("job:compose-first", "job:compose-second")
         ]
-        if case == "successive"
-        else ()
-    )
     calls = {"model": 0, "start": 0, "complete": 0, "hello": 0, "download": 0}
     discoveries = 0
     oracle_bytes = Path("/fixture/expected.json").read_bytes()
