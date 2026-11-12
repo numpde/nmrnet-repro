@@ -298,6 +298,12 @@ api_witness_stop_deployment 0
             ("ignored-output", 0),
             ("missing-parent", 0),
             ("missing-volume", 2),
+            ("missing-deployment", 2),
+            ("empty-deployment", 2),
+            ("invalid-deployment", 2),
+            ("scripted-missing-deployment", 2),
+            ("scripted-empty-deployment", 2),
+            ("scripted-invalid-deployment", 2),
         ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -324,6 +330,7 @@ api_witness_stop_deployment 0
                     'for path in "$@"; do mkdir -p "$(dirname -- "$target/$path")"; cp -- "$source/$path" "$target/$path"; done; }\n'
                 )
                 (tools / "provider_deployment.sh").write_text("""set -eu
+printf '%s\\n' "$*" >> "$TEST_RECORDS/deployment-invocations"
 [[ $# == 1 && $1 == client-inputs && $NMRNET_DEPLOYMENT_INPUT == original ]]
 printf '%s\\n' "$1" > "$TEST_RECORDS/query"
 [[ $TEST_QUERY_FAILED == false ]] || exit 7
@@ -359,15 +366,40 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "NMRNET_INTERFACE_INPUT": "fixture0",
                     "NMRNET_API_CLIENT_IMAGE_INPUT": "sha256:" + "a" * 64,
                     "NMRNET_OUTPUT_INPUT": str(output),
+                    "NMRNET_API_ORIGIN_INPUT": "https://api.example",
+                    "NMRNET_TOPOLOGY_INPUT": "fixture",
+                    "NMRNET_PROVIDER_CREDENTIAL_INPUT": str(root / "provider-key"),
+                    "NMRNET_LOCAL_NETWORK_INPUT": "127.0.0.0/8",
+                    "NMRNET_LOCAL_INTERFACE_INPUT": "lo",
                 }
+                mode = "existing-pasted"
+                if scenario.startswith("scripted-"):
+                    mode = "scripted-pasted"
+                if scenario in ("missing-deployment", "scripted-missing-deployment"):
+                    del environment["NMRNET_DEPLOYMENT_INPUT"]
+                elif scenario in ("empty-deployment", "scripted-empty-deployment"):
+                    environment["NMRNET_DEPLOYMENT_INPUT"] = ""
+                elif scenario in ("invalid-deployment", "scripted-invalid-deployment"):
+                    environment["NMRNET_DEPLOYMENT_INPUT"] = "../invalid"
                 result = subprocess.run(
-                    ["bash", str(script), "existing-pasted"],
+                    ["bash", str(script), mode],
                     env=environment,
                     capture_output=True,
                     text=True,
                     timeout=10,
                     check=False,
                 )
+                if scenario.endswith("-deployment"):
+                    self.assertEqual(expected_status, result.returncode, msg=result.stderr)
+                    if scenario.endswith("invalid-deployment"):
+                        self.assertIn("Select a named local deployment", result.stderr)
+                    else:
+                        self.assertIn("Missing explicit command-line selector: DEPLOYMENT", result.stderr)
+                    self.assertFalse(output.exists())
+                    self.assertFalse((records / "deployment-invocations").exists())
+                    self.assertFalse((records / "query").exists())
+                    self.assertFalse((records / "creates").exists())
+                    continue
                 if scenario == "existing-output":
                     self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                     self.assertIn("Use fresh client output", result.stderr)

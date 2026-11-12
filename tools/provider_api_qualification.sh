@@ -25,7 +25,7 @@ api_witness_wait() {
 }
 
 api_witness_select_deployment_settings() {
-    local deployment=${NMRNET_DEPLOYMENT_INPUT-}
+    local deployment=$NMRNET_DEPLOYMENT_INPUT
     [[ $deployment =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] \
         || { provider_host_refuse 'Select a named local deployment.'; return 2; }
     api_witness_deployment_settings=$repository_root/config/deployments/$deployment/deployment.toml
