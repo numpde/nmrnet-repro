@@ -80,6 +80,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
             summary = json.loads((output / "result.json").read_bytes())
             self.assertFalse(summary["authenticated_api_jobs"])
             self.assertEqual(4, summary["cases_passed"])
+            self.assertEqual("input_problem_decisions", summary["evidence_scope"])
             for case, carrier in zip(cases, carriers, strict=True):
                 observed = json.loads((output / (case["id"] + ".json")).read_bytes())
                 self.assertEqual(observed["issue"], case["expected_issue"])

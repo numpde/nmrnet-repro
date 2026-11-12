@@ -430,10 +430,12 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe):
                 "cases_passed": passed,
                 "authenticated_api_jobs": False,
                 "scientific_work_performed": False,
+                # silent-defaults: allow-contract -- The formats probe records upload-argument choices; the ambiguity probe records input-problem decisions.
                 "evidence_scope": "prepare_upload_arguments" if probe == "formats" else "input_problem_decisions",
             }
         ),
     )
+    # silent-defaults: allow-contract -- Return 0 when the passed count equals the selected probe's count, and 1 otherwise; load_cases admits that fixed count.
     return 0 if passed == _CASE_COUNTS[probe] else 1
 
 
