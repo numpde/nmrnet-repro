@@ -16,11 +16,14 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
-
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
+from nmrnet_provider.prepared_input import (
+    DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+    MAX_SHIFT_SIGNIFICANT_DIGITS,
+    MIN_SHIFT_SIGNIFICANT_DIGITS,
+)
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected
@@ -329,11 +332,11 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], ports.worker.events)
 
     async def test_model_fault_observed_during_retirement_cannot_become_a_job_time_limit(self):
-        for observation in ("io", "status"):
+        for observation, expected in (("io", '"errno": 5'), ("status", '"status": 503')):
             with self.subTest(observation=observation):
-                await self.check_late_model_fault(observation)
+                await self.check_late_model_fault(observation, expected)
 
-    async def check_late_model_fault(self, observation):
+    async def check_late_model_fault(self, observation, expected):
         ports = SessionPorts()
         observed_heads = []
         async with TlsPeer("body-stall", response_headers=((b"x-request-id", b"request:late-model"),)) as peer:
@@ -361,7 +364,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(any(head is not None for head in observed_heads), msg="Model response headers were not observed")
                 rendered = json.dumps(failure_evidence(caught.exception, secrets=("PRIVATE_MODEL_KEY",)))
                 self.assertIn("request:late-model", rendered)
-                self.assertIn('"errno": 5' if observation == "io" else '"status": 503', rendered)
+                self.assertIn(expected, rendered)
                 self.assertNotIn("PRIVATE_MODEL_KEY", rendered)
                 self.assertNotIn("PRIVATE_LATE_IO", rendered)
                 self.assertEqual(1, len(peer.requests))
@@ -575,7 +578,9 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose)
         self.addAsyncCleanup(owner.retire)
         prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
-        self.assertEqual({"verbosity": "medium", "shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS}, prepared.output.as_dict())
+        self.assertEqual(
+            {"verbosity": "medium", "shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS}, prepared.output.as_dict()
+        )
         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
 
     async def test_parent_cancellation_retains_the_original_late_operational_child_failure_after_clean_join(self):
