@@ -149,6 +149,7 @@ class NativeGeometryProtocolTests(unittest.TestCase):
             "diagnostic": None,
         }
         for source_format in ("mol", "sdf"):
+            # silent-defaults: allow-contract -- MOL has no record selection; this SDF case selects its sole record.
             selection = None if source_format == "mol" else (1,)
             valid_reply = {"kind": "geometries", "allocation": ALLOCATION, "records": [record]}
             prepared_reply(valid_reply, b"source", source_format=source_format, source_unit="angstrom", selection=selection)
@@ -259,6 +260,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
                 geometries = await client.read(source, source_format="mol2", source_unit="angstrom", selection=selection)
                 self.assertEqual(list(numbers), [g.source_record_number for g in geometries])
                 for geometry in geometries:
+                    # silent-defaults: allow-contract -- The authored mixed-record corpus maps record 2 to water and records 1 and 3 to the independent chloromethane expectation.
                     name = "water" if geometry.source_record_number == 2 else "chloromethane"
                     request = json.loads(geometry.request_bytes)
                     self.assertEqual(expected[name]["atoms"], request["atoms"])
@@ -315,6 +317,7 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
                 geometries = await client.read(source, source_format="pdb", source_unit="angstrom", selection=selection)
                 self.assertEqual(list(expected), [g.source_record_number for g in geometries])
                 for geometry in geometries:
+                    # silent-defaults: allow-contract -- The source above places model 7000 at x=2.027 and model 900 at x=1.027.
                     expected_x = 2.027 if geometry.source_record_number == 7000 else 1.027
                     self.assertEqual(expected_x, json.loads(geometry.request_bytes)["coordinates"][0][0])
 

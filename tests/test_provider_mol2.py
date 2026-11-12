@@ -15,6 +15,7 @@ from nmrnet_provider.mol2 import prepare_mol2
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 
 
+# silent-defaults: allow-contract -- Minimal synthetic MOL2 fixtures omit trailing non-ATOM metadata unless the case supplies it.
 def molecule(rows, *, atom_count=None, metadata=b""):
     """Author independent source rows; graph metadata is outside this reader's input."""
     count = len(rows) if atom_count is None else atom_count
@@ -50,6 +51,7 @@ class MOL2NormativeTests(unittest.TestCase):
                 geometries = prepare_mol2(source, source_unit="angstrom", selection=selection)
                 self.assertEqual(list(numbers), [g.source_record_number for g in geometries])
                 for geometry, number in zip(geometries, numbers, strict=True):
+                    # silent-defaults: allow-contract -- The authored mixed-record corpus maps record 2 to water and records 1 and 3 to the independent chloromethane expectation.
                     name = "water" if number == 2 else "chloromethane"
                     self.assertEqual(expected[name]["atoms"], json.loads(geometry.request_bytes)["atoms"])
                     self.assertEqual(expected[name]["coordinates_angstrom"], json.loads(geometry.request_bytes)["coordinates"])

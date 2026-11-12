@@ -15,16 +15,18 @@ from nmrnet_provider.pdb import prepare_pdb
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 
 
-def atom(serial, name, element, coordinates, *, alternate=" ", residue="LIG", chain="A", number=1):
+# silent-defaults: allow-contract -- Synthetic PDB records use a blank alternate location and LIG residue unless the case varies them.
+def atom(serial, name, element, coordinates, *, alternate=" ", residue="LIG"):
     """Author fixed-column source records independently of the reader."""
     x, y, z = coordinates
     return (
-        f"HETATM{serial:5d} {name:4s}{alternate}{residue:3s} {chain}{number:4d}    "
+        f"HETATM{serial:5d} {name:4s}{alternate}{residue:3s} A   1    "
         f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00          {element:>2s}\n"
     ).encode("ascii")
 
 
 class PDBPreparationTests(unittest.TestCase):
+    # silent-defaults: allow-contract -- PDB tests select all models in angstrom units unless the case supplies a different selection or unit.
     def prepare(self, source, *, selection="all", alternate_location=None, source_unit="angstrom"):
         return prepare_pdb(source, source_unit=source_unit, selection=selection, alternate_location=alternate_location)
 
