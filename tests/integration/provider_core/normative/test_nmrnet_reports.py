@@ -134,6 +134,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Scientific worker failed", rendered)
                 self.assertNotIn("PRIVATE_KEY", rendered)
 
+    # silent-defaults: allow-contract -- The ordinary controller fixture polls at one second; the condition-expiry case supplies 0.005 seconds.
     def live_controller(self, transport, session, *, poll_seconds=1, condition_recovery=None):
         claims = AttemptClaims.live()
         controller = AttemptController.live(
@@ -155,6 +156,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         )
         return controller, claims
 
+    # silent-defaults: allow-contract -- Omission supplies no known secret spellings; canary cases provide the values the report must redact.
     def receive(self, failure, *, secrets=()):
         output = io.StringIO()
         with (
@@ -579,6 +581,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                         (b"x-request-id", b"request:store-refusal"),
                         (b"x-private", b"PRIVATE_HEADER"),
                     )
+                    # silent-defaults: allow-contract -- Only the status-refusal scenario returns 503; header and encoding refusals use 200 so their own checks select failure.
                     status = 503 if refusal == "status" else 200
                     if refusal == "header":
                         headers = [(name, value) for name, value in headers if name != b"content-type"]

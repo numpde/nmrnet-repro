@@ -210,6 +210,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
                     notices = []
 
+                    # silent-defaults: allow-contract -- Capture this loop iteration's notice sink and failure stimulus for the patched provider run.
                     def write_notice(content, *, notices=notices, fail_first=fail_first):
                         document = json.loads(content)
                         notices.append(document)
@@ -316,6 +317,13 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
 
     async def check_attempt_reference_redaction(self, *, recovery_kind, failed_sink):
+        expected_events, expected_failure = {
+            "native": (["native_lifecycle_settled"], "Allocator failed"),
+            "delivery": (["delivery_handoff_retry"], "Attempt API exchange"),
+            "observation": (["api_observation_retry", "api_observation_recovered"], "Attempt API exchange"),
+            "start": (["api_start_retry", "api_start_recovered"], "Attempt API exchange"),
+            "condition": (["api_condition_retry", "api_condition_recovered"], "Attempt API exchange"),
+        }[recovery_kind]
         async with ProcessPeers() as fixture:
             pending = record()
             attempt = acknowledge_start(pending, admission())
@@ -409,31 +417,16 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual("provider_shutdown_observation", shutdown["event"])
                 self.assertEqual("Notice delivery was not confirmed", shutdown["operation"])
                 notices = [shutdown["notice"]]
-                expected_first = (
-                    "native_lifecycle_settled"
-                    if recovery_kind == "native"
-                    else "delivery_handoff_retry"
-                    if recovery_kind == "delivery"
-                    else f"api_{recovery_kind}_retry"
-                )
-                self.assertEqual(notices[0]["event"], expected_first)
+                self.assertEqual(notices[0]["event"], expected_events[0])
                 self.assertIn("OSError", json.dumps(shutdown["output"]))
-                self.assertIn(
-                    "Allocator failed" if recovery_kind == "native" else "Attempt API exchange",
-                    json.dumps(shutdown["failure"]),
-                )
+                self.assertIn(expected_failure, json.dumps(shutdown["failure"]))
                 self.assertNotIn(attempt.admission.job_ref, content.decode())
                 self.assertNotIn(attempt.admission.execution_attempt_ref, content.decode())
                 self.assertNotIn("PRIVATE_CREDENTIAL", content.decode())
                 self.assertFalse((fixture.diagnostics / "result.json").exists())
             else:
                 notices = [json.loads(line) for line in content.splitlines()]
-                expected = [f"api_{recovery_kind}_retry", f"api_{recovery_kind}_recovered"]
-                if recovery_kind == "native":
-                    expected = ["native_lifecycle_settled"]
-                elif recovery_kind == "delivery":
-                    expected = ["delivery_handoff_retry"]
-                self.assertEqual([item["event"] for item in notices], expected)
+                self.assertEqual([item["event"] for item in notices], expected_events)
             for notice in notices:
                 self.assertEqual("[redacted]", notice["job_ref"])
                 if notice["event"] == "api_start_retry":
