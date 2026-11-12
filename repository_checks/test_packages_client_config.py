@@ -99,7 +99,7 @@ class PackagesClientTests(unittest.TestCase):
             env=environment,
             text=True,
             capture_output=True,
-            timeout=20 if arguments[0] == "stage" else 8,
+            timeout=20 if arguments[:1] == ("stage",) else 8,
             check=False,
         )
         self._remember(result.stderr)
@@ -781,7 +781,10 @@ class PackagesClientTests(unittest.TestCase):
                 environment["NMRNET_FAKE_ACQ_REMOVE_HOLD_ROLE"] = "worker-1"
                 process = subprocess.Popen(
                     ["bash", str(self.root / "tools/packages.sh"), "stage"],
-                    env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                    env=environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True,
                 )
                 observed = {}
                 before_capture = None
@@ -795,7 +798,14 @@ class PackagesClientTests(unittest.TestCase):
                         client_arguments = Path("/proc", str(client), "cmdline").read_bytes().split(b"\0")
                         self.assertEqual([os.fsencode(sys.executable), os.fsencode(FIXTURES / "docker.py")], client_arguments[:2])
                         self.assertEqual(
-                            [b"--host", b"unix:///var/run/docker.sock", b"start", b"--attach", identities["worker-1"].encode(), b""],
+                            [
+                                b"--host",
+                                b"unix:///var/run/docker.sock",
+                                b"start",
+                                b"--attach",
+                                identities["worker-1"].encode(),
+                                b"",
+                            ],
                             client_arguments[4:],
                         )
                         self.assertEqual(b"--config", client_arguments[2])
@@ -803,7 +813,9 @@ class PackagesClientTests(unittest.TestCase):
                         controller = int(Path("/proc", str(group), "cmdline").read_bytes().split(b"\0")[5])
                         observed[group] = self._composition_anchor(group, process.pid, controller)
                         controller_arguments = Path("/proc", str(controller), "cmdline").read_bytes().split(b"\0")
-                        self.assertEqual([b"bash", os.fsencode(self.root / "tools/acquisition_run.original.sh")], controller_arguments[:2])
+                        self.assertEqual(
+                            [b"bash", os.fsencode(self.root / "tools/acquisition_run.original.sh")], controller_arguments[:2]
+                        )
                         outer = os.getpgid(controller)
                         observed[outer] = self._composition_anchor(outer, process.pid, process.pid)
                         calls = self.fixture.calls()[start:]
@@ -816,8 +828,13 @@ class PackagesClientTests(unittest.TestCase):
                         stage = stages.pop()
                         capture = stage / ".inputs"
                         before_capture = {
-                            str(path.relative_to(capture)): (path.read_bytes(), stat.S_IMODE(path.stat().st_mode), path.stat().st_ino)
-                            for path in capture.rglob("*") if path.is_file()
+                            str(path.relative_to(capture)): (
+                                path.read_bytes(),
+                                stat.S_IMODE(path.stat().st_mode),
+                                path.stat().st_ino,
+                            )
+                            for path in capture.rglob("*")
+                            if path.is_file()
                         }
                         self.assertTrue(before_capture)
                         os.kill(process.pid, signal.SIGTERM)
@@ -831,7 +848,9 @@ class PackagesClientTests(unittest.TestCase):
                     self.assertEqual(["--force", identities["worker-1"]], removal["arguments"])
                     self.assertEqual(removal["group"], os.getpgid(removal["pid"]))
                     remove_arguments = Path("/proc", str(removal["pid"]), "cmdline").read_bytes().split(b"\0")
-                    self.assertEqual([os.fsencode(sys.executable), os.fsencode(FIXTURES / "docker.py"), b"--config"], remove_arguments[:3])
+                    self.assertEqual(
+                        [os.fsencode(sys.executable), os.fsencode(FIXTURES / "docker.py"), b"--config"], remove_arguments[:3]
+                    )
                     configuration = Path(remove_arguments[3].decode())
                     self.assertEqual(
                         [b"--host", b"unix:///var/run/docker.sock", b"rm", b"--force", identities["worker-1"].encode(), b""],
@@ -860,7 +879,8 @@ class PackagesClientTests(unittest.TestCase):
                     capture = stages.pop() / ".inputs"
                     held_capture = {
                         str(path.relative_to(capture)): (path.read_bytes(), stat.S_IMODE(path.stat().st_mode), path.stat().st_ino)
-                        for path in capture.rglob("*") if path.is_file()
+                        for path in capture.rglob("*")
+                        if path.is_file()
                     }
                     self.assertTrue(held_capture)
                     if cancellation:
@@ -869,7 +889,9 @@ class PackagesClientTests(unittest.TestCase):
                     deadline = time.monotonic() + 2.25
                     while time.monotonic() < deadline:
                         self.assertIsNone(os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG))
-                        self.assertEqual(observed[removal["group"]], self._composition_anchor(removal["group"], process.pid, controller))
+                        self.assertEqual(
+                            observed[removal["group"]], self._composition_anchor(removal["group"], process.pid, controller)
+                        )
                         self.assertTrue(Path("/proc", str(controller)).exists())
                         self.assertTrue(configuration.is_dir())
                         time.sleep(0.01)
@@ -1047,7 +1069,9 @@ class PackagesClientTests(unittest.TestCase):
         deadline = time.monotonic() + 20
         while not ready.is_file() and current.poll() is None and time.monotonic() < deadline:
             time.sleep(0.01)
-        self.assertTrue(ready.is_file(), msg=f"Built-image inspection did not reach held client; caller status {current.poll()!r}")
+        self.assertTrue(
+            ready.is_file(), msg=f"Built-image inspection did not reach held client; caller status {current.poll()!r}"
+        )
         current_call = self.fixture.calls()[-1]
         self._retire_failed_probe(current)
         self.assertEqual(-signal.SIGKILL, current.returncode)
@@ -1110,7 +1134,9 @@ class PackagesClientTests(unittest.TestCase):
                     process = subprocess.Popen(
                         ["bash", str(self.root / "tools/packages.sh"), "stage"],
                         env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
-                        stdout=subprocess.PIPE, stderr=write_fd, start_new_session=True,
+                        stdout=subprocess.PIPE,
+                        stderr=write_fd,
+                        start_new_session=True,
                     )
                     os.close(write_fd)
                     write_fd = None
@@ -1459,26 +1485,63 @@ def fake_controller(arguments):
     root = Path(os.environ["NMRNET_PACKAGE_FIXTURE_ROOT"])
     if arguments[:3] != ["--image", "sha256:" + "b" * 64, "--"] or arguments[-2:] != ["stage", "inference"]:
         return 97
-    outputs = [value.removeprefix("type=bind,src=").removesuffix(",dst=/output") for value in arguments
-               if value.startswith("type=bind,src=") and value.endswith(",dst=/output")]
+    outputs = [
+        value.removeprefix("type=bind,src=").removesuffix(",dst=/output")
+        for value in arguments
+        if value.startswith("type=bind,src=") and value.endswith(",dst=/output")
+    ]
     if len(outputs) != 1:
         return 97
     stage = Path(outputs[0])
-    if (stage.parent != root / ".work/packages-stage" or re.fullmatch(r"lock\.[A-Za-z0-9]+", stage.name) is None
-            or stage.name == "lock.fixture" or not stage.is_dir() or stage.is_symlink() or stage.resolve() != stage):
+    if (
+        stage.parent != root / ".work/packages-stage"
+        or re.fullmatch(r"lock\.[A-Za-z0-9]+", stage.name) is None
+        or stage.name == "lock.fixture"
+        or not stage.is_dir()
+        or stage.is_symlink()
+        or stage.resolve() != stage
+    ):
         return 97
     capture = stage / ".inputs"
     expected = [
-        "--init", "--pull", "never", "--read-only", "--env", "NMRNET_IN_CONTAINER=1",
-        "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-        "--cpus", "2", "--memory", "2g", "--memory-swap", "2g", "--pids-limit", "64",
-        "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=1g", "--env", "UV_CACHE_DIR=/tmp/uv",
-        "--env", "UV_NO_PROGRESS=1", "--env", "UV_PYTHON_DOWNLOADS=never",
+        "--init",
+        "--pull",
+        "never",
+        "--read-only",
+        "--env",
+        "NMRNET_IN_CONTAINER=1",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
+        "--cpus",
+        "2",
+        "--memory",
+        "2g",
+        "--memory-swap",
+        "2g",
+        "--pids-limit",
+        "64",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,noexec,size=1g",
+        "--env",
+        "UV_CACHE_DIR=/tmp/uv",
+        "--env",
+        "UV_NO_PROGRESS=1",
+        "--env",
+        "UV_PYTHON_DOWNLOADS=never",
     ]
     for name in ("inference.in", "build.in", "unicore-source.json"):
         expected += ["--mount", f"type=bind,src={capture / 'requirements' / name},dst=/input/{name},readonly"]
-    expected += ["--mount", f"type=bind,src={stage},dst=/output",
-                 "--mount", f"type=bind,src={capture},dst=/output/.inputs,readonly", "--", "stage", "inference"]
+    expected += [
+        "--mount",
+        f"type=bind,src={stage},dst=/output",
+        "--mount",
+        f"type=bind,src={capture},dst=/output/.inputs,readonly",
+        "--",
+        "stage",
+        "inference",
+    ]
     if arguments[3:] != expected:
         return 97
     (root / "controller-returned").write_text(str(os.getpid()))

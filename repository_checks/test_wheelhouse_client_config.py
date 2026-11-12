@@ -39,13 +39,13 @@ class WheelhouseClientTests(unittest.TestCase):
         self._remember(result.stderr)
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertFalse((self.root / "sentinel").exists())
-        worker = next(call["arguments"] for call in self.fixture.calls() if "tools.wheelhouse" in call["arguments"])
+        worker = next(call["arguments"] for call in self.fixture.calls() if "tools.wheelhouse_acquire" in call["arguments"])
         self.assertIn(f"type=bind,src={cache},dst=/wheelhouse,readonly", worker)
         self.assertEqual("/wheelhouse", worker[worker.index("--pool") + 1])
 
     def test_make_without_a_terminal_requires_a_path_before_engine_effects(self):
         result = subprocess.run(
-            ["make", "--no-print-directory", "-C", str(self.root), "packages/image"],
+            ["make", "--no-print-directory", "-C", str(self.root), "packages/image", "DOCKER_CONTEXT=fixture-local"],
             env=self.environment | {"WHEELHOUSE": str(self.root / ".work/wheelhouse")},
             input="/piped/input/is/not/a/selection\n",
             start_new_session=True,
@@ -68,27 +68,36 @@ class WheelhouseClientTests(unittest.TestCase):
             result = self.caller("--print", action, "preparation", environment=environment)
             self.assertEqual(0, result.returncode, msg=result.stderr)
             commands = [shlex.split(line) for line in result.stdout.splitlines()]
-            command = next(command for command in commands if "tools.wheelhouse" in command)
+            command = next(command for command in commands if "tools.wheelhouse_acquire" in command)
             mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
             inputs = [mount for mount in mounts if ",dst=/input/" in mount]
-            self.assertEqual(
-                [
-                    f"type=bind,src={lock},dst=/input/preparation.lock,readonly",
-                    f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
-                    f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
-                ],
-                inputs,
-            )
+            expected_inputs = [
+                f"type=bind,src={lock},dst=/input/preparation.lock,readonly",
+                f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
+                f"type=bind,src={self.root}/requirements/wheelhouse-tool-assets.in,dst=/input/wheelhouse-tool-assets.in,readonly",
+            ]
+            if action == "download":
+                expected_inputs.extend(
+                    [
+                        f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
+                        f"type=bind,src={self.root}/requirements/wheelhouse-acquirer-assets.in,dst=/input/wheelhouse-acquirer-assets.in,readonly",
+                    ]
+                )
+            self.assertEqual(expected_inputs, inputs)
             self.assertNotIn("--source", command)
-            self.assertEqual("preparation", command[command.index("--profile") + 1])
             self.assertEqual("/wheelhouse", command[command.index("--pool") + 1])
             if action == "check":
                 self.assertEqual("none", command[command.index("--network") + 1])
                 self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+                self.assertIn("--check", command)
             else:
+                self.assertIn("--probe", command)
+                self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+                online = next(command for command in commands if command[:2] == ["If", "missing,"])
+                online_mounts = [online[index + 1] for index, value in enumerate(online) if value == "--mount"]
                 self.assertEqual(
                     [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"],
-                    [mount for mount in mounts if not mount.endswith(",readonly")],
+                    [mount for mount in online_mounts if not mount.endswith(",readonly")],
                 )
             self.assertFalse(self.fixture.calls())
         lock.unlink()
@@ -244,7 +253,7 @@ class WheelhouseClientTests(unittest.TestCase):
             ],
             call["arguments"][:27],
         )
-        mounts = call["arguments"][27:45]
+        mounts = call["arguments"][27:49]
         self.assertEqual(
             [
                 "--mount",
@@ -254,6 +263,8 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--mount",
                 f"type=bind,src={self.root}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly",
                 "--mount",
+                f"type=bind,src={self.root}/tools/wheelhouse_acquire.py,dst=/workspace/tools/wheelhouse_acquire.py,readonly",
+                "--mount",
                 f"type=bind,src={self.root}/requirements/inference.lock,dst=/input/inference.lock,readonly",
                 "--mount",
                 f"type=bind,src={self.root}/requirements/preparation.lock,dst=/input/preparation.lock,readonly",
@@ -262,7 +273,9 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--mount",
                 f"type=bind,src={self.root}/requirements/provider-core-native-install.lock,dst=/input/provider-core-native-install.lock,readonly",
                 "--mount",
-                f"type=bind,src={self.root}/requirements/provider-core-assets.in,dst=/input/provider-core-assets.in,readonly",
+                f"type=bind,src={self.root}/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly",
+                "--mount",
+                f"type=bind,src={self.root}/requirements/wheelhouse-tool-assets.in,dst=/input/wheelhouse-tool-assets.in,readonly",
                 "--mount",
                 f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse,readonly",
             ],
@@ -274,24 +287,24 @@ class WheelhouseClientTests(unittest.TestCase):
                 "python3",
                 "-B",
                 "-m",
-                "tools.wheelhouse",
-                "check",
-                "--profile",
-                "inference",
+                "tools.wheelhouse_acquire",
                 "--lock",
                 "/input/inference.lock",
                 "--lock",
                 "/input/preparation.lock",
                 "--lock",
                 "/input/provider-core-native-install.lock",
-                "--assets",
-                "/input/provider-core-assets.in",
+                "--lock",
+                "/input/provider-core-install.lock",
                 "--source",
                 "/input/unicore-source.json",
+                "--stream-assets",
+                "/input/wheelhouse-tool-assets.in",
                 "--pool",
                 "/wheelhouse",
+                "--check",
             ],
-            call["arguments"][45:],
+            call["arguments"][49:],
         )
 
     def test_native_output_and_failure_status_are_preserved(self):
@@ -375,6 +388,9 @@ def fake_command(name):
     """Implement a finite native client and precise removal/receipt faults."""
     root = Path(os.environ["NMRNET_WHEELHOUSE_FIXTURE_ROOT"])
     arguments = sys.argv[1:]
+    if name == "docker" and arguments == ["context", "inspect", "--format", "{{.Endpoints.docker.Host}}", "fixture-local"]:
+        sys.stdout.write("unix:///var/run/docker.sock\n")
+        return 0
     if name == "rm":
         destination = Path(arguments[-1])
         fault = os.environ.get("NMRNET_WHEELHOUSE_RM_FAULT")

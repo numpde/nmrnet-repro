@@ -14,6 +14,7 @@ import tempfile
 import time
 import unittest
 from contextlib import suppress
+from itertools import pairwise
 from pathlib import Path
 
 from repository_checks.fixtures.containers.fixture import LauncherFixture
@@ -247,11 +248,16 @@ class InferenceClientConfigTests(unittest.TestCase):
                     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
                         process = subprocess.Popen(
                             ["bash", str(fixture.root / "tools/inference_image.sh"), action],
-                            env=fixture.environment | environment | {
+                            env=fixture.environment
+                            | environment
+                            | {
                                 "BASH_FUNC_kill%%": deny_retirement,
                                 "NMRNET_RETIREMENT_OBSERVATION": str(observation),
                             },
-                            cwd=fixture.root, stdout=stdout, stderr=stderr, start_new_session=True,
+                            cwd=fixture.root,
+                            stdout=stdout,
+                            stderr=stderr,
+                            start_new_session=True,
                         )
                         self.assertEqual(1, process.wait(timeout=20))
                         stderr.seek(0)
@@ -263,7 +269,8 @@ class InferenceClientConfigTests(unittest.TestCase):
                     # silent-defaults: allow-contract -- Build inspects the pinned base image; import inspects the image recorded before the launch.
                     image = (
                         "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
-                        if action == "build" else before[0].decode().strip()
+                        if action == "build"
+                        else before[0].decode().strip()
                     )
                     self.assertEqual(["image", "inspect", "--format", "{{.Id}}", image], calls[0]["arguments"])
                     self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
@@ -398,11 +405,7 @@ class InferenceClientConfigTests(unittest.TestCase):
             write_fd = None
             if phase == "native":
                 phase_deadline = time.monotonic() + 30
-                while (
-                    not native_receipt.is_file()
-                    and process.poll() is None
-                    and time.monotonic() < phase_deadline
-                ):
+                while not native_receipt.is_file() and process.poll() is None and time.monotonic() < phase_deadline:
                     time.sleep(0.01)
                 if not native_receipt.is_file():
                     self.fail(
@@ -482,13 +485,20 @@ class InferenceClientConfigTests(unittest.TestCase):
                     expected_operations.append("image")
                 self.assertEqual(expected_operations, [call[0] for call in engine_calls])
                 self.assertEqual(
-                    ["image", "inspect", "--format", "{{.Id}}", "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"],
+                    [
+                        "image",
+                        "inspect",
+                        "--format",
+                        "{{.Id}}",
+                        "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+                    ],
                     engine_calls[0],
                 )
                 lock_names = []
                 for call in engine_calls[1:3]:
                     mount = next(
-                        value for option, value in zip(call, call[1:])
+                        value
+                        for option, value in pairwise(call)
                         if option == "--mount" and ",dst=/input/requirements.lock,readonly" in value
                     )
                     lock_names.append(Path(mount.split(",src=", 1)[1].split(",dst=", 1)[0]).name)
@@ -496,9 +506,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                 dockerfile = engine_calls[3][engine_calls[3].index("--file") + 1]
                 self.assertEqual("containers/inference/Dockerfile", dockerfile)
                 if phase == "mismatch":
-                    self.assertEqual(
-                        ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "d" * 64], engine_calls[4]
-                    )
+                    self.assertEqual(["image", "inspect", "--format", "{{.Id}}", "sha256:" + "d" * 64], engine_calls[4])
             else:
                 self.assertEqual({"validation": 0, "native": 3}[phase], len(engine_calls))
             self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
@@ -651,8 +659,7 @@ class InferenceClientConfigTests(unittest.TestCase):
             engine_calls = [call["arguments"] for call in calls]
             # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls before the independently observed held success reporter; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stdout_success_report_cancellation_retires_owner_before_cleanup
             expected_operations = (
-                ["image", "run", "run", "build", "image", "image", "image"]
-                if action == "build" else ["image", "run"]
+                ["image", "run", "run", "build", "image", "image", "image"] if action == "build" else ["image", "run"]
             )
             self.assertEqual(expected_operations, [call[0] for call in engine_calls])
             configuration = Path(calls[0]["client_config"]["path"])
@@ -663,7 +670,10 @@ class InferenceClientConfigTests(unittest.TestCase):
                 self.assertEqual(1, len(list(record.parent.glob(".build.*"))))
                 self.assertEqual(
                     [
-                        "image", "inspect", "--format", "{{.Id}}",
+                        "image",
+                        "inspect",
+                        "--format",
+                        "{{.Id}}",
                         "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
                     ],
                     engine_calls[0],
@@ -671,19 +681,20 @@ class InferenceClientConfigTests(unittest.TestCase):
                 lock_names = []
                 for call in engine_calls[1:3]:
                     mount = next(
-                        value for option, value in zip(call, call[1:])
+                        value
+                        for option, value in pairwise(call)
                         if option == "--mount" and ",dst=/input/requirements.lock,readonly" in value
                     )
                     lock_names.append(Path(mount.split(",src=", 1)[1].split(",dst=", 1)[0]).name)
                 self.assertEqual(["inference.lock", "provider-core-native-install.lock"], lock_names)
                 self.assertEqual("containers/inference/Dockerfile", engine_calls[3][engine_calls[3].index("--file") + 1])
-                self.assertEqual(
-                    ["image", "inspect", "--format", "{{.Id}}", identity], engine_calls[4]
-                )
+                self.assertEqual(["image", "inspect", "--format", "{{.Id}}", identity], engine_calls[4])
                 for index, label in ((5, "inference-inputs"), (6, "inference-wheels")):
                     self.assertEqual(
                         [
-                            "image", "inspect", "--format",
+                            "image",
+                            "inspect",
+                            "--format",
                             f'{{{{index .Config.Labels "io.nmrnet-repro.{label}"}}}}',
                             identity,
                         ],
@@ -760,8 +771,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                     engine_calls = [call["arguments"] for call in fixture.calls()]
                     # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls; retained inputs and record effects separately check denied reporter retirement; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record
                     expected_operations = (
-                        ["image", "run", "run", "build", "image", "image", "image"]
-                        if action == "build" else ["image", "run"]
+                        ["image", "run", "run", "build", "image", "image", "image"] if action == "build" else ["image", "run"]
                     )
                     self.assertEqual(expected_operations, [call[0] for call in engine_calls])
                     self.assert_owned_configuration(fixture, caller_paths, retired=False)
@@ -783,7 +793,10 @@ class InferenceClientConfigTests(unittest.TestCase):
                     if action == "build":
                         self.assertEqual(
                             [
-                                "image", "inspect", "--format", "{{.Id}}",
+                                "image",
+                                "inspect",
+                                "--format",
+                                "{{.Id}}",
                                 "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
                             ],
                             engine_calls[0],
@@ -791,19 +804,20 @@ class InferenceClientConfigTests(unittest.TestCase):
                         lock_names = []
                         for call in engine_calls[1:3]:
                             mount = next(
-                                value for option, value in zip(call, call[1:])
+                                value
+                                for option, value in pairwise(call)
                                 if option == "--mount" and ",dst=/input/requirements.lock,readonly" in value
                             )
                             lock_names.append(Path(mount.split(",src=", 1)[1].split(",dst=", 1)[0]).name)
                         self.assertEqual(["inference.lock", "provider-core-native-install.lock"], lock_names)
                         dockerfile = engine_calls[3][engine_calls[3].index("--file") + 1]
                         self.assertEqual("containers/inference/Dockerfile", dockerfile)
-                        self.assertEqual(
-                            ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64], engine_calls[4]
-                        )
+                        self.assertEqual(["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64], engine_calls[4])
                         self.assertEqual(
                             [
-                                "image", "inspect", "--format",
+                                "image",
+                                "inspect",
+                                "--format",
                                 '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}',
                                 "sha256:" + "b" * 64,
                             ],
@@ -811,7 +825,9 @@ class InferenceClientConfigTests(unittest.TestCase):
                         )
                         self.assertEqual(
                             [
-                                "image", "inspect", "--format",
+                                "image",
+                                "inspect",
+                                "--format",
                                 '{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}',
                                 "sha256:" + "b" * 64,
                             ],
@@ -854,18 +870,16 @@ class InferenceClientConfigTests(unittest.TestCase):
 
     def full_stderr_cleanup_case(self, directory, *, phase, signum, publication):
         environment, caller_paths = self.caller_configuration(Path(directory))
+        # silent-defaults: allow-contract -- Only the removal phase injects a signal from rm; the reporting and capture phases signal at their own boundaries.
+        removal_signal = f'builtin kill -{signum} "$BASHPID"; ' if phase == "removal" else ""
+        # silent-defaults: allow-contract -- Capture must finish removal successfully; the other phases return 9 to exercise cleanup failure reporting.
+        removal_status = "" if phase == "capture" else "return 9"
         removal = (
             '() { case "$*" in *nmrnet-docker-client.*) '
             'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_CLEANUP_OBSERVATION"; '
-            'command rm "$@"; '
-            + (f'builtin kill -{signum} "$BASHPID"; ' if phase == "removal" else "")
-            + ("" if phase == "capture" else "return 9")
-            + ';; *) command rm "$@";; esac; }'
+            'command rm "$@"; ' + removal_signal + removal_status + ';; *) command rm "$@";; esac; }'
         )
-        chmod = (
-            '() { case "$3" in */context/*) head -c 64 /dev/zero >&2; return 37;; '
-            'esac; command chmod "$@"; }'
-        )
+        chmod = '() { case "$3" in */context/*) head -c 64 /dev/zero >&2; return 37;; esac; command chmod "$@"; }'
         fixture = LauncherFixture(Path(directory))
         observation = fixture.root / "cleanup-observation"
         read_fd, write_fd = os.pipe()
@@ -952,9 +966,9 @@ class InferenceClientConfigTests(unittest.TestCase):
                     self.assertEqual(anchor, os.getpgid(anchor))
                     anchors = []
                     source = (fixture.root / "tools/inference_image.sh").read_text()
-                    capture_payload = source.split(
-                        "inference_native 'input capture' untimed stdio bash -eu -c '", 1
-                    )[1].split("' bash ", 1)[0]
+                    capture_payload = source.split("inference_native 'input capture' untimed stdio bash -eu -c '", 1)[1].split(
+                        "' bash ", 1
+                    )[0]
                     capture_workers = []
                     for identifier in reporting_processes:
                         with suppress(FileNotFoundError, ProcessLookupError):
@@ -1016,7 +1030,9 @@ class InferenceClientConfigTests(unittest.TestCase):
                     self.assertTrue((caller / "config.json").is_file())
             deadline = time.monotonic() + 2
             retired_processes = owned if phase == "capture" else reporting_processes
-            while any(Path("/proc", str(identifier)).exists() for identifier in retired_processes) and time.monotonic() < deadline:
+            while (
+                any(Path("/proc", str(identifier)).exists() for identifier in retired_processes) and time.monotonic() < deadline
+            ):
                 time.sleep(0.01)
             self.assertFalse(any(Path("/proc", str(identifier)).exists() for identifier in retired_processes))
         finally:
@@ -1028,7 +1044,10 @@ class InferenceClientConfigTests(unittest.TestCase):
                     os.killpg(process.pid, signal.SIGKILL)
                     if observed_capture_group is not None:
                         with suppress(FileNotFoundError, ProcessLookupError):
-                            if os.getsid(observed_capture_group) == process.pid and os.getpgid(observed_capture_group) == observed_capture_group:
+                            if (
+                                os.getsid(observed_capture_group) == process.pid
+                                and os.getpgid(observed_capture_group) == observed_capture_group
+                            ):
                                 os.killpg(observed_capture_group, signal.SIGKILL)
                                 deadline = time.monotonic() + 2
                                 while True:

@@ -34,8 +34,7 @@ class PackageInputCaptureTests(unittest.TestCase):
         # Keep the base fixture's pinned-image preflight; replace only the
         # acquisition worker handoff with the finite captured worker.
         (self.root / "tools/acquisition_run.sh").write_text(
-            "#!/bin/bash\n"
-            f'exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller "$@"\n'
+            f'#!/bin/bash\nexec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller "$@"\n'
         )
         self.intent = {
             "inference.in": b"torch @ https://fixture.test/torch-2.13.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256="
@@ -53,7 +52,11 @@ class PackageInputCaptureTests(unittest.TestCase):
         # controller alone; bound the complete pipeline while allowing its cost.
         result = subprocess.run(
             ["bash", str(self.root / "tools/packages.sh"), *arguments],
-            env=environment, text=True, capture_output=True, timeout=20, check=False,
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=20,
+            check=False,
         )
         self._remember(result.stderr)
         return result
@@ -510,22 +513,49 @@ def stage_worker_arguments(arguments):
     grants = arguments[3:]
     profile = grants[-1]
     assert profile in ("inference", "preparation")
-    names = {"inference": ("inference.in", "build.in", "unicore-source.json"),
-             "preparation": ("preparation.in",)}[profile]
+    names = {"inference": ("inference.in", "build.in", "unicore-source.json"), "preparation": ("preparation.in",)}[profile]
     selected = mounts(grants)
     capture = Path(selected["/input/" + names[0]]["src"]).parent.parent
     stage = capture.parent
     expected = [
-        "--init", "--pull", "never", "--read-only", "--env", "NMRNET_IN_CONTAINER=1",
-        "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-        "--cpus", "2", "--memory", "2g", "--memory-swap", "2g", "--pids-limit", "64",
-        "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=1g", "--env", "UV_CACHE_DIR=/tmp/uv",
-        "--env", "UV_NO_PROGRESS=1", "--env", "UV_PYTHON_DOWNLOADS=never",
+        "--init",
+        "--pull",
+        "never",
+        "--read-only",
+        "--env",
+        "NMRNET_IN_CONTAINER=1",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
+        "--cpus",
+        "2",
+        "--memory",
+        "2g",
+        "--memory-swap",
+        "2g",
+        "--pids-limit",
+        "64",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,noexec,size=1g",
+        "--env",
+        "UV_CACHE_DIR=/tmp/uv",
+        "--env",
+        "UV_NO_PROGRESS=1",
+        "--env",
+        "UV_PYTHON_DOWNLOADS=never",
     ]
     for name in names:
         expected += ["--mount", f"type=bind,src={capture / 'requirements' / name},dst=/input/{name},readonly"]
-    expected += ["--mount", f"type=bind,src={stage},dst=/output",
-                 "--mount", f"type=bind,src={capture},dst=/output/.inputs,readonly", "--", "stage", profile]
+    expected += [
+        "--mount",
+        f"type=bind,src={stage},dst=/output",
+        "--mount",
+        f"type=bind,src={capture},dst=/output/.inputs,readonly",
+        "--",
+        "stage",
+        profile,
+    ]
     assert grants == expected
     return grants
 
