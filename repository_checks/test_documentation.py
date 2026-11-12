@@ -37,9 +37,10 @@ class Page(HTMLParser):
             if name in attrs:
                 self.links.append(attrs[name])
         if tag == "meta" and "name" in attrs:
-            self.metadata[attrs["name"]] = attrs.get("content", "")
+            self.metadata[attrs["name"]] = attrs["content"]
         if tag == "pre" and attrs.get("id") == "record-text":
             self.in_record = True
+        # silent-defaults: allow-contract -- A span without an id is ordinary record content, not a cited source line.
         if self.in_record and tag == "span" and attrs.get("id", "").startswith("L"):
             self.current_line = []
             self.lines.append((attrs["id"], self.current_line))
