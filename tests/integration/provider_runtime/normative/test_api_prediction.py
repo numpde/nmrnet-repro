@@ -201,13 +201,25 @@ class ApiPredictionTests(unittest.TestCase):
         observation.update(
             operations=["prepare_pasted", "prepare_pasted"],
             visits=[
-                {"turns_started": 1, "corrections": 0, "routes": [
-                    {"endpoint": interpreter["endpoints"][0], "turns_started": 1,
-                     "failure": "exchange_failed", "http_status": 503},
-                ]},
-                {"turns_started": 2, "corrections": 1, "routes": [
-                    {"endpoint": fallback, "turns_started": 2},
-                ]},
+                {
+                    "turns_started": 1,
+                    "corrections": 0,
+                    "routes": [
+                        {
+                            "endpoint": interpreter["endpoints"][0],
+                            "turns_started": 1,
+                            "failure": "exchange_failed",
+                            "http_status": 503,
+                        },
+                    ],
+                },
+                {
+                    "turns_started": 2,
+                    "corrections": 1,
+                    "routes": [
+                        {"endpoint": fallback, "turns_started": 2},
+                    ],
+                },
             ],
         )
         before = copy.deepcopy(actual)
@@ -323,14 +335,22 @@ class ApiPredictionTests(unittest.TestCase):
         actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567891
         with patch("api_prediction._retained_science", return_value=retained):
             compare_science(
-                json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter,
-                prediction_image_id="sha256:" + "c" * 64, case_kind="pasted",
+                json.dumps(actual).encode(),
+                receipt,
+                metadata,
+                interpreter=interpreter,
+                prediction_image_id="sha256:" + "c" * 64,
+                case_kind="pasted",
             )
             actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567892
             with self.assertRaisesRegex(AssertionError, "predictions"):
                 compare_science(
-                    json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter,
-                    prediction_image_id="sha256:" + "c" * 64, case_kind="pasted",
+                    json.dumps(actual).encode(),
+                    receipt,
+                    metadata,
+                    interpreter=interpreter,
+                    prediction_image_id="sha256:" + "c" * 64,
+                    case_kind="pasted",
                 )
         self.assertEqual(1.23456789123, retained["geometries"][0]["predictions"][0]["shift_ppm"])
 
@@ -429,8 +449,13 @@ class ApiPredictionTests(unittest.TestCase):
         actual, retained, receipt, metadata, interpreter, upload, source, expected = uploaded_documents()
         retained["geometries"][0]["predictions"][0]["shift_ppm"] = 1.23456789123
         actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567891
-        arguments = dict(interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64,
-                         upload=upload, source=source, expected=expected)
+        arguments = {
+            "interpreter": interpreter,
+            "prediction_image_id": "sha256:" + "c" * 64,
+            "upload": upload,
+            "source": source,
+            "expected": expected,
+        }
         compare_upload_scientific_documents(actual, retained, receipt, metadata, **arguments)
         actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567892
         with self.assertRaisesRegex(AssertionError, "predictions"):
@@ -440,7 +465,7 @@ class ApiPredictionTests(unittest.TestCase):
         actual, retained, receipt, metadata, interpreter, upload = uploaded_sdf_documents()
         retained["geometries"][0]["predictions"][0]["shift_ppm"] = 1.23456789123
         actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567891
-        arguments = dict(interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, upload=upload)
+        arguments = {"interpreter": interpreter, "prediction_image_id": "sha256:" + "c" * 64, "upload": upload}
         compare_sdf_scientific_documents(actual, retained, receipt, metadata, **arguments)
         actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567892
         with self.assertRaisesRegex(AssertionError, "predictions"):

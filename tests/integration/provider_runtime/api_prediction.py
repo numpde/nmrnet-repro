@@ -185,6 +185,7 @@ class Client:
             return False
         try:
             problem = decode_strict_json(content.decode("utf-8"))
+        # silent-defaults: allow-exception-outcome -- An unreadable problem cannot authorize a signature retry; request retains the response and rejects its 401 status.
         except (ValueError, UnicodeError):
             return False
         return (
@@ -327,16 +328,16 @@ def submit(client, case, *, case_kind, upload_receipt=None):
     )
     # silent-defaults: allow-contract -- Publish one Upload only for a profile with prepared source bytes; profiles without source proceed directly to Job submission and skip attachment; source=submit; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer, test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_delayed_result_crosses_old_reader_and_process_limits_without_another_job.
     upload = publish_upload(client, source, case_kind=case_kind, reservation=upload_receipt) if source is not None else None
+    # silent-defaults: allow-contract -- The description names the molecule selected by the fixed qualification case.
+    molecule = "butane" if case_kind in ("smiles-multiple", "sdf-zip") else "chloromethane"
+    # silent-defaults: allow-contract -- The receipt records whether this qualification uses a scripted interpreter.
+    interpreter = "scripted" if client.identity["interpretation_scripted"] else "real"
     body = json.dumps(
         {
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "analysis_kind_ref": "peaks_from_mol",
-            "description": "NMRNet "
-            + ("butane" if case_kind in ("smiles-multiple", "sdf-zip") else "chloromethane")
-            + "; "
-            + ("scripted" if client.identity["interpretation_scripted"] else "real")
-            + " interpreter qualification",
+            "description": f"NMRNet {molecule}; {interpreter} interpreter qualification",
             "specification": case["specification"],
             "state": "closed",
         },
@@ -647,10 +648,7 @@ def require_selected_interpretation(observation, interpreter, operation):
             and 0 < visit["turns_started"] <= 12
             and type(visit["corrections"]) is int
             and 0 <= visit["corrections"] <= 3
-            and all(
-                type(route["turns_started"]) is int and 0 <= route["turns_started"]
-                for route in visit["routes"]
-            )
+            and all(type(route["turns_started"]) is int and route["turns_started"] >= 0 for route in visit["routes"])
             and sum(route["turns_started"] for route in visit["routes"]) == visit["turns_started"]
             for visit in visits
         )

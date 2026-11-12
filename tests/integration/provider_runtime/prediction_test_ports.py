@@ -216,6 +216,7 @@ def clocked_client(output, *, ready_at):
         "result_fingerprint": "sha256:" + hashlib.sha256(content).hexdigest(),
     }
 
+    # silent-defaults: allow-contract -- The clock fixture mirrors the request helper's signature and records its ordinary 200 or explicit expected status.
     def request(label, method, path, query="", body=None, status=200):
         calls.append((label, method, path, query, body, status))
         if label == "directory":
@@ -238,6 +239,7 @@ def clocked_client(output, *, ready_at):
         if label == "open":
             return {"job": {"job_ref": receipt["job_ref"], "state": "open"}}
         if label in ("attempts", "final-attempts"):
+            # silent-defaults: allow-contract -- No attempt is visible before the fixture clock reaches ready_at; afterward the authored attempt succeeds.
             attempts = (
                 [{"execution_attempt_ref": metadata["execution_attempt_ref"], "state": "succeeded"}]
                 if clock.seconds >= ready_at
@@ -245,6 +247,7 @@ def clocked_client(output, *, ready_at):
             )
             return {"job_ref": receipt["job_ref"], "next_cursor": None, "attempts": attempts}
         if label == "results":
+            # silent-defaults: allow-contract -- The result becomes visible at the same fixture clock threshold as the completed attempt.
             return {"job_ref": receipt["job_ref"], "next_cursor": None, "results": [result] if clock.seconds >= ready_at else []}
         if label == "result":
             import base64  # noqa: PLC0415 -- Only the readback response fixture needs its wire encoding.
@@ -280,9 +283,12 @@ def upload_client(output, *, fault, source=None, existing=None):
     if source is None:
         source = Path("/fixture/atom_order.xyz").read_bytes()
     canary = "synthetic-publication-secret-canary"
-    reservation = dict(existing or {})
+    reservation = {}
+    if existing is not None:
+        reservation.update(existing)
 
     def exchange(prefix, method, path, _query, body, headers, maximum_bytes):
+        # silent-defaults: allow-contract -- Upload and publication-capability responses use the 64 KiB ceiling; ordinary API responses use 1 MiB.
         assert maximum_bytes == (65536 if path.endswith("/publish-capability") or path.startswith("/upload/v1/") else 1048576)
         calls.append((method, path, body, headers))
         status, document = 200, {}
@@ -333,6 +339,7 @@ def upload_client(output, *, fault, source=None, existing=None):
         elif path.startswith("/upload/v1/"):
             if fault == "lost-put":
                 raise OSError("synthetic transfer interrupted " + canary)
+            # silent-defaults: allow-contract -- This fault injects a 500 response with a canary; the ordinary publication response is 201.
             status, document = (500, {"detail": canary}) if fault == "put-error-body" else (201, {"ignored": canary})
         elif path.endswith("/finalize"):
             document = {key: reservation[key] for key in ("upload_ref", "project_ref", "byte_length", "created_at")}
@@ -354,6 +361,7 @@ def upload_client(output, *, fault, source=None, existing=None):
             }
             document.update(job_ref="job:upload-new", submitter_ref=client.user.principal_ref, replayed=False)
         elif path.endswith("/uploads"):
+            # silent-defaults: allow-contract -- The wrong-attach fault returns no attachment; normal responses retain the created Upload reference.
             document = {"upload_refs": [] if fault == "wrong-attach" else [upload_ref]}
         elif path.endswith("/providers"):
             document = {"provider_refs": [client.identity["provider_ref"]]}
@@ -409,10 +417,13 @@ def uploaded_sdf_documents():
     actual["schema_id"] = "nmrnet.coordinate_shifts.result.v2"
     actual["interpretation"].update(
         operations=["inspect_uploads", "inspect_upload", "prepare_upload"],
-        visits=[{
-            "turns_started": 3, "corrections": 0,
-            "routes": [{"endpoint": interpreter["endpoints"][0], "turns_started": 3}],
-        }],
+        visits=[
+            {
+                "turns_started": 3,
+                "corrections": 0,
+                "routes": [{"endpoint": interpreter["endpoints"][0], "turns_started": 3}],
+            }
+        ],
     )
     return actual, retained, receipt, metadata, interpreter, upload
 
@@ -458,10 +469,13 @@ def uploaded_documents():
     )
     actual["interpretation"].update(
         operations=["inspect_uploads", "prepare_upload"],
-        visits=[{
-            "turns_started": 2, "corrections": 0,
-            "routes": [{"endpoint": interpreter["endpoints"][0], "turns_started": 2}],
-        }],
+        visits=[
+            {
+                "turns_started": 2,
+                "corrections": 0,
+                "routes": [{"endpoint": interpreter["endpoints"][0], "turns_started": 2}],
+            }
+        ],
     )
     upload = {
         "upload_ref": "upload:sha256:" + "d" * 64,
@@ -497,12 +511,15 @@ def clocked_upload_client(output, *, ready_at):
         label = prefix.name.split("-", 1)[1]
         ready = clock.seconds >= ready_at
         if label in ("attempts", "final-attempts"):
+            # silent-defaults: allow-contract -- The Upload readback exposes its completed attempt only after the fixture clock reaches ready_at.
+            attempts = [{"execution_attempt_ref": metadata["execution_attempt_ref"], "state": "succeeded"}] if ready else []
             document = {
                 "job_ref": receipt["job_ref"],
                 "next_cursor": None,
-                "attempts": [{"execution_attempt_ref": metadata["execution_attempt_ref"], "state": "succeeded"}] if ready else [],
+                "attempts": attempts,
             }
         elif label == "results":
+            # silent-defaults: allow-contract -- The Upload result becomes visible at the same clock threshold as its completed attempt.
             document = {"job_ref": receipt["job_ref"], "next_cursor": None, "results": [result] if ready else []}
         elif label == "result":
             import base64  # noqa: PLC0415 -- This finite response encodes already-owned synthetic bytes.
