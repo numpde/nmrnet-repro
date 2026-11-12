@@ -8,12 +8,15 @@ from pathlib import Path
 from host.git_stream_sources import source_allowlist
 
 
+# silent-defaults: allow-contract -- Inventory entries model nonexecutable files unless the scenario selects an executable file.
 def record(name, content, executable=False):
     digest = hashlib.sha1(f"blob {len(content)}\0".encode() + content, usedforsecurity=False).hexdigest()
+    # silent-defaults: allow-contract -- Git records executable files as 100755 and ordinary files as 100644.
     mode = "100755" if executable else "100644"
     return f"{mode} blob {digest}\t{name}\0".encode()
 
 
+# silent-defaults: allow-contract -- Parent inventory uses the context root; submodule and invalid-prefix scenarios supply their own prefix.
 def admitted(path, prefix="."):
     return path, prefix, "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 

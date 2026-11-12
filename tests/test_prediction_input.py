@@ -254,6 +254,7 @@ QUALIFIED_MODEL_COORDINATE_UNITS['C'] = 'angstrom'
 parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,0]]}')
 """
         environment = os.environ.copy()
+        # silent-defaults: allow-pop-default -- Remove an inherited container marker so the child import exercises rejection outside the maintained launcher.
         environment.pop("NMRNET_IN_CONTAINER", None)
         result = subprocess.run(
             [sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True, check=False

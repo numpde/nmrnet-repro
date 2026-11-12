@@ -420,9 +420,11 @@ class ResultTests(unittest.TestCase):
                 self.raw = json.dumps({"coordinate_unit": "angstrom", "atoms": [atom], "coordinates": [[0, 0, 0]]}).encode()
                 self.geometry = prepare_json(self.raw)
                 self.result["request_sha256"] = hashlib.sha256(self.raw).hexdigest()
+                # silent-defaults: allow-contract -- H input has its valid prediction row; the O case has no predicted rows.
                 self.result["prediction"]["predictions"] = (
                     [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}] if atom == "H" else []
                 )
+                # silent-defaults: allow-contract -- Only H carries an artifact, so the C scaler claimed by the injected warning is absent in both cases.
                 self.result["provenance"]["artifacts"]["elements"] = {"H": self.artifacts["elements"]["H"]} if atom == "H" else {}
                 self.result["private_warnings"] = [
                     {

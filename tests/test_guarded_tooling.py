@@ -356,6 +356,7 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assert_wheel_profile("provider-core")
 
     def assert_wheel_profile(self, profile):
+        # silent-defaults: allow-contract -- The provider-core profile uses provider-core-install.lock; other tested profiles use their own lock stem.
         name = "provider-core-install" if profile == "provider-core" else profile
         (self.root / f"requirements/{name}.lock").write_text("fixture==1\n")
         if profile == "provider-core":
