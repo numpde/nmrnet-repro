@@ -641,6 +641,7 @@ class ProviderService:
     async def _cleanup(self, operation, function):
         try:
             await function()
+        # silent-defaults: allow-exception-outcome -- Retain and return the original cleanup failure so shutdown can finish independent obligations before reporting failures and cancellation.
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             self._remember(operation, cause)
             return cause

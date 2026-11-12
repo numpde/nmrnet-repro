@@ -227,6 +227,7 @@ class NMRNetSession:
             if type(original) is not NativeWorkerExited:
                 raise
             raise self._worker_crash(original, cause=cause) from None
+        # silent-defaults: allow-exception-outcome -- Invalid user input becomes an invalid_input result with diagnostic evidence in _failed_preparation.
         except InputRejected as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
@@ -246,6 +247,7 @@ class NMRNetSession:
                 input_fingerprint=instructions.identity.input_fingerprint,
                 **self._facts,
             )
+        # silent-defaults: allow-exception-outcome -- Result capacity refusal becomes a result_size_limit result with evidence in _failed_preparation.
         except ResultCapacityExceeded as cause:
             return self._failed_preparation(cause, instructions)
         diagnostics = self._input_preparation.interpreter_diagnostics
@@ -325,6 +327,7 @@ class NMRNetSession:
             try:
                 async with asyncio.timeout_at(deadline):
                     return await self._predict_once(requests, require_execution)
+            # silent-defaults: allow-exception-outcome -- Only an exact ModelCallFailed enters the bounded retry, retaining the first failure through retirement and replacement.
             except ModelCallFailed as first:
                 if type(first) is not ModelCallFailed:
                     raise

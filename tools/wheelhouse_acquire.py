@@ -53,6 +53,7 @@ def shared_asset_present(declaration, pool):
     _, _, name = assets[0]
     try:
         (pool / name).lstat()
+    # silent-defaults: allow-exception-outcome -- An absent pinned asset reports not present; existing assets are verified before readiness.
     except FileNotFoundError:
         return False
     prepare_core_assets(declaration, pool, download=False)
@@ -64,6 +65,7 @@ def scientific_source_present(declaration, pool):
     source = source_cache_file(pool, identity)
     try:
         source.lstat()
+    # silent-defaults: allow-exception-outcome -- An absent pinned source reports not present; existing source bytes are verified before readiness.
     except FileNotFoundError:
         return False
     verified_source(source, identity)

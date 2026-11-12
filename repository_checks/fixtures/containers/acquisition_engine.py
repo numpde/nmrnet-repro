@@ -88,6 +88,7 @@ class AcquisitionEngine:
             if arguments != [identifier]:
                 reject("readiness fixture requires a detached start")
             scenario = os.environ["NMRNET_FAKE_ACQ_READINESS_SCENARIO"]
+            # silent-defaults: allow-contract -- The stopped readiness scenario models an exited container; other modeled scenarios keep it running.
             record["phase"] = "exited" if scenario == "stopped" else "running"
             self.save()
             return 0
@@ -147,6 +148,7 @@ class AcquisitionEngine:
         projection = arguments[1]
         if projection == "{{.State.Running}}" and os.environ.get("NMRNET_FAKE_ACQ_READINESS_ROLE") == record["role"]:
             scenario = os.environ["NMRNET_FAKE_ACQ_READINESS_SCENARIO"]
+            # silent-defaults: allow-contract -- Readiness inspection must agree with the phase selected by the authored stopped or running scenario.
             if record["phase"] != ("exited" if scenario == "stopped" else "running"):
                 reject("readiness observation disagrees with modeled state")
             if scenario == "inspect-failed":
@@ -159,6 +161,7 @@ class AcquisitionEngine:
         elif projection == "{{.HostConfig.NetworkMode}}":
             sys.stdout.write(f"{record['network']}\n")
         elif projection == "{{.HostConfig.NetworkMode}} {{.State.Running}}":
+            # silent-defaults: allow-contract -- Docker inspect renders the modeled running phase as true and every other phase as false.
             running = "true" if record["phase"] == "running" else "false"
             sys.stdout.write(f"{record['network']} {running}\n")
         elif projection == "{{.State.Running}} {{.State.ExitCode}}" and record["phase"] == "exited":
