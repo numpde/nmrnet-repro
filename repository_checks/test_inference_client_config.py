@@ -242,20 +242,29 @@ class InferenceClientConfigTests(unittest.TestCase):
                 observation = fixture.root / "unconfirmed-retirement"
                 record = fixture.root / ".work/inference/image-id"
                 before = record.read_bytes(), record.stat().st_ino
+                process = None
                 try:
-                    result = fixture.run(
-                        "inference_image.sh",
-                        action,
-                        additions=environment
-                        | {
-                            "BASH_FUNC_kill%%": deny_retirement,
-                            "NMRNET_RETIREMENT_OBSERVATION": str(observation),
-                        },
+                    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+                        process = subprocess.Popen(
+                            ["bash", str(fixture.root / "tools/inference_image.sh"), action],
+                            env=fixture.environment | environment | {
+                                "BASH_FUNC_kill%%": deny_retirement,
+                                "NMRNET_RETIREMENT_OBSERVATION": str(observation),
+                            },
+                            cwd=fixture.root, stdout=stdout, stderr=stderr, start_new_session=True,
+                        )
+                        self.assertEqual(1, process.wait(timeout=20))
+                        stderr.seek(0)
+                        diagnostic = stderr.read().decode()
+                    self.assertIn("native anchor retirement could not be confirmed", diagnostic)
+                    self.assertIn("private Docker client state retained", diagnostic)
+                    calls = fixture.calls()
+                    self.assertEqual(1, len(calls), msg="A second native call overwrote unknown retirement")
+                    image = (
+                        "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+                        if action == "build" else before[0].decode().strip()
                     )
-                    self.assertEqual(1, result.returncode, msg=result.stderr)
-                    self.assertIn("native anchor retirement could not be confirmed", result.stderr)
-                    self.assertIn("private Docker client state retained", result.stderr)
-                    self.assertEqual(1, len(fixture.calls()), msg="A second native call overwrote unknown retirement")
+                    self.assertEqual(["image", "inspect", "--format", "{{.Id}}", image], calls[0]["arguments"])
                     self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
                     self.assert_owned_configuration(fixture, caller_paths, retired=False)
                     observed = observation.read_text().splitlines()
@@ -263,15 +272,20 @@ class InferenceClientConfigTests(unittest.TestCase):
                     if action == "build":
                         capture = Path(observed[4])
                         self.assertTrue((capture / "context").is_dir())
-                        self.assertTrue((capture / "wheelhouse").is_dir())
-                        self.assertIn("private build capture retained", result.stderr)
+                        self.assertTrue((capture / "authored").is_file())
+                        self.assertTrue((capture / "source").is_file())
+                        self.assertIn("private build capture retained", diagnostic)
                 finally:
+                    if process is not None and process.poll() is None:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=2)
                     if observation.exists():
                         observed = observation.read_text().splitlines()
                         with suppress(ProcessLookupError):
                             os.killpg(int(observed[0]), signal.SIGKILL)
-                        with suppress(ProcessLookupError):
-                            os.kill(int(observed[1]), signal.SIGKILL)
+                        if observed[1]:
+                            with suppress(ProcessLookupError):
+                                os.kill(int(observed[1]), signal.SIGKILL)
                         for retained in observed[2:]:
                             if retained:
                                 shutil.rmtree(retained)
