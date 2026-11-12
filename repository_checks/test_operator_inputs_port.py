@@ -13,6 +13,7 @@ from tools.container_guard import require_container
 
 require_container()
 
+import json
 import os
 import re
 import shlex
@@ -565,51 +566,51 @@ class AcquisitionRetirementTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
             result = fixture.run(
-                "docker.sh",
-                "run",
-                "--pull",
-                "never",
-                "--read-only",
-                "sha256:" + "b" * 64,
-                additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
+                "acquisition_run.sh", "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_ACQUISITION_SCOPE": "1"},
             )
             self.assertEqual(0, result.returncode, msg=result.stderr)
             calls = [call["arguments"] for call in fixture.calls()]
             creates = [call for call in calls if call[0] == "create"]
             removals = [call for call in calls if call[0] == "rm"]
-            self.assertEqual(2, len(creates))
-            self.assertEqual(2, len(removals))
+            self.assertEqual(3, len(creates))
+            self.assertEqual(3, len(removals))
             starts = [call for call in calls if call[0] == "start"]
-            self.assertEqual(starts, [["start", "c" * 64], ["start", "--attach", "d" * 64]])
+            self.assertEqual(starts, [["start", "1" * 64], ["start", "2" * 64], ["start", "--attach", "3" * 64]])
             self.assertEqual(
                 [call[-1] for call in removals],
-                ["d" * 64, "c" * 64],
-                msg="Worker retirement must precede proxy retirement using their distinct exact IDs.",
+                ["3" * 64, "2" * 64, "1" * 64],
+                msg="Worker retirement must precede relay and gateway retirement using their distinct exact IDs.",
             )
-            scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent
+            scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent.parent
             self.assertFalse(scratch.exists(), msg="Joined owned acquisition scratch was retained after confirmed cleanup.")
 
-    def test_worker_failure_and_proxy_retirement_failure_both_survive(self):
+    def test_worker_failure_and_relay_retirement_failure_both_survive(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
             result = fixture.run(
-                "docker.sh",
-                "run",
-                "sha256:" + "b" * 64,
+                "acquisition_run.sh", "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
                 additions={
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "NMRNET_FAKE_WORKER_STATUS": "7",
-                    "NMRNET_FAKE_REMOVE_STATUS": "9",
+                    "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                    "NMRNET_FAKE_ACQ_REMOVE_FAIL": "relay",
                 },
             )
             self.assertEqual(7, result.returncode)
             self.assertIn("removal", result.stderr)
-            self.assertIn("worker", result.stderr)
-            self.assertIn("proxy", result.stderr)
+            self.assertIn("acquisition relay", result.stderr)
+            calls = [call["arguments"] for call in fixture.calls()]
+            self.assertEqual([["rm", "--force", "3" * 64], ["rm", "--force", "2" * 64]],
+                             [call for call in calls if call[0] == "rm"])
             creates = [call["arguments"] for call in fixture.calls() if call["arguments"][0] == "create"]
-            scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent
+            scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent.parent
             self.assertTrue(scratch.exists(), msg="Unconfirmed cleanup deleted the retained ownership evidence.")
+            self.assertEqual(("2" * 64 + "\n").encode(), (scratch / "relay" / "cid").read_bytes())
+            self.assertEqual(("2" * 64 + "\n").encode(), (scratch / "relay" / "stdout").read_bytes())
+            registry = json.loads((fixture.root / "acquisition-containers.json").read_text())
+            self.assertEqual({"1" * 64, "2" * 64}, set(registry))
             # The fixture owns this directory and can dispose of failed probe
             # evidence after asserting it; production cleanup must retain it.
             shutil.rmtree(scratch)
@@ -802,25 +803,25 @@ class NativeCommandPostureTests(unittest.TestCase):
                 msg="A native command exceeded the original capped evidence bound.",
             )
 
-    def test_cancellation_and_cleanup_failure_preserve_primary_status_and_evidence(self):
+    def test_worker_signal_number_and_cleanup_failure_preserve_primary_status_and_evidence(self):
         for status in (130, 143):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 self.addCleanup(fixture.dispose)
                 result = fixture.run(
-                    "docker.sh",
-                    "run",
-                    "sha256:" + "b" * 64,
+                    "acquisition_run.sh", "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
                     additions={
                         "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                         "NMRNET_FAKE_WORKER_STATUS": str(status),
-                        "NMRNET_FAKE_REMOVE_STATUS": "9",
+                        "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
+                        "NMRNET_FAKE_ACQ_REMOVE_FAIL": "relay",
                     },
                 )
                 self.assertEqual(result.returncode, status)
+                self.assertNotIn("Acquisition was interrupted", result.stderr)
                 self.assertIn("removal", result.stderr)
                 creates = [call["arguments"] for call in fixture.calls() if call["arguments"][0] == "create"]
-                scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent
+                scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent.parent
                 self.assertTrue(scratch.exists())
                 shutil.rmtree(scratch)
 
