@@ -81,6 +81,7 @@ def require_download_credentials(request, body):
 
 
 class RuntimePeers:
+    # silent-defaults: allow-contract -- Ordinary runtime witnesses use two live Attempt slots; capacity and successive-service fixtures explicitly select their required limit.
     def __init__(self, ports, route, *, maximum_live_attempts=2):
         self.ports, self.route = ports, route
         self.allocate_prediction = AsyncMock(side_effect=self._allocate_prediction)
@@ -223,6 +224,7 @@ class RuntimePeers:
                     raise AssertionError("Delivery proxy CONNECT worker did not stop; scratch remains owned.")
         proxy.server_close()
 
+    # silent-defaults: allow-contract -- Ordinary witnesses wait for one delivery_published notice from the real shared relay; successive-result witnesses explicitly request their publication count.
     async def wait_published(self, count=1):
         async with asyncio.timeout(3):
             while sum(facts["event"] == "delivery_published" for _, facts in self.delivery_notices) < count:
@@ -314,6 +316,7 @@ class RuntimePeers:
             ]
             return json.dumps(document).encode()
         if path.endswith("/input"):
+            # silent-defaults: allow-contract -- The normal reply preserves discovered input bytes; corrupt_input explicitly substitutes changed bytes to prove identity rejection before model or native dispatch.
             payload = b"PRIVATE changed after discovery" if self.corrupt_input else self.ports.instructions.specification_bytes
             return response(payload)
         if path.endswith("/uploads"):

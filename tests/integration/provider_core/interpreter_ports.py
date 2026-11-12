@@ -58,6 +58,7 @@ def tool_reply(identifier, name, arguments):
     return json.dumps({"choices": [{"message": message, "finish_reason": "tool_calls"}]}).encode()
 
 
+# silent-defaults: allow-contract -- Ordinary HTTPS chat witnesses use one fixture identity, a 64 KiB request ceiling and a one-second exchange bound; endpoint-order, request-limit and slower-exchange cases override these inputs.
 def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_seconds=1):
     return ChatEndpoint(
         ChatEndpointSpec(
