@@ -34,6 +34,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             (self.root / directory).mkdir(parents=True)
         for name in (
             "checker.py",
+            "checker_acquisition.py",
             "checker.sh",
             "artifacts.py",
             "container_guard.py",
@@ -50,14 +51,24 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
         (self.root / "tools/docker.sh").rename(self.root / "tools/docker-real.sh")
-        (self.root / "tools/docker.sh").write_text('''#!/bin/bash
+        (self.root / "tools/docker.sh").write_text("""#!/bin/bash
 if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
     if [[ ${CHECKER_FIXTURE_MAP_FAIL-} ]]; then exit 23; fi
     printf '%s\\n' "${CHECKER_FIXTURE_MAP_RESULT:-0:0}"
     exit
 fi
 exec bash "$(dirname "$0")/docker-real.sh" "$@"
-''')
+""")
+        installer = Path("host/bootstrap/acquisition/acquisition_tool/installer")
+        for name in (
+            "tools/container_guard.py",
+            "tools/installer.py",
+            "requirements/installer-release.json",
+            "wheels/pip-26.2.2-py3-none-any.whl",
+        ):
+            destination = self.root / installer / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / installer / name, destination)
         for name in ("Dockerfile", "Dockerfile.dockerignore"):
             (self.root / "containers/checker" / name).write_text("fixture recipe\n")
         self.document["base"] = (
@@ -72,9 +83,9 @@ exec bash "$(dirname "$0")/docker-real.sh" "$@"
         pool = self.root / "pool"
         pool.mkdir()
         wheel = next(item["file"] for item in self.document["packages"] if item["name"] == "ruff")
-        shutil.copyfile(self.directory / wheel, pool / wheel)
+        shutil.copyfile(self.shared / wheel, pool / wheel)
         streamer = pool / "wheelhouse-tool-1.0.0.pyz"
-        streamer.write_text('''import json, pathlib, sys, tarfile
+        streamer.write_text("""import json, pathlib, sys, tarfile
 args = sys.argv
 sources = json.loads(pathlib.Path(args[args.index("--source-allowlist") + 1]).read_text())
 items = json.loads(pathlib.Path(args[args.index("--manifest") + 1]).read_text())
@@ -84,7 +95,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         tar.add(item["path"], arcname=item["destination"])
     for item in items:
         tar.add(pool / item["filename"], arcname=item["directory"] + "/" + item["filename"])
-''')
+""")
         pin = hashlib.sha256(streamer.read_bytes()).hexdigest()
         asset = f"https://github.com/numpde/nmr-provider-tools/releases/download/v1/{streamer.name}#sha256={pin}\n"
         (self.root / "requirements/wheelhouse-tool-assets.in").write_text(asset)
@@ -150,7 +161,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         for name in names:
             target = self.root / "bin" / name
             if not target.exists():
-                target.symlink_to(ROOT / "tests/test_checker_engine.py")
+                target.symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
 
     # silent-defaults: allow-contract -- Capture both streams unless a blocked-pipe scenario supplies its own descriptor; the removal-signal case checks exact stdout and quiet stderr; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_removal_signal_finishes_quiet_cleanup_without_new_report
     def _start(self, action, additions, *, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
@@ -440,14 +451,30 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
     def test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture(self):
         selected = self.root / "tools/checker.py"
         expected = hashlib.sha256(selected.read_bytes()).hexdigest()
+        installer = Path("host/bootstrap/acquisition/acquisition_tool/installer")
+        installer_inputs = [
+            installer / name
+            for name in (
+                "tools/container_guard.py",
+                "tools/installer.py",
+                "requirements/installer-release.json",
+                "wheels/pip-26.2.2-py3-none-any.whl",
+            )
+        ]
+        installer_hashes = {str(path): hashlib.sha256((self.root / path).read_bytes()).hexdigest() for path in installer_inputs}
         result = self.launch("build", additions={"CHECKER_FIXTURE_MUTATE": str(selected), "CHECKER_FIXTURE_PROBE_LEASE": "1"})
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertTrue((self.root / "state/build-lease-held").exists())
         evidence = json.loads((self.root / "state/build.json").read_text())
         self.assertEqual(expected, evidence["manifest"]["tools/checker.py"])
+        for path, digest in installer_hashes.items():
+            self.assertEqual(digest, evidence["manifest"][path])
         declared = {item["file"] for item in self.document["packages"] if item["name"] != "ruff"}
-        streamed = {name.removeprefix("checker-dependencies/") for name in evidence["manifest"]
-                    if name.startswith("checker-dependencies/")}
+        streamed = {
+            name.removeprefix("checker-dependencies/")
+            for name in evidence["manifest"]
+            if name.startswith("checker-dependencies/")
+        }
         self.assertEqual(declared | {".complete"}, streamed)
         self.assertNotEqual(Path(evidence["context"]), self.root)
         self.assertFalse(Path(evidence["context"]).exists())
@@ -473,7 +500,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                 self.assertFalse(Path(evidence["dependencies"]).exists())
 
     def test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture(self):
-        (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
+        (self.root / "bin/rm").symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         record = self.root / ".work/checker/image-id"
         record.write_text("sha256:" + "c" * 64 + "\n")
         result = self.launch("build", additions={"CHECKER_FIXTURE_BUILD_FAIL": "1", "CHECKER_FIXTURE_CAPTURE_CLEANUP_FAIL": "1"})
@@ -491,7 +518,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         )
 
     def test_successful_build_with_failed_capture_cleanup_fails_and_keeps_published_record(self):
-        (self.root / "bin/rm").symlink_to(ROOT / "tests/test_checker_engine.py")
+        (self.root / "bin/rm").symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         result = self.launch("build", additions={"CHECKER_FIXTURE_CAPTURE_CLEANUP_FAIL": "1"})
         self.assertEqual(13, result.returncode, msg=result.stderr)
         self.assertEqual("sha256:" + "d" * 64 + "\n", (self.root / ".work/checker/image-id").read_text())
@@ -507,7 +534,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_failed_record_rename_retires_only_owned_temporary_and_preserves_predecessor(self):
         for command in ("mv", "rm"):
-            (self.root / "bin" / command).symlink_to(ROOT / "tests/test_checker_engine.py")
+            (self.root / "bin" / command).symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         record = self.root / ".work/checker/image-id"
         predecessor = "sha256:" + "c" * 64 + "\n"
         record.write_text(predecessor)
@@ -530,7 +557,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_failed_record_cleanup_reports_retained_temporary_and_preserves_rename_status(self):
         for command in ("mv", "rm"):
-            (self.root / "bin" / command).symlink_to(ROOT / "tests/test_checker_engine.py")
+            (self.root / "bin" / command).symlink_to(ROOT / "tests/fixtures/checker_native_command.py")
         record = self.root / ".work/checker/image-id"
         predecessor = "sha256:" + "c" * 64 + "\n"
         record.write_text(predecessor)
@@ -563,11 +590,12 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         download = self.launch("download", preview=True)
         self.assertEqual(0, download.returncode, msg=download.stderr)
-        worker = shlex.split(download.stdout.splitlines()[-1].split('Online worker: ', 1)[1])
+        worker = shlex.split(download.stdout.splitlines()[-1].split("Online worker: ", 1)[1])
         mounts = [worker[index + 1] for index, value in enumerate(worker) if value == "--mount"]
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
-        self.assertEqual([f"type=bind,src={self.root}/.work/checker,dst=/output",
-                          f"type=bind,src={self.root}/pool,dst=/wheelhouse"], writable)
+        self.assertEqual(
+            [f"type=bind,src={self.root}/.work/checker,dst=/output", f"type=bind,src={self.root}/pool,dst=/wheelhouse"], writable
+        )
         self.assertNotIn("/var/run/docker.sock", " ".join(mounts))
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
 
@@ -626,7 +654,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_checker_uses_mapped_owner_and_refuses_unverified_mapping(self):
         result = self.launch("check", additions={"CHECKER_FIXTURE_MAP_RESULT": "42:43"})
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = self.calls()[-1]["arguments"]
         self.assertEqual("42:43", arguments[arguments.index("--user") + 1])
         for additions in ({"CHECKER_FIXTURE_MAP_FAIL": "1"}, {"CHECKER_FIXTURE_MAP_RESULT": "bad"}):
@@ -638,7 +666,7 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 
     def test_failed_captured_verification_retains_borrowed_inputs(self):
         result = self.launch("build", additions={"CHECKER_FIXTURE_RUN_STATUS": "37", "CHECKER_FIXTURE_RUN_STATUS_CALL": "2"})
-        self.assertEqual(37, result.returncode, result.stderr)
+        self.assertEqual(37, result.returncode, msg=result.stderr)
         self.assertIn("operation retirement is unconfirmed", result.stderr)
         captures = list((self.root / ".work/checker").glob(".build.*"))
         self.assertEqual(1, len(captures))
@@ -672,7 +700,9 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                     [call["arguments"][0] for call in calls],
                 )
                 evidence = json.loads((self.root / "state/build.json").read_text())
-                self.assertEqual(fault == "malformed-build", Path(evidence["context"]).parent.exists())
+                # The fake engine consumed the stream before replying. Joined
+                # local readers no longer borrow capture, even for a refused ID.
+                self.assertFalse(Path(evidence["context"]).parent.exists())
                 self.assertFalse(Path(calls[-1]["client_config"]).parent.exists())
                 if fault != "malformed-build":
                     receipt = Path(calls[-1]["receipt_directory"])
@@ -775,7 +805,11 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
                 reader, writer = self._full_pipe()
                 process = self._start("build", {"CHECKER_FIXTURE_HOLD": "inspect"}, stderr=writer)
                 os.close(writer)
-                self._wait_path(ready, seconds=5)
+                try:
+                    self._wait_path(ready, seconds=5)
+                except AssertionError as failure:
+                    failure.add_note(f"Observed fixture calls: {self.calls()}; launcher status: {process.poll()}")
+                    raise
                 call = self.calls()[-1]
                 self.assertEqual(["image", "inspect"], call["arguments"][:2])
                 self.assertEqual(str(call["pid"]), ready.read_text())

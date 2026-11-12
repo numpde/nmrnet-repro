@@ -20,7 +20,7 @@ class SmilesSourceTests(unittest.TestCase):
         self.assertEqual(selected.input_fingerprint, verified.identity.input_fingerprint)
         self.assertEqual(selected.source_bytes, source.encode())
         self.assertEqual(selected.source_sha256, hashlib.sha256(source.encode()).hexdigest())
-        self.assertEqual(selected.requested_count, 3)
+        self.assertEqual(3, selected.requested_count)
         self.assertNotIn("[13CH3]Cl", repr(selected))
         with self.assertRaises(FrozenInstanceError):
             selected.requested_count = 2
@@ -28,4 +28,4 @@ class SmilesSourceTests(unittest.TestCase):
     def test_supplied_text_need_not_be_a_literal_job_substring(self):
         raw = b"Use chloromethane with two conformers."
         selected = select_job_smiles(verify_job_input(response(raw), feed=facts(raw)), smiles="CCl", requested_count=2)
-        self.assertEqual(selected.source_bytes, b"CCl")
+        self.assertEqual(b"CCl", selected.source_bytes)

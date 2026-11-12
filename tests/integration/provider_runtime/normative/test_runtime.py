@@ -40,7 +40,17 @@ class ProviderRuntimeTests(unittest.TestCase):
             for line in Path("/opt/provider/provider-core-install.lock").read_text().splitlines()
             if (match := re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s;]+) \\", line))
         )
-        self.assertIn(("provider-core", self.core_wheel.removeprefix("provider_core-").removesuffix("-py3-none-any.whl")), expected)
+        self.assertIn(
+            ("provider-core", self.core_wheel.removeprefix("provider_core-").removesuffix("-py3-none-any.whl")), expected
+        )
+        installer = json.loads(Path("/opt/provider-tools/installer/release.json").read_bytes())
+        wheel = Path("/opt/provider-tools/installer/wheels") / installer["name"]
+        self.assertEqual(wheel.stat().st_size, installer["size"])
+        self.assertEqual(hashlib.sha256(wheel.read_bytes()).hexdigest(), installer["sha256"])
+        expected.append(("pip", installer["name"].split("-")[1]))
+        self.assertTrue(
+            Path(importlib.import_module("pip").__file__).resolve().is_relative_to(Path(sysconfig.get_path("purelib")).resolve())
+        )
         observed = sorted(
             (re.sub(r"[-_.]+", "-", item.metadata["Name"]).lower(), item.version) for item in importlib.metadata.distributions()
         )
@@ -49,7 +59,7 @@ class ProviderRuntimeTests(unittest.TestCase):
         key.public_key().verify(key.sign(b"installed provider controller"), b"installed provider controller")
 
     def test_isolated_interpreter_loads_only_image_owned_modules(self):
-        self.assertEqual(sys.flags.isolated, 1)
+        self.assertEqual(1, sys.flags.isolated)
         self.assertFalse(site.ENABLE_USER_SITE)
         self.assertNotEqual(sys.base_prefix, sys.prefix)
         installed = Path(sysconfig.get_path("purelib")).resolve()
@@ -66,13 +76,12 @@ class ProviderRuntimeTests(unittest.TestCase):
         ):
             with self.subTest(module=name):
                 origin = Path(importlib.import_module(name).__file__).resolve(strict=True)
-                self.assertTrue(origin.is_relative_to(installed), str(origin))
+                self.assertTrue(origin.is_relative_to(installed), msg=str(origin))
         for name in (
             "torch",
             "rdkit",
             "numpy",
             "lmdb",
-            "pip",
             "setuptools",
             "tests",
             "packages",
@@ -104,20 +113,26 @@ class ProviderRuntimeTests(unittest.TestCase):
                 check=False,
                 timeout=5,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertIn("--config", result.stdout)
             self.assertNotIn("PRIVATE", result.stdout + result.stderr)
-            self.assertEqual(result.stderr, "")
+            self.assertEqual("", result.stderr)
 
     def test_consumed_dependency_inventory_is_retained_in_the_image(self):
         evidence = json.loads(Path("/opt/provider/dependency-inputs.json").read_bytes())
-        self.assertEqual(set(evidence), {"runtime"})
-        self.assertEqual(evidence["runtime"]["files"], {
-            **self.release["dependency_inputs"]["runtime"]["files"],
-            self.core_wheel: self.release["files"][self.core_wheel],
-        })
-        self.assertEqual(evidence["runtime"]["lock_sha256"],
-                         self.release["files"][self.core_wheel.removesuffix("-py3-none-any.whl") + "-install.lock"])
+        self.assertEqual({"runtime"}, set(evidence))
         self.assertEqual(
-            evidence["runtime"]["lock_sha256"], hashlib.sha256(Path("/opt/provider/provider-core-install.lock").read_bytes()).hexdigest()
+            evidence["runtime"]["files"],
+            {
+                **self.release["dependency_inputs"]["runtime"]["files"],
+                self.core_wheel: self.release["files"][self.core_wheel],
+            },
+        )
+        self.assertEqual(
+            evidence["runtime"]["lock_sha256"],
+            self.release["files"][self.core_wheel.removesuffix("-py3-none-any.whl") + "-install.lock"],
+        )
+        self.assertEqual(
+            evidence["runtime"]["lock_sha256"],
+            hashlib.sha256(Path("/opt/provider/provider-core-install.lock").read_bytes()).hexdigest(),
         )

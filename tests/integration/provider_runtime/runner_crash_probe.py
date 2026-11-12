@@ -26,7 +26,8 @@ from provider_core.process_status import read_status
 
 def main(operation, seconds):
     assert re.fullmatch(r"[0-9a-f]{32}", operation)
-    assert type(seconds) is int and seconds > 0
+    assert type(seconds) is int
+    assert seconds > 0
     deadline = time.monotonic() + seconds
 
     def remaining():
@@ -37,7 +38,7 @@ def main(operation, seconds):
 
     def identity(pid):
         raw = Path(f"/proc/{pid}/stat").read_text()
-        fields = raw[raw.rfind(")") + 2:].split()
+        fields = raw[raw.rfind(")") + 2 :].split()
         return fields[0], int(fields[1]), int(fields[19])
 
     def live(descriptor):
@@ -46,8 +47,8 @@ def main(operation, seconds):
         assert not poller.poll(0), "Crash probe target exited before supervisor kill."
 
     status = read_status("/run/status.json", "reader")
-    assert (status["phase"] == "working"
-            and 0 <= time.monotonic() - status["updated_monotonic"] <= 30), "Reader has no current working supervisor."
+    assert status["phase"] == "working", "Reader has no current working supervisor."
+    assert 0 <= time.monotonic() - status["updated_monotonic"] <= 30, "Reader has no current working supervisor."
     supervisor = status["pid"]
     supervisor_fd = os.pidfd_open(supervisor, 0)
     live(supervisor_fd)
@@ -60,7 +61,7 @@ def main(operation, seconds):
         pid = int(entry.name)
         try:
             observed = identity(pid)
-            if observed[1] == supervisor and os.readlink(entry / "cwd") == work:
+            if observed[1] == supervisor and str((entry / "cwd").readlink()) == work:
                 candidates.append((pid, observed[2]))
         except (FileNotFoundError, ProcessLookupError):
             continue
@@ -69,7 +70,7 @@ def main(operation, seconds):
     child_fd = os.pidfd_open(child, 0)
     live(child_fd)
     assert identity(child)[1:] == (supervisor, child_ticks)
-    assert os.readlink(f"/proc/{child}/cwd") == work
+    assert str(Path(f"/proc/{child}/cwd").readlink()) == work
     observed = Path("/native/reader/.owner-session.lock").stat()
     lease = observed.st_dev, observed.st_ino
     inherited = []
@@ -98,10 +99,20 @@ def main(operation, seconds):
     poller.register(child_fd, select.POLLIN)
     assert not poller.poll(max(1, int(min(0.1, remaining()) * 1000)))
     assert identity(child) == ("T", supervisor, child_ticks)
-    facts = json.dumps({"operation": operation, "lease": list(lease),
-        "supervisor_pid": supervisor, "supervisor_start_ticks": status["start_ticks"],
-        "child_pid": child, "child_start_ticks": child_ticks,
-        "stopped": True, "alive_after_term": True, "remnant_written": True}, separators=(",", ":")).encode()
+    facts = json.dumps(
+        {
+            "operation": operation,
+            "lease": list(lease),
+            "supervisor_pid": supervisor,
+            "supervisor_start_ticks": status["start_ticks"],
+            "child_pid": child,
+            "child_start_ticks": child_ticks,
+            "stopped": True,
+            "alive_after_term": True,
+            "remnant_written": True,
+        },
+        separators=(",", ":"),
+    ).encode()
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as control:
         control.settimeout(remaining())
         control.connect("/native/reader/crash-probe.sock")

@@ -22,15 +22,23 @@ from pathlib import Path
 from nmrnet_provider.worker_protocol import require_seconds, send
 from tools.container_resources import cgroup_snapshot
 
+# Deployment mounts admitted startup declarations at this fixed container path.
+# repo-check: allow-module-constant
 INPUT_ROOT = Path("/input")
+# The inference image embeds its installation declarations here for comparison before scientific imports.
+# repo-check: allow-module-constant
 INFERENCE_ROOT = Path("/opt/inference")
+# Retain this process's named logger handle; logging configuration owns its levels and handlers.
+# repo-check: allow-module-constant
 LOGGER = logging.getLogger("nmrnet_provider.native_child")
 
 
 def _prediction(options, connection):
     for name in ("inference.lock", "unicore-source.json"):
         if (INPUT_ROOT / name).read_bytes() != (INFERENCE_ROOT / name).read_bytes():
-            raise ValueError(f"Cannot start prediction: embedded {name} differs from its mounted declaration; rebuild the admitted image.")
+            raise ValueError(
+                f"Cannot start prediction: embedded {name} differs from its mounted declaration; rebuild the admitted image."
+            )
     from nmrnet_inference.worker import serve_released_connection  # noqa: PLC0415 -- Admit declarations before scientific wiring.
 
     runtime = {
@@ -41,8 +49,11 @@ def _prediction(options, connection):
     }
     send(connection, {"kind": "startup", "allocation": options.operation, "runtime": runtime}, options.io_seconds)
     serve_released_connection(
-        connection, allocation=options.operation, io_seconds=options.io_seconds,
-        declaration_path=INPUT_ROOT / "prediction-models.json", weight_root=Path("/weight"),
+        connection,
+        allocation=options.operation,
+        io_seconds=options.io_seconds,
+        declaration_path=INPUT_ROOT / "prediction-models.json",
+        weight_root=Path("/weight"),
         checkpoint_root=Path("/checkpoints"),
     )
 
@@ -54,7 +65,9 @@ def _source(options, connection):
         serve_geometry_connection(connection, allocation=options.operation, io_seconds=options.io_seconds)
     else:
         from nmrnet_provider.smiles import GenerationSettings  # noqa: PLC0415 -- Generation settings belong to this role.
-        from nmrnet_provider.smiles_protocol import require_generation_deadline  # noqa: PLC0415 -- Admit before scientific dispatch.
+        from nmrnet_provider.smiles_protocol import (  # noqa: PLC0415 -- Admit before scientific dispatch.
+            require_generation_deadline,
+        )
         from nmrnet_provider.smiles_worker import serve_smiles_connection  # noqa: PLC0415 -- Prediction never imports RDKit.
 
         settings = GenerationSettings(options.seed, options.max_iterations, options.embedding_seconds)
@@ -91,8 +104,11 @@ def main(arguments=None):
         finally:
             # A failed observation must not replace the original scientific cause.
             try:
-                LOGGER.info("event=native_cgroup_observation operation=%s scope=persistent_container_cumulative facts=%s",
-                            options.operation, json.dumps(cgroup_snapshot(), sort_keys=True))
+                LOGGER.info(
+                    "event=native_cgroup_observation operation=%s scope=persistent_container_cumulative facts=%s",
+                    options.operation,
+                    json.dumps(cgroup_snapshot(), sort_keys=True),
+                )
             except Exception:
                 LOGGER.exception("Cannot observe native cumulative cgroup resources.")
 
@@ -100,5 +116,5 @@ def main(arguments=None):
 if __name__ == "__main__":
     from nmrnet_provider.runtime_logging import configure_logging
 
-    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
+    configure_logging(os.environ.get("NMRNET_LOG_LEVEL"))
     main()

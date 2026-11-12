@@ -40,13 +40,20 @@ ALLOWED_MAKE_DEFAULTS = {}
 # contracts, not operator input choices; changes require a new inventory review.
 ALLOWED_DOCKER_DEFAULTS = {
     ("ENV", "containers/checker/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/checker/Dockerfile", "NMR_PROVIDER_TOOLS_IN_CONTAINER", "1"),
     ("ENV", "containers/checker/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
     ("ENV", "containers/inference/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
     ("ENV", "containers/inference/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
-    ("ENV", "containers/inference/Dockerfile", "PYTHONPATH", "/opt/nmrnet"),
+    ("ENV", "containers/inference/Dockerfile", "PROVIDER_CORE_IN_CONTAINER", "1"),
     ("ENV", "containers/inference/Dockerfile", "OMP_NUM_THREADS", "2"),
     ("ENV", "containers/inference/Dockerfile", "MKL_NUM_THREADS", "2"),
     ("ENV", "containers/packages/Dockerfile.lock", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/geometry/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/geometry/Dockerfile", "PROVIDER_CORE_IN_CONTAINER", "1"),
+    ("ENV", "containers/geometry/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
+    ("ENV", "containers/provider/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/provider/Dockerfile", "PROVIDER_CORE_IN_CONTAINER", "1"),
+    ("ENV", "containers/provider/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
 }
 ALLOWED_SHELL_DEFAULTS = set()
 
@@ -93,8 +100,24 @@ def shell_exported_names(source: str) -> set[str] | None:
             tokens = list(lexer)
         except ValueError:
             return None
-        if "declare" in tokens or "typeset" in tokens:
+        if "typeset" in tokens:
             return None
+        if "declare" in tokens:
+            # shlex emits NAME= and () separately for literal empty arrays.
+            # These type/scope flags do not export; any other token keeps the
+            # declaration uncertain, including a following shell command.
+            arguments = tokens[2:]
+            if not (
+                tokens[0] == "declare"
+                and len(tokens) >= 4
+                and tokens[1] in {"-A", "-gA", "-Ag"}
+                and len(arguments) % 2 == 0
+                and all(
+                    re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=", name) is not None and initializer == "()"
+                    for name, initializer in zip(arguments[::2], arguments[1::2], strict=True)
+                )
+            ):
+                return None
         for builtin in ("set", "shopt"):
             if builtin not in tokens:
                 continue
@@ -242,6 +265,21 @@ class OpsSilentDefaultsTest(unittest.TestCase):
     def test_shell_publication_names_are_conservative_source_candidates(self):
         cases = (
             ("directory=\ndirectory=ready\ndirectory=\n", set()),
+            ('directory=\ndeclare -A map=()\n', set()),
+            ('directory=\ndeclare -gA native_ids=() native_events=()\n', set()),
+            ('directory=\ndeclare -Ag map=()\n', set()),
+            ('export TOKEN\ndeclare -A map=()\nTOKEN=\n', {"TOKEN"}),
+            ('TOKEN=\ndeclare -gA map=()\nexport TOKEN\n', {"TOKEN"}),
+            ('TOKEN=\ndeclare -Ax map=()\n', None),
+            ('TOKEN=\ndeclare -gAx map=()\n', None),
+            ('TOKEN=\ndeclare "$flags" map=()\n', None),
+            ('TOKEN=\ndeclare -A "$name"=()\n', None),
+            ('TOKEN=\ndeclare -A map=("$value")\n', None),
+            ('TOKEN=\ndeclare -A map\n', None),
+            ('TOKEN=\ndeclare -A\n', None),
+            ('TOKEN=\ntypeset -A map=()\n', None),
+            ('TOKEN=\ndeclare -A map=(); export TOKEN\n', None),
+            ('TOKEN=\ndeclare -A map=() ; set -a\n', None),
             ("export TOKEN\nTOKEN=\n", {"TOKEN"}),
             ("TOKEN=\nexport TOKEN\n", {"TOKEN"}),
             ("TOKEN=\nTOKEN=ready\nexport TOKEN\n", {"TOKEN"}),
@@ -266,6 +304,21 @@ class OpsSilentDefaultsTest(unittest.TestCase):
     def test_ops_property_distinguishes_private_resets_from_blank_publication(self):
         cases = (
             ("fixture.sh", "directory=\ndirectory=ready\ndirectory=\n", None),
+            ("fixture.sh", 'directory=\ndeclare -A map=()\n', None),
+            ("fixture.sh", 'directory=\ndeclare -gA native_ids=() native_events=()\n', None),
+            ("fixture.sh", 'directory=\ndeclare -Ag map=()\n', None),
+            ("fixture.sh", 'export TOKEN\ndeclare -A map=()\nTOKEN=\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -gA map=()\nexport TOKEN\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -Ax map=()\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -gAx map=()\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare "$flags" map=()\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -A "$name"=()\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -A map=("$value")\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -A map\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -A\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ntypeset -A map=()\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -A map=(); export TOKEN\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\ndeclare -A map=() ; set -a\n', "blank env assignment: TOKEN="),
             ("fixture.sh", "export TOKEN\nTOKEN=\n", "blank env assignment: TOKEN="),
             ("fixture.sh", "TOKEN=\nexport TOKEN\n", "blank env assignment: TOKEN="),
             ("fixture.sh", "TOKEN=\nTOKEN=ready\nexport TOKEN\n", "blank env assignment: TOKEN="),

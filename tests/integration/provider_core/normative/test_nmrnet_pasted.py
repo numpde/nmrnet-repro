@@ -33,7 +33,7 @@ class PastedGeometryTests(unittest.IsolatedAsyncioTestCase):
                 handle = await ports.session.prepare(
                     ports.acknowledged, ports.instructions, report_condition=unexpected_condition
                 )
-                self.assertEqual(ports.worker.events, [])
+                self.assertEqual([], ports.worker.events)
                 ports.reader_host.retire.assert_awaited_once()
                 ports.reader.wait_closed.assert_awaited_once()
                 identity = json.loads(handle.identity.content)["geometries"][0]
@@ -53,18 +53,18 @@ class PastedGeometryTests(unittest.IsolatedAsyncioTestCase):
                 }
                 self.assertEqual(geometry["source"], expected)
                 self.assertEqual(identity["source"], expected)
-                self.assertEqual(geometry["prepared_request"]["coordinates"], [[0, 0, 0], [1.25, 0, 0]])
-                self.assertEqual(geometry["prepared_request"]["coordinate_unit"], "angstrom")
-                self.assertEqual(geometry["preparation"]["scale_to_angstrom"], 10)
-                self.assertEqual(geometry["preparation"]["source_unit"], "nm")
-                self.assertEqual(geometry["coverage"]["hydrogen_completeness"], "not_established_from_coordinates")
+                self.assertEqual([[0, 0, 0], [1.25, 0, 0]], geometry["prepared_request"]["coordinates"])
+                self.assertEqual("angstrom", geometry["prepared_request"]["coordinate_unit"])
+                self.assertEqual(10, geometry["preparation"]["scale_to_angstrom"])
+                self.assertEqual("nm", geometry["preparation"]["source_unit"])
+                self.assertEqual("not_established_from_coordinates", geometry["coverage"]["hydrogen_completeness"])
                 self.assertEqual([row["atom_index"] for row in geometry["predictions"]], [0, 1])
                 self.assertEqual(ports.reader.read.await_args.args, (source,))
                 options = ports.reader.read.await_args.kwargs
                 self.assertEqual(options["source_format"], source_format)
-                self.assertEqual(options["source_unit"], "nm")
+                self.assertEqual("nm", options["source_unit"])
                 if source_format == "xyz":
-                    self.assertEqual(options["selection"], "all")
+                    self.assertEqual("all", options["selection"])
                 else:
                     self.assertIsNone(options["selection"])
                 ports.uploads.acquire.assert_not_awaited()

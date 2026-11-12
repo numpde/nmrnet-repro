@@ -5,10 +5,10 @@ import hashlib
 import json
 import unittest
 from dataclasses import replace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
-from tests.fakes.execution import unexpected_condition
 from tests.fakes.attempts import start_response
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF, member
 from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
@@ -17,17 +17,60 @@ from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWorker
 
-from nmrnet_provider.runtime import assemble_attempt
-from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
 from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.runtime import assemble_attempt
+from nmrnet_provider.smiles import ConformerShortfall
+from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
+from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
 from provider_core.attempt_record import AcknowledgedAttempt
-from provider_core.controller import StartDeferred
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
+from provider_core.controller import ControllerFailed, StartDeferred
+from provider_core.execution import ExecutionFailed
 from provider_core.job_input import verify_job_input
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_generation_capacity_failures_retain_original_cause_without_prediction_or_terminal_report(self):
+        for failure_kind in ("shortfall", "output_limit"):
+            with self.subTest(failure_kind=failure_kind):
+                ports = SessionPorts()
+                original = (
+                    ConformerShortfall(replace(ports.batch, conformers=ports.batch.conformers[:1]))
+                    if failure_kind == "shortfall"
+                    else ConformerOutputLimit(
+                        {
+                            "kind": "conformer_output_limit",
+                            "allocation": "PRIVATE_ALLOCATION",
+                            "coordinates_available": False,
+                            **conformer_evidence(ports.batch),
+                        },
+                        requested_count=2,
+                    )
+                )
+                ports.generator.generate.side_effect = original
+                async with RuntimePeers(ports, "smiles") as fixture:
+                    pending = await fixture.discover()
+                    controller = await assemble_attempt(**fixture.arguments(pending))
+                    fixture.stack.push_async_callback(fixture.settle_controller, controller)
+                    with self.assertRaises(ControllerFailed) as caught:
+                        await controller.run(pending)
+                    self.assertIs(caught.exception, controller.last_failure)
+                    self.assertIs(type(caught.exception.cause), ExecutionFailed)
+                    self.assertIs(caught.exception.cause.cause, original)
+                    self.assertTrue(controller.shutdown_ready)
+                    self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
+                    self.assertTrue(ports.generator_host.confirmed)
+                    ports.generator.generate.assert_awaited_once()
+                    ports.generator.close.assert_called_once()
+                    ports.generator.wait_closed.assert_awaited_once()
+                    fixture.allocate_prediction.assert_not_awaited()
+                    ports.allocate_reader.assert_not_awaited()
+                    self.assertEqual([], ports.worker.events)
+                    self.assertEqual(1, len(fixture.model_peer.requests))
+                    requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+                    self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
     async def test_malformed_prediction_reply_retains_attempt_and_original_evidence(self):
         ports = SessionPorts()
         rejected = WorkerResultRejected({"kind": "result", "result": "PRIVATE_INCOMPLETE"})
@@ -95,7 +138,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("ModelCallFailed", evidence)
             self.assertIn("WorkerExchangeTimedOut", evidence)
             self.assertTrue(replacement_host.confirmed)
-            self.assertEqual(fixture.allocate_prediction.await_count, 2)
+            self.assertEqual(2, fixture.allocate_prediction.await_count)
             replacement.execute.assert_awaited_once()
 
     async def test_controller_stop_during_generation_blocks_prediction_allocation(self):
@@ -288,39 +331,40 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
             requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
-            self.assertEqual(sum(b"/start HTTP/" in request for request in requests), 1)
-            self.assertEqual(sum(b"/fail HTTP/" in request for request in requests), 0)
-            self.assertEqual(sum(b"/complete HTTP/" in request for request in requests), 1)
+            self.assertEqual(1, sum(b"/start HTTP/" in request for request in requests))
+            self.assertEqual(0, sum(b"/fail HTTP/" in request for request in requests))
+            self.assertEqual(1, sum(b"/complete HTTP/" in request for request in requests))
             self.assertEqual(ports.worker.requests, replacement.requests)
             self.assertTrue(ports.host.confirmed)
             self.assertTrue(replacement_host.confirmed)
-            self.assertEqual(replacement.events.count("execute"), 1)
+            self.assertEqual(1, replacement.events.count("execute"))
             notices = [item for item in fixture.operator_notices if item[0] == "prediction_failed"]
-            self.assertEqual(len(notices), 1)
+            self.assertEqual(1, len(notices))
             self.assertIs(notices[0][1], failure)
 
-    async def test_prediction_failure_is_delivered_once_with_private_diagnostic_separate(self):
+    async def test_prediction_operator_failure_retains_attempt_and_original_diagnostic_without_terminal_report(self):
         ports = SessionPorts()
-        failure = ModelCallFailed("PRIVATE_PREDICTION_DIAGNOSTIC" + "💧" * 300000)
-        ports.worker.execute = AsyncMock(side_effect=failure)
+        original = ModelCallFailed("Authored prediction failure; api_key=PRIVATE_PREDICTION_DIAGNOSTIC; " + "💧" * 300000)
+        ports.worker.execute = AsyncMock(side_effect=original)
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(fixture.settle_controller, controller)
-            outcome = await controller.run(pending)
-            self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
-            await fixture.wait_published()
-            fail_bodies = [body for request, body in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies)
-                           if b"/fail HTTP/1.1" in request.split(b"\r\n", 1)[0]]
-            self.assertEqual(len(fail_bodies), 1)
-            body = json.loads(fail_bodies[0])
-            self.assertEqual(body["failure_code"], "prediction_execution_failed")
-            self.assertNotIn("PRIVATE_PREDICTION_DIAGNOSTIC", fail_bodies[0].decode())
-            notices = [item for item in fixture.operator_notices if item[0] == "prediction_failed"]
-            self.assertEqual(len(notices), 1)
-            self.assertIs(notices[0][1], failure)
-            ports.worker.execute.assert_awaited_once()
+            (failure,) = await asyncio.gather(controller.run(pending), return_exceptions=True)
+            self.assertIsInstance(failure, ControllerFailed)
+            self.assertIs(controller.last_failure, failure)
+            self.assertTrue(controller.shutdown_ready)
+            self.assertIs(failure.cause.cause, original)
             self.assertTrue(ports.host.confirmed)
+            self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
+            fixture.allocate_prediction.assert_awaited_once()
+            ports.worker.execute.assert_awaited_once()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+            rendered = json.dumps(failure_evidence(failure, secrets=("PRIVATE_PREDICTION_DIAGNOSTIC",)))
+            self.assertIn("Authored prediction failure", rendered)
+            self.assertIn("omitted_characters", rendered)
+            self.assertNotIn("PRIVATE_PREDICTION_DIAGNOSTIC", rendered)
 
     async def test_late_start_ack_after_admission_stop_does_not_enter_science(self):
         ports = SessionPorts()
@@ -346,9 +390,9 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 outcome = await asyncio.wait_for(task, 3)
                 self.assertIs(type(outcome), StartDeferred)
                 self.assertTrue(outcome.may_have_committed)
-                self.assertEqual(fixture.model_peer.requests, [])
-                self.assertEqual(ports.worker.events, [])
-                self.assertEqual(sum(b"/start HTTP/1.1" in request for request in fixture.api_peer.requests), 1)
+                self.assertEqual([], fixture.model_peer.requests)
+                self.assertEqual([], ports.worker.events)
+                self.assertEqual(1, sum(b"/start HTTP/1.1" in request for request in fixture.api_peer.requests))
             finally:
                 release.set()
                 await asyncio.gather(task, return_exceptions=True)
@@ -365,8 +409,8 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(type(outcome), StartDeferred)
             self.assertFalse(outcome.may_have_committed)
             self.assertFalse(any(b"/start HTTP/1.1" in request for request in fixture.api_peer.requests))
-            self.assertEqual(fixture.model_peer.requests, [])
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], fixture.model_peer.requests)
+            self.assertEqual([], ports.worker.events)
 
     async def test_terminal_start_replay_never_acquires_prediction_or_interprets_input(self):
         ports = SessionPorts()
@@ -374,14 +418,19 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             pending = await fixture.discover()
             controller = await assemble_attempt(**fixture.arguments(pending))
             fixture.stack.push_async_callback(fixture.settle_controller, controller)
-            with patch("tests.integration.nmrnet.runtime_ports.start_response", return_value=start_response(
-                analysis_kind_ref=pending.analysis_kind_ref, state="failed", replayed=True,
-            )):
+            with patch(
+                "tests.integration.nmrnet.runtime_ports.start_response",
+                return_value=start_response(
+                    analysis_kind_ref=pending.analysis_kind_ref,
+                    state="failed",
+                    replayed=True,
+                ),
+            ):
                 outcome = await controller.run(pending)
             self.assertIsInstance(outcome, AcknowledgedAttempt)
             fixture.allocate_prediction.assert_not_awaited()
-            self.assertEqual(fixture.model_peer.requests, [])
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], fixture.model_peer.requests)
+            self.assertEqual([], ports.worker.events)
             ports.allocate_generator.assert_not_awaited()
             ports.allocate_reader.assert_not_awaited()
 
@@ -400,13 +449,13 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 corrected = messages[-2]["role"] == "tool"
                 if corrected:
                     self.assertEqual(
-                        messages[-2]["content"],
                         "Cannot prepare coordinates: specify source unit angstrom, nm or bohr.",
+                        messages[-2]["content"],
                     )
                     ports.allocate_reader.assert_not_awaited()
                     ports.allocate_generator.assert_not_awaited()
                     ports.uploads.acquire.assert_not_awaited()
-                    self.assertEqual(ports.worker.events, [])
+                    self.assertEqual([], ports.worker.events)
                 return tool_reply(
                     "corrected" if corrected else "invalid",
                     "prepare_pasted",
@@ -442,30 +491,28 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            self.assertEqual(len(fixture.model_peer.requests), 2)
+            self.assertEqual(2, len(fixture.model_peer.requests))
             self.assertEqual(fixture.result["interpretation"], durable[0]["interpretation"])
-            self.assertEqual(fixture.result["output"]["verbosity"], "medium")
-            self.assertEqual(durable[0]["interpretation"]["visits"][-1]["turns_started"], 2)
-            self.assertEqual(durable[0]["interpretation"]["visits"][-1]["corrections"], 1)
-            self.assertEqual(durable[0]["interpretation"]["operations"], ["prepare_pasted"])
+            self.assertEqual("medium", fixture.result["output"]["verbosity"])
+            self.assertEqual(2, durable[0]["interpretation"]["visits"][-1]["turns_started"])
+            self.assertEqual(1, durable[0]["interpretation"]["visits"][-1]["corrections"])
+            self.assertEqual(["prepare_pasted"], durable[0]["interpretation"]["operations"])
             (geometry,) = fixture.result["geometries"]
             self.assertEqual(
-                geometry["prepared_request"], {"atoms": ["H"], "coordinates": [[1.25, 0, 0]], "coordinate_unit": "angstrom"}
+                {"atoms": ["H"], "coordinates": [[1.25, 0, 0]], "coordinate_unit": "angstrom"}, geometry["prepared_request"]
             )
-            self.assertEqual(geometry["preparation"]["source_unit"], "nm")
-            self.assertEqual(geometry["preparation"]["scale_to_angstrom"], 10)
+            self.assertEqual("nm", geometry["preparation"]["source_unit"])
+            self.assertEqual(10, geometry["preparation"]["scale_to_angstrom"])
             self.assertEqual(geometry["source"]["sha256"], hashlib.sha256(source).hexdigest())
-            self.assertEqual(geometry["source"]["positions"], [1])
+            self.assertEqual([1], geometry["source"]["positions"])
             self.assertEqual(geometry["source"]["input_fingerprint"], pending.input.input_fingerprint)
             self.assertEqual(durable[0]["geometries"][0]["source"], geometry["source"])
             self.assertEqual(durable[0]["geometries"][0]["request_sha256"], hashlib.sha256(ports.worker.requests[0]).hexdigest())
-            self.assertEqual(
-                durable[0]["interpretation"], json.loads(selected_identity.content)["interpretation"]
-            )
+            self.assertEqual(durable[0]["interpretation"], json.loads(selected_identity.content)["interpretation"])
             ports.allocate_reader.assert_awaited_once()
             ports.reader.read.assert_awaited_once_with(source, source_format="table", source_unit="nm", selection=None)
             ports.allocate_generator.assert_not_awaited()
-            self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
+            self.assertEqual(["prepare", "execute", "close", "closed"], ports.worker.events)
             self.assertTrue(ports.host.confirmed)
 
     async def test_selected_precision_and_exact_ram_evidence_need_no_local_checkpoint_storage(self):
@@ -498,7 +545,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 outcome = await controller.run(pending)
             self.assertIsInstance(outcome, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
-            self.assertEqual(fixture.result["output"], {"shift_significant_digits": 4, "verbosity": "max"})
+            self.assertEqual({"shift_significant_digits": 4, "verbosity": "max"}, fixture.result["output"])
             for geometry in fixture.result["geometries"]:
                 self.assertTrue(all(row["shift_ppm"] == 32.31 for row in geometry["predictions"]))
             evidence = json.loads(captured.evidence.content)
@@ -515,13 +562,17 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             session = alternative.make_session(alternative.owner(choose))
             fixture.stack.push_async_callback(session.retire)
-            handle = await session.prepare(alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition)
-            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2, "verbosity": "medium"})
+            handle = await session.prepare(
+                alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition
+            )
+            self.assertEqual(
+                {"shift_significant_digits": 2, "verbosity": "medium"}, json.loads(handle.identity.content)["output"]
+            )
             self.assertEqual(fixture.api_peer.request_bodies[-1], body)
             self.assertEqual(captured.evidence.content, raw_evidence)
-            self.assertEqual(alternative.worker.events, [])
-            self.assertEqual(len(fixture.model_peer.requests), 1)
-            self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
+            self.assertEqual([], alternative.worker.events)
+            self.assertEqual(1, len(fixture.model_peer.requests))
+            self.assertEqual(["prepare", "execute", "close", "closed"], ports.worker.events)
 
     async def test_upload_selection_refusals_correct_in_the_same_conversation_before_one_grant(self):
         for mistake in ("not_inspected", "unknown_member", "changed_membership", "oversized_member"):
@@ -563,10 +614,10 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     acquisition = controller.session._input_preparation._uploads
                     self.assertIsInstance(acquisition.last_failure, UploadInputRejected)
                     self.assertFalse(acquisition.last_failure.grant_issued)
-                    self.assertEqual(acquisition.received_bytes, 0)
+                    self.assertEqual(0, acquisition.received_bytes)
                     ports.allocate_reader.assert_not_awaited()
                     ports.allocate_generator.assert_not_awaited()
-                    self.assertEqual(fixture.store_peer.requests, [])
+                    self.assertEqual([], fixture.store_peer.requests)
                     self.assertFalse(any(b"/read-capability " in request for request in fixture.api_peer.requests))
                     return tool_reply("reinspect", "inspect_uploads", {})
                 if not replies and mistake != "not_inspected":
@@ -605,13 +656,13 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 confirmed = await controller.run(pending)
             self.assertIsInstance(confirmed, DeliveryAcceptedCheckpoint)
             await fixture.wait_published()
-            self.assertEqual(fixture.result["interpretation"]["visits"][-1]["corrections"], 1)
+            self.assertEqual(1, fixture.result["interpretation"]["visits"][-1]["corrections"])
             self.assertEqual(fixture.result["interpretation"], json.loads(selected.content)["interpretation"])
             self.assertEqual(len(fixture.model_peer.requests), 3 if mistake == "not_inspected" else 4)
-            self.assertEqual(len(fixture.store_peer.requests), 1)
-            self.assertEqual(sum(b"/read-capability " in request for request in fixture.api_peer.requests), 1)
+            self.assertEqual(1, len(fixture.store_peer.requests))
+            self.assertEqual(1, sum(b"/read-capability " in request for request in fixture.api_peer.requests))
             ports.allocate_reader.assert_awaited_once()
-            self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
+            self.assertEqual(["prepare", "execute", "close", "closed"], ports.worker.events)
 
     async def test_returned_controller_never_acquires_prediction_when_not_run(self):
         ports = SessionPorts()
@@ -620,10 +671,10 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             controller = await assemble_attempt(**fixture.arguments(pending))
             await controller.settle()
             self.assertFalse(ports.host.confirmed)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             fixture.allocate_prediction.assert_not_awaited()
-            self.assertEqual(fixture.model_peer.requests, [])
-            self.assertEqual(len(fixture.api_peer.requests), 1)
+            self.assertEqual([], fixture.model_peer.requests)
+            self.assertEqual(1, len(fixture.api_peer.requests))
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
     async def test_three_routes_consume_discovered_identity_and_publish_a_complete_result(self):
@@ -640,7 +691,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     fixture.verify_discovery_signature()
                     controller = await assemble_attempt(**fixture.arguments(pending))
                     fixture.stack.push_async_callback(fixture.settle_controller, controller)
-                    self.assertEqual(ports.worker.events, [])
+                    self.assertEqual([], ports.worker.events)
                     ports.allocate_generator.assert_not_awaited()
                     ports.allocate_reader.assert_not_awaited()
                     outcome = await controller.run(pending)
@@ -648,12 +699,12 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     await fixture.wait_published()
                     self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
                     self.assertTrue(ports.host.confirmed)
-                    self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
+                    self.assertEqual(["prepare", "execute", "close", "closed"], ports.worker.events)
                     self.assertEqual(fixture.result["input_fingerprint"], pending.input.input_fingerprint)
                     self.assertIn("interpretation", fixture.result)
                     if route == "pasted":
-                        self.assertEqual(fixture.result["geometries"][0]["prepared_request"]["coordinates"], [[1.25, 0, 0]])
+                        self.assertEqual([[1.25, 0, 0]], fixture.result["geometries"][0]["prepared_request"]["coordinates"])
                     if route == "upload":
                         self.assertEqual([item["source"]["record_number"] for item in fixture.result["geometries"]], [2, 1])
-                        self.assertEqual(len(fixture.store_peer.requests), 1)
+                        self.assertEqual(1, len(fixture.store_peer.requests))
                         self.assertNotIn(b"signature:", fixture.store_peer.requests[0].lower())

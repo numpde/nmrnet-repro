@@ -118,7 +118,7 @@ elif [[ "$action" == run ]]; then
     # finite nonnegative tolerances before creating its exclusive output directory.
     for name in LABEL_ATOL ATOL RTOL RUN_ID; do
         variable="NMRNET_${name}_INPUT"
-        if [[ -z "${!variable:-}" ]]; then
+        if [[ ! -v $variable || -z ${!variable} ]]; then
             printf 'Cannot run baseline: supply %s explicitly on the make command line.\n' "$name" >&2
             exit 2
         fi
@@ -138,7 +138,7 @@ else
     tool_sources=(tools/container_guard.py tools/artifacts.py tools/baseline_prepare.py)
     directories+=(.work/baseline .work/baseline/prepared tests nmrnet_inference)
     declarations=(reference-cpu-float32.json)
-    inputs+=(.work/baseline/prepared/provenance.json tests/test_prediction_model.py)
+    inputs+=(.work/baseline/prepared/provenance.json tests/integration/prediction_parity/test_prediction_model.py)
     output_parent=
     output_name=
     memory=1g
@@ -149,12 +149,12 @@ else
         tool_sources+=(tools/baseline.sh tools/inference_native.sh tools/docker_client.sh tools/git_metadata.sh)
         directories+=(.work/prepared .work/prepared/checkpoints .work/prepared/weight)
         declarations+=(release.json checkpoints.selection.json weight.selection.json prediction-models.json)
-        inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/test_prediction_release.py)
+        inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/integration/prediction_parity/test_prediction_release.py)
         memory=4g
     fi
     if [[ "$action" == *worker-parity ]]; then
         directories+=(nmrnet_provider)
-        inputs+=(tests/test_prediction_worker_release.py)
+        inputs+=(tests/integration/prediction_parity/test_prediction_worker_release.py)
     fi
 fi
 if [[ "$action" != *parity && ( -L "$output_parent" || ( -e "$output_parent" && ! -d "$output_parent" ) ) ]]; then
@@ -347,8 +347,7 @@ else
         # nor the costly four-reference numerical/capacity checks in the full lane.
         test_pattern=test_prediction_release.ReleasedPredictionTests.test_loaded_state_matches_verified_checkpoint_bytes
     fi
-    command+=(--env NMRNET_PREDICTION_PARITY=1
-        --env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"
+    command+=(--env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"
         --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision"
         --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision"
         --mount "type=bind,src=$repository_root/.work/baseline/prepared,dst=/prepared,readonly"
@@ -362,9 +361,9 @@ for name in ("inference.lock", "unicore-source.json"):
         raise ValueError("Cannot check prediction tensors: embedded " + name + " differs from checkout; rebuild the inference image from the current declarations")
 selection = sys.argv[1]
 if selection.endswith(".py"):
-    sys.argv = ["unittest", "discover", "-s", "/workspace/tests", "-p", selection, "-v"]
+    sys.argv = ["unittest", "discover", "-s", "/workspace/tests/integration/prediction_parity", "-p", selection, "-v"]
 else:
-    sys.path.insert(0, "/workspace/tests")
+    sys.path.insert(0, "/workspace/tests/integration/prediction_parity")
     sys.argv = ["unittest", selection, "-v"]
 runpy.run_module("unittest", run_name="__main__")' "$test_pattern")
 fi

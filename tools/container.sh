@@ -302,7 +302,7 @@ case "$1" in
         exit "$download_status"
         ;;
     test/integration/wheelhouse/acquisition|test/unit/provider/deployment|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
-    test/unit/provider/image|test/integration/provider-runtime|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/unit/packages/images|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/delivery|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs|probe|download|check|inspect|extract)
+    test/unit/provider/image|test/integration/provider-runtime|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/unit/packages/images|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/delivery|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/acquisition|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -381,7 +381,7 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse || "$1" == test/repository/provider ]]; then
+        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/acquisition || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse || "$1" == test/repository/provider ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
@@ -400,6 +400,8 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly"
                     --mount "type=bind,src=$repository_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_fragment.py,dst=/fixture/interpreter_fragment.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/materialize_api_config.py,dst=/fixture/materialize_api_config.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_stage_api_config.py,dst=/fixture/test_stage_api_config_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_stage_api_config.py,dst=/fixture/test_stage_api_config_adversarial.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/staging_test_ports.py,dst=/fixture/staging_test_ports.py,readonly"
@@ -429,6 +431,7 @@ case "$1" in
                     "$api_test_image" -B -m unittest -v test_api_prediction_normative test_api_prediction_adversarial)
                 ;;
             test/unit/provider/image)
+                command+=(--mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly")
                 for directory in tools tests requirements; do require_source_directory "$directory"; done
                 if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
                     printf -v pending_diagnostic '%s\n' 'Cannot check provider image commands: Makefile must be a regular file without a symlink.'
@@ -492,20 +495,24 @@ case "$1" in
                     printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot test RDKit dependencies: requirements/preparation.lock must be a regular file without a symlink.'
                     exit 2
                 fi
+                checker_image
                 command+=(--init --tmpfs /runtime:rw,nosuid,nodev,exec,size=512m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
-                    "$image" python3 -B -m tools.rdkit_runtime_tests temporary)
+                    "$checker_image_id" python3 -B -m tools.rdkit_runtime_tests temporary)
                 ;;
             test/integration/wheelhouse/acquisition)
+                for directory in tools host tests requirements; do require_source_directory "$directory"; done
+                checker_image
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements,dst=/input,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
-                    "$image" python3 -B -m unittest -v tests.test_shared_acquisition_real)
+                    "$checker_image_id" python3 -B -m unittest -v tests.integration.shared_acquisition)
                 ;;
             test/unit/packages|test/unit/packages/wheelhouse|test/unit/packages/images)
                 require_source_directory tools
@@ -519,6 +526,7 @@ case "$1" in
                 fi
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$package_test_image" python3 -B -m unittest -v)
                 if [[ "$1" == test/unit/packages/images ]]; then
@@ -576,7 +584,7 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation,dst=/fixtures/preparation,readonly")
                 fi
                 if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
-                    for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json tests/fixtures/preparation/interpreter_formats.json; do
+                    for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_runtime/interpreter_fragment.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json tests/fixtures/preparation/interpreter_formats.json; do
                         if [[ ! -f "$repository_root/$probe_input" || -L "$repository_root/$probe_input" ]]; then
                             printf -v pending_diagnostic '%sCannot test the interpreter probe: expected a regular authored input.\n' "$pending_diagnostic"
                             exit 2
@@ -593,17 +601,19 @@ case "$1" in
                     require_source_directory tests/fixtures/scientific_inputs
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly"
                         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/compose_peer.py,dst=/consumer/compose_peer.py,readonly"
+                        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/compose_peer_runtime.py,dst=/consumer/compose_peer_runtime.py,readonly"
                         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/consumer/binding_inputs.py,readonly"
                         --mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly"
                         --mount "type=bind,src=$repository_root/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly")
                 fi
+                checker_image
                 command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
                     --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-install.lock,dst=/input/provider-core-install.lock,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-release.json,dst=/input/provider-core-release.json,readonly"
                     --mount "type=bind,src=$wheelhouse_directory,dst=/wheelhouse,readonly"
-                    "$image" python3 -B -m tools.provider_test_environment integration)
+                    "$checker_image_id" python3 -B -m tools.provider_test_environment integration)
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
                     command+=(test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py)
                 fi
@@ -635,7 +645,7 @@ case "$1" in
                     command+=(test_nmrnet_service_admission.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
-                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py)
+                    command+=(test_nmrnet_service.py test_nmrnet_service_recovery.py test_nmrnet_service_prose_outage.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/recovery ]]; then
                     command+=(test_nmrnet_service_recovery.py test_nmrnet_reference_lifecycle.py test_nmrnet_prediction_recovery.py)
@@ -665,11 +675,8 @@ case "$1" in
                 require_source_directory tests
                 require_source_directory nmrnet_inference
                 require_source_directory nmrnet_provider
-                unit_image=$image
-                if [[ "$1" == test/unit/provider || "$1" == test/unit/provider/deployment ]]; then
+                if [[ "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider/deployment ]]; then
                     # Host composition fixtures need the checker-owned Make/Git tools.
-                    checker_image
-                    unit_image=$checker_image_id
                     if [[ ! -f $repository_root/Makefile || -L $repository_root/Makefile \
                         || ! -f $repository_root/requirements/provider-core-install.lock \
                         || -L $repository_root/requirements/provider-core-install.lock ]]; then
@@ -696,8 +703,11 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/tools/provider_api_qualification.sh,dst=/fixture/provider_api_qualification.sh,readonly"
                         --mount "type=bind,src=$repository_root/tools/operator_guidance.sh,dst=/fixture/operator_guidance.sh,readonly")
                 fi
+                checker_image
+                unit_image=$checker_image_id
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
+                    --mount "type=bind,src=$repository_root/host,dst=/workspace/host,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
                     --env PROVIDER_CORE_IN_CONTAINER=1
@@ -744,7 +754,7 @@ case "$1" in
                     command+=(-p test_baseline_run.py -v)
                 fi
                 ;;
-            test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs)
+            test/repository|test/repository/acquisition|test/repository/native-images|test/repository/wheelhouse|test/repository/provider|test/repository/documentation|test/repository/operator-inputs)
                 # Checkers read public source inputs, never workspace state or credentials.
                 # A root-entry inventory makes omitted new source paths fail visibly.
                 require_source_directory tools
@@ -819,7 +829,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/.git/objects,dst=/workspace/.git/objects,readonly"
                     --mount "type=bind,src=$repository_root/.git/modules/$module_name/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
                     --env "NMRNET_EXPECTED_UID=$checker_uid" --env "NMRNET_EXPECTED_GID=$checker_gid")
-                for source_input in tests containers requirements artifacts notes docs NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
+                for source_input in host tests containers requirements artifacts notes docs NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
                         if [[ -L "$repository_root/$source_input" || ( ! -f "$repository_root/$source_input" && ! -d "$repository_root/$source_input" ) ]]; then
                             printf -v pending_diagnostic '%sCannot check repository source: public input must be a regular file or directory without a symlink: %s\n' "$pending_diagnostic" "$source_input"
@@ -850,6 +860,11 @@ case "$1" in
                 # config admits only these root-owned mount destinations; HOME
                 # remains available when source verification scrubs GIT_* vars.
                 repository_tests=(discover -s repository_checks -v)
+                if [[ "$1" == test/repository/acquisition ]]; then
+                    repository_tests=(-v tests.test_acquisition_bootstrap tests.test_acquisition_run
+                        repository_checks.test_acquisition_inputs repository_checks.test_acquisition_client_config
+                        repository_checks.test_engine_metadata_fixture)
+                fi
                 if [[ "$1" == test/repository/documentation ]]; then
                     repository_tests=(-v repository_checks.test_documentation)
                 fi

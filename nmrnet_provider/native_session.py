@@ -53,7 +53,7 @@ class NativeOperation:
             raise ValueError("Native operation requires the fixed prediction, reader or smiles role.")
         require_seconds(operation_seconds)
         require_seconds(observation_seconds)
-        if observation_seconds >= operation_seconds:
+        if not (observation_seconds < operation_seconds):
             raise ValueError("Native exit observation must leave time for stop and retirement.")
         if not callable(on_notice):
             raise ValueError("Native operation requires a protected lifecycle diagnostic recipient.")
@@ -75,6 +75,7 @@ class NativeOperation:
 
     @property
     def allocation(self):
+        # silent-defaults: allow-contract -- Reporting an allocation before session creation must not allocate a replacement child; proof=tests/integration/provider_core/normative/test_nmrnet_runner_session.py::NativeOperationTests.test_stop_before_connect_does_not_allocate_a_retirement_child.
         return None if self.session is None else self.session.operation
 
     @property
@@ -83,6 +84,7 @@ class NativeOperation:
 
     @property
     def _control_retirement(self):
+        # silent-defaults: allow-contract -- Retirement observes only the existing control owner's reader and cannot create a replacement owner; proof=tests/integration/provider_core/normative/test_nmrnet_runner_session.py::NativeOperationTests.test_observed_channel_failure_while_child_lives_stops_and_joins_original_reader.
         return None if self._control is None else self._control.reader
 
     def _observe(self, task):
@@ -101,6 +103,7 @@ class NativeOperation:
 
     @property
     def last_failure(self):
+        # silent-defaults: allow-contract -- A retained lifecycle failure remains reportable after its original resources retire; proof=tests/integration/provider_core/normative/test_nmrnet_runner_session.py::NativeOperationTests.test_lost_control_uses_one_retired_proof_session_without_scientific_commands.
         failures = [] if self._stop_failure is None else [self._stop_failure]
         if self._opening_interruption is not None:
             failures.append(self._opening_interruption)
@@ -129,7 +132,9 @@ class NativeOperation:
     def _lease_identity(self):
         if not self.endpoint.is_absolute() or self.endpoint.parent.resolve() != self.endpoint.parent:
             raise ValueError("Native runner endpoint requires an admitted canonical absolute parent.")
-        descriptor = os.open(self.endpoint.parent / ".owner-session.lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+        descriptor = os.open(
+            self.endpoint.parent / ".owner-session.lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+        )
         try:
             observed = os.fstat(descriptor)
             if not stat.S_ISREG(observed.st_mode) or observed.st_uid != os.geteuid() or stat.S_IMODE(observed.st_mode) != 0o600:
@@ -141,8 +146,11 @@ class NativeOperation:
     async def _open(self):
         identity = await asyncio.to_thread(self._lease_identity)
         self.session = RunnerSession(
-            self.endpoint, role=self.role, expected_lock_identity=identity,
-            startup_seconds=self._seconds, retirement_seconds=self._seconds,
+            self.endpoint,
+            role=self.role,
+            expected_lock_identity=identity,
+            startup_seconds=self._seconds,
+            retirement_seconds=self._seconds,
         )
         self._control = AsyncRunnerSession(self.session, not_after=self._cleanup_deadline)
         if self._stop_requested:
@@ -166,8 +174,10 @@ class NativeOperation:
                 size = frame_size(await self.reader.readexactly(4))
                 startup = document(await self.reader.readexactly(size))
             if (
-                set(startup) != {"kind", "allocation", "runtime"} or startup["kind"] != "startup"
-                or startup["allocation"] != self.allocation or type(startup["runtime"]) is not dict
+                set(startup) != {"kind", "allocation", "runtime"}
+                or startup["kind"] != "startup"
+                or startup["allocation"] != self.allocation
+                or type(startup["runtime"]) is not dict
             ):
                 raise LifecycleRejected("Prediction startup does not contain this operation's observed runtime.")
             self.runtime = startup["runtime"]
@@ -184,7 +194,9 @@ class NativeOperation:
         except asyncio.CancelledError:
             if self._opening.cancelled() and asyncio.current_task().cancelling() == cancellations:
                 self._observe_opening(self._opening)
-                raise self._opening_interruption
+                # Explicit chaining would overwrite the retained interruption's
+                # cause or suppress its context, losing opening failure evidence.
+                raise self._opening_interruption  # noqa: B904
             raise
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError) as cause:
             await self.observe_failure(cause)
@@ -239,8 +251,11 @@ class NativeOperation:
         if remaining <= 0:
             raise TimeoutError("Native cleanup deadline expired before proof-session acquisition; ownership remains held.")
         self.proof = RunnerSession(
-            self.endpoint, role=self.role, expected_lock_identity=self.session.expected_lock_identity,
-            startup_seconds=remaining, retirement_seconds=remaining,
+            self.endpoint,
+            role=self.role,
+            expected_lock_identity=self.session.expected_lock_identity,
+            startup_seconds=remaining,
+            retirement_seconds=remaining,
         )
         self._proof_control = AsyncRunnerSession(self.proof, not_after=deadline)
         try:
@@ -322,8 +337,13 @@ class NativeOperation:
             reader = self._control_retirement
             if reader is None:
                 setup = self._control.setup
-                if (setup is None or not setup.done() or setup.cancelled() or self.session.operation is None
-                        or self._control.setup_failure is None):
+                if (
+                    setup is None
+                    or not setup.done()
+                    or setup.cancelled()
+                    or self.session.operation is None
+                    or self._control.setup_failure is None
+                ):
                     raise
                 needs_proof = True
             else:
@@ -344,8 +364,11 @@ class NativeOperation:
                 try:
                     await self._wait(self._science_closure, deadline)
                 except Exception as cause:
-                    if (not self._science_closure.done() or self._science_closure.cancelled()
-                            or self._science_closure.exception() is not cause):
+                    if (
+                        not self._science_closure.done()
+                        or self._science_closure.cancelled()
+                        or self._science_closure.exception() is not cause
+                    ):
                         raise
                     # asyncio's closed waiter can carry connection_lost's
                     # error after the transport has closed. Retain that cause
@@ -363,8 +386,7 @@ class NativeOperation:
         if failure is not None:
             # Settled resources can be transferred/released, but independent
             # setup and cleanup failures must still reach protected output.
-            self._on_notice(failure, {"event": "native_lifecycle_settled", "role": self.role,
-                                      "operation": self.allocation})
+            self._on_notice(failure, {"event": "native_lifecycle_settled", "role": self.role, "operation": self.allocation})
 
     async def retire(self):
         if self._retirement is None or (

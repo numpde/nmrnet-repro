@@ -39,10 +39,13 @@ from nmrnet_provider.worker_client import (
 )
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.attempt_record import ProtectedEvidence
-from provider_core.diagnostics import DiagnosticOutputRefused, failure_evidence as core_failure_evidence
+from provider_core.diagnostics import DiagnosticOutputRefused
+from provider_core.diagnostics import failure_evidence as core_failure_evidence
 from provider_core.failure_projection import owned_details as core_owned_details
 from provider_core.failure_projection import owned_relationships as core_owned_relationships
 
+# Private result summaries project at most this many interpreter diagnostic entries.
+# repo-check: allow-module-constant
 _MAX_FAILURE_NODES = 64
 
 
@@ -69,11 +72,6 @@ def _owned_relationships(error):
     if kind in (ProviderProcessFailed, ServiceFailed, SessionRetirementFailed, PreparationRetirementFailed):
         for operation, cause in error.failures:
             yield operation, cause
-    if kind is ModelReportedInputProblem:
-        for endpoint_index, cause in error.endpoint_failures:
-            yield f"interpreter endpoint {endpoint_index} failure", cause
-        for turn_index, cause in error.correction_failures:
-            yield f"interpreter turn {turn_index} correction failure", cause
     if kind in (ConfigurationRejected, PreparationRetirementFailed, NativeSetupFailed, InputSelectionTimeLimit):
         yield "owned cause", error.cause
     if kind is ConfigurationRejected:
@@ -214,6 +212,7 @@ def _preparation_summary(document, text, diagnostic_window):
                     # The interpreter already owns this redacted exception
                     # graph. Window it; never serialize raw model exchanges.
                     try:
+                        # silent-defaults: allow-contract -- Only object-valued protected failure graphs become diagnostic text; absent or non-object values leave that text omitted while entry metadata remains.
                         diagnostic = (
                             json.dumps(entry["failure"], ensure_ascii=True, allow_nan=False)
                             if type(entry.get("failure")) is dict
@@ -249,6 +248,7 @@ def _describe_scientific_owner(current, text, diagnostic_window):
         else:
             if type(reply) is dict:
                 kind, result = reply.get("kind"), reply.get("result")
+                # silent-defaults: allow-contract -- Project only recognized worker reply kinds; unfamiliar values remain identified by the retained reply's hash and byte length without exposing arbitrary payload text.
                 evidence["worker_reply"]["kind"] = (
                     kind if kind in ("result", "failure", "execution_failed", "model_call_failed") else "unrecognized"
                 )

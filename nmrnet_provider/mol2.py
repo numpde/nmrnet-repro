@@ -22,14 +22,17 @@ from nmrnet_provider.xyz import MAX_RECORDS
 
 # Source IDs reach JSON result consumers. Keep them exact even in a binary64
 # reader; this is our transport bound, not a claimed Tripos integer-width rule.
+# repo-check: allow-module-constant
 MAX_ATOM_ID = 2**53 - 1
 
 # float() also accepts Python digit separators. File coordinates use decimal
 # numbers with an optional exponent; they must not silently reinterpret 1_0.
+# repo-check: allow-module-constant
 _COORDINATE_NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
 # These are the concrete dotted types in the cited pp. 53-54 table. Prefix
 # guessing would turn Du.C into carbon or accept an unknown producer type.
+# repo-check: allow-module-constant
 _SYBYL_SUFFIXES = {
     "C": {"3", "2", "1", "ar", "cat"},
     "N": {"3", "2", "1", "ar", "am", "pl3", "4"},
@@ -137,7 +140,7 @@ def _atom_rows(lines):
         symbol = _element(fields[5], number)
         if not all(_COORDINATE_NUMBER.fullmatch(value) is not None for value in fields[2:5]):
             raise InputRejected(f"Cannot read MOL2 ATOM row {number}: X/Y/Z must be decimal numbers with optional exponents.")
-        coordinates = tuple(float(value) for value in fields[2:5])
+        coordinates = (float(fields[2]), float(fields[3]), float(fields[4]))
         rows.append((identifier, symbol, coordinates))
     return rows
 

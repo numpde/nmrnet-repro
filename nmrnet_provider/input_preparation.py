@@ -89,7 +89,7 @@ def _selected_output(value):
 
 def require_preparation_settings(*, generation_settings, generation_seconds, max_worker_calls, seconds):
     """Admit trusted budgets before startup acquires source or worker resources."""
-    if type(max_worker_calls) is not int or max_worker_calls <= 0:
+    if not (type(max_worker_calls) is int and max_worker_calls > 0):
         raise ValueError("Cannot configure input preparation: the worker call limit must be a positive integer.")
     require_seconds(seconds)
     require_generation_deadline(generation_settings, generation_seconds)
@@ -595,8 +595,11 @@ class InputPreparation:
             self._worker_task = None
             return
         except asyncio.CancelledError:
-            if (not self._worker_task.done() or not self._worker_task.cancelled()
-                    or asyncio.current_task().cancelling() > cancellations):
+            if (
+                not self._worker_task.done()
+                or not self._worker_task.cancelled()
+                or asyncio.current_task().cancelling() > cancellations
+            ):
                 raise
             if self.allocation_failure is None:
                 self._record_allocation_failure(self._worker_task)
@@ -610,7 +613,9 @@ class InputPreparation:
                     elif previous is not child:
                         observed_failure.__cause__ = BaseExceptionGroup("Allocation interruption observations", (previous, child))
                 else:
-                    raise child
+                    # Explicit chaining would overwrite the retained child's cause
+                    # or suppress its context, losing allocation failure evidence.
+                    raise child  # noqa: B904
             return
         except (Exception, BaseExceptionGroup) as failure:
             if not self._worker_task.done() or self._worker_task.cancelled():

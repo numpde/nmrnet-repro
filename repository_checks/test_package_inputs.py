@@ -119,7 +119,7 @@ class PackageInputCaptureTests(unittest.TestCase):
             "preparation",
             environment=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_CAPTURE_MUTATE_LIVE": "1"},
         )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         stage = self.captured_stage()
         capture = stage / ".inputs/requirements"
         self.assertEqual(["preparation.in"], sorted(item.name for item in capture.iterdir()))
@@ -141,7 +141,7 @@ class PackageInputCaptureTests(unittest.TestCase):
         self.assertFalse((self.root / "requirements/preparation.lock").exists())
         path.write_bytes(intent)
         applied = self.caller(*arguments, environment=environment)
-        self.assertEqual(0, applied.returncode, applied.stderr)
+        self.assertEqual(0, applied.returncode, msg=applied.stderr)
         for name in ("preparation.lock", "preparation-advisories.json"):
             self.assertEqual((stage / name).read_bytes(), (self.root / "requirements" / name).read_bytes())
         self.assertEqual(before, (self.root / "requirements/inference.lock").read_bytes())
@@ -174,8 +174,8 @@ class PackageInputCaptureTests(unittest.TestCase):
         self.assertFalse(list(self.stage_directory().glob(".apply.*")))
         self.assertTrue((stage / ".inputs").is_dir())
 
-    def test_committed_execution_rejects_dirty_bytes_modes_links_and_wrong_inventory(self):
-        for mutation in ("bytes", "mode", "link", "inventory"):
+    def test_committed_execution_rejects_dirty_bytes_links_and_wrong_inventory(self):
+        for mutation in ("bytes", "link", "inventory"):
             with self.subTest(mutation=mutation):
                 probe = clients.PackagesClientTests()
                 probe.setUp()
@@ -183,8 +183,6 @@ class PackageInputCaptureTests(unittest.TestCase):
                     source = probe.root / "tools/package_lock.py"
                     if mutation == "bytes":
                         source.write_bytes(b"dirty execution\n")
-                    elif mutation == "mode":
-                        source.chmod(0o755)
                     elif mutation == "link":
                         source.rename(probe.root / "saved-tool")
                         source.symlink_to(probe.root / "saved-tool")

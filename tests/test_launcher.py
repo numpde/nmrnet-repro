@@ -40,25 +40,23 @@ class LauncherTests(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
         self.assertIn("--init", arguments)
-        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+        self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--read-only", arguments)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         self.assertNotIn("docker.sock", " ".join(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
-        self.assertEqual(
-            arguments[-2:], ["test_nmrnet_process.py", "test_nmrnet_reports.py"]
-        )
+        self.assertEqual(["test_nmrnet_process.py", "test_nmrnet_reports.py"], arguments[-2:])
 
     def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/worker-startup")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
         self.assertIn("--init", arguments)
-        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
-        self.assertEqual(arguments[-3:], ["-p", "test_worker_main.py", "-v"])
+        self.assertEqual("none", arguments[arguments.index("--network") + 1])
+        self.assertEqual(["-p", "test_worker_main.py", "-v"], arguments[-3:])
 
     def command(self, lane, archive=None):
         environment = dict(os.environ)
@@ -91,11 +89,22 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
         self.assertIn("--init", arguments)
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
-        self.assertEqual(9, len(mounts))
+        self.assertEqual(12, len(mounts))
         self.assertEqual(
-            {"/workspace/tools", "/workspace/tests", "/workspace/nmrnet_inference", "/workspace/nmrnet_provider",
-             "/consumer/tools", "/consumer/nmrnet_inference", "/consumer/nmrnet_provider",
-             "/input/provider-core-install.lock", "/wheelhouse"},
+            {
+                "/workspace/tools",
+                "/workspace/tests",
+                "/workspace/Makefile",
+                "/workspace/host",
+                "/workspace/requirements",
+                "/workspace/nmrnet_inference",
+                "/workspace/nmrnet_provider",
+                "/consumer/tools",
+                "/consumer/nmrnet_inference",
+                "/consumer/nmrnet_provider",
+                "/input/provider-core-install.lock",
+                "/wheelhouse",
+            },
             {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
         )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
@@ -116,6 +125,14 @@ class LauncherTests(unittest.TestCase):
         (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (checkout / "tools/image_lifecycle.sh").write_bytes(Path("tools/image_lifecycle.sh").read_bytes())
+        (checkout / "tools/docker-real.sh").write_bytes(Path("tools/docker.sh").read_bytes())
+        (checkout / "tools/docker.sh").write_text("""#!/bin/bash
+if [[ ${1-} == --pool-owner && ${3-} == map-owner ]]; then
+    printf '0:0\\n'
+    exit
+fi
+exec bash "$(dirname "$0")/docker-real.sh" "$@"
+""")
         (checkout / ".work/checker").mkdir(parents=True)
         (checkout / ".work/wheelhouse").mkdir()
         (checkout / "bin").mkdir()
@@ -153,9 +170,15 @@ class LauncherTests(unittest.TestCase):
             checkout, environment = self.checker_checkout(temporary, run_status=0)
             (checkout / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
             environment["FAKE_CHECK_LEASE_DIR"] = str(checkout)
-            result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "test/repository"],
-                                    env=environment, text=True, capture_output=True, timeout=5)
-            self.assertEqual(0, result.returncode, result.stderr)
+            result = subprocess.run(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository"],
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(2, len((checkout / "engine-log").read_text().splitlines()))
 
     def test_provider_lane_keeps_aggregate_offline_with_required_public_inputs(self):
@@ -166,7 +189,28 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--read-only", arguments)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
-        self.assertEqual(7, len(mounts))
+        self.assertEqual(12, len(mounts))
+        self.assertEqual(
+            {
+                "/workspace/Makefile",
+                "/workspace/requirements",
+                "/workspace/tools",
+                "/workspace/tests",
+                "/workspace/host",
+                "/workspace/nmrnet_inference",
+                "/workspace/nmrnet_provider",
+                "/consumer/nmrnet_provider",
+                "/consumer/nmrnet_inference",
+                "/consumer/tools",
+                "/input/provider-core-install.lock",
+                "/wheelhouse",
+            },
+            {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+        )
+        self.assertCountEqual(
+            ["/tmp:rw,nosuid,nodev,noexec,size=64m", "/runtime:rw,nosuid,nodev,exec,size=128m"],
+            [arguments[index + 1] for index, value in enumerate(arguments) if value == "--tmpfs"],
+        )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("docker.sock", " ".join(mounts))
 
@@ -179,7 +223,26 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("--init", arguments)
         self.assertIn("--read-only", arguments)
         mounts = [arguments[i + 1] for i, value in enumerate(arguments) if value == "--mount"]
-        self.assertEqual(4, len(mounts))
+        self.assertEqual(10, len(mounts))
+        self.assertEqual(
+            {
+                "/workspace/tools",
+                "/workspace/tests",
+                "/workspace/host",
+                "/workspace/nmrnet_inference",
+                "/workspace/nmrnet_provider",
+                "/consumer/nmrnet_provider",
+                "/consumer/nmrnet_inference",
+                "/consumer/tools",
+                "/input/provider-core-install.lock",
+                "/wheelhouse",
+            },
+            {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+        )
+        self.assertCountEqual(
+            ["/tmp:rw,nosuid,nodev,noexec,size=64m", "/runtime:rw,nosuid,nodev,exec,size=128m"],
+            [arguments[index + 1] for index, value in enumerate(arguments) if value == "--tmpfs"],
+        )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("docker.sock", " ".join(mounts))
 
@@ -187,13 +250,32 @@ class LauncherTests(unittest.TestCase):
         for source_format in ("pdb", "mol2"):
             with self.subTest(source_format=source_format):
                 result = self.command(f"test/unit/provider/{source_format}")
-                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 arguments = shlex.split(result.stdout)
                 self.assertEqual(["-p", f"test_provider_{source_format}.py", "-v"], arguments[-3:])
                 self.assertEqual("none", arguments[arguments.index("--network") + 1])
                 self.assertIn("--read-only", arguments)
                 mounts = [arguments[i + 1] for i, argument in enumerate(arguments) if argument == "--mount"]
-                self.assertEqual(4, len(mounts))
+                self.assertEqual(10, len(mounts))
+                self.assertEqual(
+                    {
+                        "/workspace/tools",
+                        "/workspace/tests",
+                        "/workspace/host",
+                        "/workspace/nmrnet_inference",
+                        "/workspace/nmrnet_provider",
+                        "/consumer/nmrnet_provider",
+                        "/consumer/nmrnet_inference",
+                        "/consumer/tools",
+                        "/input/provider-core-install.lock",
+                        "/wheelhouse",
+                    },
+                    {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+                )
+                self.assertCountEqual(
+                    ["/tmp:rw,nosuid,nodev,noexec,size=64m", "/runtime:rw,nosuid,nodev,exec,size=128m"],
+                    [arguments[index + 1] for index, value in enumerate(arguments) if value == "--tmpfs"],
+                )
                 self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
                 self.assertNotIn("docker.sock", " ".join(mounts))
 
@@ -211,9 +293,12 @@ class LauncherTests(unittest.TestCase):
             )
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "test/repository"],
-                env=environment, text=True, capture_output=True, check=False,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             arguments = shlex.split(result.stdout)
             mounts = [arguments[i + 1] for i, value in enumerate(arguments) if value == "--mount"]
             self.assertIn(f"type=bind,src={public},dst=/workspace/config/deployments/example/provider.toml,readonly", mounts)
@@ -243,15 +328,20 @@ class LauncherTests(unittest.TestCase):
             (checkout / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
             ready = checkout / "mapping-ready"
             settled = checkout / "mapping-settled"
-            (checkout / "tools/docker.sh").write_text('''#!/bin/bash
+            (checkout / "tools/docker.sh").write_text("""#!/bin/bash
 trap 'sleep 3; : > "$MAPPING_SETTLED"; exit 143' TERM
 : > "$MAPPING_READY"
 while :; do sleep 0.1; done
-''')
+""")
             environment.update(MAPPING_READY=str(ready), MAPPING_SETTLED=str(settled))
-            process = subprocess.Popen(["bash", str(checkout / "tools/container.sh"), "test/repository/documentation"],
-                                       env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       text=True, start_new_session=True)
+            process = subprocess.Popen(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository/documentation"],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
             try:
                 deadline = time.monotonic() + 8
                 while not ready.exists() and time.monotonic() < deadline:
@@ -259,10 +349,10 @@ while :; do sleep 0.1; done
                 self.assertTrue(ready.exists())
                 process.send_signal(signal.SIGTERM)
                 time.sleep(2.3)
-                self.assertIsNone(process.poll(), "mapping owner was not allowed to finish cleanup")
+                self.assertIsNone(process.poll(), msg="mapping owner was not allowed to finish cleanup")
                 self.assertTrue(list((checkout / ".work").glob("repository-check-inputs.*")))
                 _stdout, stderr = process.communicate(timeout=8)
-                self.assertEqual(143, process.returncode, stderr)
+                self.assertEqual(143, process.returncode, msg=stderr)
                 self.assertTrue(settled.exists())
                 self.assertFalse(list((checkout / ".work").glob("repository-check-inputs.*")))
             finally:
@@ -322,7 +412,7 @@ while :; do sleep 0.1; done
             self.assertEqual(2, result.returncode, msg=result.stderr)
             self.assertIn("identity differs", result.stderr)
             self.assertEqual(1, len((checkout / "engine-log").read_text().splitlines()))
-            self.assertEqual([checkout / ".work/checker"], list((checkout / ".work").iterdir()))
+            self.assertEqual({checkout / ".work/checker", checkout / ".work/wheelhouse"}, set((checkout / ".work").iterdir()))
 
     def test_repository_failure_keeps_status_and_removes_owned_metadata(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -340,7 +430,7 @@ while :; do sleep 0.1; done
             invocations = (checkout / "engine-log").read_text().splitlines()
             self.assertEqual(2, len(invocations))
             self.assertIn(image + " bash -eu -c", invocations[-1])
-            self.assertEqual([checkout / ".work/checker"], list((checkout / ".work").iterdir()))
+            self.assertEqual({checkout / ".work/checker", checkout / ".work/wheelhouse"}, set((checkout / ".work").iterdir()))
 
     def test_repository_worker_requires_declared_status_despite_ambient_success(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"FAKE_RUN_STATUS": "0"}):
@@ -498,9 +588,69 @@ while :; do sleep 0.1; done
         self.assertNotEqual(self.command("download", "../weight.zip").returncode, 0)
         result = self.command("download", "weight.zip")
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        arguments = shlex.split(result.stdout.splitlines()[-2])
-        self.assertEqual("host", arguments[arguments.index("--network") + 1])
+        self.assertIn("acquisition route: lo", result.stdout)
+        arguments = shlex.split(result.stdout.split("Online worker: ", 1)[1])
+        self.assertEqual(
+            "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+            arguments[0],
+        )
+        self.assertEqual(
+            [
+                "--pull",
+                "never",
+                "--read-only",
+                "--env",
+                "NMRNET_IN_CONTAINER=1",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges:true",
+                "--cpus",
+                "2",
+                "--memory",
+                "512m",
+                "--memory-swap",
+                "512m",
+                "--pids-limit",
+                "64",
+                "--tmpfs",
+                "/tmp:rw,nosuid,nodev,noexec,size=64m",
+                "--workdir",
+                "/workspace",
+            ],
+            arguments[1:22],
+        )
+        self.assertNotIn("--network", arguments)
+        self.assertNotIn("--user", arguments)
+        self.assertEqual(30, arguments.index("--"))
+        self.assertEqual(
+            [
+                "python3",
+                "-B",
+                "-m",
+                "tools.artifacts",
+                "download",
+                "--declaration",
+                "/inputs/release.json",
+                "--directory",
+                "/downloads",
+                "--name",
+                "weight.zip",
+            ],
+            arguments[arguments.index("--") + 1 :],
+        )
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
+        self.assertEqual(
+            {
+                f"type=bind,src={Path.cwd()}/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly",
+                f"type=bind,src={Path.cwd()}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly",
+                f"type=bind,src={Path.cwd()}/artifacts/release.json,dst=/inputs/release.json,readonly",
+                f"type=bind,src={Path.cwd()}/.work/downloads,dst=/downloads",
+            },
+            set(mounts),
+        )
+        self.assertEqual(4, len(mounts))
+        self.assertNotIn("docker.sock", " ".join(mounts))
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
         self.assertEqual([f"type=bind,src={Path.cwd()}/.work/downloads,dst=/downloads"], writable)
 
@@ -525,9 +675,17 @@ while :; do sleep 0.1; done
             (checkout / "tools/acquisition_interface.sh").write_bytes(Path("tools/acquisition_interface.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+            (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "check"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"},
+                env={
+                    **os.environ,
+                    "NMRNET_ARCHIVE_INPUT": "weight.zip",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                },
                 text=True,
                 capture_output=True,
                 check=False,
@@ -555,6 +713,7 @@ while :; do sleep 0.1; done
             (checkout / "tools/acquisition_interface.sh").write_bytes(Path("tools/acquisition_interface.sh").read_bytes())
             (checkout / ".work").symlink_to(checkout / "elsewhere", target_is_directory=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+            (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "download"],
                 env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
@@ -571,13 +730,22 @@ while :; do sleep 0.1; done
             (checkout / "tools").mkdir()
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
+            (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+            (checkout / "tools/operator_guidance.sh").write_bytes(Path("tools/operator_guidance.sh").read_bytes())
             (checkout / "artifacts").mkdir()
             (checkout / "artifacts/weight.selection.json").write_text("{}")
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "extract"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"},
+                env={
+                    **os.environ,
+                    "NMRNET_ARCHIVE_INPUT": "weight.zip",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                },
                 text=True,
                 capture_output=True,
                 check=False,
@@ -595,7 +763,14 @@ while :; do sleep 0.1; done
             (checkout / ".work/prepared").symlink_to(checkout / "elsewhere", target_is_directory=True)
             denied = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "extract"],
-                env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"},
+                env={
+                    **os.environ,
+                    "NMRNET_ARCHIVE_INPUT": "weight.zip",
+                    "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
+                    "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
+                    "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                },
                 text=True,
                 capture_output=True,
                 check=False,

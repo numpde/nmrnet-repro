@@ -8,10 +8,10 @@ from tests.integration.nmrnet.reference_fixtures import (
     indexed_predictions,
     render_fixture,
     require_reference_inputs,
+    require_reference_predictions,
     verify_fixture,
 )
 from tests.integration.nmrnet.reference_ports import authored_populations
-from tests.integration.nmrnet.reference_fixtures import require_reference_predictions
 
 
 class ReferenceFixtureTests(unittest.TestCase):
@@ -73,9 +73,9 @@ class ReferenceFixtureTests(unittest.TestCase):
             [{"element": "H", "atom_index": 0, "shift_ppm": 1.5}],
         ]
         self.assertEqual(
-            indexed_predictions(identities, rows),
             {
                 ("H", "01", "C", 0): 10.25,
                 ("C", "01", "H", 0): 1.5,
             },
+            indexed_predictions(identities, rows),
         )

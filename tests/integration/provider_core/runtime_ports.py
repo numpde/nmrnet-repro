@@ -16,8 +16,8 @@ from contextlib import AsyncExitStack
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit
 from unittest.mock import AsyncMock
+from urllib.parse import urlsplit
 
 from http_sf import parse
 from tests.fakes.acquisition import store_headers
@@ -31,17 +31,18 @@ from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 
 from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
+from nmrnet_provider.runtime import capture_prose_services
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.lifetime import ProviderLifetime
 from provider_core.controller import ControllerFailed, LiveStartPolicy
 from provider_core.delivery_store import QueueLimits
+from provider_core.execution import ObservationRecovery
+from provider_core.lifetime import ProviderLifetime
+from provider_core.ownership import AttemptClaims
 from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
 from provider_core.shared_delivery_ipc import SharedDeliverySocket
 from provider_core.shared_delivery_service import SharedDeliveryService
-from provider_core.execution import ObservationRecovery
-from provider_core.ownership import AttemptClaims
 
 
 class JoinedDeliveryProxy(ServiceProxyServer):
@@ -67,8 +68,12 @@ def require_model_credentials(request):
 def require_download_credentials(request, body):
     if request.split(b"\r\n", 1)[0] != f"GET /upload/v1/uploads/{UPLOAD_REF}/bytes HTTP/1.1".encode() or body:
         raise AssertionError("Store received an unexpected Upload bytes operation")
-    headers = [(name.lower(), value.strip()) for line in request.split(b"\r\n")[1:] if b":" in line
-               for name, value in [line.split(b":", 1)]]
+    headers = [
+        (name.lower(), value.strip())
+        for line in request.split(b"\r\n")[1:]
+        if b":" in line
+        for name, value in [line.split(b":", 1)]
+    ]
     if [value for name, value in headers if name == b"authorization"] != [b"Bearer " + grant()["capability"].encode()]:
         raise AssertionError("Store did not receive exactly its granted download bearer")
     if any(name in (b"signature", b"signature-input") for name, _ in headers) or b"private_model_key" in request.lower():
@@ -76,6 +81,7 @@ def require_download_credentials(request, body):
 
 
 class RuntimePeers:
+    # silent-defaults: allow-contract -- Ordinary runtime witnesses use two live Attempt slots; capacity and successive-service fixtures explicitly select their required limit.
     def __init__(self, ports, route, *, maximum_live_attempts=2):
         self.ports, self.route = ports, route
         self.allocate_prediction = AsyncMock(side_effect=self._allocate_prediction)
@@ -97,7 +103,7 @@ class RuntimePeers:
         try:
             self.api_peer = await self.resources.enter_async_context(api_tls_peer("success", response_factory=self.api_reply))
             self.model_peer = await self.resources.enter_async_context(TlsPeer("success", response_factory=self.model_reply))
-            headers = tuple((name, value) for name, value in store_headers(self.ports.source) if name != b"content-length")
+            headers = [(name, value) for name, value in store_headers(self.ports.source) if name != b"content-length"]
             self.store_peer = await self.resources.enter_async_context(
                 TlsPeer("success", response_body=self.ports.source, response_headers=headers)
             )
@@ -113,6 +119,7 @@ class RuntimePeers:
                 maximum_live_attempts=self.maximum_live_attempts,
             )
             self.config = load_provider_config(self.files.path)
+            self.prose_services = capture_prose_services(self.config)
             self.files.state.mkdir(mode=0o700)
             self.lifetime = ProviderLifetime(self.config.lifecycle.lifetime_root).open()
             self.stack.callback(self.lifetime.close)
@@ -128,15 +135,20 @@ class RuntimePeers:
             self.config.delivery.endpoint.socket_path.parent.mkdir(mode=0o710)
             self.config.delivery.endpoint.socket_path.parent.chmod(0o710)
             policy = ServicePolicy.admit("local", [urlsplit(self.api_peer.origin).netloc], ["127.0.0.1=127.0.0.1"])
-            self.proxy = JoinedDeliveryProxy(Path(directory) / "delivery-proxy.sock", "lo", policy, status_directory=Path(directory))
+            self.proxy = JoinedDeliveryProxy(
+                Path(directory) / "delivery-proxy.sock", "lo", policy, status_directory=Path(directory)
+            )
             self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
             self.proxy_thread.start()
             endpoint = self.config.delivery.endpoint
             self.relay = SharedDeliveryService(
-                relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
+                relay_root,
+                limits=QueueLimits(8, 16777216, 8, 16777216),
                 socket=SharedDeliverySocket(endpoint.socket_path, endpoint.socket_group_id),
-                proxy_socket=Path(directory) / "delivery-proxy.sock", request_seconds=2,
-                retry_initial_seconds=0.01, retry_max_seconds=0.1,
+                proxy_socket=Path(directory) / "delivery-proxy.sock",
+                request_seconds=2,
+                retry_initial_seconds=0.01,
+                retry_max_seconds=0.1,
                 on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
                 diagnostic_status=lambda: {"output_failures": 0},
             )
@@ -212,6 +224,7 @@ class RuntimePeers:
                     raise AssertionError("Delivery proxy CONNECT worker did not stop; scratch remains owned.")
         proxy.server_close()
 
+    # silent-defaults: allow-contract -- Ordinary witnesses wait for one delivery_published notice from the real shared relay; successive-result witnesses explicitly request their publication count.
     async def wait_published(self, count=1):
         async with asyncio.timeout(3):
             while sum(facts["event"] == "delivery_published" for _, facts in self.delivery_notices) < count:
@@ -249,12 +262,15 @@ class RuntimePeers:
             "execution_identity": {"image_id": "fixture"},
             "selected_artifacts": self.ports.worker.artifacts,
             "allocate_prediction": self.allocate_prediction,
-            "on_prediction_failure": lambda failure, attempt: self.operator_notices.append(("prediction_failed", failure, attempt)),
+            "on_prediction_failure": lambda failure, attempt: self.operator_notices.append(
+                ("prediction_failed", failure, attempt)
+            ),
             "on_interpreter_failure": lambda index, failure: self.operator_notices.append((index, failure)),
             "on_source_retry": lambda failure, seconds: self.operator_notices.append(("source_retry", failure, seconds)),
             "on_source_observation": lambda failure: self.operator_notices.append(("source_observation", failure)),
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
+            "prose_services": self.prose_services,
             "observation_recovery": ObservationRecovery(
                 self.config.lifecycle.observation_gap_seconds,
                 self.config.service.policy.api_backoff_max_seconds,
@@ -264,8 +280,14 @@ class RuntimePeers:
             "on_unconfirmed_phase_progress": self.unconfirmed_phase_progress,
             "condition_recovery": None,
             "on_delivery_retry": lambda attempt, failure, seconds: self.delivery_notices.append(
-                (failure, {"event": "producer_delivery_retry", "retry_seconds": seconds,
-                           "execution_attempt_ref": attempt.admission.execution_attempt_ref})
+                (
+                    failure,
+                    {
+                        "event": "producer_delivery_retry",
+                        "retry_seconds": seconds,
+                        "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+                    },
+                )
             ),
         }
 
@@ -294,6 +316,7 @@ class RuntimePeers:
             ]
             return json.dumps(document).encode()
         if path.endswith("/input"):
+            # silent-defaults: allow-contract -- The normal reply preserves discovered input bytes; corrupt_input explicitly substitutes changed bytes to prove identity rejection before model or native dispatch.
             payload = b"PRIVATE changed after discovery" if self.corrupt_input else self.ports.instructions.specification_bytes
             return response(payload)
         if path.endswith("/uploads"):

@@ -1,7 +1,6 @@
 """An interrupted prediction does not trigger another scientific execution."""
 
 import asyncio
-import hashlib
 import json
 import time
 import unittest
@@ -11,10 +10,10 @@ from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWorker
 
-from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut
-from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess
+from provider_core.analysis import AnalysisOutcomeUnresolved, AnalysisSuccess
 
 
 class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -32,9 +31,12 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             return replacement, replacement_host, replacement.runtime
 
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=original_worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=5,
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=original_worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=5,
             on_prediction_failure=lambda failure, attempt: notices.append((failure, attempt)),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
@@ -42,8 +44,8 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(outcome, AnalysisSuccess)
         self.assertTrue(original_host.confirmed)
         self.assertEqual(original_worker.requests, replacement.requests)
-        self.assertEqual(replacement.events.count("execute"), 1)
-        self.assertEqual(len(notices), 1)
+        self.assertEqual(1, replacement.events.count("execute"))
+        self.assertEqual(1, len(notices))
         self.assertIs(notices[0][1], ports.acknowledged)
         await session.retire()
         self.assertTrue(replacement_host.confirmed)
@@ -64,16 +66,19 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
 
         allocation = AsyncMock(side_effect=allocate)
         session = NMRNetSession(
-            allocate_prediction=allocation, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=5,
+            allocate_prediction=allocation,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=5,
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         with self.assertRaises(AnalysisOutcomeUnresolved) as caught:
             await session.execute(prepared, report_condition=unexpected_condition)
         self.assertIs(caught.exception.__cause__, lost)
         self.assertIs(lost.__context__, first)
-        self.assertEqual(allocation.await_count, 2)
+        self.assertEqual(2, allocation.await_count)
         replacement.execute.assert_awaited_once()
         await session.retire()
         self.assertTrue(replacement_host.confirmed)
@@ -92,15 +97,18 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             return replacement, replacement_host, {"python": "different"}
 
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=5,
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=5,
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         with self.assertRaisesRegex(ValueError, "replacement runtime") as caught:
             await session.execute(prepared, report_condition=unexpected_condition)
         self.assertIs(caught.exception.__cause__, first)
-        self.assertEqual(replacement.events, [])
+        self.assertEqual([], replacement.events)
         replacement.execute.assert_not_awaited()
         await session.retire()
         self.assertTrue(replacement_host.confirmed)
@@ -118,34 +126,48 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             return await retire(worker)
 
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=0.01,
-            on_prediction_failure=lambda failure, attempt: notices.append(failure),
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=0.01,
+            on_prediction_failure=lambda failure, _attempt: notices.append(failure),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        with patch.object(ports.host, "retire_channel", side_effect=slow_retirement):
-            outcome = await session.execute(prepared, report_condition=unexpected_condition)
-        self.assertIsInstance(outcome, AnalysisFailure)
+        self.addAsyncCleanup(session.retire)
+        with (
+            patch.object(ports.host, "retire_channel", side_effect=slow_retirement),
+            self.assertRaises(ModelCallFailed) as caught,
+        ):
+            await session.execute(prepared, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, original)
         self.assertTrue(ports.host.confirmed)
         allocate.assert_awaited_once()
-        self.assertEqual(notices, [original])
-        self.assertIn("retirement", json.loads(outcome.evidence.content)["prediction_failure"]["retry_not_started"])
+        self.assertEqual([], notices)
+        self.assertIn("retirement", original.retry_not_started)
         await session.retire()
 
     async def test_other_prediction_failure_does_not_authorize_retry(self):
         ports = SessionPorts()
-        ports.worker.execute = AsyncMock(side_effect=PredictionExecutionFailed("private failure"))
+        original = PredictionExecutionFailed("private failure")
+        ports.worker.execute = AsyncMock(side_effect=original)
         allocate = AsyncMock(side_effect=ports.allocate_prediction)
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=5,
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=5,
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        outcome = await session.execute(prepared, report_condition=unexpected_condition)
-        self.assertIsInstance(outcome, AnalysisFailure)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(PredictionExecutionFailed) as caught:
+            await session.execute(prepared, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, original)
         allocate.assert_awaited_once()
+        ports.worker.execute.assert_awaited_once()
         await session.retire()
 
     async def test_failed_retirement_preserves_first_failure_and_blocks_replacement(self):
@@ -156,9 +178,12 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         ports.host.failure = cleanup
         allocate = AsyncMock(side_effect=ports.allocate_prediction)
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=5,
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=5,
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         with self.assertRaises(ExceptionGroup) as caught:
@@ -188,9 +213,12 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             return await retire(worker)
 
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=5,
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=5,
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         with patch.object(ports.host, "retire_channel", side_effect=held_retirement) as retirement:
@@ -206,7 +234,6 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         allocate.assert_awaited_once()
         retirement.assert_awaited_once()
         self.assertTrue(ports.host.confirmed)
-
 
     async def test_retry_budget_expires_in_preparation_without_second_execution(self):
         ports = SessionPorts()
@@ -228,17 +255,23 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             return replacement, replacement_host, replacement.runtime
 
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=0.02,
-            on_prediction_failure=lambda failure, attempt: notices.append(failure),
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=0.02,
+            on_prediction_failure=lambda failure, _attempt: notices.append(failure),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        outcome = await session.execute(prepared, report_condition=unexpected_condition)
-        self.assertIsInstance(outcome, AnalysisFailure)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(ModelCallFailed) as caught:
+            await session.execute(prepared, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, original)
+        self.assertIsInstance(original.__cause__, TimeoutError)
         replacement.execute.assert_not_awaited()
-        self.assertEqual(notices, [original])
-        self.assertIn("preparation", json.loads(outcome.evidence.content)["prediction_failure"]["retry_not_started"])
+        self.assertEqual([], notices)
+        self.assertIn("preparation", original.retry_not_started)
         await session.retire()
 
     async def test_retry_budget_expires_during_notice_without_second_execution(self):
@@ -255,30 +288,45 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             return replacement, replacement_host, replacement.runtime
 
         session = NMRNetSession(
-            allocate_prediction=allocate, execution_identity={"image_id": "fixture"},
-            selected_artifacts=ports.worker.artifacts, input_preparation=ports.preparation,
-            max_retries=1, prediction_seconds=0.02,
-            on_prediction_failure=lambda failure, attempt: time.sleep(0.05),
+            allocate_prediction=allocate,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=ports.worker.artifacts,
+            input_preparation=ports.preparation,
+            max_retries=1,
+            prediction_seconds=0.02,
+            on_prediction_failure=lambda _failure, _attempt: time.sleep(0.05),
         )
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        outcome = await session.execute(prepared, report_condition=unexpected_condition)
-        self.assertIsInstance(outcome, AnalysisFailure)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(ModelCallFailed) as caught:
+            await session.execute(prepared, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, original)
         replacement.execute.assert_not_awaited()
-        self.assertIn("before retry dispatch", json.loads(outcome.evidence.content)["prediction_failure"]["retry_not_started"])
+        self.assertIn("before retry dispatch", original.retry_not_started)
         await session.retire()
 
-    async def test_large_diagnostic_does_not_prevent_truthful_failure(self):
+    async def test_large_diagnostic_preserves_original_failure_and_bounded_private_rendering(self):
         ports = SessionPorts()
-        original = PredictionExecutionFailed("💧" * 300000)
+        self.addAsyncCleanup(ports.session.retire)
+        original = PredictionExecutionFailed(
+            "Authored allocator failure; api_key=PRIVATE_DIAGNOSTIC_KEY; " + "💧" * 300000
+        )
+        original_cause = OSError("Authored allocator cause")
+        original.__cause__ = original_cause
         ports.worker.execute = AsyncMock(side_effect=original)
         prepared = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        outcome = await ports.session.execute(prepared, report_condition=unexpected_condition)
-        diagnostic = json.dumps(original.diagnostic, ensure_ascii=True).encode("ascii")
-        evidence = json.loads(outcome.evidence.content)["prediction_failure"]
-        self.assertEqual(evidence["diagnostic_bytes"], len(diagnostic))
-        self.assertEqual(evidence["diagnostic_sha256"], hashlib.sha256(diagnostic).hexdigest())
-        self.assertIsInstance(outcome, AnalysisFailure)
+        with self.assertRaises(PredictionExecutionFailed) as caught:
+            await ports.session.execute(prepared, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, original)
+        self.assertIs(caught.exception.__cause__, original_cause)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=("PRIVATE_DIAGNOSTIC_KEY",)))
+        self.assertIn("Authored allocator failure", rendered)
+        self.assertIn("omitted_characters", rendered)
+        self.assertNotIn("PRIVATE_DIAGNOSTIC_KEY", rendered)
+        self.assertLess(len(rendered), len(original.diagnostic))
+        ports.worker.execute.assert_awaited_once()
         await ports.session.retire()
+        self.assertTrue(ports.host.confirmed)
 
     async def test_failure_after_retirement_is_not_selected_as_outcome(self):
         ports = SessionPorts()
@@ -298,28 +346,36 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(entered.wait(), 2)
             await session.retire()
             release.set()
-            with self.assertRaisesRegex(ValueError, "after retirement began") as caught:
+            with self.assertRaises(PredictionExecutionFailed) as caught:
                 await task
-            self.assertIs(caught.exception.__cause__, original)
+            self.assertIs(caught.exception, original)
+            self.assertTrue(ports.host.confirmed)
+            ports.worker.execute.assert_awaited_once()
         finally:
             release.set()
             await asyncio.gather(task, return_exceptions=True)
+            await session.retire()
 
-    async def test_evidence_failure_keeps_original_prediction_failure(self):
+    async def test_unavailable_outcome_evidence_does_not_mask_original_prediction_failure(self):
         ports = SessionPorts()
         session = NMRNetSession(
             allocate_prediction=ports.allocate_prediction,
             execution_identity={"image_id": "fixture"},
             selected_artifacts=ports.worker.artifacts,
             input_preparation=ports.preparation,
+            max_retries=0,
         )
         original = PredictionExecutionFailed("private diagnostic")
         ports.worker.execute = AsyncMock(side_effect=original)
         prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        with patch("nmrnet_provider.session._evidence", side_effect=ValueError("evidence unavailable")):
-            with self.assertRaisesRegex(ValueError, "evidence unavailable") as caught:
-                await session.execute(prepared, report_condition=unexpected_condition)
-        self.assertIs(caught.exception.__cause__, original)
+        self.addAsyncCleanup(session.retire)
+        with (
+            patch("nmrnet_provider.session._evidence", side_effect=ValueError("evidence unavailable")),
+            self.assertRaises(PredictionExecutionFailed) as caught,
+        ):
+            await session.execute(prepared, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, original)
+        ports.worker.execute.assert_awaited_once()
         await session.retire()
 
     async def test_failure_is_preserved_without_reallocating_or_reexecuting(self):
@@ -329,9 +385,14 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
         underlying.__cause__ = interrupted
         timeout_with_interruption = WorkerExchangeTimedOut("Prediction timed out", send_started=True)
         timeout_with_interruption.__cause__ = underlying
-        for failure in (PredictionExecutionFailed("Prediction failed"), ModelCallFailed("Model call failed"),
-                        asyncio.IncompleteReadError(b"", 1), TimeoutError("Prediction timed out"),
-                        WorkerExchangeTimedOut("Prediction was not sent", send_started=False), timeout_with_interruption):
+        for failure in (
+            PredictionExecutionFailed("Prediction failed"),
+            ModelCallFailed("Model call failed"),
+            asyncio.IncompleteReadError(b"", 1),
+            TimeoutError("Prediction timed out"),
+            WorkerExchangeTimedOut("Prediction was not sent", send_started=False),
+            timeout_with_interruption,
+        ):
             with self.subTest(failure=type(failure).__name__):
                 ports = SessionPorts()
                 allocate = AsyncMock(side_effect=ports.allocate_prediction)
@@ -340,16 +401,12 @@ class PredictionFailureTests(unittest.IsolatedAsyncioTestCase):
                     execution_identity={"image_id": "fixture"},
                     selected_artifacts=ports.worker.artifacts,
                     input_preparation=ports.preparation,
+                    max_retries=0,
                 )
                 ports.worker.execute = AsyncMock(side_effect=failure)
                 prepared = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-                if isinstance(failure, PredictionExecutionFailed):
-                    outcome = await session.execute(prepared, report_condition=unexpected_condition)
-                    self.assertIsInstance(outcome, AnalysisFailure)
-                    self.assertEqual(outcome.message, "Prediction did not return a complete verified result.")
-                    self.assertNotIn(failure.diagnostic, outcome.message)
-                    self.assertNotIn(failure.diagnostic.encode(), outcome.evidence.content)
-                elif type(failure) is asyncio.IncompleteReadError:
+                self.addAsyncCleanup(session.retire)
+                if type(failure) is asyncio.IncompleteReadError:
                     with self.assertRaises(AnalysisOutcomeUnresolved) as caught:
                         await session.execute(prepared, report_condition=unexpected_condition)
                     self.assertIs(caught.exception.__cause__, failure)

@@ -3,6 +3,13 @@
 !containers/geometry/
 !containers/geometry/Dockerfile
 !containers/geometry/Dockerfile.dockerignore
+!host/
+!host/bootstrap/
+!host/bootstrap/acquisition/
+!host/bootstrap/acquisition/acquisition_tool/
+!host/bootstrap/acquisition/acquisition_tool/__init__.py
+!host/bootstrap/acquisition/acquisition_tool/installer/
+!host/bootstrap/acquisition/acquisition_tool/installer/**
 !requirements/
 !requirements/provider-core-native-install.lock
 !requirements/preparation.lock

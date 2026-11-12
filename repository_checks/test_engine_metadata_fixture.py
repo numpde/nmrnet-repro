@@ -9,10 +9,12 @@ from tools.container_guard import require_container
 
 require_container()
 
+import io
 import json
 import os
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import unittest
@@ -23,6 +25,75 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class EngineMetadataFixtureTests(unittest.TestCase):
+    def test_fixture_identity_and_owned_stat_share_explicit_uid_gid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            environment = fixture.environment | {"NMRNET_FIXTURE_UID": "2100", "NMRNET_FIXTURE_GID": "2200"}
+            for command, expected in (
+                (["id", "-u"], b"2100\n"),
+                (["id", "-g"], b"2200\n"),
+                (["stat", "-c", "%u", str(fixture.root / ".work")], b"2100\n"),
+                (["stat", "-c", "%u:%g", "--", str(fixture.root / ".work")], b"2100:2200\n"),
+            ):
+                with self.subTest(command=command):
+                    result = subprocess.run(command, env=environment, capture_output=True, check=False)
+                    self.assertEqual((0, expected, b""), (result.returncode, result.stdout, result.stderr))
+
+    def test_fixture_stat_preserves_other_metadata_paths_and_errors(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            owned = fixture.root / "stat-input"
+            owned.write_bytes(b"real bytes\n")
+            owned.chmod(0o640)
+            link = fixture.root / "stat-link"
+            link.symlink_to(owned)
+            ancestor = fixture.root / "linked-work"
+            ancestor.symlink_to(fixture.root / ".work")
+            cycle = fixture.root / "stat-cycle"
+            cycle.symlink_to(cycle)
+            for output, path in (
+                ("%a:%s:%F", owned),
+                ("%u:%a", owned),
+                ("%u:%g", Path(outside)),
+                ("%u", link),
+                ("%u", ancestor / "checker"),
+                ("%u", cycle),
+                ("%u", fixture.root / "missing"),
+            ):
+                with self.subTest(output=output, path=path):
+                    command = ["stat", "-c", output, "--", str(path)]
+                    actual = subprocess.run(command, executable="/usr/bin/stat", capture_output=True, check=False)
+                    observed = subprocess.run(command, env=fixture.environment, capture_output=True, check=False)
+                    self.assertEqual(
+                        (actual.returncode, actual.stdout, actual.stderr),
+                        (observed.returncode, observed.stdout, observed.stderr),
+                    )
+
+    def test_preexisting_acquisition_registry_is_preserved_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "acquisition-containers.json"
+            evidence = b'{"prior-container":{"phase":"running"}}\n'
+            registry.write_bytes(evidence)
+            with self.assertRaises(FileExistsError):
+                LauncherFixture(root)
+            self.assertEqual(evidence, registry.read_bytes())
+
+    def test_launcher_acquisition_snapshot_verifies_before_engine_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            command = [sys.executable, "-B", str(fixture.root / "host/acquisition_bootstrap.py"), "--root", str(fixture.root)]
+            verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
+            self.assertEqual(0, verified.returncode, msg=verified.stderr)
+            (fixture.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()
+            rejected = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
+            self.assertEqual(1, rejected.returncode, msg=rejected.stderr)
+            self.assertIn("bootstrap files differ from the release inventory", rejected.stderr)
+            self.assertEqual([], fixture.calls())
+
     def inspect(self, fixture, arguments, additions):
         return subprocess.run(
             [str(fixture.root / "bin/docker"), *arguments],
@@ -88,7 +159,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
         program = (
             "import resource, sys, time\n"
             "from pathlib import Path\n"
-            "from repository_checks.fixtures.containers.fixture import record_engine_call\n"
+            "from repository_checks.fixtures.containers.engine_log import record_engine_call\n"
             "resource.setrlimit(resource.RLIMIT_FSIZE, (4096, 4096))\n"
             "root, name = Path(sys.argv[1]), sys.argv[2]\n"
             "(root / (name + '.ready')).write_text('ready\\n')\n"
@@ -233,16 +304,23 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             identity = "sha256:" + "b" * 64
             self.assertEqual(identity, fixture.environment["NMRNET_FAKE_BUILD_RESULT"])
-            arguments = [
-                "build",
-                "--file",
-                str(fixture.root / "containers/inference/Dockerfile"),
-                "--build-context",
-                "wheelhouse=" + str(fixture.root / ".work/wheelhouse"),
-                "--build-context",
-                "runtime-wheels=" + str(fixture.root / ".work/wheelhouse"),
-                str(fixture.root),
-            ]
+            capture = fixture.root / ".work/inference/.build.metadata/context"
+            capture.mkdir(parents=True)
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w"):
+                pass
+            payload = stream.getvalue()
+            arguments = ["build", "--file", "containers/inference/Dockerfile", "-"]
+
+            def build(additions):
+                return subprocess.run(
+                    [str(fixture.root / "bin/docker"), *arguments],
+                    env=fixture.environment | additions,
+                    input=payload,
+                    capture_output=True,
+                    check=False,
+                )
+
             registry = fixture.root / "containers.json"
             before = (registry.read_bytes(), registry.stat().st_ino)
             cases = (
@@ -255,20 +333,20 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             )
             for additions, expected, status in cases:
                 with self.subTest(additions=additions):
-                    result = self.inspect(fixture, arguments, additions)
+                    result = build(additions)
                     self.assertEqual(status, result.returncode, msg=result.stderr)
                     self.assertEqual((expected + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
             del fixture.environment["NMRNET_FAKE_BUILD_RESULT"]
             evidence = fixture.root / "build-evidence.json"
             evidence.unlink()
-            missing = self.inspect(fixture, arguments, {})
+            missing = build({})
             self.assertEqual(1, missing.returncode)
             self.assertEqual(b"", missing.stdout)
             self.assertIn(b"KeyError: 'NMRNET_FAKE_BUILD_RESULT'", missing.stderr)
             # Evidence is written before identity output consumes its result.
             self.assertTrue(evidence.is_file())
-            selected_bytes = self.inspect(fixture, arguments, {"NMRNET_FAKE_BUILD_BYTES": "3"})
+            selected_bytes = build({"NMRNET_FAKE_BUILD_BYTES": "3"})
             self.assertEqual(0, selected_bytes.returncode, msg=selected_bytes.stderr)
             self.assertEqual(b"xxx\n", selected_bytes.stdout)
             self.assertEqual(b"", selected_bytes.stderr)

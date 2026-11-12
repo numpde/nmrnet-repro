@@ -4,28 +4,28 @@ import asyncio
 import json
 import unittest
 from dataclasses import asdict, replace
-from urllib.parse import urlsplit
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlsplit
 
-from tests.fakes.attempts import start_response
 from tests.fakes.api import response_headers
 from tests.fakes.api_tls import verify_signed_request
+from tests.fakes.attempts import start_response
 from tests.fakes.job_feed import page
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from nmrnet_provider.input_geometry import prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.service import ServiceFailed
 from nmrnet_provider.worker_client import WorkerResultRejected
+from provider_core.api import ApiFailure
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
-from provider_core.api import ApiFailure
 from provider_core.controller import ControllerFailed, LiveStartPolicy, StartDeferred
 from provider_core.delivery_client import DeliveryUnavailable
 from provider_core.delivery_store import DeliveryFull
@@ -56,20 +56,25 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 method, target, _ = request.split(b"\r\n", 1)[0].decode().split()
                 path = urlsplit(target).path
                 if path == "/provider/v1/jobs" and len(fixture.start_bodies) >= 2:
-                    verify_signed_request(request, body, origin=fixture.api_peer.origin,
-                                          key=fixture.config.api.identity.private_key)
+                    verify_signed_request(
+                        request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key
+                    )
                     return json.dumps(page() | {"analysis_kind_ref": ANALYSIS_KIND_REF, "next_cursor": None, "jobs": []}).encode()
                 if path == "/provider/v1/execution-attempts/start":
-                    verify_signed_request(request, body, origin=fixture.api_peer.origin,
-                                          key=fixture.config.api.identity.private_key)
+                    verify_signed_request(
+                        request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key
+                    )
                     index = len(fixture.start_bodies)
                     self.assertLess(index, 2)
                     self.assertEqual(json.loads(body)["job_ref"], fixture.jobs[index].job_ref)
                     if index == 1:
                         self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
                     fixture.start_bodies.append(body)
-                    return start_response(execution_attempt_ref=fixture.attempt_refs[index],
-                                          job_ref=fixture.jobs[index].job_ref, analysis_kind_ref=ANALYSIS_KIND_REF)
+                    return start_response(
+                        execution_attempt_ref=fixture.attempt_refs[index],
+                        job_ref=fixture.jobs[index].job_ref,
+                        analysis_kind_ref=ANALYSIS_KIND_REF,
+                    )
                 if method == "POST" and path.endswith("/fail"):
                     failures.append(body)
                 result = await original_api(request, body)
@@ -83,14 +88,14 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             fixture.stack.push_async_callback(fixture.settle_service, service)
             await asyncio.wait_for(service.run(fixture.stop), 8)
             await fixture.wait_published()
-            self.assertEqual(len(fixture.start_bodies), 2)
+            self.assertEqual(2, len(fixture.start_bodies))
             self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
-            self.assertEqual(len(fixture.complete_bodies), 1)
+            self.assertEqual(1, len(fixture.complete_bodies))
             self.assertEqual(failures, [])
             self.assertTrue(fixture.allocations[0].host.confirmed)
-            self.assertEqual(fixture.allocations[1].worker.events.count("execute"), 1)
+            self.assertEqual(1, fixture.allocations[1].worker.events.count("execute"))
             notices = [notice for notice in fixture.api_notices if notice[0] == "attempt_held"]
-            self.assertEqual(len(notices), 1)
+            self.assertEqual(1, len(notices))
             self.assertEqual(notices[0][2].input.job_ref, first.job_ref)
             self.assertIs(notices[0][1].cause.cause.__cause__, rejected)
             evidence = json.dumps(failure_evidence(notices[0][1], secrets=()))
@@ -138,15 +143,25 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 fixture.api_peer.response_headers = response_headers()
                 method, target, _ = request.split(b"\r\n", 1)[0].decode().split()
                 path = urlsplit(target).path
-                verify_signed_request(request, body, origin=fixture.api_peer.origin,
-                                      key=fixture.config.api.identity.private_key)
+                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
                 if path == "/provider/v1/jobs":
-                    jobs = [] if len(fixture.start_bodies) >= 2 else ([first] if not fixture.start_bodies else [second])
-                    return json.dumps(page() | {
-                        "analysis_kind_ref": ANALYSIS_KIND_REF, "next_cursor": None,
-                        "jobs": [{**asdict(job.identity), "analysis_kind_ref": ANALYSIS_KIND_REF,
-                                  "created_at": "2026-10-18T00:00:00.123456Z"} for job in jobs],
-                    }).encode()
+                    count = len(fixture.start_bodies)
+                    jobs = [first, second][count : count + 1]
+                    return json.dumps(
+                        page()
+                        | {
+                            "analysis_kind_ref": ANALYSIS_KIND_REF,
+                            "next_cursor": None,
+                            "jobs": [
+                                {
+                                    **asdict(job.identity),
+                                    "analysis_kind_ref": ANALYSIS_KIND_REF,
+                                    "created_at": "2026-10-18T00:00:00.123456Z",
+                                }
+                                for job in jobs
+                            ],
+                        }
+                    ).encode()
                 if path == "/provider/v1/execution-attempts/start":
                     index = len(fixture.start_bodies)
                     self.assertLess(index, 2)
@@ -155,8 +170,11 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                         self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
                         first_owner.extend(owner for owner in fixture.claims.live_owners() if owner is not service.controller)
                     fixture.start_bodies.append(body)
-                    return start_response(execution_attempt_ref=fixture.attempt_refs[index],
-                                          job_ref=fixture.jobs[index].job_ref, analysis_kind_ref=ANALYSIS_KIND_REF)
+                    return start_response(
+                        execution_attempt_ref=fixture.attempt_refs[index],
+                        job_ref=fixture.jobs[index].job_ref,
+                        analysis_kind_ref=ANALYSIS_KIND_REF,
+                    )
                 if path == f"/provider/v1/jobs/{first.job_ref}/uploads":
                     source_requests.append(path)
                     fixture.api_peer.response_status = 503
@@ -201,44 +219,49 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     with patch.object(owner._api, "retire", new=AsyncMock(side_effect=OSError("PRIVATE_RETIREMENT"))):
                         return await original_retire(owner, failure, store_owner=store_owner)
 
-                with patch.object(JobUploads, "_recovery_exhausted", exhausted_with_cleanup), \
-                     patch.object(JobUploads, "_retire_recovery", retire_with_failure if source_problem == "retirement" else original_retire):
-                    with self.assertRaises(ServiceFailed) as caught:
-                        await asyncio.wait_for(service.run(fixture.stop), 8)
+                with (
+                    patch.object(JobUploads, "_recovery_exhausted", exhausted_with_cleanup),
+                    patch.object(
+                        JobUploads, "_retire_recovery", retire_with_failure if source_problem == "retirement" else original_retire
+                    ),
+                    self.assertRaises(ServiceFailed) as caught,
+                ):
+                    await asyncio.wait_for(service.run(fixture.stop), 8)
                 evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
-                self.assertIn("UploadFailed" if source_problem == "retirement" else "UploadRecoveryExhausted", evidence)
+                required_markers = {
+                    "cleanup": ("UploadRecoveryExhausted", "independent cleanup", "OSError"),
+                    "interruption": ("UploadRecoveryExhausted", "acquisition interruption", "OSError"),
+                    "control": ("UploadRecoveryExhausted", "independent control write"),
+                    "retirement": ("UploadFailed", "OSError"),
+                }
+                for marker in required_markers[source_problem]:
+                    self.assertIn(marker, evidence)
                 if source_problem == "retirement":
-                    self.assertIn("OSError", evidence)
                     self.assertNotIn("PRIVATE_RETIREMENT", evidence)
-                elif source_problem != "control":
-                    self.assertIn("independent cleanup" if source_problem == "cleanup" else "acquisition interruption", evidence)
-                    self.assertIn("OSError", evidence)
-                else:
-                    self.assertIn("independent control write", evidence)
                 self.assertNotIn("PRIVATE_SOURCE_", evidence)
-                self.assertEqual(len(fixture.start_bodies), 1)
+                self.assertEqual(1, len(fixture.start_bodies))
                 self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
-                self.assertEqual(fixture.allocations[0].worker.events, [])
+                self.assertEqual([], fixture.allocations[0].worker.events)
                 self.assertEqual(failure_bodies, [])
                 return
             await asyncio.wait_for(service.run(fixture.stop), 8)
             await fixture.wait_published()
-            self.assertEqual(len(source_requests), 3)
-            self.assertEqual(len(fixture.start_bodies), 2)
+            self.assertEqual(3, len(source_requests))
+            self.assertEqual(2, len(fixture.start_bodies))
             self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, first.job_ref))
-            self.assertEqual(len(first_owner), 1)
+            self.assertEqual(1, len(first_owner))
             self.assertTrue(first_owner[0].shutdown_ready)
-            self.assertEqual(fixture.allocations[0].worker.events, [])
-            self.assertEqual(fixture.allocations[1].worker.events.count("execute"), 1)
-            self.assertEqual(len(fixture.complete_bodies), 1)
+            self.assertEqual([], fixture.allocations[0].worker.events)
+            self.assertEqual(1, fixture.allocations[1].worker.events.count("execute"))
+            self.assertEqual(1, len(fixture.complete_bodies))
             self.assertEqual(failure_bodies, [])
             notices = [notice for notice in fixture.api_notices if notice[0] == "attempt_held"]
-            self.assertEqual(len(notices), 1)
+            self.assertEqual(1, len(notices))
             failure = notices[0][1]
             exhaustion = failure.cause.cause
-            self.assertEqual(type(exhaustion).__name__, "UploadRecoveryExhausted")
-            self.assertEqual(exhaustion.cause.status, 503)
-            self.assertEqual(exhaustion.cause.request_id, "request:source-outage")
+            self.assertEqual("UploadRecoveryExhausted", type(exhaustion).__name__)
+            self.assertEqual(503, exhaustion.cause.status)
+            self.assertEqual("request:source-outage", exhaustion.cause.request_id)
             evidence = json.dumps(failure_evidence(failure, secrets=("PRIVATE_MODEL_KEY",)))
             self.assertIn("UploadRecoveryExhausted", evidence)
             self.assertIn('"status": 503', evidence)
@@ -248,15 +271,19 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
         async with ServicePeers() as fixture:
             service = fixture.service()
             failure = BaseExceptionGroup("first controller", [SystemExit(7)])
+
             # Controller identity indexes require hashable owners.
             class Owner:
                 shutdown_ready = False
+
             owners = [Owner(), Owner()]
             owners[0].settle = AsyncMock(side_effect=failure)
             owners[1].settle = AsyncMock()
-            with patch.object(service, "_owned_controllers", return_value=owners):
-                with self.assertRaises(BaseExceptionGroup) as caught:
-                    await service._settle_controller(retry=False)
+            with (
+                patch.object(service, "_owned_controllers", return_value=owners),
+                self.assertRaises(BaseExceptionGroup) as caught,
+            ):
+                await service._settle_controller(retry=False)
             self.assertIs(caught.exception.exceptions[0], failure)
             owners[1].settle.assert_awaited_once()
             self.assertIn(owners[0], service._settlement_tasks)
@@ -269,7 +296,8 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 original_reply = fixture.api_peer.response_factory
                 starts = []
 
-                async def reply(request, body):
+                # silent-defaults: allow-contract -- Bind this iteration's START recorder, gates and responder; proof=test_stop_observes_inflight_start_past_drain.
+                async def reply(request, body, *, starts=starts, entered=entered, release=release, original_reply=original_reply):
                     if request.startswith(b"POST /provider/v1/execution-attempts/start "):
                         starts.append(body)
                         entered.set()
@@ -280,16 +308,24 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 service = fixture.service(drain_seconds=0.02)
                 wait_task = service._wait_task
 
-                async def observed_wait(task, seconds):
+                # silent-defaults: allow-contract -- Bind this iteration's service, wait method and drain event; proof=test_stop_observes_inflight_start_past_drain.
+                async def observed_wait(task, seconds, *, wait_task=wait_task, service=service, elapsed=elapsed):
                     finished = await wait_task(task, seconds)
                     if task is service.work_task and seconds == service.policy.drain_seconds:
                         elapsed.set()
                     return finished
 
-                response = (start_response(analysis_kind_ref=ANALYSIS_KIND_REF, state="failed", replayed=True)
-                            if terminal else start_response(analysis_kind_ref=ANALYSIS_KIND_REF))
-                with patch.object(service, "_wait_task", observed_wait), patch(
-                    "tests.integration.nmrnet.runtime_ports.start_response", return_value=response,
+                response = (
+                    start_response(analysis_kind_ref=ANALYSIS_KIND_REF, state="failed", replayed=True)
+                    if terminal
+                    else start_response(analysis_kind_ref=ANALYSIS_KIND_REF)
+                )
+                with (
+                    patch.object(service, "_wait_task", observed_wait),
+                    patch(
+                        "tests.integration.nmrnet.runtime_ports.start_response",
+                        return_value=response,
+                    ),
                 ):
                     task = asyncio.create_task(service.run(fixture.stop))
                     try:
@@ -298,7 +334,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                         fixture.stop.set()
                         await asyncio.wait_for(elapsed.wait(), 1)
                         self.assertFalse(work.done())
-                        self.assertEqual(work.cancelling(), 0)
+                        self.assertEqual(0, work.cancelling())
                         release.set()
                         await asyncio.wait_for(task, 3)
                         self.assertTrue(service.shutdown_ready)
@@ -306,9 +342,9 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                             fixture.claims.owns_job(fixture.config.lifecycle.scope, fixture.ports.instructions.job_ref),
                             not terminal,
                         )
-                        self.assertEqual(len(starts), 1)
-                        self.assertEqual(fixture.model_peer.requests, [])
-                        self.assertEqual(fixture.allocations[0].worker.events, [])
+                        self.assertEqual(1, len(starts))
+                        self.assertEqual([], fixture.model_peer.requests)
+                        self.assertEqual([], fixture.allocations[0].worker.events)
                     finally:
                         fixture.stop.set()
                         release.set()
@@ -342,11 +378,11 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             fixture.stack.push_async_callback(fixture.settle_service, service)
             await asyncio.wait_for(service.run(fixture.stop), 5)
             await fixture.wait_published()
-            self.assertEqual(len(failures), 1)
-            self.assertEqual(failures[0]["failure_code"], "result_size_limit")
+            self.assertEqual(1, len(failures))
+            self.assertEqual("result_size_limit", failures[0]["failure_code"])
             self.assertIn("did not run", failures[0]["failure_message"])
             self.assertIn("may exceed", failures[0]["failure_message"])
-            self.assertEqual(fixture.allocations[0].worker.events, ["close", "closed"])
+            self.assertEqual(["close", "closed"], fixture.allocations[0].worker.events)
             self.assertTrue(service.shutdown_ready)
 
     async def test_admission_stop_interrupts_live_start_backoff_without_using_the_drain_to_replay(self):
@@ -362,22 +398,26 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 return await original_reply(request, body)
 
             def arguments(pending):
-                return original_arguments(pending) | {"start_policy": LiveStartPolicy(
-                    0.01, lambda *_: fixture.stop.set(), lambda *_: self.fail("Stopped START cannot recover"),
-                    maximum_replays=1,
-                )}
+                return original_arguments(pending) | {
+                    "start_policy": LiveStartPolicy(
+                        0.01,
+                        lambda *_: fixture.stop.set(),
+                        lambda *_: self.fail("Stopped START cannot recover"),
+                        maximum_replays=1,
+                    )
+                }
 
             fixture.api_peer.response_factory = reply
             service = fixture.service(drain_seconds=3)
             with patch.object(fixture, "arguments", arguments):
                 await asyncio.wait_for(service.run(fixture.stop), 2)
             await fixture.settle_service(service)
-            self.assertEqual(len(starts), 1)
+            self.assertEqual(1, len(starts))
             self.assertTrue(fixture.attempt_stopping.is_set())
             self.assertTrue(service.shutdown_ready)
             self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, fixture.ports.instructions.job_ref))
-            self.assertEqual(fixture.model_peer.requests, [])
-            self.assertEqual(fixture.allocations[0].worker.events, [])
+            self.assertEqual([], fixture.model_peer.requests)
+            self.assertEqual([], fixture.allocations[0].worker.events)
 
     async def test_fresh_science_does_not_query_prior_attempt_history(self):
         async with ServicePeers() as fixture:
@@ -386,8 +426,8 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(service.run(fixture.stop), 4)
             await fixture.wait_published()
             self.assertTrue(service.shutdown_ready)
-            self.assertEqual(len(fixture.allocations), 1)
-            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+            self.assertEqual(1, len(fixture.allocations))
+            self.assertEqual(1, fixture.allocations[0].worker.events.count("execute"))
             self.assertNotIn("/provider/v1/execution-attempts", fixture.request_paths)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
@@ -418,9 +458,9 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             fixture.stack.push_async_callback(fixture.settle_service, service)
             await asyncio.wait_for(service.run(fixture.stop), 3)
             self.assertTrue(service.shutdown_ready)
-            self.assertEqual(len(starts), 1)
-            self.assertEqual(fixture.model_peer.requests, [])
-            self.assertEqual(fixture.ports.worker.events, [])
+            self.assertEqual(1, len(starts))
+            self.assertEqual([], fixture.model_peer.requests)
+            self.assertEqual([], fixture.ports.worker.events)
 
     async def test_full_live_registry_paces_without_start_or_service_failure(self):
         async with ServicePeers(maximum_live_attempts=1) as fixture:
@@ -442,7 +482,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(service.last_failure)
                 self.assertTrue(service.shutdown_ready)
                 self.assertNotIn("start", fixture.events)
-                self.assertEqual(fixture.model_peer.requests, [])
+                self.assertEqual([], fixture.model_peer.requests)
                 self.assertTrue(fixture.claims.owns_job(held.scope, held.input.job_ref))
             finally:
                 fixture.stop.set()
@@ -476,18 +516,20 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
 
             service = fixture.service(open_attempt=open_attempt)
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            with patch.object(fixture.claims, "claim_live", side_effect=claim_once_full), \
-                 patch("nmrnet_provider.service.LOGGER.info", side_effect=fail_notice):
+            with (
+                patch.object(fixture.claims, "claim_live", side_effect=claim_once_full),
+                patch("nmrnet_provider.service.LOGGER.info", side_effect=fail_notice),
+            ):
                 await asyncio.wait_for(service.run(fixture.stop), 5)
             await fixture.settle_service(service)
             await fixture.wait_published()
             self.assertIs(service.capacity_notice_failure, notice_failures[0])
             self.assertIsNone(service.last_failure)
             self.assertEqual(calls, 4)
-            self.assertEqual(len(notice_failures), 3)
-            self.assertEqual(fixture.events.count("start"), 1)
-            self.assertEqual(len(fixture.model_peer.requests), 1)
-            self.assertEqual(len(fixture.allocations), 4)
+            self.assertEqual(3, len(notice_failures))
+            self.assertEqual(1, fixture.events.count("start"))
+            self.assertEqual(1, len(fixture.model_peer.requests))
+            self.assertEqual(4, len(fixture.allocations))
             self.assertTrue(service.shutdown_ready)
 
     async def test_unacknowledged_selected_result_keeps_service_held_after_physical_cleanup(self):
@@ -500,7 +542,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 controller = await original(pending, stopping=stopping)
                 controllers.append(controller)
 
-                async def unavailable(outcome):
+                async def unavailable(_outcome):
                     delivery_returned.set()
                     raise DeliveryUnavailable("Authored unacknowledged delivery", status=400)
 
@@ -517,15 +559,14 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(controller.shutdown_ready)
                 self.assertFalse(service.shutdown_ready)
                 self.assertIsNone(fixture.result)
-                self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+                self.assertEqual(1, fixture.allocations[0].worker.events.count("execute"))
             finally:
                 # The permanent refusal has no fabricated ACK or retry authority.
                 # Physical cleanup completes, but the authored process stays held.
                 with self.assertRaises(ServiceFailed):
                     await service.settle()
             self.assertFalse(service.shutdown_ready)
-            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
-
+            self.assertEqual(1, fixture.allocations[0].worker.events.count("execute"))
 
     async def test_selected_report_retries_original_bytes_after_stop_and_drain_expiry(self):
         async with ServicePeers() as fixture:
@@ -544,7 +585,7 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                         pressured.set()
                         if len(bodies) >= 2:
                             retried.set()
-                        raise DeliveryFull('Authored full queue; retain the selected report')
+                        raise DeliveryFull("Authored full queue; retain the selected report")
                     return await submit(outcome)
 
                 controller.delivery.submit = bounded_delivery
@@ -559,20 +600,20 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     window_elapsed.set()
                 return finished
 
-            with patch.object(service, '_wait_task', observed_wait):
+            with patch.object(service, "_wait_task", observed_wait):
                 task = asyncio.create_task(service.run(fixture.stop))
                 try:
                     await asyncio.wait_for(pressured.wait(), 3)
                     await asyncio.wait_for(retried.wait(), 3)
-                    self.assertEqual(len(controllers), 1)
-                    self.assertEqual(len(fixture.allocations), 1)
-                    self.assertEqual(fixture.events.count('discover'), 1)
+                    self.assertEqual(1, len(controllers))
+                    self.assertEqual(1, len(fixture.allocations))
+                    self.assertEqual(1, fixture.events.count("discover"))
                     driver = service.work_task
                     (controller,) = controllers
                     fixture.stop.set()
                     await asyncio.wait_for(window_elapsed.wait(), 1)
                     self.assertFalse(driver.done())
-                    self.assertEqual(driver.cancelling(), 0)
+                    self.assertEqual(0, driver.cancelling())
                     self.assertFalse(controller.shutdown_ready)
                     with self.assertRaises(ExecutionRefused):
                         await controller.operation.retain_suppressed_disposition()
@@ -582,11 +623,11 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIs(service.work_task, driver)
                     self.assertTrue(service.shutdown_ready)
                     self.assertIsNone(service.last_failure)
-                    self.assertEqual(fixture.claims.live_owners(), ())
+                    self.assertEqual((), fixture.claims.live_owners())
                     self.assertGreaterEqual(len(bodies), 2)
                     self.assertTrue(all(body == bodies[0] for body in bodies))
-                    self.assertEqual(len(controllers), 1)
-                    self.assertEqual(fixture.allocations[0].worker.events.count('execute'), 1)
+                    self.assertEqual(1, len(controllers))
+                    self.assertEqual(1, fixture.allocations[0].worker.events.count("execute"))
                 finally:
                     recovered.set()
                     fixture.stop.set()
@@ -631,4 +672,4 @@ class LiveServiceOwnershipTests(unittest.IsolatedAsyncioTestCase):
             await fixture.settle_service(service)
             self.assertTrue(service.shutdown_ready)
             self.assertEqual(submissions, [])
-            self.assertEqual(fixture.allocations[0].worker.events.count('execute'), 1)
+            self.assertEqual(1, fixture.allocations[0].worker.events.count("execute"))

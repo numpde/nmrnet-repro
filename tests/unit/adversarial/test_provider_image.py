@@ -14,7 +14,7 @@ from unittest.mock import patch
 from tests.unit.provider_image_ports import ImageSource
 from tests.unit.wheel_pool_fixtures import locked, wheel
 
-from tools.provider_environment import install_provider, install_provider_into
+from tools.provider_environment import install_provider_into
 
 
 class ProviderDependencyAdmissionTests(unittest.TestCase):
@@ -25,9 +25,12 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
             environment = Path(directory) / "environment"
             subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(environment)], check=True)
             python = environment / "bin/python"
-            site = Path(subprocess.check_output(
-                [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True,
-            ).strip())
+            site = Path(
+                subprocess.check_output(
+                    [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                    text=True,
+                ).strip()
+            )
             metadata = site / "example-1.dist-info"
             metadata.mkdir()
             original = b"Metadata-Version: 2.1\nName: example\nVersion: 1\n"
@@ -61,6 +64,9 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
             "unconfirmed",
             "inspect",
             "label",
+            "wheel-label",
+            "missing-tool",
+            "corrupt-tool",
         ):
             with self.subTest(form=form), ImageSource() as fixture:
                 directory = fixture.repository / ".work/provider"
@@ -68,6 +74,11 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 record = directory / "image-id"
                 previous = b"previous image evidence\n"
                 record.write_bytes(previous)
+                tool = fixture.wheelhouse / "wheelhouse-tool-1.0.0.pyz"
+                if form == "missing-tool":
+                    tool.unlink()
+                elif form == "corrupt-tool":
+                    tool.write_bytes(b"damaged tool")
                 result = subprocess.run(
                     ["bash", "tests/fixtures/provider_image_build.sh", str(fixture.repository), form],
                     capture_output=True,
@@ -78,11 +89,11 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(record.read_bytes(), previous)
                 calls = (directory / "native-calls").read_text().splitlines()
-                if form not in ("inspect", "label"):
+                if form not in ("inspect", "label", "wheel-label"):
                     self.assertNotIn("controller built-image admission", calls)
                     self.assertNotIn("controller image-input admission", calls)
                 if form == "failed":
-                    self.assertEqual(result.returncode, 7)
+                    self.assertEqual(7, result.returncode)
 
     def test_missing_local_base_or_changed_label_never_replaces_image_record(self):
         for failure in ("base", "label"):
@@ -111,10 +122,10 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(record.read_bytes(), previous)
-                self.assertEqual(sorted(path.name for path in directory.iterdir()), ["image-id"])
+                self.assertEqual(["image-id"], sorted(path.name for path in directory.iterdir()))
                 if failure == "base":
-                    self.assertEqual(result.returncode, 42)
-                    self.assertEqual(result.stdout, "local-base-inspection-only\n")
+                    self.assertEqual(42, result.returncode)
+                    self.assertEqual("local-base-inspection-only\n", result.stdout)
 
     def test_changed_missing_linked_mode_or_untracked_module_refuses_committed_capture(self):
         for change in ("bytes", "missing", "linked", "mode", "untracked", "ignored"):
@@ -137,6 +148,14 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Cannot capture controller image inputs", result.stderr)
 
+    def test_changed_deployment_helper_refuses_committed_capture(self):
+        """Deployment control code must enter the image from committed source."""
+        with ImageSource() as fixture:
+            (fixture.repository / "tools/provider_deployment.py").write_text("changed deployment control code\n")
+            result, _ = fixture.capture()
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("Cannot capture controller image inputs", result.stderr)
+
     def test_pip_refuses_missing_or_changed_locked_wheels_before_installing_bindings(self):
         for mutation in ("missing", "changed"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
@@ -152,10 +171,22 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 else:
                     candidate.write_bytes(b"PRIVATE changed wheel")
                 destination = Path(directory) / "installed"
+                subprocess.run(
+                    [
+                        "/usr/local/bin/python3",
+                        "-I",
+                        "-B",
+                        "-c",
+                        "from pathlib import Path; from acquisition_tool.installer.tools.installer import create_environment; "
+                        "import sys; create_environment(Path(sys.argv[1]))",
+                        str(destination),
+                    ],
+                    check=True,
+                )
                 with (
                     patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as calls,
                     self.assertRaises(subprocess.CalledProcessError),
                 ):
-                    install_provider(destination, source, lock, wheels)
+                    install_provider_into(destination / "bin/python", source, lock, wheels, destination)
                 self.assertFalse(any("wheel" in call.args[0] for call in calls.call_args_list))
                 self.assertFalse((destination / "dependency-inputs.json").exists())

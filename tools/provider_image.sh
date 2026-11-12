@@ -5,8 +5,14 @@
 
 provider_image_inputs=(containers/provider/Dockerfile containers/provider/Dockerfile.dockerignore
     requirements/provider-core-install.lock requirements/wheelhouse-tool-assets.in nmrnet_provider/about/hello.md
+    host/bootstrap/acquisition/acquisition_tool/__init__.py
+    host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+    host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py
-    tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/streamed_build.sh tools/git_stream_sources.py tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
+    tools/provider_deployment.py
+    tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/streamed_build.sh host/git_stream_sources.py tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
 # Capture controller bindings; shared runtime code enters only as a locked wheel.
 for provider_input in "$repository_root"/nmrnet_provider/*.py; do
     case "$provider_input" in
@@ -27,7 +33,7 @@ build_provider_image() {
     if "$print_command"; then return; fi
     source "$repository_root/tools/operator_guidance.sh"
     local -a acquisition_interface=()
-    if [[ -n ${NMRNET_NETWORK_INTERFACE_INPUT-} ]]; then acquisition_interface=("NETWORK_INTERFACE=$NMRNET_NETWORK_INTERFACE_INPUT"); fi
+    if [[ -v NMRNET_NETWORK_INTERFACE_INPUT ]] && [[ -n $NMRNET_NETWORK_INTERFACE_INPUT ]]; then acquisition_interface=("NETWORK_INTERFACE=$NMRNET_NETWORK_INTERFACE_INPUT"); fi
     next_actions=$(
         next_make_command 'If the model archives are not prepared yet:' weights/download ARCHIVE=weight.zip "${acquisition_interface[@]}"
         printf '%s\n' 'Starting the provider requires controller, prediction, geometry and delivery images and both prepared model archives.' \

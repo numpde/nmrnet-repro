@@ -9,9 +9,9 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
-from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.fakes.uploads import UPLOAD_REF
+from tests.integration.nmrnet.interpreter_ports import tool_reply
+from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
 
 FORMAT_CASES = (
     "json",
@@ -34,11 +34,10 @@ class FormatFixture:
     fixture_root = Path("/input/preparation")
 
     def load_case(self):
+        """Load independent molecular expectations and scripted preparation choices."""
         oracle = (self.fixture_root / "expected.json").read_bytes()
         corpus = json.loads(oracle)
         self.oracle_sha256 = hashlib.sha256(oracle).hexdigest()
-        self.expected_preparation_calls = 2 if self.format_case in ("sdf-correction", "pdb-alternate") else 1
-        self.expected_model_calls = 1 + self.expected_preparation_calls
         self.expected_records = (1,)
         self.relative_source = None
         self.reader_options = {
@@ -75,25 +74,35 @@ class FormatFixture:
             self.expected_positions = (tuple(expected["source_atom_ids"]),)
             self.reader_options.update(source_format="pdb", selection=(1,), alternate_location="B")
         else:
-            source_format, relative_source, records = {
-                "mol": ("mol", "normative/atom_order_v2000.mol", (1,)),
-                "sdf-all": ("sdf", "normative/mixed_records.sdf", (1, 2, 3)),
-                "sdf-carbon-only": ("sdf", "normative/butane_conformers.sdf", (1, 2)),
-                "sdf-correction": ("sdf", "adversarial/invalid_last.sdf", (3, 1)),
-                "pdb-models": ("pdb", "normative/models.pdb", (2, 1)),
-                "mol2": ("mol2", "normative/mixed_records.mol2", (2, 1)),
+            source_format, relative_source, records, selection = {
+                "mol": ("mol", "normative/atom_order_v2000.mol", (1,), None),
+                "sdf-all": ("sdf", "normative/mixed_records.sdf", (1, 2, 3), "all"),
+                "sdf-carbon-only": ("sdf", "normative/butane_conformers.sdf", (1, 2), "all"),
+                "sdf-correction": ("sdf", "adversarial/invalid_last.sdf", (3, 1), (3, 1)),
+                "pdb-models": ("pdb", "normative/models.pdb", (2, 1), (2, 1)),
+                "mol2": ("mol2", "normative/mixed_records.mol2", (2, 1), (2, 1)),
             }[self.format_case]
             self.relative_source = relative_source
+            # silent-defaults: allow-contract -- The malformed SDF adds an invalid trailing record; its selected valid records retain the independent mixed-record oracle.
             native = corpus["native_files"][
                 "normative/mixed_records.sdf" if self.format_case == "sdf-correction" else relative_source
             ]
             self.expected_records = records
             self.expected = [corpus["geometries"][native["geometry_names"][record - 1]] for record in records]
+            # repo-check: allow-tuple-generator -- The fixture preserves tuple-valued source positions for each ordered geometry; proof=nmrnet_provider/input_geometry.py::PreparedGeometry.
             self.expected_positions = tuple(tuple(native["source_atom_ids"][record - 1]) for record in records)
-            selection = (
-                None if source_format == "mol" else "all" if self.format_case in ("sdf-all", "sdf-carbon-only") else records
-            )
             self.reader_options.update(source_format=source_format, selection=selection)
+        self.preparation_options = [self.reader_options]
+        self.correction_feedback = None
+        correction = {
+            "sdf-correction": ("record 4", {"selection": "all"}),
+            "pdb-alternate": ("alternate", {"alternate_location": None}),
+        }.get(self.format_case)
+        if correction is not None:
+            self.correction_feedback, initial_options = correction
+            self.preparation_options.insert(0, self.reader_options | initial_options)
+        self.expected_preparation_calls = len(self.preparation_options)
+        self.expected_model_calls = 1 + self.expected_preparation_calls
         if self.relative_source is not None:
             self.source = (self.fixture_root / self.relative_source).read_bytes()
         self.fixture_sha256 = hashlib.sha256(self.source).hexdigest()
@@ -105,6 +114,7 @@ class FormatFixture:
         ).encode()
 
     async def model_reply(self, request, raw):
+        """Script source selection, observing reader retirement before correction."""
         self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
         self.assertNotIn(b"signature:", request.lower())
         self.model_calls += 1
@@ -114,19 +124,17 @@ class FormatFixture:
             return tool_reply(f"inspect_uploads-{self.model_calls}", "inspect_uploads", {})
         response = json.loads(tool_reply(f"prepare_upload-{self.model_calls}", "prepare_upload", {"upload_ref": UPLOAD_REF}))
         function = response["choices"][0]["message"]["tool_calls"][0]["function"]
-        options = dict(self.reader_options)
-        if self.expected_preparation_calls == 2:
+        options = dict(self.preparation_options[-1])
+        if self.correction_feedback is not None:
             messages = json.loads(raw)["messages"]
             feedback = messages[-2]["content"]
             if not feedback.startswith("{"):
-                self.assertEqual(len(self.source_clients), 1)
+                self.assertEqual(1, len(self.source_clients))
                 self.assertTrue(self.source_clients[0][1].confirmed)
                 self.assertEqual((self.worker.preparations, self.worker.executions), (0, 0))
-                self.assertIn("record 4" if self.format_case == "sdf-correction" else "alternate", feedback.lower())
-            elif self.format_case == "sdf-correction":
-                options["selection"] = "all"
+                self.assertIn(self.correction_feedback, feedback.lower())
             else:
-                options["alternate_location"] = None
+                options = dict(self.preparation_options[0])
         arguments = json.loads(function["arguments"])
         arguments.update(options, output={"verbosity": "max", "shift_significant_digits": 17})
         function["arguments"] = json.dumps(arguments)

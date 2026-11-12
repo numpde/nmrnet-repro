@@ -17,7 +17,7 @@ class XYZPreparationTests(unittest.TestCase):
     def test_all_frames_preserve_different_molecules_and_original_lines(self):
         frames = xyz.prepare_xyz(TWO_FRAMES, source_unit="nm", selection="all")
         self.assertEqual(2, len(frames))
-        self.assertEqual((1, 2), tuple(frame.source_record_number for frame in frames))
+        self.assertEqual([1, 2], [frame.source_record_number for frame in frames])
         self.assertEqual((3, 4), frames[0].source_positions)
         self.assertEqual((7,), frames[1].source_positions)
         self.assertEqual(hashlib.sha256(TWO_FRAMES).hexdigest(), frames[1].source_sha256)
@@ -31,7 +31,7 @@ class XYZPreparationTests(unittest.TestCase):
 
     def test_explicit_order_is_preserved_without_sorting_sources(self):
         frames = xyz.prepare_xyz(TWO_FRAMES, source_unit="angstrom", selection=(2, 1))
-        self.assertEqual((2, 1), tuple(frame.source_record_number for frame in frames))
+        self.assertEqual([2, 1], [frame.source_record_number for frame in frames])
         self.assertEqual((7,), frames[0].source_positions)
 
     def test_skipped_preceding_coordinates_do_not_change_later_record_identity(self):

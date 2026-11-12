@@ -48,11 +48,11 @@ class PDBPreparationTests(unittest.TestCase):
             b"MODEL       17\n" + atom(30, "H1", "H", (2, 3, 4)) + atom(2, "C1", "C", (-1, 0.5, 7)) + b"ENDMDL\nEND\n"
         )
         geometries = self.prepare(source, selection=(17, 4))
-        self.assertEqual((17, 4), tuple(g.source_record_number for g in geometries))
+        self.assertEqual([17, 4], [g.source_record_number for g in geometries])
         self.assertEqual((30, 2), geometries[0].source_positions)
         self.assertEqual([[2, 3, 4], [-1, 0.5, 7]], json.loads(geometries[0].request_bytes)["coordinates"])
         self.assertEqual(["C"], json.loads(geometries[1].request_bytes)["atoms"])
-        self.assertEqual((4, 17), tuple(g.source_record_number for g in self.prepare(source)))
+        self.assertEqual([4, 17], [g.source_record_number for g in self.prepare(source)])
         self.assertTrue(all(g.source_sha256 == hashlib.sha256(source).hexdigest() for g in geometries))
 
     def test_explicit_alternate_keeps_common_rows_once_without_occupancy_selection(self):

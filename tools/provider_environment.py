@@ -13,7 +13,6 @@ import argparse
 import json
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -21,23 +20,45 @@ from tools.wheelhouse import requirements, wheel_inputs_from_report
 
 
 def _install_core(python, lock, runtime_wheels, evidence_root):
-    installed = json.loads(subprocess.check_output(
-        [str(python), "-I", "-B", "-c",
-         "import importlib.metadata,json,re; print(json.dumps({re.sub(r'[-_.]+','-',d.metadata['Name']).lower():d.version for d in importlib.metadata.distributions()}))"],
-        text=True,
-    ))
+    installed = json.loads(
+        subprocess.check_output(
+            [
+                str(python),
+                "-I",
+                "-B",
+                "-c",
+                "import importlib.metadata,json,re; print(json.dumps({re.sub(r'[-_.]+','-',d.metadata['Name']).lower():d.version for d in importlib.metadata.distributions()}))",
+            ],
+            text=True,
+        )
+    )
     for name, version in requirements(lock):
         if name in installed and installed[name] != version:
             raise ValueError(
                 f"Cannot extend interpreter: installed {name}=={installed[name]} differs from core lock {version}; review the locks before changing installed versions."
             )
-    pip = [sys.executable, "-I", "-m", "pip", "--isolated", "--python", str(python)]
+    pip = [str(python), "-I", "-B", "-m", "pip", "--isolated"]
     with tempfile.TemporaryDirectory(prefix="provider-install-") as temporary:
         report = Path(temporary) / "runtime-install.json"
         subprocess.run(
-            [*pip, "install", "--ignore-installed", "--disable-pip-version-check", "--no-cache-dir",
-             "--no-index", "--no-deps", "--only-binary=:all:", "--require-hashes", "--no-compile",
-             "--report", str(report), "--find-links", str(runtime_wheels), "-r", str(lock)],
+            [
+                *pip,
+                "install",
+                "--ignore-installed",
+                "--disable-pip-version-check",
+                "--no-cache-dir",
+                "--no-index",
+                "--no-deps",
+                "--only-binary=:all:",
+                "--require-hashes",
+                "--no-compile",
+                "--report",
+                str(report),
+                "--find-links",
+                str(runtime_wheels),
+                "-r",
+                str(lock),
+            ],
             check=True,
         )
         identities = {"runtime": wheel_inputs_from_report(lock, runtime_wheels, report)}
@@ -50,7 +71,8 @@ def _install_binding(python, source):
     # Bindings live beside the core wheel so -I excludes ambient source while
     # still finding image-owned code. They are not a second distribution.
     location = subprocess.check_output(
-        [str(python), "-I", "-B", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True,
+        [str(python), "-I", "-B", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+        text=True,
     ).strip()
     installed = Path(location)
     for name in ("nmrnet_provider", "nmrnet_inference"):
@@ -63,8 +85,10 @@ def _install_binding(python, source):
 
 def install_provider(root, source, install_lock, runtime_wheels):
     root.mkdir(mode=0o755)
-    python = root / "environment/bin/python"
-    subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(python.parent.parent)], check=True)
+    # Existing scientific images extend their interpreter after build-only SDK files are removed.
+    from acquisition_tool.installer.tools.installer import create_environment  # noqa: PLC0415
+
+    python = create_environment(root / "environment")
     _install_core(python, install_lock, runtime_wheels, root)
     _install_binding(python, source)
     return python
@@ -81,7 +105,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "source", "install-lock", "runtime-wheels"):
         parser.add_argument("--" + name, type=Path, required=True)
-    parser.add_argument("--python", type=Path, help="Extend this existing scientific interpreter; otherwise create the controller environment.")
+    parser.add_argument(
+        "--python", type=Path, help="Extend this existing scientific interpreter; otherwise create the controller environment."
+    )
     options = parser.parse_args()
     if options.python is None:
         install_provider(options.root, options.source, options.install_lock, options.runtime_wheels)

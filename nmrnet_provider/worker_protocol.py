@@ -15,6 +15,8 @@ import math
 import struct
 import time
 
+# Each worker frame body is capped at 2 MiB when encoded or read; exchange budgets are separate.
+# repo-check: allow-module-constant
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 
 
@@ -23,7 +25,7 @@ class WorkerProtocolError(ValueError):
 
 
 def require_seconds(seconds):
-    if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
+    if not (type(seconds) in (int, float) and math.isfinite(seconds) and seconds > 0):
         raise ValueError("Worker operation duration must be finite and positive")
 
 

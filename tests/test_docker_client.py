@@ -35,7 +35,19 @@ class DockerClientTests(unittest.TestCase):
         for name in ("nmrnet_inference", "nmrnet_provider", "requirements", "wheelhouse"):
             (self.root / name).mkdir(parents=True)
         (self.root / "bin").mkdir()
-        for name in ("container.sh", "docker.sh", "docker_client.sh", "inference_native.sh", "wheelhouse_path.sh"):
+        (self.root / "Makefile").write_text("help:\n")
+        (self.root / "requirements/provider-core-install.lock").touch()
+        (self.root / ".work/checker").mkdir(parents=True)
+        (self.root / ".work/checker/image-id").write_text("sha256:" + "a" * 64 + "\n")
+        for name in (
+            "container.sh",
+            "docker.sh",
+            "docker_client.sh",
+            "image_lifecycle.sh",
+            "inference_native.sh",
+            "operator_guidance.sh",
+            "wheelhouse_path.sh",
+        ):
             (self.root / "tools" / name).write_bytes((Path("tools") / name).read_bytes())
         for name in ("docker", "rm", "mv"):
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
@@ -295,7 +307,9 @@ mktemp() {
         )
         original = config.read_bytes()
         poisoned["DOCKER_CONTEXT"] = "default"
-        result = self.caller("test", environment=self.environment | poisoned | {"DOCKER_CONFIG": str(inherited)})
+        result = self.caller(
+            "test/unit/smiles-worker", environment=self.environment | poisoned | {"DOCKER_CONFIG": str(inherited)}
+        )
         self.assertEqual(0, result.returncode, msg=result.stderr)
         observed = json.loads(self.observation.read_text())
         self.assertEqual(0o700, observed["config_mode"])
@@ -310,7 +324,7 @@ mktemp() {
     def test_missing_run_status_fails_after_observed_dispatch_without_inventing_success(self):
         environment = self.environment.copy()
         del environment["FAKE_RUN_STATUS"]
-        result = self.caller("test", environment=environment)
+        result = self.caller("test/unit/smiles-worker", environment=environment)
         self.assertEqual(1, result.returncode, msg=result.stderr)
         self.assertEqual("", result.stdout)
         self.assertIn("KeyError: 'FAKE_RUN_STATUS'", result.stderr)
@@ -320,7 +334,7 @@ mktemp() {
 
     def test_native_failure_survives_configuration_cleanup_failure(self):
         result = self.caller(
-            "test",
+            "test/unit/smiles-worker",
             environment=self.environment
             | {
                 "FAKE_RUN_STATUS": "19",
@@ -334,7 +348,7 @@ mktemp() {
         subprocess.run(["/bin/rm", "-rf", "--", str(config.parent)], check=True)
 
     def test_cleanup_failure_turns_native_success_into_failure(self):
-        result = self.caller("test", environment=self.environment | {"FAKE_CLIENT_CLEANUP_FAILURE": "1"})
+        result = self.caller("test/unit/smiles-worker", environment=self.environment | {"FAKE_CLIENT_CLEANUP_FAILURE": "1"})
         self.assertEqual(23, result.returncode, msg=result.stderr)
         self.assertIn("Cannot confirm Docker client configuration removal", result.stderr)
         config = Path(json.loads(self.observation.read_text())["config"])
@@ -345,7 +359,7 @@ mktemp() {
         for native_status, caller_status in ((0, 23), (19, 19)):
             with self.subTest(native_status=native_status):
                 result = self.caller(
-                    "test",
+                    "test/unit/smiles-worker",
                     environment=self.environment
                     | {
                         "FAKE_RUN_STATUS": str(native_status),
@@ -363,7 +377,9 @@ mktemp() {
     def test_status_receipt_requires_exact_bounded_bytes(self):
         for mutation in ("nul", "extra-lf", "out-of-range"):
             with self.subTest(mutation=mutation):
-                result = self.caller("test", environment=self.environment | {"FAKE_CLIENT_STATUS_RECEIPT": mutation})
+                result = self.caller(
+                    "test/unit/smiles-worker", environment=self.environment | {"FAKE_CLIENT_STATUS_RECEIPT": mutation}
+                )
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("byte-exact status from 0 through 255", result.stderr)
                 self.assertNotIn("ignored null byte", result.stderr)
@@ -372,7 +388,7 @@ mktemp() {
 
     def test_client_output_eof_does_not_end_its_execution(self):
         started = time.monotonic()
-        result = self.caller("test", environment=self.environment | {"FAKE_RUN_BEHAVIOR": "closed-output"})
+        result = self.caller("test/unit/smiles-worker", environment=self.environment | {"FAKE_RUN_BEHAVIOR": "closed-output"})
         self.assertEqual(19, result.returncode, msg=result.stderr)
         self.assertGreaterEqual(time.monotonic() - started, 0.2)
         observed = json.loads(self.observation.read_text())
@@ -416,13 +432,13 @@ mktemp() {
         self.assertEqual(1, source.count(capture))
         birth = self.root / "birth"
         delayed = (
-            '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
+            '    if [[ $operation == "contained lane" ]]; then\n    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
             '    /bin/mv -- "$FAKE_BIRTH_RECEIPT.pending" "$FAKE_BIRTH_RECEIPT"\n'
-            "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n"
+            "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n    fi\n"
         ) + capture
         helper.write_text(source.replace(capture, delayed, 1))
         process = subprocess.Popen(
-            ["bash", str(launcher), "test"],
+            ["bash", str(launcher), "test/unit/smiles-worker"],
             env=self.environment | {"FAKE_BIRTH_RECEIPT": str(birth)},
             text=True,
             stdout=subprocess.PIPE,
@@ -468,15 +484,15 @@ mktemp() {
                 }
                 if fault == "hold":
                     delayed = (
-                        '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
+                        '    if [[ $operation == "contained lane" ]]; then\n    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
                         '    /bin/mv -- "$FAKE_BIRTH_RECEIPT.pending" "$FAKE_BIRTH_RECEIPT"\n'
-                        "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n"
+                        "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n    fi\n"
                     ) + capture
                     helper.write_text(source.replace(capture, delayed, 1))
                 else:
                     helper.write_text(source)
                 process = subprocess.Popen(
-                    ["bash", str(self.root / "tools/container.sh"), "test"],
+                    ["bash", str(self.root / "tools/container.sh"), "test/unit/smiles-worker"],
                     env=environment,
                     text=True,
                     stdout=subprocess.PIPE,
@@ -529,7 +545,7 @@ mktemp() {
     def test_failed_ready_publication_never_dispatches_docker_and_retains_uncertain_state(self):
         control = self.root / "control.json"
         result = self.caller(
-            "test",
+            "test/unit/smiles-worker",
             environment=self.environment
             | {
                 "FAKE_READY_PUBLICATION_FAILURE": "1",
@@ -549,7 +565,7 @@ mktemp() {
     def test_failed_parent_release_never_dispatches_docker_and_retires_admitted_anchor(self):
         control = self.root / "control.json"
         result = self.caller(
-            "test",
+            "test/unit/smiles-worker",
             environment=self.environment
             | {
                 "FAKE_RELEASE_PUBLICATION_FAILURE": "1",
@@ -565,7 +581,7 @@ mktemp() {
 
     def test_unreadable_status_receipt_retires_anchor_and_a_held_descendant_before_cleanup(self):
         result = self.caller(
-            "test",
+            "test/unit/smiles-worker",
             environment=self.environment
             | {
                 "FAKE_STATUS_READ_FAILURE": "1",
@@ -582,7 +598,7 @@ mktemp() {
     def test_failed_terminal_publication_retires_anchor_and_held_descendant(self):
         """Publication failure is bounded without reading an uncommitted pending file."""
         result = self.caller(
-            "test",
+            "test/unit/smiles-worker",
             environment=self.environment
             | {
                 "FAKE_STATUS_PUBLICATION_FAILURE": "1",
@@ -613,7 +629,7 @@ mktemp() {
         """Bound the probe separately and inspect actual local client disappearance."""
         self.observation.unlink(missing_ok=True)
         process = subprocess.Popen(
-            ["bash", str(self.root / "tools/container.sh"), "test"],
+            ["bash", str(self.root / "tools/container.sh"), "test/unit/smiles-worker"],
             env=self.environment | {"FAKE_RUN_BEHAVIOR": "resistant"},
             text=True,
             stdout=subprocess.PIPE,
@@ -641,7 +657,7 @@ mktemp() {
             'printf "private config setup cause\\n" >&2; return 42; fi; command mkdir "$@"; }'
         )
         result = self.caller(
-            "test",
+            "test/unit/smiles-worker",
             environment=self.environment | {"BASH_FUNC_mkdir%%": fault, "NMRNET_PREPARATION_OBSERVATION": str(observation)},
         )
         self.assertEqual(42, result.returncode, msg=result.stderr)
@@ -673,7 +689,8 @@ mktemp() {
     def checker_inputs(self, program):
         """Supply finite inspection/preparation inputs without an engine or Git."""
         (self.root / "repository_checks").mkdir()
-        (self.root / ".work/checker").mkdir(parents=True)
+        self.environment["FAKE_RECORD_INSPECTION"] = "1"
+        (self.root / ".work/checker").mkdir(parents=True, exist_ok=True)
         (self.root / "Makefile").write_text("help:\n")
         image = "sha256:" + "a" * 64
         (self.root / ".work/checker/image-id").write_text(image + "\n")
@@ -1011,6 +1028,22 @@ def _fake_command():
     arguments = sys.argv[1:]
     name = Path(sys.argv[0]).name
     if name == "rm":
+        root = Path(os.environ["FAKE_DOCKER_OBSERVATION"]).parent
+        if len(arguments) >= 3 and arguments[:2] == ["-f", "--"]:
+            paths = [Path(value) for value in arguments[2:]]
+            directory = paths[0].parent
+            if (
+                directory.parent == root / ".work"
+                and directory.name.startswith("repository-check-inputs.")
+                and paths
+                == [
+                    directory / "root-entries",
+                    directory / "mapped-owner",
+                    directory / "module-name",
+                    directory / "module-pointer",
+                ]
+            ):
+                return subprocess.run(["/bin/rm", *arguments], check=False).returncode
         if len(arguments) >= 3 and arguments[:2] == ["-f", "--"]:
             paths = [Path(value) for value in arguments[2:]]
             directory = paths[0].parent
@@ -1023,7 +1056,6 @@ def _fake_command():
         if len(arguments) != 3 or arguments[1] != "--":
             return 97
         destination = Path(arguments[2])
-        root = Path(os.environ["FAKE_DOCKER_OBSERVATION"]).parent
         configuration = arguments[0] == "-rf" and destination.name.startswith("nmrnet-docker-client.")
         native_control = (
             arguments[0] == "-rf"
@@ -1035,9 +1067,7 @@ def _fake_command():
             arguments[0] == "-rf" and destination.parent == root / ".work/checker" and destination.name.startswith(".inspect.")
         )
         scaffold = destination.parent.parent == root / ".work" and destination.parent.name.startswith("repository-check-inputs.")
-        checker_scaffold = scaffold and (
-            (arguments[0] == "-rf" and destination.name == "git") or (arguments[0] == "-f" and destination.name == "root-entries")
-        )
+        checker_scaffold = scaffold and arguments[0] == "-rf" and destination.name == "git"
         if not (configuration or native_control or probe_output or checker_receipt or checker_scaffold):
             return 97
         if configuration:
@@ -1185,8 +1215,9 @@ def _fake_command():
         observed["action"] = "inspect"
         if behavior != "success":
             os.write(2, b"private inspection cause\n")
-        staged.write_text(json.dumps(observed))
-        staged.replace(observation)
+        if os.environ.get("FAKE_RECORD_INSPECTION") == "1" or behavior == "hold":
+            staged.write_text(json.dumps(observed))
+            staged.replace(observation)
         if behavior == "hold":
             while True:
                 time.sleep(60)

@@ -24,7 +24,7 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
         prepared = await owner.prepare(self.ports.instructions, require_execution=lambda: None)
         self.assertIs(type(prepared), GeneratedJobInput)
         self.assertIs(prepared.generated, self.ports.batch)
-        self.assertEqual(prepared.source.source_bytes, b"CCl")
+        self.assertEqual(b"CCl", prepared.source.source_bytes)
         self.ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
         self.ports.allocate_generator.assert_awaited_once_with(settings=self.ports.settings, operation_seconds=2)
         self.ports.allocate_reader.assert_not_awaited()

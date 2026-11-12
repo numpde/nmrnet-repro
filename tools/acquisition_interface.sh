@@ -27,8 +27,13 @@ acquisition_interface_description() {
 select_acquisition_interface() {
     local tty_fd path name answer index
     local -a choices=() adapters=() other=()
-    if [[ -n ${NMRNET_NETWORK_INTERFACE_INPUT-} || ${NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN-} == 'command line' ]]; then
-        interface=${NMRNET_NETWORK_INTERFACE_INPUT-}
+    if { [[ -v NMRNET_NETWORK_INTERFACE_INPUT ]] && [[ -n $NMRNET_NETWORK_INTERFACE_INPUT ]]; } \
+        || { [[ -v NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN ]] && [[ $NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN == 'command line' ]]; }; then
+        if [[ ! -v NMRNET_NETWORK_INTERFACE_INPUT ]]; then
+            printf '%s\n' 'Cannot acquire artifacts or packages: NETWORK_INTERFACE was explicitly selected without a value.' >&2
+            return 2
+        fi
+        interface=$NMRNET_NETWORK_INTERFACE_INPUT
     else
         for path in /sys/class/net/*; do
             name=${path##*/}

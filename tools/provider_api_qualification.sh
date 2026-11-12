@@ -66,7 +66,7 @@ print(json.dumps(shared_grants(Path("/input/deployment.toml")).compose(), sort_k
 
 
 api_witness_stop_deployment() {
-    if [[ ${api_deployment_active-false} == true ]]; then
+    if [[ $api_deployment_active == true ]]; then
         NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
         api_deployment_active=false
     fi
@@ -75,9 +75,9 @@ api_witness_stop_deployment() {
 api_witness_finish() {
     local status=$? role cleanup=0
     trap - EXIT
-    [[ -z ${inference_diagnostic-} ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
+    [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
     if [[ $inference_retirement_confirmed == true ]]; then
-        if [[ ${api_witness_mode-} == real-ambiguity ]]; then
+        if [[ $api_witness_mode == real-ambiguity ]]; then
             for role in probe admission selection; do
                 [[ $inference_retirement_confirmed == true ]] || break
                 provider_host_remove "$role" || cleanup=2
@@ -101,9 +101,9 @@ api_witness_finish() {
         printf 'Qualification still owns an unretired local client at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
     fi
-    if [[ ${api_deployment_active-false} == true || ${#provider_host_ids[@]} != 0 ]]; then
+    if [[ $api_deployment_active == true || ${#provider_host_ids[@]} != 0 ]]; then
         printf 'Qualification stopped with unresolved deployment/helper obligations. Containers and original receipts remain at %q; their dependencies were retained.\n' "$provider_host_root" >&2 || :
-        if [[ ${api_deployment_active-false} == true ]]; then
+        if [[ $api_deployment_active == true ]]; then
             source "$repository_root/tools/operator_guidance.sh"
             next_make_command 'Reconcile the original deployment before retiring its model peer:' \
                 provider/deployment/down "DEPLOYMENT=$api_deployment_name" >&2 || :
@@ -113,9 +113,9 @@ api_witness_finish() {
     docker_client_cleanup || cleanup=2
     if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
     if [[ $status == 0 ]]; then
-        if [[ ${api_witness_mode-} == real-ambiguity ]]; then
+        if [[ $api_witness_mode == real-ambiguity ]]; then
             printf 'Selected-model interpreter probe and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
-        elif [[ ${api_witness_mode-} == existing-pasted && -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+        elif [[ $api_witness_mode == existing-pasted && -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
             printf 'Original Job readback and client retirement passed; no new prediction. Private evidence: %s\n' "$provider_host_root"
         else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
     fi
@@ -124,7 +124,7 @@ api_witness_finish() {
 
 api_witness_ambiguity() {
     # Both fixed probes share selection, grants, clocks and exact retirement.
-    local probe=${1:-ambiguity} case_fixture=interpreter_ambiguity.json
+    local probe=$1 case_fixture=interpreter_ambiguity.json
     case "$probe" in
         ambiguity) ;;
         formats) case_fixture=interpreter_formats.json ;;
@@ -152,7 +152,7 @@ api_witness_ambiguity() {
         provider_host_ipv4 "$resolver" && [[ $resolver != 0.* && $resolver != 127.* ]] \
             || { provider_host_refuse 'External resolvers require literal nonloopback IPv4 addresses.'; return 2; }
     done
-    api_witness_mode=real-ambiguity
+    api_witness_mode=real-ambiguity api_deployment_active=false
     provider_host_initialize api_witness_finish || return $?
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -165,13 +165,14 @@ api_witness_ambiguity() {
     for resolver in "${resolvers[@]}"; do printf 'nameserver %s\n' "$resolver"; done > "$provider_host_root/resolv.conf"
     repository_git rev-parse HEAD > "$provider_host_root/source-revision.txt" || return $?
     sha256sum -- "$repository_root/Makefile" "$repository_root/tools/"{provider_api_qualification,provider,provider_logging,provider_image,docker_client,inference_native,worker_retirement,git_metadata}.sh \
-        "$repository_root/tests/integration/provider_runtime/"{interpreter_ambiguity,stage_api_config}.py \
+        "$repository_root/tests/integration/provider_runtime/"{interpreter_ambiguity,stage_api_config,interpreter_fragment}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/tests/fixtures/preparation/$case_fixture" > "$provider_host_root/qualification-sources.sha256" || return $?
     printf '%s\n' "$controller_image" > "$provider_host_root/controller-image-id"
     common_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_ambiguity.py,dst=/fixture/interpreter_ambiguity.py,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_fragment.py,dst=/fixture/interpreter_fragment.py,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
         --mount "type=bind,src=$NMRNET_INTERPRETER_CONFIG_INPUT,dst=/input/interpreter.toml,readonly")
@@ -227,7 +228,7 @@ api_witness_ambiguity() {
 api_witness_admission_finish() {
     local status=$?
     trap - EXIT
-    if [[ -n ${provider_host_diagnostic-} ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || exit "$status"; fi
+    if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || exit "$status"; fi
     exit "$status"
 }
 
@@ -417,6 +418,7 @@ api_witness_main() {
             artifacts/prediction-models.json
             tools/container_guard.py tools/provider_consumer_tests.py requirements/provider-core-release.json
             tests/integration/provider_runtime/stage_api_config.py
+            tests/integration/provider_runtime/interpreter_fragment.py tests/integration/provider_runtime/materialize_api_config.py
             tests/integration/provider_runtime/api_prediction.py
             config/provider.toml.example
             config/deployment.toml.example
@@ -443,7 +445,7 @@ api_witness_main() {
         "$repository_root/tools/"{compose_qualification.sh,core_image.sh,geometry_image.sh,provider_image.sh,git_inputs.sh,git_metadata.sh} \
         "$repository_root/containers/inference/image-inputs.txt" "$repository_root/requirements/"{inference.lock,unicore-source.json} \
         "$repository_root/artifacts/prediction-models.json" \
-        "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
+        "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,interpreter_fragment,materialize_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/tools/provider_consumer_tests.py" \
         "$repository_root/tests/integration/provider_runtime/binding_inputs.py" \
@@ -504,6 +506,8 @@ api_witness_main() {
         --mount "type=bind,src=$qualification_source_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
         --mount "type=bind,src=$api_witness_deployment_settings,dst=/input/deployment.toml,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/interpreter_fragment.py,dst=/fixture/interpreter_fragment.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/materialize_api_config.py,dst=/fixture/materialize_api_config.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly")
     if [[ $mode != scripted-pasted ]]; then
         mkdir -m 700 -- "$provider_host_root/selection" || return $?

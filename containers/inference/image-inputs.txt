@@ -2,6 +2,11 @@ artifacts/nmrnet-source.paths
 artifacts/nmrnet-source.sha256
 containers/inference/Dockerfile
 containers/inference/Dockerfile.dockerignore
+host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl
+host/git_stream_sources.py
 nmrnet_inference
 nmrnet_provider
 requirements/inference.lock
@@ -13,7 +18,6 @@ tools/baseline_prepare.py
 tools/build_unicore.py
 tools/container_guard.py
 tools/container_resources.py
-tools/git_stream_sources.py
 tools/provider_environment.py
 tools/streamed_build.sh
 tools/wheelhouse.py

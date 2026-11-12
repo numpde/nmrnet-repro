@@ -20,8 +20,32 @@ from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.chat import ChatEndpointFactory
 from provider_core.controller import AttemptController
+from provider_core.interpreter import ProseService
 from provider_core.shared_delivery_client import SharedDeliveryClient
 from provider_core.uploads import JobUploads, UploadRecovery
+
+
+def capture_prose_services(config):
+    """Capture each configured HTTPS interpreter binding once per provider life.
+
+    A new Job receives its own interpreter and HTTP carrier. Only the service's
+    retry timing survives, so an unavailable model does not consume successive
+    Jobs' budgets before another request is allowed.
+    """
+    # repo-check: allow-tuple-generator -- SDK Interpreter requires a nonempty tuple of factories; captured services preserve retry state across Jobs; proof=tests/integration/provider_core/adversarial/test_nmrnet_service_prose_outage.py::NmrnetProseServiceOutageTests.test_captured_http_service_postpones_admission_and_recovers_without_rebinding
+    return tuple(
+        ProseService(
+            ChatEndpointFactory(
+                spec=settings.spec,
+                trust=settings.trust,
+                proxy_socket=settings.proxy_socket,
+                retirement_seconds=settings.retirement_seconds,
+                request_bytes=settings.request_bytes,
+                response_bytes=settings.response_bytes,
+            )
+        )
+        for settings in config.interpreter.endpoints
+    )
 
 
 async def assemble_attempt(
@@ -41,6 +65,7 @@ async def assemble_attempt(
     on_source_observation,
     allocate_reader,
     allocate_generator,
+    prose_services,
     observation_recovery,
     condition_recovery,
     on_unconfirmed_phase_progress,
@@ -67,8 +92,7 @@ async def assemble_attempt(
         raise ValueError("Cannot assemble NMRNet Attempt: selection differs from the configured provider scope.")
     if pending.analysis_kind_ref != ANALYSIS_KIND_REF:
         raise ValueError("Cannot assemble NMRNet Attempt: the selected Job must request peaks_from_mol.")
-    api = ProviderAPI(config.api.identity, config.api.http.new_transport(),
-                      expected_topology=config.api.expected_topology)
+    api = ProviderAPI(config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology)
     source_api_transport = config.api.http.new_transport()
     source_store_transport = config.uploads.http.new_transport()
     source_api = ProviderAPI(config.api.identity, source_api_transport, expected_topology=config.api.expected_topology)
@@ -86,16 +110,15 @@ async def assemble_attempt(
             on_retry=on_source_retry,
         ),
     )
-    endpoints = tuple(
-        ChatEndpointFactory(spec=settings.spec, trust=settings.trust,
-                            proxy_socket=settings.proxy_socket,
-                            retirement_seconds=settings.retirement_seconds,
-                            request_bytes=settings.request_bytes, response_bytes=settings.response_bytes)
-        for settings in config.interpreter.endpoints
-    )
+    # The scientific owner gets a fresh Interpreter for this Attempt, but the
+    # captured service bindings must not be rebuilt for each selected Job.
+    if not prose_services:
+        raise ValueError("NMRNet requires the captured configured prose services for this Attempt.")
     chooser = InputInterpreter(
-        endpoints, timeout_seconds=config.interpreter.timeout_seconds,
-        context_bytes=min(endpoint.context_bytes for endpoint in endpoints),
+        prose_services,
+        timeout_seconds=config.interpreter.timeout_seconds,
+        context_bytes=min(service.context_bytes for service in prose_services),
+        # repo-check: allow-tuple-generator -- SDK Interpreter requires credentials as a tuple whose members are nonempty strings; proof=tests/integration/provider_core/normative/test_nmrnet_runtime.py::ConfiguredRuntimeTests.test_three_routes_consume_discovered_identity_and_publish_a_complete_result
         secrets=tuple(settings.spec.api_key for settings in config.interpreter.endpoints),
         on_endpoint_failure=on_interpreter_failure,
     )
@@ -132,9 +155,12 @@ async def assemble_attempt(
         admission_stopping=admission_stopping,
         start_policy=start_policy,
         allow_active_start_replay=True,
-        delivery=SharedDeliveryClient(config.delivery.endpoint, config.publication,
-                                      exchange_seconds=config.api.http.exchange_seconds,
-                                      retirement_seconds=config.api.http.retirement_seconds),
+        delivery=SharedDeliveryClient(
+            config.delivery.endpoint,
+            config.publication,
+            exchange_seconds=config.api.http.exchange_seconds,
+            retirement_seconds=config.api.http.retirement_seconds,
+        ),
         on_delivery_retry=on_delivery_retry,
         delivery_retry_initial_seconds=config.delivery.retry_initial_seconds,
         delivery_retry_max_seconds=config.delivery.retry_max_seconds,

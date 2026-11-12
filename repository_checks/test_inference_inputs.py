@@ -20,6 +20,25 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class CapturedInputTests(unittest.TestCase):
+    def test_installer_is_captured_and_precedes_scientific_installation(self):
+        root = Path("/workspace")
+        prefix = "host/bootstrap/acquisition/acquisition_tool/installer/"
+        selectors = set((root / "containers/inference/image-inputs.txt").read_text().splitlines())
+        inputs = {
+            prefix + "requirements/installer-release.json",
+            prefix + "tools/container_guard.py",
+            prefix + "tools/installer.py",
+            prefix + "wheels/pip-26.2.2-py3-none-any.whl",
+        }
+        self.assertTrue(inputs <= selectors)
+        rules = set((root / "containers/inference/Dockerfile.dockerignore").read_text().splitlines())
+        self.assertTrue({"!" + path for path in inputs} <= rules)
+        dockerfile = (root / "containers/inference/Dockerfile").read_text()
+        bootstrap = dockerfile.index("python3 -B -m tools.installer")
+        self.assertLess(bootstrap, dockerfile.index("python3 -m pip install"))
+        self.assertLess(bootstrap, dockerfile.index("python3 -B -m tools.provider_environment"))
+        self.assertIn("--python /usr/local/bin/python", dockerfile)
+
     def author_pool(self, fixture, pool):
         wheel = fixture_wheel(pool, "fixture", "1")
         locked(fixture.root / "requirements/inference.lock", [("fixture", "1", [wheel])])
@@ -161,15 +180,13 @@ class CapturedInputTests(unittest.TestCase):
             self.assertEqual([], fixture.calls())
             self.assert_retired_capture(fixture)
 
-    def test_live_bytes_modes_and_linked_ancestors_must_match_committed_inputs(self):
-        for mutation in ("bytes", "mode", "ancestor"):
+    def test_live_bytes_and_linked_ancestors_must_match_committed_inputs(self):
+        for mutation in ("bytes", "ancestor"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 source = fixture.root / "tools/wheelhouse.py"
                 if mutation == "bytes":
                     source.write_bytes(b"dirty\n")
-                elif mutation == "mode":
-                    source.chmod(0o755)
                 else:
                     tools = fixture.root / "tools"
                     tools.rename(fixture.root / "outside-tools")
@@ -196,9 +213,26 @@ class CapturedInputTests(unittest.TestCase):
             source = fixture.root / "NMRNetplusplus/uninmr/infer.py"
             source.chmod(0o755)
             fixture.capture_committed_inputs()
+            source.chmod(0o644)
+            # The finite Git status double does not inspect live chmod changes.
+            # This isolates materialization from the stored committed tree.
             result = fixture.run("inference_image.sh", "build")
             self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(0o755, fixture.build_evidence()["manifest"]["NMRNetplusplus/uninmr/infer.py"]["mode"])
+            self.assert_retired_capture(fixture)
+
+    def test_live_chmod_does_not_change_captured_committed_nonexecutable_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            source = fixture.root / "tools/wheelhouse.py"
+            original = hashlib.sha256(source.read_bytes()).hexdigest()
+            source.chmod(0o755)
+            # The finite Git status double admits this change; real Git status
+            # remains responsible for its own worktree cleanliness report.
+            result = fixture.run("inference_image.sh", "build")
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual({"sha256": original, "mode": 0o644}, fixture.build_evidence()["manifest"]["tools/wheelhouse.py"])
+            self.assertEqual(0o755, source.stat().st_mode & 0o777)
             self.assert_retired_capture(fixture)
 
     def test_unrelated_pool_entries_are_not_opened_or_copied_into_image_capture(self):
@@ -215,150 +249,18 @@ class CapturedInputTests(unittest.TestCase):
                     entry.mkdir()
                 # This path runs two real pip selections inside the bounded fixture.
                 result = fixture.run(
-                    "inference_image.sh", "build", additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"}, timeout=30,
+                    "inference_image.sh",
+                    "build",
+                    additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"},
+                    timeout=60,
                 )
                 self.assertEqual(0, result.returncode, msg=result.stderr)
-                self.assertEqual(set(fixture.build_evidence()["wheelhouse_manifest"]), {selected.name, "unicore-source.tar.gz"})
+                self.assertEqual(
+                    set(fixture.build_evidence()["wheelhouse_manifest"]),
+                    {selected.name, "Uni-Core-" + "a" * 40 + ".tar.gz"},
+                )
                 self.assertTrue(entry.exists() or entry.is_symlink())
                 self.assert_retired_capture(fixture)
-
-    def test_selected_wheel_symlink_refusal_retires_exact_capture_worker(self):
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = LauncherFixture(Path(directory))
-            pool = fixture.root / ".work/wheelhouse"
-            selected = self.author_pool(fixture, pool)
-            outside = fixture.root / "outside-wheel.whl"
-            shutil.copyfile(selected, outside)
-            selected.unlink()
-            selected.symlink_to(outside)
-
-            result = fixture.run("inference_image.sh", "build", additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"})
-            self.assertNotEqual(0, result.returncode, msg=result.stderr)
-            self.assertIn("Too many levels of symbolic links", result.stderr)
-            calls = fixture.calls()
-            lifecycle = [
-                call["arguments"]
-                for call in calls
-                if call["arguments"][:1] in (["create"], ["start"], ["stop"], ["rm"])
-                or call["arguments"][:2] == ["inspect", "--type"]
-            ]
-            self.assertEqual(["create", "start", "stop", "inspect", "rm"], [arguments[0] for arguments in lifecycle])
-            worker_id = fixture.environment["NMRNET_FAKE_WORKER_CID"]
-            self.assertEqual(["start", "--attach", worker_id], lifecycle[1])
-            self.assertEqual(["stop", "--time", "5", worker_id], lifecycle[2])
-            self.assertEqual(
-                [
-                    "inspect",
-                    "--type",
-                    "container",
-                    "--format",
-                    "{{.Id}} {{.State.Status}} {{.State.Running}} {{.State.Pid}} {{.State.Restarting}}",
-                    worker_id,
-                ],
-                lifecycle[3],
-            )
-            self.assertEqual(["rm", worker_id], lifecycle[4])
-            self.assertEqual({}, json.loads((fixture.root / "containers.json").read_text()))
-            self.assertFalse((fixture.root / "worker-capture-arguments.json").exists())
-            self.assertFalse((fixture.root / "worker-stopped-id").exists())
-            self.assertFalse(any(call["arguments"][:1] == ["build"] for call in calls))
-            self.assert_retired_capture(fixture)
-
-    def test_failed_create_with_exact_cid_keeps_cause_and_retires_without_start(self):
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = LauncherFixture(Path(directory))
-            self.author_pool(fixture, fixture.root / ".work/wheelhouse")
-            private_error = "engine refused fixture allocation"
-            result = fixture.run(
-                "inference_image.sh",
-                "build",
-                additions={
-                    "NMRNET_FAKE_CREATE_ROLE": "worker",
-                    "NMRNET_FAKE_CREATE_OUTPUT": "exact",
-                    "NMRNET_FAKE_CREATE_STATUS": "37",
-                    "NMRNET_FAKE_CREATE_PRIVATE_ERROR": private_error,
-                },
-            )
-            self.assertNotEqual(0, result.returncode, msg=result.stderr)
-            self.assertIn("create did not complete cleanly (status 37", result.stderr)
-            calls = fixture.calls()
-            lifecycle = [
-                call["arguments"]
-                for call in calls
-                if call["arguments"][:1] in (["create"], ["start"], ["stop"], ["rm"])
-                or call["arguments"][:2] == ["inspect", "--type"]
-            ]
-            self.assertEqual(["create", "stop", "inspect", "rm"], [arguments[0] for arguments in lifecycle])
-            worker_id = fixture.environment["NMRNET_FAKE_WORKER_CID"]
-            cidfile = Path(lifecycle[0][lifecycle[0].index("--cidfile") + 1])
-            allocation = cidfile.parent
-            self.assertIn("tools.wheelhouse", lifecycle[0])
-            self.assertIn("capture", lifecycle[0])
-            self.assertIn(str(allocation), result.stderr)
-            self.assertEqual((private_error + "\n").encode(), (allocation / "create.stderr").read_bytes())
-            self.assertEqual(["stop", "--time", "5", worker_id], lifecycle[1])
-            self.assertEqual(["rm", worker_id], lifecycle[3])
-            self.assertEqual({}, json.loads((fixture.root / "containers.json").read_text()))
-            self.assertFalse((fixture.root / "worker-capture-arguments.json").exists())
-            self.assertTrue(allocation.is_dir())
-            self.assertTrue((allocation / "retirement/remove.stderr").is_file())
-            self.assertFalse(any(call["arguments"][:1] == ["build"] for call in calls))
-            self.assert_retired_capture(fixture)
-
-    def test_remove_failure_retains_successful_capture_and_owned_engine_state(self):
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = LauncherFixture(Path(directory))
-            selected = self.author_pool(fixture, fixture.root / ".work/wheelhouse")
-            result = fixture.run(
-                "inference_image.sh",
-                "build",
-                additions={
-                    "NMRNET_FAKE_VERIFY_WHEELHOUSE": "1",
-                    "NMRNET_FAKE_REMOVE_STATUS": "37",
-                },
-            )
-            self.assertNotEqual(0, result.returncode, msg=result.stderr)
-            calls = fixture.calls()
-            client_configurations = [call["client_config"] for call in calls if call["client_config"]]
-            self.assertTrue(client_configurations)
-            config = Path(client_configurations[0]["path"])
-            client_directory = config.parent
-            self.addCleanup(shutil.rmtree, client_directory, ignore_errors=True)
-
-            lifecycle = [
-                call["arguments"]
-                for call in calls
-                if call["arguments"][:1] in (["create"], ["start"], ["stop"], ["rm"])
-                or call["arguments"][:2] == ["inspect", "--type"]
-            ]
-            self.assertEqual(["create", "start", "stop", "inspect", "rm"], [arguments[0] for arguments in lifecycle])
-            worker_id = fixture.environment["NMRNET_FAKE_WORKER_CID"]
-            self.assertEqual(["start", "--attach", worker_id], lifecycle[1])
-            self.assertEqual(["stop", "--time", "5", worker_id], lifecycle[2])
-            self.assertEqual(["rm", worker_id], lifecycle[4])
-
-            capture_mount = next(
-                argument
-                for argument in lifecycle[0]
-                if argument.startswith("type=bind,src=") and argument.endswith(",dst=/capture")
-            )
-            captured = Path(capture_mount.split("src=", 1)[1].removesuffix(",dst=/capture"))
-            self.assertEqual({selected.name, "unicore-source.tar.gz"}, {path.name for path in captured.iterdir()})
-            self.assertEqual(selected.read_bytes(), (captured / selected.name).read_bytes())
-            allocation = Path(lifecycle[0][lifecycle[0].index("--cidfile") + 1]).parent
-            self.assertIn(str(allocation / "retirement"), result.stderr)
-            self.assertIn(f"Wheel capture container {worker_id} remains owned by allocation", result.stderr)
-            self.assertEqual({worker_id: "worker"}, json.loads((fixture.root / "containers.json").read_text()))
-            self.assertEqual(worker_id + "\n", (fixture.root / "worker-stopped-id").read_text())
-            capture_arguments = fixture.root / "worker-capture-arguments.json"
-            self.assertTrue(capture_arguments.is_file())
-            self.assertLess(capture_arguments.stat().st_size, 4096)
-            self.assertEqual(0o600, capture_arguments.stat().st_mode & 0o777)
-
-            self.assertTrue(client_directory.is_dir())
-            self.assertEqual(0o700, client_directory.stat().st_mode & 0o777)
-            self.assertTrue(captured.parent.is_dir())
-            self.assertFalse(any(call["arguments"][:1] == ["build"] for call in calls))
 
     def test_parent_uses_the_captured_declaration_and_rejects_unreadable_or_changed_bytes(self):
         mutation = (
@@ -442,7 +344,7 @@ class CapturedInputTests(unittest.TestCase):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 result = fixture.run("inference_image.sh", "build", additions=additions)
-                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual(status == 0, "make packages/import" in result.stderr)
 
     def test_cleanup_failure_preserves_primary_and_reports_its_owned_capture(self):
@@ -459,7 +361,7 @@ class CapturedInputTests(unittest.TestCase):
                 self.assertIn("Cannot confirm owned inference build capture removal; attempted path", result.stderr)
                 self.assertEqual(1, len(list((fixture.root / ".work/inference").glob(".build.*"))))
 
-    def test_frozen_verifier_checks_actual_copied_wheel_bytes_before_build(self):
+    def test_streamed_build_checks_selected_wheel_bytes(self):
         for corrupt in (False, True):
             with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
@@ -477,7 +379,7 @@ class CapturedInputTests(unittest.TestCase):
                 result = fixture.run(
                     "inference_image.sh",
                     "build",
-                    additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1", "NMRNET_FAKE_MUTATE_INPUT": str(wheel)},
+                    additions={"NMRNET_FAKE_VERIFY_WHEELHOUSE": "1"},
                 )
                 if corrupt:
                     self.assertNotEqual(0, result.returncode, msg=result.stderr)

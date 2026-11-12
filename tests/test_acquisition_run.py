@@ -1,11 +1,11 @@
 """Exercise the NMRNet single-worker adapter at the shared-owner boundary."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path.cwd()
 
@@ -17,13 +17,16 @@ class AcquisitionRunTests(unittest.TestCase):
         self.root = Path(temporary.name)
         tools = self.root / "tools"
         tools.mkdir()
+        (self.root / "host").mkdir()
         for name in ("acquisition_run.sh", "acquisition_interface.sh", "inference_native.sh", "operator_guidance.sh"):
             shutil.copyfile(ROOT / "tools" / name, tools / name)
-        (tools / "docker_client.sh").write_text('docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }\n')
-        (tools / "acquisition_bootstrap.py").write_text("# Verification has separate tests.\n")
-        owner = tools / "bootstrap/acquisition/acquisition_tool"
+        (tools / "docker_client.sh").write_text(
+            "docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }\n"
+        )
+        (self.root / "host/acquisition_bootstrap.py").write_text("# Verification has separate tests.\n")
+        owner = self.root / "host/bootstrap/acquisition/acquisition_tool"
         owner.mkdir(parents=True)
-        (owner / "owner.sh").write_text('''
+        (owner / "owner.sh").write_text("""
 acquisition_scope() { shift 5; "$@"; }
 acquisition_set_route() { printf 'route:%s\\n' "$1" >> "$EVENTS"; }
 acquisition_worker() {
@@ -33,19 +36,35 @@ acquisition_worker() {
     printf 'worker data\\n'
     printf -v "$output" '%s' "${WORKER_STATUS:-0}"
 }
-''')
+""")
         self.events = self.root / "events"
         self.env = os.environ | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "EVENTS": str(self.events)}
 
     def run_worker(self, **extra):
-        return subprocess.run(["bash", str(self.root / "tools/acquisition_run.sh"),
-                               "--success-note", "next", "--image", "fixture-image", "--",
-                               "--read-only", "--", "tool", "--network", "argument"],
-                              env=self.env | extra, capture_output=True, text=True, check=False)
+        return subprocess.run(
+            [
+                "bash",
+                str(self.root / "tools/acquisition_run.sh"),
+                "--success-note",
+                "next",
+                "--image",
+                "fixture-image",
+                "--",
+                "--read-only",
+                "--",
+                "tool",
+                "--network",
+                "argument",
+            ],
+            env=self.env | extra,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
     def test_separates_application_arguments_and_reports_after_success(self):
         result = self.run_worker()
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("worker data\n", result.stdout)
         self.assertIn("next", result.stderr)
         self.assertIn("app:tool --network argument", self.events.read_text())
@@ -57,7 +76,7 @@ acquisition_worker() {
 
     def test_suppressed_guidance_stays_suppressed(self):
         result = self.run_worker(NMRNET_SUPPRESS_NEXT_ACTIONS="1")
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertNotIn("next", result.stderr)
 
 

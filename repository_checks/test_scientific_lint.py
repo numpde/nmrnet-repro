@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import unittest
 
-from repository_checks.quality.sources import ROOT
+from repository_checks.quality.sources import ROOT, python_sources
 from repository_checks.test_conventions import has_early_guard
 
 
@@ -89,8 +89,7 @@ class ScientificLintTests(unittest.TestCase):
     def test_guard_exception_retains_late_module_import_rejection(self):
         findings = [
             f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
-            for name in ("tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider")
-            for path in sorted((ROOT / name).rglob("*.py"))
+            for path in python_sources(production_only=False)
             for line in late_module_imports(path.read_text())
         ]
         self.assertEqual([], findings, msg="\n".join(findings))
@@ -102,7 +101,7 @@ class ScientificLintTests(unittest.TestCase):
         )
         version = subprocess.run([binary, "--version"], check=True, capture_output=True, text=True)
         self.assertEqual("ruff 0.15.15", version.stdout.strip(), msg="The full source policy requires its pinned Ruff version")
-        paths = [ROOT / name for name in ("tools", "repository_checks", "tests")]
+        paths = [ROOT / name for name in ("host", "tools", "repository_checks", "tests")]
         for path in paths:
             self.assertTrue(path.is_dir() and not path.is_symlink(), msg=f"Authored lint root is missing or a symlink: {path}")
             self.assertTrue(list(path.rglob("*.py")), msg=f"Authored lint inventory is empty: {path}")
@@ -113,11 +112,15 @@ class ScientificLintTests(unittest.TestCase):
                     package.is_dir() and not package.is_symlink(), msg=f"Authored package {name} must be a non-symlink directory"
                 )
                 self.assertTrue(list(package.rglob("*.py")), msg=f"Authored package {name} has no lintable sources")
-                paths.append(package)
         arguments = [binary, operation, "--no-cache", "--config", str(ROOT / "repository_checks/lint/ruff.toml")]
         if operation == "format":
             arguments.append("--check")
-        result = subprocess.run([*arguments, *(str(path) for path in paths)], capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            [*arguments, *(str(path) for path in python_sources(production_only=False))],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(0, result.returncode, msg=result.stdout + result.stderr)
 
     def test_full_selected_ruff_rule_policy(self):

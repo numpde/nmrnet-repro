@@ -21,14 +21,14 @@ class ResultPrecisionTests(unittest.TestCase):
         original = copy.deepcopy(outcomes)
         plan = ResultPlan(prepared, **facts)
         document = json.loads(plan.finish(outcomes))
-        self.assertEqual(document["output"], {"shift_significant_digits": 4, "verbosity": "medium"})
+        self.assertEqual({"shift_significant_digits": 4, "verbosity": "medium"}, document["output"])
         self.assertEqual(json.loads(plan.prepared_identity)["output"], document["output"])
         for geometry, conformer in zip(document["geometries"], prepared.generated.conformers, strict=True):
             self.assertEqual(geometry["prepared_request"], json.loads(conformer.request_bytes))
             values = [row["shift_ppm"] for row in geometry["predictions"]]
             self.assertEqual(values, [32.31, 3.063, 0.001235, -1.235, 0.0])
             self.assertTrue(all(type(value) is float for value in values))
-            self.assertEqual(math.copysign(1, values[-1]), 1)
+            self.assertEqual(1, math.copysign(1, values[-1]))
         self.assertEqual(outcomes, original)
         self.assertLessEqual(len(plan.finish(outcomes)), plan.maximum_result_bytes)
 
@@ -51,7 +51,7 @@ class ResultPrecisionTests(unittest.TestCase):
         for reserved, observed in zip(reservation, outcomes, strict=True):
             self.assertEqual(reserved["request_sha256"], observed["request_sha256"])
             self.assertEqual(reserved["provenance"], observed["provenance"])
-            self.assertEqual(reserved["private_warnings"], [])
+            self.assertEqual([], reserved["private_warnings"])
             self.assertEqual(len(reserved["prediction"]["predictions"]), len(observed["prediction"]["predictions"]))
             for row in reserved["prediction"]["predictions"]:
                 self.assertEqual(row["shift_ppm"], "x" * 32)

@@ -13,8 +13,8 @@ import argparse
 import os
 import sys
 
-from provider_core.runner import main as supervise
 from nmrnet_provider.worker_protocol import require_seconds
+from provider_core.runner import main as supervise
 
 
 def main(arguments=None):
@@ -29,8 +29,16 @@ def main(arguments=None):
     options = parser.parse_args(arguments)
     for name in ("io", "operation", "startup", "terminate", "kill", "cleanup"):
         require_seconds(getattr(options, name + "_seconds"))
-    child = [sys.executable, "-I", "-B", "-m", "nmrnet_provider.native_child", options.role,
-             "--io-seconds", str(options.io_seconds)]
+    child = [
+        sys.executable,
+        "-I",
+        "-B",
+        "-m",
+        "nmrnet_provider.native_child",
+        options.role,
+        "--io-seconds",
+        str(options.io_seconds),
+    ]
     generation = options.seed, options.max_iterations, options.embedding_seconds
     if options.role == "smiles":
         if any(value is None for value in generation):
@@ -44,8 +52,7 @@ def main(arguments=None):
             child.extend(("--" + name, str(value)))
     elif any(value is not None for value in generation):
         parser.error("Generation settings belong only to the SMILES runner.")
-    supervisor = ["--role", options.role, "--socket", options.socket, "--scratch", options.scratch,
-                  "--status-directory", "/run"]
+    supervisor = ["--role", options.role, "--socket", options.socket, "--scratch", options.scratch, "--status-directory", "/run"]
     for name in ("operation", "startup", "terminate", "kill", "cleanup"):
         supervisor.extend(("--" + name + "-seconds", str(getattr(options, name + "_seconds"))))
     supervise([*supervisor, "--", *child])
@@ -54,5 +61,5 @@ def main(arguments=None):
 if __name__ == "__main__":
     from nmrnet_provider.runtime_logging import configure_logging
 
-    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
+    configure_logging(os.environ.get("NMRNET_LOG_LEVEL"))
     main()

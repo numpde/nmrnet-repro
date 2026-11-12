@@ -8,15 +8,14 @@ Layer PARENTS manifests, delta locks and source-specific Compose projects,
 networks, volumes and datasets have no consumer here. Final-stage USER, verified
 offline wheelhouse installation, no wheelhouse-triggered lock regeneration,
 exact context rules and corresponding native namespace/mount/device/pull/OOM/
-shm/restart/build grants retain their original assertion groups. Named local
-wheelhouse build context is the existing verified NMRNet input exception.
+shm/restart/build grants retain their original assertion groups.
 """
 
 from tools.container_guard import require_container
 
 require_container()
 
-import hashlib
+import shlex
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,12 +38,25 @@ EXPECTED_RULES = {
 !containers/inference/
 !containers/inference/Dockerfile
 !containers/inference/Dockerfile.dockerignore
+!host/
+!host/bootstrap/
+!host/bootstrap/acquisition/
+!host/bootstrap/acquisition/acquisition_tool/
+!host/bootstrap/acquisition/acquisition_tool/installer/
+!host/bootstrap/acquisition/acquisition_tool/installer/requirements/
+!host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+!host/bootstrap/acquisition/acquisition_tool/installer/tools/
+!host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+!host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+!host/bootstrap/acquisition/acquisition_tool/installer/wheels/
+!host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl
 !tools/
 !tools/container_guard.py
 !tools/artifacts.py
 !tools/wheelhouse.py
 !tools/build_unicore.py
 !requirements/
+!requirements/provider-core-native-install.lock
 !requirements/inference.lock
 !requirements/unicore-source.json
 !NMRNetplusplus/
@@ -52,6 +64,15 @@ EXPECTED_RULES = {
 !NMRNetplusplus/uninmr/
 !NMRNetplusplus/uninmr/**/
 !NMRNetplusplus/uninmr/**/*.py
+!tools/provider_environment.py
+!tools/baseline_prepare.py
+!tools/container_resources.py
+!nmrnet_provider/
+!nmrnet_provider/**
+!nmrnet_inference/
+!nmrnet_inference/**
+!wheelhouse/
+!wheelhouse/**
 """,
 }
 
@@ -86,7 +107,9 @@ def byte_size(value):
 
 
 # silent-defaults: allow-contract -- The checker profile admits network none, tmpfs up to 256 MiB and memory up to 2 GiB; reviewed lanes override resource bounds; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
-def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_max=2 * 1024**3, network="none"):
+def assert_runtime_grants(
+    case, arguments, *, tmpfs_max=256 * 1024**2, memory_max=2 * 1024**3, network="none", runtime_tmpfs=False
+):
     values = options(arguments)
     forbidden = {
         "--privileged",
@@ -140,17 +163,25 @@ def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_ma
         case.assertNotIn("bind-recursive=writable", mount)
         case.assertNotIn("selinux=", mount)
         case.assertNotIn("docker.sock", mount)
-    # silent-defaults: allow-contract -- An absent tmpfs option counts as zero and fails the requirement for exactly one writable tmpfs; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_missing_oversized_or_extra_writable_tmpfs_breaks_owned_bounds
-    case.assertEqual(1, len(values.get("--tmpfs", [])))
-    for tmpfs in values["--tmpfs"]:
+    # The provider test environment needs an executable, bounded runtime area.
+    expected_tmpfs = {"/tmp": (tmpfs_max, False)}
+    if runtime_tmpfs:
+        expected_tmpfs["/runtime"] = (128 * 1024**2, True)
+    mounts = values.get("--tmpfs", [])
+    case.assertEqual(len(expected_tmpfs), len(mounts))
+    seen = set()
+    for tmpfs in mounts:
         target, settings = tmpfs.split(":", 1)
+        case.assertIn(target, expected_tmpfs)
+        case.assertNotIn(target, seen)
+        seen.add(target)
+        limit, executable = expected_tmpfs[target]
         flags = set(settings.split(","))
-        case.assertTrue({"rw", "nosuid", "nodev", "noexec"} <= flags)
-        case.assertFalse({"exec", "suid", "dev"} & flags)
-        case.assertEqual("/tmp", target)
+        case.assertTrue({"rw", "nosuid", "nodev", "exec" if executable else "noexec"} <= flags)
+        case.assertFalse({"suid", "dev", "noexec" if executable else "exec"} & flags)
         sizes = [setting.split("=", 1)[1] for setting in flags if setting.startswith("size=")]
         case.assertEqual(1, len(sizes), msg="Writable tmpfs has no single finite owned size.")
-        case.assertTrue(0 < byte_size(sizes[0]) <= tmpfs_max)
+        case.assertTrue(0 < byte_size(sizes[0]) <= limit)
 
 
 class DependencyLayerChecks(unittest.TestCase):
@@ -167,23 +198,13 @@ class DependencyLayerChecks(unittest.TestCase):
             ["USER 65532:65532"], final_stage_users("FROM python AS earlier\nUSER root\nFROM python\nUSER 65532:65532\n")
         )
 
-    def test_image_installs_verified_wheelhouse_without_removing_owned_dependencies(self):
+    def test_image_installs_science_dependencies_offline_with_hashes(self):
         source = (ROOT / "containers/inference/Dockerfile").read_text()
-        phases = instructions(source)
-        install = next(line for line in phases if "pip install" in line)
-        self.assertIn("python3 -B -m tools.wheelhouse check", install)
-        self.assertLess(install.index("tools.wheelhouse check"), install.index("pip install"))
+        install = next(line for line in instructions(source) if "pip install" in line)
         for flag in ("--no-index", "--require-hashes", "--only-binary=:all:", "--find-links /wheelhouse"):
             self.assertIn(flag, install)
         self.assertNotIn("pip sync", install)
         self.assertIn("python3 -m pip check", install)
-        self.assertIn("--mount=type=bind,from=wheelhouse,target=/wheelhouse", install)
-        # The existing NMRNet verifier compares .complete to a full hash/size
-        # inventory rather than Magnet's sha256sum file. Its unit tests exercise
-        # corrupted receipts/content; this assertion only proves build ordering.
-        verifier = (ROOT / "tools/wheelhouse.py").read_text()
-        self.assertIn('read_json(output / ".complete")', verifier)
-        self.assertIn("receipt != inventory(lock, source, output)", verifier)
 
     def test_wheelhouse_target_does_not_depend_on_lock_generation(self):
         source = (ROOT / "Makefile").read_text()
@@ -229,6 +250,7 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
                 (stage / "image-id").write_text("sha256:" + "b" * 64 + "\n")
                 additions = baseline if launcher == "baseline.sh" and action == "run" else lane_additions
                 before = len(fixture.calls())
+                printed = launcher == "container.sh" and action == "test/repository"
                 prepared = fixture.root / ".work/baseline/prepared"
                 saved = fixture.root / ".work/baseline/prepared.prerequisite"
                 if launcher == "baseline.sh" and action == "prepare":
@@ -236,15 +258,25 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
                     # needs the separately seeded prepared prerequisite.
                     prepared.rename(saved)
                 try:
-                    result = fixture.run(launcher, action, additions=additions)
+                    result = fixture.run(launcher, *(("--print", action) if printed else (action,)), additions=additions)
                 finally:
                     if saved.exists():
                         saved.rename(prepared)
                 self.assertEqual(0, result.returncode, msg=result.stderr)
-                calls = fixture.calls()[before:]
-                runs = [call["arguments"] for call in calls if call["arguments"][:1] == ["run"]]
+                if printed:
+                    arguments = shlex.split(result.stdout)
+                    runs = [arguments[arguments.index("run") :]]
+                else:
+                    calls = fixture.calls()[before:]
+                    runs = [call["arguments"] for call in calls if call["arguments"][:1] == ["run"]]
                 self.assertEqual(1, len(runs))
-                assert_runtime_grants(self, runs[0], tmpfs_max=tmpfs_max, memory_max=memory_max)
+                assert_runtime_grants(
+                    self,
+                    runs[0],
+                    tmpfs_max=tmpfs_max,
+                    memory_max=memory_max,
+                    runtime_tmpfs=launcher == "container.sh" and action == "test",
+                )
 
     def test_native_grant_detector_rejects_each_extra_authority_group(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -291,12 +323,13 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 assert_runtime_grants(self, [*arguments, "--tmpfs", "/extra:rw,nosuid,nodev,noexec,size=1m"])
 
-    def test_native_build_has_no_extra_grants_and_dockerfile_is_inside_real_context(self):
+    def test_native_build_has_no_extra_grants_and_uses_streamed_context(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
-            result = fixture.run("inference_image.sh", "build")
+            result = fixture.run("inference_image.sh", "--print", "build")
             self.assertEqual(0, result.returncode, msg=result.stderr)
-            arguments = next(call["arguments"] for call in fixture.calls() if call["arguments"][:1] == ["build"])
+            rendered = shlex.split(result.stdout)
+            arguments = rendered[rendered.index("build") :]
             values = options(arguments)
             self.assertEqual(["none"], values["--network"])
             self.assertEqual(["false"], values["--pull"])
@@ -314,17 +347,9 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
                 "--ulimit",
             }
             self.assertFalse(forbidden & values.keys())
-            self.assertTrue(Path(values["--file"][0]).is_relative_to(Path(arguments[-1])))
-            capture = Path(arguments[-1]).parent
-            self.assertEqual(fixture.root / ".work/inference", capture.parent)
-            self.assertTrue(capture.name.startswith(".build."))
-            self.assertEqual(["wheelhouse=" + str(capture / "wheelhouse")], values["--build-context"])
-            self.assertTrue(fixture.build_evidence()["manifest"])
-            self.assertEqual(
-                {".complete": {"sha256": hashlib.sha256(b"{}\n").hexdigest(), "mode": 0o644}},
-                fixture.build_evidence()["wheelhouse_manifest"],
-            )
-            self.assertFalse(capture.exists(), msg="The completed builder retained its disposable inputs")
+            self.assertEqual(["containers/inference/Dockerfile"], values["--file"])
+            self.assertEqual("-", arguments[-1], msg="Inference build must consume its streamed context.")
+            self.assertNotIn("--build-context", values)
 
 
 if __name__ == "__main__":

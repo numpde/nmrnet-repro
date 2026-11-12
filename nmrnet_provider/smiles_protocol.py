@@ -46,7 +46,7 @@ def require_generation_deadline(settings, operation_seconds):
     if type(settings) is not GenerationSettings:
         raise TypeError("Conformer generation requires one frozen GenerationSettings value from trusted composition.")
     require_seconds(operation_seconds)
-    if settings.timeout_seconds >= operation_seconds:
+    if not (settings.timeout_seconds < operation_seconds):
         raise ValueError(
             f"Cannot start conformer generation: its {settings.timeout_seconds}-second cooperative budget "
             f"must be below the {operation_seconds}-second channel deadline."
@@ -99,7 +99,7 @@ def conformer_reply(batch, *, allocation):
     """
     require_allocation(allocation)
     requested = document(batch.provenance).get("requested_count")
-    if type(requested) is not int or not 1 <= requested <= MAX_GEOMETRIES or len(batch.conformers) > requested:
+    if not (type(requested) is int and 1 <= requested <= MAX_GEOMETRIES and len(batch.conformers) <= requested):
         raise ValueError("Cannot encode conformers: the collection contradicts its requested count.")
     reply = {
         # silent-defaults: allow-contract -- The requested and returned counts select complete output or native shortfall; both are explicit outcomes.

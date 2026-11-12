@@ -257,13 +257,12 @@ if [[ "$1" == build ]]; then
     else
         image_input_directory=$capture_directory
         image=$python_image
-        stream_native=inference_native
-        stream_inventory="$capture_directory/authored"
-        stream_submodule_inventory="$capture_directory/source"
-        stream_submodule_digest=$(sha256sum -- "$stream_submodule_inventory")
-        stream_submodule_digest="sha256:${stream_submodule_digest%% *}"
+        source_inventory_digest=$(sha256sum -- "$capture_directory/source")
+        source_inventory_digest="sha256:${source_inventory_digest%% *}"
+        stream_inventories=("$capture_directory/authored" . "$inputs_digest"
+            "$capture_directory/source" NMRNetplusplus "$source_inventory_digest")
         source "$capture_directory/context/tools/streamed_build.sh"
-        prepare_streamed_inputs inference "$inputs_digest" science:inference.lock runtime:provider-core-native-install.lock
+        prepare_streamed_inputs inference inference_native stream_inventories science:inference.lock runtime:provider-core-native-install.lock
         python3 -I -c '
 import json,sys
 manifest, declaration = sys.argv[1:]
@@ -278,7 +277,7 @@ with open(manifest, "w") as target: json.dump(entries, target)
             --build-arg "NMRNET_REVISION=$revision"
             --build-arg "INFERENCE_INPUTS=$inputs_digest" --build-arg "INFERENCE_WHEELS=$stream_selection"
             --file containers/inference/Dockerfile -)
-        build_streamed_context build "$native_timeout" image-id "${build[@]}"
+        build_streamed_context build "$native_timeout" image-id inference_native "${build[@]}"
         image_id=$inference_result
         inference_native 'built image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"

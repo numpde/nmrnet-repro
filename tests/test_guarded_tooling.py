@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 
 MODULES = (
+    "checker",
+    "checker_acquisition",
     "artifacts",
     "build_unicore",
     "package_lock",
@@ -87,7 +89,12 @@ class GuardedToolingTests(unittest.TestCase):
         for module in MODULES:
             with self.subTest(module=module):
                 result = subprocess.run(
-                    [sys.executable, "-B", "-c", f"import tools.{module}"],
+                    [
+                        str(Path(sys.base_prefix) / "bin/python") if module == "rdkit_environment" else sys.executable,
+                        "-B",
+                        "-c",
+                        f"import tools.{module}",
+                    ],
                     env={**os.environ, "NMRNET_IN_CONTAINER": "1"},
                     text=True,
                     capture_output=True,
@@ -118,12 +125,22 @@ class ToolingLauncherTests(unittest.TestCase):
             "wheelhouse_path",
             "operator_guidance",
             "acquisition_interface",
+            "acquisition_run",
         ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
-        for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock",
-                     "preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in",
-                     "wheelhouse-acquirer-assets.in", "wheelhouse-tool-assets.in"):
+        for name in (
+            "inference.in",
+            "build.in",
+            "unicore-source.json",
+            "inference.lock",
+            "preparation.lock",
+            "provider-core-install.lock",
+            "provider-core-native-install.lock",
+            "provider-core-assets.in",
+            "wheelhouse-acquirer-assets.in",
+            "wheelhouse-tool-assets.in",
+        ):
             (self.root / f"requirements/{name}").write_text("fixture")
         (self.root / ".work/wheelhouse").mkdir(parents=True)
         (self.root / ".work/packages-stage/lock.TEST").mkdir(parents=True)
@@ -150,7 +167,13 @@ class ToolingLauncherTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        return [shlex.split(line) for line in result.stdout.splitlines()]
+        lines = result.stdout.splitlines()
+        if owner == "wheelhouse" and lane == "download":
+            prefix = "If missing, acquire: "
+            workers = [line.removeprefix(prefix) for line in lines if line.startswith(prefix)]
+            self.assertEqual(1, len(workers), msg=result.stdout)
+            return [shlex.split(workers[0])]
+        return [shlex.split(line) for line in lines]
 
     def test_rdkit_runtime_lane_keeps_native_installation_offline_and_ephemeral(self):
         for directory in ("tests/integration/rdkit_runtime",):
@@ -317,10 +340,14 @@ class ToolingLauncherTests(unittest.TestCase):
                 self.assert_guarded_module(command, module, writable, self.root)
                 self.assertEqual(
                     [command[index + 1] for index, value in enumerate(command) if value == "--lock"],
-                    ["/input/inference.lock", "/input/preparation.lock", "/input/provider-core-native-install.lock",
-                     "/input/provider-core-install.lock"],
+                    [
+                        "/input/inference.lock",
+                        "/input/preparation.lock",
+                        "/input/provider-core-native-install.lock",
+                        "/input/provider-core-install.lock",
+                    ],
                 )
-                self.assertEqual(command[command.index("--stream-assets") + 1], "/input/wheelhouse-tool-assets.in")
+                self.assertEqual("/input/wheelhouse-tool-assets.in", command[command.index("--stream-assets") + 1])
 
     def test_preparation_acquisition_grants_only_the_selected_shared_root(self):
         self.assert_wheel_profile("preparation")
@@ -341,7 +368,7 @@ class ToolingLauncherTests(unittest.TestCase):
             command = next(command for command in self.commands("wheelhouse", lane, profile) if f"tools.{module}" in command)
             self.assert_guarded_module(command, module, writable, self.root)
             self.assertNotIn("/input/unicore-source.json", command)
-            self.assertEqual(command[command.index("--pool") + 1], "/wheelhouse")
+            self.assertEqual("/wheelhouse", command[command.index("--pool") + 1])
             self.assertEqual("--check" in command, lane == "check")
             self.assertNotIn(f"/wheelhouse/{profile}", command)
             if profile == "provider-core":

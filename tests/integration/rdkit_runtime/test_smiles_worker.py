@@ -69,9 +69,9 @@ class NativeSmilesWorkerTests(unittest.IsolatedAsyncioTestCase):
                 worker.kill()
                 await asyncio.to_thread(worker.join, 1)
             try:
-                self.assertEqual(worker.exitcode, 0, "Native generator did not exit cleanly after its single reply.")
-                self.assertNotIn("rdkit", sys.modules, "Controller imported native chemistry.")
-                self.assertNotIn("torch", sys.modules, "Conformer generation imported prediction dependencies.")
+                self.assertEqual(0, worker.exitcode, msg="Native generator did not exit cleanly after its single reply.")
+                self.assertNotIn("rdkit", sys.modules, msg="Controller imported native chemistry.")
+                self.assertNotIn("torch", sys.modules, msg="Conformer generation imported prediction dependencies.")
             finally:
                 worker.close()
 
@@ -80,15 +80,15 @@ class NativeSmilesWorkerTests(unittest.IsolatedAsyncioTestCase):
         batch = await self.generate(source, 3)
         metadata = json.loads(batch.provenance)
         self.assertEqual(metadata["source_sha256"], hashlib.sha256(source).hexdigest())
-        self.assertEqual(metadata["requested_count"], 3)
-        self.assertEqual(metadata["runtime"]["rdkit"], "2026.09.1")
+        self.assertEqual(3, metadata["requested_count"])
+        self.assertEqual("2026.09.1", metadata["runtime"]["rdkit"])
         self.assertEqual([item.conformer_id for item in batch.conformers], [0, 1, 2])
-        self.assertEqual(metadata["added_hydrogen_parents"], [[2, 0], [3, 0], [4, 0]])
+        self.assertEqual([[2, 0], [3, 0], [4, 0]], metadata["added_hydrogen_parents"])
         for item in batch.conformers:
             request = json.loads(item.request_bytes)
-            self.assertEqual(request["coordinate_unit"], "angstrom")
-            self.assertEqual(request["atoms"], ["C", "Cl", "H", "H", "H"])
-            self.assertEqual(len(request["coordinates"]), 5)
+            self.assertEqual("angstrom", request["coordinate_unit"])
+            self.assertEqual(["C", "Cl", "H", "H", "H"], request["atoms"])
+            self.assertEqual(5, len(request["coordinates"]))
 
     async def test_invalid_smiles_delivers_native_feedback_without_echoing_private_source(self):
         with self.assertRaises(InputRejected) as caught:
@@ -102,7 +102,7 @@ class NativeSmilesWorkerTests(unittest.IsolatedAsyncioTestCase):
             await self.generate(b"CCCC", 3, fault="shortfall")
         partial = caught.exception.partial
         self.assertEqual([item.conformer_id for item in partial.conformers], [0, 2])
-        self.assertEqual(json.loads(partial.provenance)["requested_count"], 3)
+        self.assertEqual(3, json.loads(partial.provenance)["requested_count"])
         self.assertTrue(all(json.loads(item.request_bytes)["coordinates"] for item in partial.conformers))
 
     async def test_injected_worker_failure_is_private_and_operational(self):

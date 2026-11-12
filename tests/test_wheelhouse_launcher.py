@@ -21,20 +21,37 @@ class WheelhouseLauncherTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        for directory in ("tools", "requirements", "state", "pool"):
+        for directory in ("tools", "host", "requirements", "state", "pool"):
             (self.root / directory).mkdir()
-        for name in ("wheelhouse.sh", "wheelhouse_path.sh", "acquisition_interface.sh", "operator_guidance.sh", "inference_native.sh", "acquisition_wheelhouse.sh"):
+        for name in (
+            "wheelhouse.sh",
+            "wheelhouse_path.sh",
+            "acquisition_interface.sh",
+            "operator_guidance.sh",
+            "inference_native.sh",
+            "acquisition_wheelhouse.sh",
+        ):
             shutil.copyfile(ROOT / "tools" / name, self.root / "tools" / name)
-        for name in ("inference.lock", "preparation.lock", "unicore-source.json", "provider-core-native-install.lock",
-                     "provider-core-install.lock", "wheelhouse-tool-assets.in", "provider-core-assets.in",
-                     "wheelhouse-acquirer-assets.in", "inference.in"):
+        for name in (
+            "inference.lock",
+            "preparation.lock",
+            "unicore-source.json",
+            "provider-core-native-install.lock",
+            "provider-core-install.lock",
+            "wheelhouse-tool-assets.in",
+            "provider-core-assets.in",
+            "wheelhouse-acquirer-assets.in",
+            "inference.in",
+        ):
             (self.root / "requirements" / name).write_text("fixture\n")
-        (self.root / "tools/acquisition_bootstrap.py").write_text("# fixture: verification is tested separately\n")
-        (self.root / "tools/docker_client.sh").write_text('''docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }
-''')
-        owner = self.root / "tools/bootstrap/acquisition/acquisition_tool"
+        (self.root / "host/acquisition_bootstrap.py").write_text("# fixture: verification is tested separately\n")
+        (
+            self.root / "tools/docker_client.sh"
+        ).write_text("""docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=fixture; NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture.sock; }
+""")
+        owner = self.root / "host/bootstrap/acquisition/acquisition_tool"
         owner.mkdir(parents=True)
-        (owner / "owner.sh").write_text('''
+        (owner / "owner.sh").write_text("""
 acquisition_scope() { shift 5; "$@"; }
 acquisition_set_route() { :; }
 acquisition_worker() {
@@ -54,7 +71,7 @@ acquisition_worker() {
     else status=${FIXTURE_ACQUIRE_STATUS:-0}; fi
     printf -v "$result_name" '%s' "$status"
 }
-''')
+""")
         self.env = os.environ | {
             "NMRNET_WHEELHOUSE_INPUT": str(self.root / "pool"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
@@ -66,9 +83,15 @@ acquisition_worker() {
     def launch(self, profile="inference", *, statuses=(0,), additions=None):
         for index, status in enumerate(statuses, 1):
             (self.root / "state" / f"probe-{index}").write_text(f"{status}\n")
-        return subprocess.run(["bash", str(self.root / "tools/wheelhouse.sh"), "download", profile],
-                              env=self.env | (additions or {}), stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, timeout=15, check=False)
+        return subprocess.run(
+            ["bash", str(self.root / "tools/wheelhouse.sh"), "download", profile],
+            env=self.env | (additions or {}),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
 
     def events(self):
         path = self.root / "state/events"
@@ -80,7 +103,7 @@ acquisition_worker() {
                 (self.root / "state/count").unlink(missing_ok=True)
                 (self.root / "state/events").unlink(missing_ok=True)
                 result = self.launch(profile)
-                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertIn("already available", result.stdout)
                 self.assertEqual(1, len(self.events()))
                 self.assertTrue(self.events()[0].startswith("offline "))
@@ -88,15 +111,20 @@ acquisition_worker() {
 
     def test_missing_runs_one_acquisition_and_rechecks(self):
         result = self.launch(statuses=(3, 0), additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo"})
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         events = self.events()
         self.assertEqual(["offline", "online", "offline"], [event.split()[0] for event in events])
 
     def test_preview_shows_context_route_and_session_without_dispatch(self):
-        result = subprocess.run(["bash", str(self.root / "tools/wheelhouse.sh"), "--print", "download", "shared-tool"],
-                                env=self.env | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
-                                stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False)
-        self.assertEqual(0, result.returncode, result.stderr)
+        result = subprocess.run(
+            ["bash", str(self.root / "tools/wheelhouse.sh"), "--print", "download", "shared-tool"],
+            env=self.env | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("fixture (unix:///fixture.sock)", result.stdout)
         self.assertIn("route: lo", result.stdout)
         self.assertIn("Offline probe:", result.stdout)
@@ -115,7 +143,7 @@ acquisition_worker() {
                 (self.root / "state/count").unlink(missing_ok=True)
                 (self.root / "state/events").unlink(missing_ok=True)
                 result = self.launch(statuses=(status,))
-                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual(1, len(self.events()))
 
     def test_invalid_explicit_interface_does_not_create_pool(self):
@@ -127,9 +155,15 @@ acquisition_worker() {
 
     def test_signal_waits_for_probe_owner_and_never_dispatches_acquisition(self):
         (self.root / "state/probe-1").write_text("99\n")
-        process = subprocess.Popen(["bash", str(self.root / "tools/wheelhouse.sh"), "download", "inference"],
-                                   env=self.env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True, start_new_session=True)
+        process = subprocess.Popen(
+            ["bash", str(self.root / "tools/wheelhouse.sh"), "download", "inference"],
+            env=self.env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
         try:
             deadline = time.monotonic() + 5
             while not (self.root / "state/probe-ready").exists() and time.monotonic() < deadline:
@@ -137,7 +171,7 @@ acquisition_worker() {
             self.assertTrue((self.root / "state/probe-ready").exists())
             process.send_signal(signal.SIGTERM)
             _stdout, stderr = process.communicate(timeout=8)
-            self.assertEqual(143, process.returncode, stderr)
+            self.assertEqual(143, process.returncode, msg=stderr)
             self.assertTrue((self.root / "state/probe-done").exists())
             self.assertEqual(1, len(self.events()))
         finally:

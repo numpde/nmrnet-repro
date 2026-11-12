@@ -2,9 +2,9 @@
 # Prepare target-selected wheels and committed source for the shared streamer.
 
 prepare_streamed_inputs() {
-    local description=$1 inputs_digest=$2 item role lock lock_hash tool_line tool_url tool_name tool_hash observed status
-    local native=${stream_native:-container_native}
-    shift 2
+    local description=$1 native=$2 item role lock lock_hash tool_line tool_url tool_name tool_hash observed status
+    local -n _stream_inventories=$3
+    shift 3
     local -a manifests=()
     tool_line=$(grep '^https://github.com/numpde/nmr-provider-tools/releases/download/' "$image_input_directory/context/requirements/wheelhouse-tool-assets.in")
     tool_url=${tool_line%%#sha256=*}
@@ -21,12 +21,8 @@ prepare_streamed_inputs() {
     fi
     stream_sources="$image_input_directory/sources.json"
     stream_manifest="$image_input_directory/manifest.json"
-    local -a inventories=("${stream_inventory:-$image_input_directory/inputs}" . "$inputs_digest")
-    if [[ -n ${stream_submodule_inventory-} ]]; then
-        inventories+=("$stream_submodule_inventory" NMRNetplusplus "$stream_submodule_digest")
-    fi
-    python3 -I -B "$image_input_directory/context/tools/git_stream_sources.py" "$image_input_directory/context" \
-        "${inventories[@]}" > "$stream_sources"
+    python3 -I -B "$image_input_directory/context/host/git_stream_sources.py" "$image_input_directory/context" \
+        "${_stream_inventories[@]}" > "$stream_sources"
     for item in "$@"; do
         role=${item%%:*}; lock=${item#*:}
         lock_hash=$(sha256sum -- "$image_input_directory/context/requirements/$lock")
@@ -56,9 +52,8 @@ prepare_streamed_inputs() {
 }
 
 build_streamed_context() {
-    local description=$1 budget=$2 disposition=$3
-    local native=${stream_native:-container_native}
-    shift 3
+    local description=$1 budget=$2 disposition=$3 native=$4
+    shift 4
     "$native" "$description" "$budget" "$disposition" bash -o pipefail -c '
         tool=$1 pool=$2 sources=$3 manifest=$4; shift 4
         python3 -I -S -B "$tool" stream --pool "$pool" --source-allowlist "$sources" --manifest "$manifest" | "$@"

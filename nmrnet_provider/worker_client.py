@@ -156,7 +156,9 @@ class WorkerClient:
         self._writer.close()
 
     def _close_after_failure(self, primary):
+        # silent-defaults: allow-contract -- A successful geometry operation has no primary cause; otherwise preserve the existing cause before channel cleanup can change exception chaining.
         previous_cause = None if primary is None else primary.__cause__
+        # silent-defaults: allow-contract -- Preserve a primary failure's existing context separately from its explicit cause; successful geometry operations have no exception context to retain.
         previous_context = None if primary is None else primary.__context__
         try:
             self.close()
@@ -207,7 +209,7 @@ class PredictionClient(WorkerClient):
         # Raw bytes alone cannot exceed a frame that must also hold base64 and
         # JSON. This necessary bound limits encoding allocation; frame() remains
         # the authority for exact fit, including all expansion and envelope bytes.
-        if sum(len(raw) for raw in raw_requests) > MAX_FRAME_BYTES:
+        if not (sum(len(raw) for raw in raw_requests) <= MAX_FRAME_BYTES):
             raise ValueError("Scientific preparation cannot fit the 2 MiB channel frame: request bytes alone exceed it.")
         reply = await self._exchange(
             {"operation": "prepare", "requests_base64": [base64.b64encode(raw).decode("ascii") for raw in raw_requests]}
@@ -224,7 +226,9 @@ class PredictionClient(WorkerClient):
             raise WorkerProtocolError("Scientific worker returned an invalid preparation token or model declaration identity")
         if reply["declaration_sha256"] != self._declaration_sha256:
             self.close()
-            raise WorkerProtocolError("Scientific worker's model declaration differs from the admitted declaration; this worker's prediction was not dispatched")
+            raise WorkerProtocolError(
+                "Scientific worker's model declaration differs from the admitted declaration; this worker's prediction was not dispatched"
+            )
         handle = object()
         self._prepared = handle, reply["token"], len(raw_requests)
         return handle

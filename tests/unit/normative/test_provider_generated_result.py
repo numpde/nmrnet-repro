@@ -39,7 +39,7 @@ class GeneratedResultTests(unittest.TestCase):
             )
             self.assertEqual(json.loads(conformer.request_bytes), geometry["prepared_request"])
             self.assertEqual(json.loads(conformer.stereochemistry), geometry["preparation"]["stereochemistry"])
-            self.assertEqual(geometry["preparation"]["coordinate_unit"], "angstrom")
+            self.assertEqual("angstrom", geometry["preparation"]["coordinate_unit"])
             self.assertNotIn("scale_to_angstrom", geometry["preparation"])
         self.assertNotIn(b"PRIVATE_NATIVE_DIAGNOSTIC", plan.finish(scientific_outcomes(self.batch, self.facts)))
         self.assertNotIn("rdkit", sys.modules)
@@ -60,7 +60,7 @@ print(json.dumps(modules))
             [sys.executable, "-B", "-c", import_probe],
             text=True,
         )
-        self.assertEqual(json.loads(loaded), ["provider_core", "provider_core.container_guard", "provider_core.result_verbosity"])
+        self.assertEqual(["provider_core", "provider_core.container_guard", "provider_core.result_verbosity"], json.loads(loaded))
 
     def test_identity_binds_generation_and_stereo_without_coordinates(self):
         plan = ResultPlan(self.prepared, **self.facts)
@@ -94,7 +94,6 @@ print(json.dumps(modules))
         document = json.loads(content)
         for ordinal, geometry in enumerate(document["geometries"], 1):
             self.assertEqual(
-                geometry["coverage"],
                 {
                     "basis": "smiles_graph_expansion",
                     "source_explicit_hydrogen_atoms": 0,
@@ -103,6 +102,7 @@ print(json.dumps(modules))
                     "predicted_hydrogen_atoms": 4,
                     "hydrogen_completeness": "not_independently_validated",
                 },
+                geometry["coverage"],
             )
             self.assertEqual([item["shift_ppm"] for item in geometry["predictions"]], [float(ordinal)] * 5)
         limits = " ".join(document["scientific_limits"])

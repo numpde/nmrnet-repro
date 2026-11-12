@@ -3,9 +3,14 @@
 # owners. Committed-blob capture follows inference_inputs.sh; science stays offline.
 
 geometry_image_inputs=(containers/geometry/Dockerfile containers/geometry/Dockerfile.dockerignore
+    host/bootstrap/acquisition/acquisition_tool/__init__.py
+    host/bootstrap/acquisition/acquisition_tool/installer/requirements/installer-release.json
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/container_guard.py
+    host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
+    host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl
     requirements/preparation.lock tools/artifacts.py tools/container_guard.py
     tools/rdkit_environment.py tools/wheelhouse.py
-    requirements/provider-core-native-install.lock requirements/wheelhouse-tool-assets.in tools/streamed_build.sh tools/git_stream_sources.py
+    requirements/provider-core-native-install.lock requirements/wheelhouse-tool-assets.in tools/streamed_build.sh host/git_stream_sources.py
     nmrnet_provider nmrnet_inference tools/provider_environment.py
     tools/baseline_prepare.py tools/container_resources.py)
 
@@ -58,11 +63,12 @@ build_geometry_image() {
         --build-arg "GEOMETRY_INPUTS=$inputs_digest" --file containers/geometry/Dockerfile -)
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
     source "$image_input_directory/context/tools/streamed_build.sh"
-    prepare_streamed_inputs RDKit "$inputs_digest" preparation:preparation.lock runtime:provider-core-native-install.lock
+    local -a stream_inventories=("$image_input_directory/inputs" . "$inputs_digest")
+    prepare_streamed_inputs RDKit container_native stream_inventories preparation:preparation.lock runtime:provider-core-native-install.lock
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "GEOMETRY_INPUTS=$inputs_digest" --build-arg "GEOMETRY_WHEELS=$stream_selection"
         --file containers/geometry/Dockerfile -)
-    if build_streamed_context 'RDKit image build' "$build_timeout" image-id "${build[@]}"; then :; else
+    if build_streamed_context 'RDKit image build' "$build_timeout" image-id container_native "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     image_id=$inference_result

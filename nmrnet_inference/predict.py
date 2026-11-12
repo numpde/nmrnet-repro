@@ -13,13 +13,22 @@ import math
 import re
 import struct
 
+# The scientific request decoder owns this fixed byte ceiling.
+# repo-check: allow-module-constant
 MAX_INPUT_BYTES = 1 << 20
+# Prediction input and source readers share this admitted atom-count ceiling.
+# repo-check: allow-module-constant
 MAX_ATOMS = 128
+# Scientific batch preparation owns this fixed geometry-count ceiling.
+# repo-check: allow-module-constant
 MAX_GEOMETRIES = 128
+# These fields define the coordinate request document consumed by the worker.
+# repo-check: allow-module-constant
 REQUEST_FIELDS = ("coordinate_unit", "atoms", "coordinates")
 # Qualify each selected element checkpoint independently. Evidence for one
 # checkpoint must not admit the other by accident.
 # The repository adopts the released H/C model input convention as angstroms.
+# repo-check: allow-module-constant
 QUALIFIED_MODEL_COORDINATE_UNITS = {"H": "angstrom", "C": "angstrom"}
 
 
@@ -98,7 +107,7 @@ def decode_request_document(raw):
     """Decode bounded scientific JSON without duplicate keys before field admission."""
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
-    if len(raw) > MAX_INPUT_BYTES:
+    if not (len(raw) <= MAX_INPUT_BYTES):
         raise ValueError("Cannot parse prediction input: request exceeds the 1 MiB byte limit.")
     parse_error = None
     try:
@@ -254,11 +263,11 @@ class PredictionSession:
         for index, request in enumerate(requests, 1):
             try:
                 geometries.append(
-                    tuple(
+                    [
                         (element, compose_net_input(request, dictionary, element))
                         for element in ("H", "C")
                         if element in request["atoms"]
-                    )
+                    ]
                 )
             except Exception as cause:
                 cause.add_note(f"Scientific batch geometry-{index} failed tensor admission.")

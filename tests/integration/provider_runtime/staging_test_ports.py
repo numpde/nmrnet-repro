@@ -13,7 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from stage_api_config import inspect_interpreter, stage
+from materialize_api_config import stage
+from stage_api_config import inspect_interpreter
 from tests.fakes.credential import document, encoded
 
 from nmrnet_provider.config import load_provider_config
@@ -48,7 +49,14 @@ def staged_real_config(root):
     key.chmod(0o600)
     inspect_interpreter(fragment, selection)
     (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
-    stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
+    stage(
+        root,
+        "https://api.example:9443",
+        "dev-local",
+        inputs=inputs,
+        interpreter_config=fragment,
+        prediction_image_id="sha256:" + "c" * 64,
+    )
     return load_provider_config(root / "source/provider.toml")
 
 
@@ -76,11 +84,11 @@ def upload_sources(limits):
     async def exchange(_request, *, maximum_bytes, account_bytes, before_body):
         assert maximum_bytes == len(body)
         headers = (
-                (b"content-type", b"application/octet-stream"),
-                (b"cache-control", b"no-store"),
-                (b"content-length", str(len(body)).encode()),
-                (b"content-digest", b"sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()) + b":"),
-            )
+            (b"content-type", b"application/octet-stream"),
+            (b"cache-control", b"no-store"),
+            (b"content-length", str(len(body)).encode()),
+            (b"content-digest", b"sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()) + b":"),
+        )
         before_body(HttpResponseHead(200, headers))
         account_bytes(len(body))
         return HttpResponse(200, headers, body)

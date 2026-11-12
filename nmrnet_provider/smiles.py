@@ -179,6 +179,7 @@ def _embed(text, requested_count, settings):
         setattr(parameters, name, value)
     effective = json.loads(rdDistGeom.EmbedParametersToJSON(parameters))
     identifiers = rdDistGeom.EmbedMultipleConfs(expanded, numConfs=requested_count, params=parameters)
+    # repo-check: allow-tuple-generator -- Result planning requires the generated conformer collection to be an exact tuple; source=nmrnet_provider/result.py::_planned_generated_input; proof=tests/integration/rdkit_runtime/test_smiles.py::test_native_collection_survives_full_protocol_encoding_without_reembedding
     conformers = tuple(_conformer(expanded, int(identifier)) for identifier in identifiers)
     return conformers, {
         "requested_count": requested_count,

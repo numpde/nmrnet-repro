@@ -6,6 +6,7 @@ have separate close/retirement observations so tests can inject either failure.
 
 import asyncio
 
+
 async def retire_worker_channel(worker, native_retirement):
     """Observe local closure and confirmed child retirement and scratch release, retaining every failure.
 

@@ -238,7 +238,10 @@ class BaselineAdmissionTests(unittest.TestCase):
         result = self.call()
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("scientific-fixture\n", result.stdout)
-        self.assertEqual("", result.stderr)
+        self.assertEqual(
+            f"Baseline comparison finished. Inspect {self.root}/.work/baseline/runs/reference-1/complete.json.\n",
+            result.stderr,
+        )
         calls = self.engine_calls()
         self.assertEqual(["image", "run"], [call["arguments"][0] for call in calls])
         observed = json.loads(self.observation.read_text())

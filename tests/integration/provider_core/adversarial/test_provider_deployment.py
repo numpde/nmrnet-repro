@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.integration.nmrnet.compose_ports import deployment_inputs
+
 from tools.provider_deployment import main
 
 
@@ -19,7 +20,9 @@ class DeploymentRefusalTests(unittest.TestCase):
                     files.key.chmod(0o644)
                 elif failure == "escape":
                     endpoint = arguments["definition"].parent / "interpreter.d/00-primary.toml"
-                    endpoint.write_bytes(endpoint.read_bytes().replace(b"/srv/nmrnet/input/interpreter.key", b"/srv/nmrnet/input/../outside.key"))
+                    endpoint.write_bytes(
+                        endpoint.read_bytes().replace(b"/srv/nmrnet/input/interpreter.key", b"/srv/nmrnet/input/../outside.key")
+                    )
                 elif failure == "missing":
                     files.key.unlink()
                 else:
@@ -41,7 +44,7 @@ class DeploymentRefusalTests(unittest.TestCase):
                         command += ["--" + name.replace("_", "-"), str(value)]
                 errors = io.StringIO()
                 with patch("sys.stderr", errors):
-                    self.assertEqual(main(["freeze", *command]), 2)
+                    self.assertEqual(2, main(["freeze", *command]))
                 self.assertNotIn("PRIVATE_MODEL_KEY", errors.getvalue())
                 self.assertFalse((arguments["bundle"] / "compose.json").exists())
                 if failure == "missing":

@@ -4,7 +4,6 @@ from tools.container_guard import require_container
 
 require_container()
 
-import fcntl
 import hashlib
 import json
 import os
@@ -15,48 +14,12 @@ import sys
 import time
 from pathlib import Path
 
+from tests.unit.wheel_pool_fixtures import locked, wheel
+
+from repository_checks.fixtures.containers import engine_log
 from repository_checks.quality.sources import ROOT
 
 FIXTURES = ROOT / "repository_checks/fixtures/containers"
-
-
-def record_engine_call(log, observed):
-    # Event shape: tests/test_checker_engine.py:109-153 at
-    # 4490c0ffcf86748b8761becdbfeab284d47c4733.
-    # One JSON file per call stays below the client's inherited file-size cap.
-    # Package rescue probes can own two simultaneous callers; serialize only
-    # observation admission, not their execution, and publish complete bytes.
-    descriptor = os.open(log, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        paths = sorted(log.iterdir())
-        for index, path in enumerate(paths):
-            if path.name != f"{index:06d}.json":
-                raise ValueError("Engine call evidence is not a complete ordered event directory.")
-        event = log / f"{len(paths):06d}.json"
-        pending = event.with_suffix(".pending")
-        with pending.open("x") as stream:
-            json.dump(observed, stream)
-            stream.write("\n")
-        pending.replace(event)
-    finally:
-        os.close(descriptor)
-
-
-def read_engine_calls(log):
-    # Missing directories and malformed/incomplete events remain failed proof,
-    # never a reconstructed empty history. The lock excludes an active writer.
-    descriptor = os.open(log, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_SH)
-        observed = []
-        for index, path in enumerate(sorted(log.iterdir())):
-            if path.name != f"{index:06d}.json":
-                raise ValueError("Engine call evidence is not a complete ordered event directory.")
-            observed.append(json.loads(path.read_text()))
-        return observed
-    finally:
-        os.close(descriptor)
 
 
 class LauncherFixture:
@@ -67,6 +30,8 @@ class LauncherFixture:
         # Start with no containers exactly once. Later missing state is lost
         # proof, rather than permission to recreate an empty resource inventory.
         with (root / "containers.json").open("x") as registry:
+            registry.write("{}\n")
+        with (root / "acquisition-containers.json").open("x") as registry:
             registry.write("{}\n")
         self.scratch = set()
         (root / "tools").mkdir(parents=True)
@@ -84,6 +49,9 @@ class LauncherFixture:
             "operator_guidance.sh",
             "worker_retirement.sh",
             "acquisition_interface.sh",
+            "acquisition_run.sh",
+            "acquisition_wheelhouse.sh",
+            "wheelhouse_acquire.py",
             "git_inputs.sh",
             "git_metadata.sh",
             "packages.sh",
@@ -93,6 +61,9 @@ class LauncherFixture:
             "provider_api_qualification.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
+        (root / "host").mkdir()
+        shutil.copyfile(ROOT / "host/acquisition_bootstrap.py", root / "host/acquisition_bootstrap.py")
+        shutil.copytree(ROOT / "host/bootstrap/acquisition", root / "host/bootstrap/acquisition")
         shutil.copyfile(ROOT / "Makefile", root / "Makefile")
         shutil.copytree(ROOT / "containers", root / "containers")
         for name in ("container_guard.py", "artifacts.py", "wheelhouse.py", "build_unicore.py", "package_lock.py"):
@@ -114,7 +85,13 @@ class LauncherFixture:
         for directory in ("tests", "repository_checks"):
             (root / directory).mkdir()
         (root / "bin").mkdir()
-        for name, source in (("docker", "docker.py"), ("git", "git.sh"), ("id", "id.sh")):
+        for name, source in (
+            ("docker", "docker.py"),
+            ("git", "git.sh"),
+            ("id", "id.sh"),
+            ("stat", "stat.py"),
+            ("python3", "python.sh"),
+        ):
             (root / "bin" / name).symlink_to(FIXTURES / source)
         shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
         (root / ".work/wheelhouse").mkdir(parents=True)
@@ -127,8 +104,16 @@ class LauncherFixture:
         for name in ("inference.in", "build.in", "unicore-source.json"):
             (root / "requirements" / name).write_text("fixture\n")
         (root / "requirements/inference.lock").write_text("fixture==1\n")
-        for name in ("preparation.lock", "provider-core-install.lock", "provider-core-native-install.lock", "provider-core-assets.in"):
+        for name in (
+            "preparation.lock",
+            "provider-core-install.lock",
+            "provider-core-native-install.lock",
+            "provider-core-assets.in",
+            "wheelhouse-acquirer-assets.in",
+            "wheelhouse-tool-assets.in",
+        ):
             shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
+        shutil.copyfile(ROOT / "requirements/provider-core-release.json", root / "requirements/provider-core-release.json")
         (root / "artifacts").mkdir()
         (root / "artifacts/nmrnet-source.paths").write_text("source_revision " + "a" * 40 + "\nLICENSE\nuninmr\n")
         manifest = "".join(
@@ -147,8 +132,40 @@ class LauncherFixture:
                 shutil.copytree(ROOT / name, destination)
             else:
                 shutil.copyfile(ROOT / name, destination)
+        pool = root / ".work/wheelhouse"
+        tool_pin = (root / "requirements/wheelhouse-tool-assets.in").read_text().splitlines()[-1]
+        tool_name = tool_pin.split("#", 1)[0].rsplit("/", 1)[-1]
+        tool = Path("/opt/checker-tools") / tool_name
+        if hashlib.sha256(tool.read_bytes()).hexdigest() != tool_pin.rsplit("=", 1)[-1]:
+            raise ValueError("Fixture streamer does not match the pinned released tool.")
+        shutil.copyfile(tool, pool / tool_name)
+        candidate = wheel(pool, "fixture", "1")
+        for name in ("inference.lock", "provider-core-native-install.lock"):
+            locked(root / "requirements" / name, [("fixture", "1", [candidate])])
+        archive = pool / ("Uni-Core-" + "a" * 40 + ".tar.gz")
+        archive.write_bytes(b"synthetic source bytes")
+        (root / "requirements/unicore-source.json").write_text(
+            json.dumps(
+                {
+                    "name": "unicore",
+                    "version": "0.0.1",
+                    "commit": "a" * 40,
+                    "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/" + "a" * 40,
+                    "size": archive.stat().st_size,
+                    "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+                }
+            )
+        )
         self.capture_committed_inputs()
         self.environment = os.environ | {
+            "NMRNET_FIXTURE_ROOT": str(root),
+            "NMRNET_FIXTURE_UID": "1000",
+            "NMRNET_FIXTURE_GID": "1000",
+            "NMRNET_FIXTURE_PYTHON": sys.executable,
+            "NMRNET_FAKE_IDENTITY_OWNER": "1000 1000",
+            "NMRNET_FAKE_ACQ_CIDS": json.dumps(
+                {"gateway": "1" * 64, "relay": "2" * 64, "worker-1": "3" * 64, "worker-2": "4" * 64, "worker-3": "5" * 64}
+            ),
             "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
@@ -267,7 +284,7 @@ class LauncherFixture:
         return fixture.run("inference_image.sh", "--timeout", str(budget), "import", additions=additions, timeout=3)
 
     # silent-defaults: allow-contract -- Ten seconds is the fixture per-wait observation budget; launcher deadlines and cleanup waits are separate; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_native_failure_keeps_private_output_out_of_publishable_diagnostic
-    def run(self, launcher, *arguments, additions=None, timeout=10, corrupt_worker_receipt=None):
+    def run(self, launcher, *arguments, additions=None, timeout=60, corrupt_worker_receipt=None):
         try:
             command = ["bash", str(self.root / "tools" / launcher), *arguments]
             # silent-defaults: allow-contract -- Omitted per-call additions leave the fixture environment intact; explicit dictionaries overlay only their supplied entries; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_native_failure_keeps_private_output_out_of_publishable_diagnostic
@@ -326,8 +343,15 @@ class LauncherFixture:
             if name in environment:
                 del environment[name]
         return subprocess.run(
-            ["make", "--no-print-directory", "-C", str(self.root), "DOCKER_CONTEXT=fixture-local",
-             f"WHEELHOUSE={self.root / '.work/wheelhouse'}", *arguments],
+            [
+                "make",
+                "--no-print-directory",
+                "-C",
+                str(self.root),
+                "DOCKER_CONTEXT=fixture-local",
+                f"WHEELHOUSE={self.root / '.work/wheelhouse'}",
+                *arguments,
+            ],
             env=environment,
             text=True,
             capture_output=True,
@@ -336,7 +360,7 @@ class LauncherFixture:
         )
 
     def calls(self):
-        return read_engine_calls(self.log)
+        return engine_log.read_engine_calls(self.log)
 
     def dispose(self):
         # Only acquisition scratch recorded by this fixture's create calls is

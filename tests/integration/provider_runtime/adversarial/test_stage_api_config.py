@@ -9,7 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from stage_api_config import inspect_interpreter, interpreter_fragment, stage
+from interpreter_fragment import interpreter_fragment
+from materialize_api_config import stage
+from stage_api_config import inspect_interpreter
 from staging_test_ports import staged_real_config, staging_inputs, upload_sources
 
 from nmrnet_provider.config import ConfigurationRejected
@@ -26,7 +28,14 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             original = fragment.read_text()
             fragment.write_text(original.replace('model = "selected-model"', 'model = "changed-model"'))
             with self.assertRaisesRegex(ValueError, "changed after"):
-                stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
+                stage(
+                    root,
+                    "https://api.example:9443",
+                    "dev-local",
+                    inputs=inputs,
+                    interpreter_config=fragment,
+                    prediction_image_id="sha256:" + "c" * 64,
+                )
             fragment.write_text(original + '\n[[interpreter.endpoints]]\nkey_file = "/ungranted/key"\n')
             with self.assertRaisesRegex(ValueError, "one flat endpoint"):
                 interpreter_fragment(fragment)
@@ -41,7 +50,14 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
             with self.assertRaisesRegex(ConfigurationRejected, "0400 or 0600"):
-                stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment, prediction_image_id="sha256:" + "c" * 64)
+                stage(
+                    root,
+                    "https://api.example:9443",
+                    "dev-local",
+                    inputs=inputs,
+                    interpreter_config=fragment,
+                    prediction_image_id="sha256:" + "c" * 64,
+                )
             self.assertFalse((root / "source/interpreter.key").exists())
 
     def test_private_fragment_read_keeps_the_existing_byte_ceiling(self):
@@ -66,7 +82,7 @@ class StageUploadBudgetAdversarialTests(unittest.IsolatedAsyncioTestCase):
                 clock.monotonic.return_value = 400
                 with self.assertRaisesRegex(UploadFailed, "total deadline expired"):
                     await owner.acquire(upload_ref)
-            self.assertEqual(owner.requests_started, 4)
-            self.assertEqual(api.uploads.await_count, 2)
+            self.assertEqual(4, owner.requests_started)
+            self.assertEqual(2, api.uploads.await_count)
             api.read_grant.assert_awaited_once_with("job:example", upload_ref)
             store.exchange.assert_awaited_once()

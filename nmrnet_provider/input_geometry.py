@@ -73,9 +73,7 @@ def _admit_request(raw):
     except ValueError as error:
         raise InputRejected(str(error)) from None
     if request["coordinate_unit"] != "angstrom":
-        raise InputRejected(
-            "Cannot admit executable coordinates: coordinate_unit must be exactly angstrom."
-        )
+        raise InputRejected("Cannot admit executable coordinates: coordinate_unit must be exactly angstrom.")
     return request
 
 
@@ -130,7 +128,7 @@ def parse_atom_row(line, line_number):
     if len(parts) != 4:
         raise InputRejected(f"Cannot prepare coordinates at line {line_number}: expected element x y z.")
     try:
-        coordinates = tuple(float(value) for value in parts[1:])
+        coordinates = (float(parts[1]), float(parts[2]), float(parts[3]))
     except ValueError:
         raise InputRejected(f"Cannot prepare coordinates at line {line_number}: x, y and z must be numbers.") from None
     return line_number, parts[0], coordinates
@@ -217,6 +215,7 @@ def prepare_rows(rows, *, source, source_unit, source_record_number, source_posi
     return PreparedGeometry(
         request_bytes=raw,
         source_sha256=hashlib.sha256(source).hexdigest(),
+        # repo-check: allow-tuple-generator -- PreparedGeometry exposes this ordered source mapping without mutable aliases; proof=tests/test_provider_input.py::test_plaintext_conversion_preserves_order_and_line_mapping
         source_positions=tuple(position for position, _, _ in rows),
         source_position_kind=source_position_kind,
         source_unit=source_unit,

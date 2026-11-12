@@ -20,16 +20,36 @@ import tarfile
 import tempfile
 import unittest
 from contextlib import chdir
+from importlib.util import find_spec
 from pathlib import Path
 
 from tools.artifacts import regular_file
 
-
+# Consumer qualification selects this maintained inventory from the captured SDK test support.
+# repo-check: allow-module-constant
 SUPPORT_MODULES = (
-    "acquisition", "api", "api_tls", "attempt_store", "attempts",
-    "checkpoint_execution", "condition_recovery", "conditions", "controller", "conversation",
-    "credential", "delivery", "execution", "hello", "job_feed", "job_input", "runner",
-    "tls_peer", "transport", "unix_proxy", "uploads", "live_analysis",
+    "acquisition",
+    "api",
+    "api_tls",
+    "attempt_store",
+    "attempts",
+    "checkpoint_execution",
+    "condition_recovery",
+    "conditions",
+    "controller",
+    "conversation",
+    "credential",
+    "delivery",
+    "execution",
+    "hello",
+    "job_feed",
+    "job_input",
+    "runner",
+    "tls_peer",
+    "transport",
+    "unix_proxy",
+    "uploads",
+    "live_analysis",
 )
 
 
@@ -43,8 +63,12 @@ def copy_support(source, expected_sha256, root, version):
             checksum.update(chunk)
     if checksum.hexdigest() != expected_sha256:
         raise ValueError("Cannot prepare consumer tests: shared source archive differs from its pinned SHA-256.")
-    names = ("tests/__init__.py", "tests/integration/__init__.py", "tests/fakes/__init__.py",
-             *(f"tests/fakes/{name}.py" for name in SUPPORT_MODULES))
+    names = (
+        "tests/__init__.py",
+        "tests/integration/__init__.py",
+        "tests/fakes/__init__.py",
+        *(f"tests/fakes/{name}.py" for name in SUPPORT_MODULES),
+    )
     with tarfile.open(captured, "r:gz") as archive:
         for name in names:
             member = archive.getmember(f"provider_core-{version}/{name}")
@@ -76,11 +100,29 @@ def stage_support(release, pool, target):
         shutil.copytree(root / "run/tests", target / "tests")
 
 
-def run_suite(release, pool, patterns):
-    import provider_core
+def discover_suite(start, root, patterns):
+    """Select only the requested consumer tests, or unittest's default selection."""
+    loader = unittest.defaultTestLoader
+    if patterns is None:
+        suite = loader.discover(str(start), top_level_dir=str(root))
+        if suite.countTestCases() == 0:
+            raise RuntimeError("Default NMRNet consumer discovery contains no tests")
+        return suite
+    suite = unittest.TestSuite()
+    for pattern in patterns:
+        selected = loader.discover(str(start), pattern=pattern, top_level_dir=str(root))
+        if selected.countTestCases() == 0:
+            raise RuntimeError(f"Selected NMRNet consumer pattern contains no tests: {pattern}")
+        suite.addTests(selected)
+    return suite
 
+
+def run_suite(release, pool, patterns):
     prefix = Path(sys.prefix).resolve()
-    origin = Path(provider_core.__file__).resolve()
+    specification = find_spec("provider_core")
+    if specification is None or specification.origin is None:
+        raise RuntimeError("Cannot run consumer tests: provider-core must come from the installed runtime environment.")
+    origin = Path(specification.origin).resolve()
     distribution = importlib.metadata.distribution("provider-core")
     if not origin.is_relative_to(prefix) or not Path(distribution.locate_file("provider_core")).resolve().is_relative_to(prefix):
         raise RuntimeError("Cannot run consumer tests: provider-core must come from the installed runtime environment.")
@@ -93,15 +135,11 @@ def run_suite(release, pool, patterns):
         with chdir(run):
             sys.path.insert(0, str(run))
             sys.path.append("/consumer")
-            suite = unittest.TestSuite()
-            for pattern in patterns:
-                selected = unittest.defaultTestLoader.discover(
-                    str(run / "tests/integration/nmrnet"), pattern=pattern, top_level_dir=str(run)
-                )
-                if selected.countTestCases() == 0:
-                    raise RuntimeError(f"Selected NMRNet consumer pattern contains no tests: {pattern}")
-                suite.addTests(selected)
-            print(f"NMRNet consumer tests use provider-core {distribution.version} from {origin}; support SHA-256 {source_sha256}.", flush=True)
+            suite = discover_suite(run / "tests/integration/nmrnet", run, patterns)
+            sys.stdout.write(
+                f"NMRNet consumer tests use provider-core {distribution.version} from {origin}; support SHA-256 {source_sha256}.\n"
+            )
+            sys.stdout.flush()
             return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 
 
@@ -114,7 +152,7 @@ if __name__ == "__main__":
     entrypoint = parser.add_mutually_exclusive_group()
     entrypoint.add_argument("--script", type=Path)
     entrypoint.add_argument("--module", choices=("unittest",))
-    parser.add_argument("--pattern", nargs="+", default=["test*.py"])
+    parser.add_argument("--pattern", nargs="+")
     args, remaining = parser.parse_known_args()
     if args.action in {"stage-support", "fixture"}:
         if args.target is None:

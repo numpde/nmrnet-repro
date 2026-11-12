@@ -35,7 +35,9 @@ class WorkerRetirementTests(unittest.TestCase):
         (self.root / "inspection").write_text(self.cid + " exited false 0 false\n")
 
     # silent-defaults: allow-contract -- Normal retirement succeeds; each fault test explicitly selects the failing operation or prior ownership state.
-    def run_retirement(self, *, stop_status=0, inspect_status=0, remove_status=0, log_status=0, retired="true", cancel="", cap=""):
+    def run_retirement(
+        self, *, stop_status=0, inspect_status=0, remove_status=0, log_status=0, retired="true", cancel="", cap=""
+    ):
         return subprocess.run(
             [
                 "bash",
@@ -73,7 +75,7 @@ class WorkerRetirementTests(unittest.TestCase):
 
     def test_exact_stopped_container_is_removed_and_private_cause_retained(self):
         result = self.run_retirement()
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stdout + result.stderr)
         self.assertEqual(["stop", "inspect", "logs", "rm"], [line.split()[0] for line in self.calls()])
         self.assertTrue(all(line.endswith(self.cid) for line in self.calls()))
         self.assertNotIn("private stop evidence", result.stdout + result.stderr)
@@ -92,7 +94,7 @@ class WorkerRetirementTests(unittest.TestCase):
     def test_created_but_never_started_container_can_be_removed(self):
         (self.root / "inspection").write_text(self.cid + " created false 0 false\n")
         result = self.run_retirement()
-        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stdout + result.stderr)
         self.assertEqual(["stop", "inspect", "logs", "rm"], [line.split()[0] for line in self.calls()])
 
     def test_stop_failure_is_not_retirement_or_permission_to_repeat(self):
@@ -145,7 +147,7 @@ class WorkerRetirementTests(unittest.TestCase):
                 probe.setUp()
                 try:
                     result = probe.run_retirement(log_status=status)
-                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(2, result.returncode)
                     self.assertIn(f"status {status}, cancellation 0, local client retired true", result.stdout)
                     self.assertEqual([line.split()[0] for line in probe.calls()], ["stop", "inspect", "logs"])
                 finally:

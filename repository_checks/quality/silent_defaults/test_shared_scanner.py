@@ -6,11 +6,15 @@ from tools.container_guard import require_container
 
 require_container()
 
+import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from ..sources import ROOT, is_skipped
+from .. import sources
+from ..sources import ROOT, generated_sdk_sources, is_skipped
 
 SELF_PARTS = ("repository_checks", "quality", "silent_defaults")
 SCANNER_TEST_MARKER = "active"
@@ -46,7 +50,8 @@ def repo_files(patterns: tuple[str, ...]) -> list[Path]:
     paths: set[Path] = set()
     for pattern in patterns:
         paths.update(ROOT.glob(pattern))
-    return sorted(path for path in paths if path.is_file() and not excluded(path))
+    generated = generated_sdk_sources()
+    return sorted(path for path in paths if path.is_file() and path not in generated and not excluded(path))
 
 
 def excluded(path: Path) -> bool:
@@ -77,6 +82,26 @@ class SharedScannerTest(unittest.TestCase):
 
     def test_repo_files_excludes_skipped_dependency_material(self) -> None:
         self.assertEqual([], repo_files(("NMRNetplusplus/node_modules/**/*.ts",)))
+
+    def test_repo_files_excludes_only_issuer_listed_sdk_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "host/bootstrap/acquisition"
+            snapshot.mkdir(parents=True)
+            generated = snapshot / "generated.py"
+            generated.write_text('value = config.get("mode", "generated")\n')
+            unlisted = snapshot / "unlisted.py"
+            unlisted.write_text('value = config.get("mode", "unreviewed")\n')
+            record = root / "requirements/provider-core-release.json"
+            record.parent.mkdir()
+            record.write_text(json.dumps({"acquisition_source_files": {"generated.py": {}}}))
+            with patch(__name__ + ".ROOT", root), patch.object(sources, "ROOT", root):
+                scanned = repo_files(("host/**/*.py",))
+                self.assertEqual([unlisted], scanned)
+                self.assertEqual(
+                    ["host/bootstrap/acquisition/unlisted.py:1: default: config.get"],
+                    line_findings(scanned, re.compile(r"config\.get"), "default"),
+                )
 
     def test_line_findings_reports_relative_paths_and_skips_comments(self) -> None:
         path = Path(__file__).resolve()

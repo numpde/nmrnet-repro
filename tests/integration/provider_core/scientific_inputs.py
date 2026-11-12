@@ -12,16 +12,20 @@ from tests.integration.nmrnet.reference_fixtures import (
     PRODUCTION_SHA256,
     REFERENCE_SHA256,
     pinned_packet,
-    require_reference_inputs,
     require_capacity_inputs,
+    require_reference_inputs,
     verify_fixture,
 )
 
 IDENTITIES = {
-    "references": ("5f3dd258c942cc3d1c6dc735dd904f7a444cd07b65fe8ec610523a6784f72362",
-                   "d8762cf72e329f5d94374287ef5df704e3b29bdf1f449dba8d296cb6d027fa14"),
-    "capacity": ("931c6831f212efa3e5357ce1a0078d110ef03e12d2ff18afcf48068a4bb988c1",
-                 "fa7b85f57855cc91e285363ce5e7332c93a15f70b27308cf5d8c2cc3291d6759"),
+    "references": (
+        "5f3dd258c942cc3d1c6dc735dd904f7a444cd07b65fe8ec610523a6784f72362",
+        "d8762cf72e329f5d94374287ef5df704e3b29bdf1f449dba8d296cb6d027fa14",
+    ),
+    "capacity": (
+        "931c6831f212efa3e5357ce1a0078d110ef03e12d2ff18afcf48068a4bb988c1",
+        "fa7b85f57855cc91e285363ce5e7332c93a15f70b27308cf5d8c2cc3291d6759",
+    ),
 }
 
 

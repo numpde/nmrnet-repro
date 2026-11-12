@@ -23,7 +23,7 @@ from unittest.mock import patch
 from .sources import is_skipped, iter_repo_text_files, read_text, repo_path
 
 MAKE_TARGET_RE = re.compile(r"^(?P<names>[A-Za-z0-9_/-]+(?:[ \t]+[A-Za-z0-9_/-]+)*)[ \t]*:(?!:*=)[ \t]*(?P<prereqs>.*)$")
-MAKE_HELP_TARGET_RE = re.compile(r"\bmake\s+(?P<name>[A-Za-z0-9_/-]+)\b")
+MAKE_HELP_TARGET_RE = re.compile(r"'make\s+(?P<name>[A-Za-z0-9_/-]+)(?=\s|')")
 MAKE_PHONY_RE = re.compile(r"^\.PHONY:\s*(?P<names>.*)$", re.MULTILINE)
 # Dapp requires explicit safe discovery; API additionally requires caller-proof
 # ownership. Accept that modifier without admitting a second default authority.
@@ -34,6 +34,7 @@ MAKE_DEFAULT_AUTHORITY_RE = re.compile(
     r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE
 )
 FIRST_PARTY_PYTHON_ROOTS = (
+    "host",
     "tools",
     "tests",
     "repository_checks",
@@ -57,8 +58,8 @@ class RepositoryHygieneTest(unittest.TestCase):
             (root / "Makefile").write_text(read_text(repo_path("Makefile")))
             (root / "tools").mkdir()
             (root / "tools/docker_client.sh").write_text(
-                'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
-                'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
+                "docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; "
+                "NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n"
             )
             for script in ("container.sh", "inference_image.sh", "checker.sh"):
                 (root / "tools" / script).write_text('exit "${TEST_BUILD_STATUS}"\n')
@@ -67,11 +68,16 @@ class RepositoryHygieneTest(unittest.TestCase):
                 for build_status in (7, 0):
                     with self.subTest(target=target, build_status=build_status):
                         (root / "tools/cleanup-called").unlink(missing_ok=True)
-                        result = subprocess.run(["make", "--no-print-directory", "-C", str(root), target],
-                                                env={**os.environ, "TEST_BUILD_STATUS": str(build_status)},
-                                                capture_output=True, text=True, timeout=5)
-                        self.assertEqual(result.returncode == 0, build_status == 0, result.stderr)
-                        self.assertEqual((root / "tools/cleanup-called").exists(), build_status == 0)
+                        result = subprocess.run(
+                            ["make", "--no-print-directory", "-C", str(root), target],
+                            env={**os.environ, "TEST_BUILD_STATUS": str(build_status)},
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            check=False,
+                        )
+                        self.assertEqual(build_status == 0, result.returncode == 0, msg=result.stderr)
+                        self.assertEqual(build_status == 0, (root / "tools/cleanup-called").exists())
                         if build_status == 0:
                             self.assertIn("Image build succeeded; retirement is incomplete", result.stderr)
 
@@ -81,18 +87,23 @@ class RepositoryHygieneTest(unittest.TestCase):
             (root / "Makefile").write_text(read_text(repo_path("Makefile")))
             (root / "tools").mkdir()
             (root / "tools/docker_client.sh").write_text(
-                'docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; '
-                'NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n'
+                "docker_client_prepare() { NMRNET_DOCKER_CONTEXT_INPUT=test-local; "
+                "NMRNET_DOCKER_ENDPOINT_INPUT=unix:///tmp/test-docker.sock; }\n"
             )
             (root / "tools/provider_deployment.sh").write_text('exit "${TEST_UP_STATUS}"\n')
             (root / "tools/image_retirement.sh").write_text('touch "$(dirname "$0")/cleanup-called"\nexit 7\n')
             for up_status in (7, 0):
                 with self.subTest(up_status=up_status):
-                    result = subprocess.run(["make", "--no-print-directory", "-C", str(root), "provider/deployment/up"],
-                                            env={**os.environ, "TEST_UP_STATUS": str(up_status)},
-                                            capture_output=True, text=True, timeout=5)
-                    self.assertEqual(result.returncode == 0, up_status == 0, result.stderr)
-                    self.assertEqual((root / "tools/cleanup-called").exists(), up_status == 0)
+                    result = subprocess.run(
+                        ["make", "--no-print-directory", "-C", str(root), "provider/deployment/up"],
+                        env={**os.environ, "TEST_UP_STATUS": str(up_status)},
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.assertEqual(up_status == 0, result.returncode == 0, msg=result.stderr)
+                    self.assertEqual(up_status == 0, (root / "tools/cleanup-called").exists())
                     if up_status == 0:
                         self.assertIn("Deployment is healthy; image retirement is incomplete", result.stderr)
 
@@ -250,7 +261,7 @@ class RepositoryHygieneTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(["echo input", "echo first/one", "echo second/two"], result.stdout.splitlines())
 
     def test_target_parser_excludes_assignments_and_recipe_text(self):
@@ -279,6 +290,7 @@ class RepositoryHygieneTest(unittest.TestCase):
             "\t@echo 'make help'\n"
             "\t@echo 'make real/one'\n"
             "\t@echo 'make real/two'\n"
+            "\t@echo 'Choose the make command from this list.'\n"
             "real/one real/two:\n"
             "\t@echo $@\n"
         )

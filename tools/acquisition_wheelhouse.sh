@@ -9,7 +9,7 @@ nmrnet_acquire_wheelhouse() {
         *) return "$worker_status" ;;
     esac
 
-    if [[ -z ${interface-} ]]; then select_acquisition_interface || return $?; fi
+    if [[ ! -v interface ]] || [[ -z $interface ]]; then select_acquisition_interface || return $?; fi
     acquisition_set_route "$interface" || return $?
     acquisition_worker online worker_status "$image" online_grants online_app || return $?
     if (( worker_status != 0 )); then return "$worker_status"; fi

@@ -100,9 +100,7 @@ class HostFixture:
         self.engine = self.root / "engine.sh"
         self.engine.write_text(ENGINE)
         self.environment = dict(os.environ)
-        self.environment.update(
-            FAKE_STATE=str(self.root), FAKE_ROOT=str(self.allocation_root), FAKE_IMAGE=IMAGE, FAKE_CID=CID
-        )
+        self.environment.update(FAKE_STATE=str(self.root), FAKE_ROOT=str(self.allocation_root), FAKE_IMAGE=IMAGE, FAKE_CID=CID)
 
     def close(self):
         self.scratch.cleanup()

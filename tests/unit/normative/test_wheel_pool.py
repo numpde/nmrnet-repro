@@ -12,11 +12,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Thread
 from unittest.mock import patch
-from urllib.parse import urlsplit
 
 from tests.unit.wheel_pool_fixtures import locked, wheel
 
@@ -49,40 +46,42 @@ class WheelPoolTests(unittest.TestCase):
         report = io.StringIO()
         identity = wheelhouse.select_wheels(self.lock, self.pool, report_output=report)
         selected = json.loads(report.getvalue())
-        self.assertEqual(selected["version"], "1")
-        self.assertEqual(len(selected["install"]), 1)
-        self.assertEqual(selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"],
-                         identity["files"][self.alpha.name])
+        self.assertEqual("1", selected["version"])
+        self.assertEqual(1, len(selected["install"]))
+        self.assertEqual(
+            selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"], identity["files"][self.alpha.name]
+        )
         self.alpha.write_bytes(b"invalid wheel")
         report = io.StringIO()
         with self.assertRaises(subprocess.CalledProcessError):
             wheelhouse.select_wheels(self.lock, self.pool, report_output=report)
-        self.assertEqual(report.getvalue(), "")
+        self.assertEqual("", report.getvalue())
 
     def test_report_command_emits_pip_json_for_the_captured_lock(self):
         result = subprocess.run(
-            [sys.executable, "-B", "-m", "tools.wheelhouse", "report", "--lock", str(self.lock),
-             "--lock-sha256", hashlib.sha256(self.lock.read_bytes()).hexdigest(), "--pool", str(self.pool)],
-            check=True, capture_output=True, text=True,
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "tools.wheelhouse",
+                "report",
+                "--lock",
+                str(self.lock),
+                "--lock-sha256",
+                hashlib.sha256(self.lock.read_bytes()).hexdigest(),
+                "--pool",
+                str(self.pool),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
         selected = json.loads(result.stdout)
-        self.assertEqual(selected["version"], "1")
-        self.assertEqual(selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"],
-                         hashlib.sha256(self.alpha.read_bytes()).hexdigest())
-
-    def test_complete_pool_skips_acquisition_and_preserves_all_cached_files(self):
-        before = {path.name: path.read_bytes() for path in self.pool.iterdir()}
-        run = subprocess.run
-
-        def offline_only(command, **kwargs):
-            self.assertIn("--no-index", command, "A complete pool must not query a package index")
-            return run(command, **kwargs)
-
-        with patch.object(wheelhouse.subprocess, "run", side_effect=offline_only):
-            for _ in range(2):
-                identity = wheelhouse.populate_pool(self.lock, self.pool, inference=True)
-                self.assertEqual(set(identity["files"]), {self.alpha.name})
-        self.assertEqual(before, {path.name: path.read_bytes() for path in self.pool.iterdir()})
+        self.assertEqual("1", selected["version"])
+        self.assertEqual(
+            selected["install"][0]["download_info"]["archive_info"]["hashes"]["sha256"],
+            hashlib.sha256(self.alpha.read_bytes()).hexdigest(),
+        )
 
     def test_only_incompatible_cached_wheel_fails_offline(self):
         self.alpha.unlink()
@@ -93,25 +92,7 @@ class WheelPoolTests(unittest.TestCase):
         self.alpha.write_bytes(b"corrupt cached wheel")
         with self.assertRaises(subprocess.CalledProcessError):
             wheelhouse.select_wheels(self.lock, self.pool)
-        self.assertEqual(self.alpha.read_bytes(), b"corrupt cached wheel")
-
-    def test_acquisition_preserves_conflicting_compatible_wheel_without_network(self):
-        self.alpha.write_bytes(b"other project's conflicting wheel")
-        with patch.object(wheelhouse, "select_wheels", side_effect=subprocess.CalledProcessError(1, "pip")):
-            with patch.object(wheelhouse.subprocess, "run") as run:
-                with self.assertRaisesRegex(ValueError, "existing file is preserved"):
-                    wheelhouse.populate_pool(self.lock, self.pool, inference=True)
-            run.assert_not_called()
-        self.assertEqual(self.alpha.read_bytes(), b"other project's conflicting wheel")
-
-    def test_complete_selection_does_not_reject_an_unused_conflicting_wheel(self):
-        conflicting = wheel(self.pool, "pool-alpha", "1.0", "py2.py3-none-any", b"other project's wheel")
-        selection = {"files": {self.alpha.name: hashlib.sha256(self.alpha.read_bytes()).hexdigest()}}
-        with patch.object(wheelhouse, "select_wheels", return_value=selection):
-            with patch.object(wheelhouse.subprocess, "run") as run:
-                self.assertEqual(wheelhouse.populate_pool(self.lock, self.pool, inference=True), selection)
-            run.assert_not_called()
-        self.assertTrue(conflicting.exists())
+        self.assertEqual(b"corrupt cached wheel", self.alpha.read_bytes())
 
     def test_identical_filename_winner_is_reused_without_replacing_its_inode(self):
         staged = self.root / self.alpha.name
@@ -130,7 +111,7 @@ class WheelPoolTests(unittest.TestCase):
             wheelhouse.publish_file(staged, self.alpha, hashlib.sha256(expected).hexdigest())
         self.assertIsInstance(refused.exception.__cause__, ValueError)
         self.assertEqual(staged.read_bytes(), expected)
-        self.assertEqual(self.alpha.read_bytes(), b"other project's conflicting file")
+        self.assertEqual(b"other project's conflicting file", self.alpha.read_bytes())
 
     def test_source_archive_uses_shared_root_with_separate_pinned_identity(self):
         source_directory = self.pool
@@ -151,139 +132,11 @@ class WheelPoolTests(unittest.TestCase):
         with patch.object(wheelhouse, "open_url", return_value=io.BytesIO(archive)) as network:
             wheelhouse.prepare_source(declaration, source_directory)
             wheelhouse.prepare_source(declaration, source_directory)
-        self.assertEqual(network.call_count, 1)
+        self.assertEqual(1, network.call_count)
         source = source_directory / ("Uni-Core-" + "a" * 40 + ".tar.gz")
         self.assertEqual(source.read_bytes(), archive)
         self.assertFalse((self.pool / "unicore-source.tar.gz").exists())
         source.write_bytes(b"conflicting source")
         with self.assertRaises(ValueError):
             wheelhouse.prepare_source(declaration, source_directory)
-        self.assertEqual(source.read_bytes(), b"conflicting source")
-
-    def test_per_file_publication_preserves_existing_pool_files(self):
-        source = self.root / "incoming"
-        source.mkdir()
-        incoming = wheel(source, "pool-gamma", "3.0")
-        lock = locked(self.root / "gamma.lock", [("pool-gamma", "3.0", [incoming])])
-        run = subprocess.run
-
-        def download(command, **kwargs):
-            if "download" in command:
-                self.assertIn(str(self.pool), command)
-                destination = Path(command[command.index("--dest") + 1]) / incoming.name
-                self.assertEqual(destination.parent, self.pool)
-                self.assertIn("--no-cache-dir", command)
-                shutil.copyfile(incoming, destination)
-                return subprocess.CompletedProcess(command, 0)
-            return run(command, **kwargs)
-
-        before = {path.name: path.read_bytes() for path in self.pool.iterdir()}
-        with patch.object(wheelhouse.subprocess, "run", side_effect=download) as calls:
-            wheelhouse.populate_pool(lock, self.pool, inference=False)
-            inode = (self.pool / incoming.name).stat().st_ino
-            wheelhouse.populate_pool(lock, self.pool, inference=False)
-            self.assertEqual(sum("download" in call.args[0] for call in calls.call_args_list), 1)
-            self.assertEqual((self.pool / incoming.name).stat().st_ino, inode)
-            self.assertEqual((self.pool / incoming.name).read_bytes(), incoming.read_bytes())
-            (self.pool / incoming.name).write_bytes(b"conflicting pooled bytes")
-            with self.assertRaisesRegex(ValueError, "existing file is preserved"):
-                wheelhouse.populate_pool(lock, self.pool, inference=False)
-            self.assertEqual((self.pool / incoming.name).read_bytes(), b"conflicting pooled bytes")
-            self.assertEqual(sum("download" in call.args[0] for call in calls.call_args_list), 1)
-        for name, content in before.items():
-            self.assertEqual((self.pool / name).read_bytes(), content)
-        self.assertEqual([], list(self.pool.glob(".nmrnet-wheel-download-*")))
-        self.assertFalse((self.pool / ".pip-cache").exists())
-        self.assertFalse(any((self.pool / profile).exists() for profile in ("inference", "preparation", "provider-core")))
-
-    def test_partial_lock_progress_is_published_and_reused_after_retry(self):
-        incoming = self.root / "partial incoming"
-        incoming.mkdir()
-        cached = self.alpha
-        cached_bytes, cached_inode = cached.read_bytes(), cached.stat().st_ino
-        alpha = wheel(incoming, "pool-gamma", "1.0", payload=b"new locked gamma")
-        beta = wheel(incoming, "pool-beta", "3.0", payload=b"new locked beta")
-        lock = locked(
-            self.root / "partial.lock",
-            [
-                ("pool-alpha", "1.0", [cached]),
-                ("pool-gamma", "1.0", [alpha]),
-                ("pool-beta", "3.0", [beta]),
-            ],
-        )
-        real_run = subprocess.run
-        file_gets = {cached.name: 0, alpha.name: 0, beta.name: 0}
-        fail_beta_once = {"value": True}
-
-        class LocalIndex(BaseHTTPRequestHandler):
-            def do_GET(self):
-                path = urlsplit(self.path).path
-                if path.startswith("/simple/"):
-                    package = path.strip("/").split("/")[-1]
-                    candidate = {"pool-alpha": cached, "pool-gamma": alpha, "pool-beta": beta}[package]
-                    checksum = hashlib.sha256(candidate.read_bytes()).hexdigest()
-                    body = (
-                        f'<a href="http://127.0.0.1:{self.server.server_port}/files/{candidate.name}'
-                        f'#sha256={checksum}">{candidate.name}</a>'
-                    ).encode()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html")
-                    self.send_header("Cache-Control", "max-age=3600")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                    return
-
-                filename = path.removeprefix("/files/")
-                candidate = {cached.name: cached, alpha.name: alpha, beta.name: beta}.get(filename)
-                if candidate is None:
-                    self.send_error(404)
-                    return
-                file_gets[filename] += 1
-                if filename == beta.name and fail_beta_once["value"]:
-                    fail_beta_once["value"] = False
-                    self.send_error(503)
-                    return
-                body = candidate.read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/octet-stream")
-                self.send_header("Cache-Control", "max-age=3600")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def log_message(self, *_args):
-                pass
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), LocalIndex)
-        thread = Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        self.addCleanup(thread.join)
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-
-        def local_pip(command, **kwargs):
-            if "download" not in command:
-                return real_run(command, **kwargs)
-            self.assertIn("--no-cache-dir", command)
-            self.assertEqual(str(self.pool), command[command.index("--dest") + 1])
-            rewritten = list(command)
-            index = rewritten.index("--index-url")
-            rewritten[index + 1] = f"http://127.0.0.1:{server.server_port}/simple"
-            rewritten[index + 2 : index + 2] = ["--trusted-host", "127.0.0.1", "--retries", "0"]
-            return real_run(rewritten, **kwargs)
-
-        with patch.object(wheelhouse.subprocess, "run", side_effect=local_pip):
-            with self.assertRaises(subprocess.CalledProcessError):
-                wheelhouse.populate_pool(lock, self.pool, inference=False)
-            self.assertEqual({cached.name: 0, alpha.name: 1, beta.name: 1}, file_gets)
-            self.assertFalse((self.pool / alpha.name).exists())
-            self.assertFalse((self.pool / beta.name).exists())
-            self.assertEqual([], list(self.pool.glob(".nmrnet-wheel-download-*")))
-
-            wheelhouse.populate_pool(lock, self.pool, inference=False)
-
-        self.assertEqual({cached.name: 0, alpha.name: 2, beta.name: 2}, file_gets)
-        self.assertEqual((cached.read_bytes(), cached.stat().st_ino), (cached_bytes, cached_inode))
-        self.assertEqual(alpha.read_bytes(), (self.pool / alpha.name).read_bytes())
-        self.assertEqual(beta.read_bytes(), (self.pool / beta.name).read_bytes())
+        self.assertEqual(b"conflicting source", source.read_bytes())

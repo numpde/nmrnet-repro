@@ -26,10 +26,13 @@ from zipfile import BadZipFile, ZipFile, is_zipfile
 from nmrnet_inference.predict import MAX_INPUT_BYTES
 from nmrnet_provider.input_geometry import InputRejected
 
+# ZIP discovery bounds the entry count before offering member selection.
+# repo-check: allow-module-constant
 MAX_MEMBERS = 4096
 # Smaller than SECS's discovery listing: NMRNet embeds this metadata in a
 # bounded interpreter request (the qualified profile admits 64 KiB total).
 # Preserve room for the Job, tool declarations and previous correction turns.
+# repo-check: allow-module-constant
 MAX_LISTING_BYTES = 16384
 
 

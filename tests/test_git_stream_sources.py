@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.git_stream_sources import source_allowlist
+from host.git_stream_sources import source_allowlist
 
 
 def record(name, content, executable=False):

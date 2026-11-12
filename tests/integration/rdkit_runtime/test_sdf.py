@@ -26,7 +26,7 @@ class SdfReaderNormativeTests(unittest.TestCase):
     def test_all_records_preserve_different_molecules_and_repeated_geometries(self):
         geometries = prepare_sdf(self.source, source_unit="angstrom", selection="all")
         identity = self.expected["native_files"]["normative/mixed_records.sdf"]
-        self.assertEqual((1, 2, 3), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual([1, 2, 3], [geometry.source_record_number for geometry in geometries])
         for geometry, name, positions in zip(geometries, identity["geometry_names"], identity["source_atom_ids"], strict=True):
             with self.subTest(record=geometry.source_record_number):
                 request = json.loads(geometry.request_bytes)
@@ -42,7 +42,7 @@ class SdfReaderNormativeTests(unittest.TestCase):
         with patch("nmrnet_provider.sdf.prepare_mol", wraps=prepare_mol) as reader:
             geometries = prepare_sdf(self.source, source_unit="angstrom", selection=(3, 1))
         self.assertEqual(2, reader.call_count)
-        self.assertEqual((3, 1), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual([3, 1], [geometry.source_record_number for geometry in geometries])
         self.assertTrue(all(geometry.source_sha256 == hashlib.sha256(self.source).hexdigest() for geometry in geometries))
 
     def test_supplied_carbon_conformers_do_not_gain_hydrogens_or_lose_coordinates(self):
@@ -75,14 +75,14 @@ class SdfReaderNormativeTests(unittest.TestCase):
     def test_delimiter_prefix_allows_suffix_text_but_not_leading_space(self):
         source = self.mol + b"> <VALUE>\n $$$$ opaque value\n\n$$$$ suffix\n" + self.mol + b"$$$$\n"
         geometries = prepare_sdf(source, source_unit="angstrom", selection=(2, 1))
-        self.assertEqual((2, 1), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual([2, 1], [geometry.source_record_number for geometry in geometries])
         self.assertEqual(geometries[0].request_bytes, geometries[1].request_bytes)
         self.assertTrue(all(geometry.source_sha256 == hashlib.sha256(source).hexdigest() for geometry in geometries))
 
     def test_128_records_are_read_without_redefining_the_bound_as_scientific_capacity(self):
         source = (self.mol + b"$$$$\n") * 128
         geometries = prepare_sdf(source, source_unit="angstrom", selection="all")
-        self.assertEqual(tuple(range(1, 129)), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual(list(range(1, 129)), [geometry.source_record_number for geometry in geometries])
 
     def test_source_byte_limit_is_inclusive_and_counts_opaque_data(self):
         prefix, suffix = self.mol + b"> <BOUND>\n", b"\n\n$$$$\n"
@@ -130,7 +130,7 @@ class SdfReaderAdversarialTests(unittest.TestCase):
     def test_unselected_invalid_and_v3000_records_never_reach_native_parser(self):
         invalid = (self.fixtures / "adversarial/invalid_last.sdf").read_bytes()
         geometries = prepare_sdf(invalid, source_unit="angstrom", selection=(3, 1))
-        self.assertEqual((3, 1), tuple(geometry.source_record_number for geometry in geometries))
+        self.assertEqual([3, 1], [geometry.source_record_number for geometry in geometries])
         source = self.source.replace(b"V2000", b"V3000", 1) + self.source
         with patch("nmrnet_provider.sdf.prepare_mol", wraps=prepare_mol) as reader:
             (geometry,) = prepare_sdf(source, source_unit="angstrom", selection=(2,))

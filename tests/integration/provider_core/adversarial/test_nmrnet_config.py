@@ -32,15 +32,20 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
             failure = FileNotFoundError("packaged offering is missing")
-            with patch.object(Path, "read_text", side_effect=failure):
-                with self.assertRaisesRegex(ConfigurationRejected, "packaged offering") as raised:
-                    load_provider_config(files.path)
+            with (
+                patch.object(Path, "read_text", side_effect=failure),
+                self.assertRaisesRegex(ConfigurationRejected, "packaged offering") as raised,
+            ):
+                load_provider_config(files.path)
             self.assertIs(raised.exception.cause, failure)
             self.assertFalse(files.state.exists())
 
     def test_live_limits_are_explicit_positive_integers_before_startup_effects(self):
-        for field, current in (("maximum_live_attempts", "2"), ("maximum_control_bytes", "262144"),
-                               ("maximum_pending_terminal_bytes", "4194304")):
+        for field, current in (
+            ("maximum_live_attempts", "2"),
+            ("maximum_control_bytes", "262144"),
+            ("maximum_pending_terminal_bytes", "4194304"),
+        ):
             for value in (None, "0", "-1", "true", '"64"'):
                 with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
                     files = ConfigFiles(directory)
@@ -51,7 +56,16 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     self.assertFalse(files.state.exists())
 
     def test_direct_execution_sources_refuse_invalid_grants_or_identities_without_publication(self):
-        for fault in ("missing", "linked", "empty_names", "duplicate_names", "escaping_name", "absolute_name", "oversized", "image", "revision"):
+        for fault in (
+            "missing",
+            "linked",
+            "empty_names",
+            "duplicate_names",
+            "escaping_name",
+            "absolute_name",
+            "image",
+            "revision",
+        ):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
                 source_root, names = execution_source_files(directory)
                 destination = Path(directory) / "declaration"
@@ -77,22 +91,22 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     names = ("../private-source",)
                 elif fault == "absolute_name":
                     names = (str(source),)
-                elif fault == "oversized":
-                    source.write_bytes(b"x" * (1048576 + 1))
                 elif fault == "image":
                     identities["image_id"] = "mutable:latest"
                 else:
                     identities["repository_revision"] = "invalid-revision"
                 with self.assertRaises((ConfigurationRejected, OSError)):
                     capture_execution(source_root, destination, names, **identities)
-                self.assertEqual(list(destination.iterdir()), [])
+                self.assertEqual([], list(destination.iterdir()))
 
     def test_authority_admission_keeps_canonical_url_refusal_for_explicit_default_ports(self):
         for role in ("model", "store"):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
                 files = ConfigFiles(Path(directory))
                 if role == "model":
-                    files.endpoint.write_text(files.endpoint.read_text().replace("https://model.example", "https://model.example:443"))
+                    files.endpoint.write_text(
+                        files.endpoint.read_text().replace("https://model.example", "https://model.example:443")
+                    )
                 else:
                     files.write(files.raw.replace(f"https://{role}.example".encode(), f"https://{role}.example:443".encode()))
                 with self.assertRaisesRegex(ConfigurationRejected, "canonical"):
@@ -315,7 +329,7 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                         load_provider_config(files.path)
                     self.assertNotIn("PRIVATE_MODEL_KEY", str(caught.exception))
             files.key.write_bytes(b"PRIVATE_MODEL_KEY\r\n")
-            self.assertEqual(load_provider_config(files.path).interpreter.endpoints[0].spec.api_key, "PRIVATE_MODEL_KEY")
+            self.assertEqual("PRIVATE_MODEL_KEY", load_provider_config(files.path).interpreter.endpoints[0].spec.api_key)
 
     def test_ambient_trust_overrides_cannot_change_configured_trust(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -91,13 +91,16 @@ test/integration/rdkit-runtime:
 
 override export NMRNET_ACQUISITION_ARCHIVE_INPUT := $(if $(filter command line,$(origin ACQUISITION_ARCHIVE)),$(value ACQUISITION_ARCHIVE))
 unexport ACQUISITION_ARCHIVE
+override export NMRNET_ACQUISITION_ISSUER_INPUT := $(if $(filter command line,$(origin ACQUISITION_ISSUER)),$(value ACQUISITION_ISSUER))
+unexport ACQUISITION_ISSUER
 
 packages/acquisition-bootstrap/check:
-	python3 -B tools/acquisition_bootstrap.py
+	python3 -B host/acquisition_bootstrap.py --root "$(CURDIR)"
 
 packages/acquisition-bootstrap/refresh:
 	@test -n "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ARCHIVE=<release archive> on the make command line.' >&2; exit 2; }
-	python3 -B tools/acquisition_bootstrap.py --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT"
+	@test -n "$$NMRNET_ACQUISITION_ISSUER_INPUT" || { printf '%s\n' 'Pass ACQUISITION_ISSUER=<incoming release record> on the make command line.' >&2; exit 2; }
+	python3 -B host/acquisition_bootstrap.py --root "$(CURDIR)" --archive "$$NMRNET_ACQUISITION_ARCHIVE_INPUT" --issuer "$$NMRNET_ACQUISITION_ISSUER_INPUT"
 
 packages/images/retire:
 	bash tools/image_retirement.sh
@@ -263,7 +266,11 @@ override export NMRNET_EXECUTION_ATTEMPT_REF_INPUT := $(if $(filter command line
 override export NMRNET_BODY_SHA256_INPUT := $(if $(filter command line,$(origin BODY_SHA256)),$(value BODY_SHA256))
 override export NMRNET_JOB_RECEIPT_INPUT := $(if $(filter command line,$(origin JOB_RECEIPT)),$(value JOB_RECEIPT))
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
-override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
+ifeq ($(origin LOG_LEVEL),command line)
+override export NMRNET_LOG_LEVEL_INPUT := $(value LOG_LEVEL)
+else
+unexport NMRNET_LOG_LEVEL_INPUT
+endif
 unexport LOCAL_NETWORK LOCAL_INTERFACE EXTERNAL_INTERFACE RESOLVERS
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
@@ -296,6 +303,9 @@ override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(
 help:
 	@printf '%s\n' \
 		'make help                              List maintained commands; also the default goal.' \
+		'make packages/acquisition-bootstrap/check Verify the pinned acquisition bootstrap snapshot.' \
+		'make packages/acquisition-bootstrap/refresh ACQUISITION_ARCHIVE=<path> ACQUISITION_ISSUER=<path> Refresh the bootstrap from a release.' \
+		'make packages/provider-core/test-support/check Verify the shared provider test-support wheels.' \
 		'Every Docker-using command needs DOCKER_CONTEXT=<name> on the make command line, or an interactive local Unix-socket context selection.' \
 		'Without a command-line context, unattended Docker commands fail; no current/default context is assumed.' \
 		'make test                              Run the offline unit and repository suites.' \
@@ -373,6 +383,7 @@ help:
 		'make test/repository/native-images     Check scientific image source/wheel capture and exact metadata admission offline.' \
 		'make test/integration/provider-core/compose WHEELHOUSE=<path> Check fixed Compose deployment grants and role profiles offline.' \
 		'make test/repository/operator-inputs   Check literal selectors, Docker context selection and image inspection admission offline.' \
+		'make test/repository/acquisition      Check acquisition adapters, verified snapshots and engine fixtures offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
@@ -445,7 +456,7 @@ provider/prepare:
 .PHONY: provider/deployment/retire-generations provider/deployment/retire-api-route
 .PHONY: test/integration/provider/deployment
 test/integration/provider/deployment:
-	bash tools/compose_qualification.sh
+	bash tools/compose_qualification.sh pasted
 
 .PHONY: test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery
 test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:
@@ -537,6 +548,10 @@ test/unit/baseline-launcher:
 
 test/repository:
 	bash tools/container.sh test/repository
+
+.PHONY: test/repository/acquisition
+test/repository/acquisition:
+	bash tools/container.sh $@
 
 test/probe:
 	bash tools/container.sh probe

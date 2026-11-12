@@ -3,16 +3,18 @@
 import hashlib
 import json
 from dataclasses import replace
+from unittest.mock import create_autospec
 
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.xyz import prepare_xyz
 from nmrnet_provider.interpreter import InputInterpreter
+from nmrnet_provider.xyz import prepare_xyz
 from provider_core.attempt_record import acknowledge_start
 from provider_core.chat import ChatEndpoint, ChatEndpointSpec
+from provider_core.interpreter import EndpointFactory
 from provider_core.job_input import verify_job_input
 from provider_core.transport import HttpTransport
 from provider_core.uploads import VerifiedUpload
@@ -56,6 +58,7 @@ def tool_reply(identifier, name, arguments):
     return json.dumps({"choices": [{"message": message, "finish_reason": "tool_calls"}]}).encode()
 
 
+# silent-defaults: allow-contract -- Ordinary HTTPS chat witnesses use one fixture identity, a 64 KiB request ceiling and a one-second exchange bound; endpoint-order, request-limit and slower-exchange cases override these inputs.
 def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_seconds=1):
     return ChatEndpoint(
         ChatEndpointSpec(
@@ -73,8 +76,13 @@ def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_s
 
 def fixture_interpreter(endpoints, *, timeout_seconds, on_endpoint_failure=None):
     """Give each scripted visit its own preconstructed fixture carrier."""
-    factories = tuple((lambda *, exchange_seconds, connect_seconds, endpoint=endpoint: endpoint)
-                      for endpoint in endpoints)
-    return InputInterpreter(factories, timeout_seconds=timeout_seconds, context_bytes=60000,
-                            secrets=tuple(endpoint.spec.api_key for endpoint in endpoints),
-                            on_endpoint_failure=on_endpoint_failure)
+    # repo-check: allow-tuple-generator -- The released Interpreter rejects factory collections that are not tuples; proof=provider_core/interpreter.py::Interpreter.__init__.
+    factories = tuple(create_autospec(EndpointFactory, instance=True, return_value=endpoint) for endpoint in endpoints)
+    return InputInterpreter(
+        factories,
+        timeout_seconds=timeout_seconds,
+        context_bytes=60000,
+        # repo-check: allow-tuple-generator -- The released Interpreter rejects secret collections that are not tuples; proof=provider_core/interpreter.py::Interpreter.__init__.
+        secrets=tuple(endpoint.spec.api_key for endpoint in endpoints),
+        on_endpoint_failure=on_endpoint_failure,
+    )

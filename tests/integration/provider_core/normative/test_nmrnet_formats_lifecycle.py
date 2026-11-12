@@ -12,15 +12,14 @@ from unittest.mock import AsyncMock, Mock
 from tests.fakes.job_input import facts, response
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF
-from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatFixture
 from tests.integration.nmrnet.config_ports import ConfigFiles
-from tests.integration.nmrnet.interpreter_ports import chat_endpoint
+from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatFixture
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.smiles_ports import InputPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
-from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.config import load_provider_config
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
+from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.pdb import prepare_pdb
 from nmrnet_provider.process_reports import failure_evidence
 from provider_core.job_input import verify_job_input
@@ -90,15 +89,15 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
                 self.fail(json.dumps(failure_evidence(cause, secrets=("PRIVATE_MODEL_KEY",))))
             finally:
                 await owner.retire()
-        self.assertEqual(len(identifiers), 3)
-        self.assertEqual(len(set(identifiers)), 3)
-        self.assertEqual(readers[0].read.call_args.kwargs["selection"], "all")
-        self.assertEqual(readers[1].read.call_args.kwargs["selection"], (3, 1))
+        self.assertEqual(3, len(identifiers))
+        self.assertEqual(3, len(set(identifiers)))
+        self.assertEqual("all", readers[0].read.call_args.kwargs["selection"])
+        self.assertEqual((3, 1), readers[1].read.call_args.kwargs["selection"])
         self.assertEqual([item.source_record_number for item in prepared.geometries], [3, 1])
         self.assertTrue(all(host.confirmed for host in hosts))
         ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
         ports.allocate_reader.assert_awaited()
-        self.assertEqual(ports.allocate_reader.await_count, 2)
+        self.assertEqual(2, ports.allocate_reader.await_count)
 
     async def test_actual_config_keeps_one_call_normally_and_two_for_correction_cases(self):
         for name, expected in (("json", 1), ("sdf-correction", 2), ("pdb-alternate", 2)):
@@ -133,8 +132,7 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
                         )
 
                     readers = [
-                        SimpleNamespace(read=AsyncMock(side_effect=read), close=Mock(), wait_closed=AsyncMock())
-                        for _ in range(2)
+                        SimpleNamespace(read=AsyncMock(side_effect=read), close=Mock(), wait_closed=AsyncMock()) for _ in range(2)
                     ]
                     hosts = [HostOwner(), HostOwner()]
                     for host in hosts:
@@ -155,8 +153,8 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
                     owner = ports.owner(choose, max_worker_calls=settings.max_worker_calls, seconds=settings.seconds)
                     self.addAsyncCleanup(owner.retire)
                     prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
-                    self.assertEqual(len(prepared.geometries), 1)
-                    self.assertEqual(ports.allocate_reader.await_count, 2)
+                    self.assertEqual(1, len(prepared.geometries))
+                    self.assertEqual(2, ports.allocate_reader.await_count)
                     ports.uploads.acquire.assert_awaited_once()
                     for reader, host in zip(readers, hosts, strict=True):
                         reader.read.assert_awaited_once()
@@ -170,10 +168,10 @@ class SuppliedFormatFixtureTests(unittest.TestCase):
         fixture.fixture_root = Path("/fixtures/preparation")
         fixture.format_case = "sdf-carbon-only"
         fixture.load_case()
-        self.assertEqual(fixture.relative_source, "normative/butane_conformers.sdf")
-        self.assertEqual(fixture.expected_records, (1, 2))
-        self.assertEqual(fixture.expected_positions, ((1, 2, 3, 4), (1, 2, 3, 4)))
-        self.assertEqual(fixture.reader_options["selection"], "all")
+        self.assertEqual("normative/butane_conformers.sdf", fixture.relative_source)
+        self.assertEqual((1, 2), fixture.expected_records)
+        self.assertEqual(((1, 2, 3, 4), (1, 2, 3, 4)), fixture.expected_positions)
+        self.assertEqual("all", fixture.reader_options["selection"])
         self.assertEqual([geometry["atoms"] for geometry in fixture.expected], [["C"] * 4, ["C"] * 4])
         self.assertNotEqual(fixture.expected[0]["coordinates_angstrom"], fixture.expected[1]["coordinates_angstrom"])
         self.assertEqual((fixture.expected_preparation_calls, fixture.expected_model_calls), (1, 2))
@@ -218,14 +216,14 @@ class SuppliedFormatFixtureTests(unittest.TestCase):
                         },
                     )
                 if name in ("xyz", "pdb-models", "mol2"):
-                    self.assertEqual(fixture.expected_records, (2, 1))
+                    self.assertEqual((2, 1), fixture.expected_records)
                 if name == "sdf-correction":
-                    self.assertEqual(fixture.expected_records, (3, 1))
-                    self.assertEqual(fixture.relative_source, "adversarial/invalid_last.sdf")
+                    self.assertEqual((3, 1), fixture.expected_records)
+                    self.assertEqual("adversarial/invalid_last.sdf", fixture.relative_source)
                 if name == "pdb-alternate":
-                    self.assertEqual(fixture.expected_positions, ((40, 7, 23, 5, 91),))
-                    self.assertEqual(fixture.expected[0]["coordinates_angstrom"][2], [0.125, 0, 0])
-                    self.assertEqual(fixture.reader_options["alternate_location"], "B")
+                    self.assertEqual(((40, 7, 23, 5, 91),), fixture.expected_positions)
+                    self.assertEqual([0.125, 0, 0], fixture.expected[0]["coordinates_angstrom"][2])
+                    self.assertEqual("B", fixture.reader_options["alternate_location"])
         self.assertEqual(counts, [1, 1, 2, 1, 3, 2, 2, 1, 2, 2])
         self.assertEqual(formats, {"json", "table", "xyz", "mol", "sdf", "pdb", "mol2"})
         self.assertEqual(reader_calls, 12)

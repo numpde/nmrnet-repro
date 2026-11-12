@@ -2,8 +2,8 @@
 
 import unittest
 
-from tests.integration.nmrnet.reference_fixtures import require_capacity_inputs
 from tests.integration.nmrnet.normative.test_nmrnet_capacity_lifecycle import capacity_manifest
+from tests.integration.nmrnet.reference_fixtures import require_capacity_inputs
 
 
 class CapacityInputRefusalTests(unittest.TestCase):

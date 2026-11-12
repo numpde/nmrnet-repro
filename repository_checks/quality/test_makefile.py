@@ -12,7 +12,9 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 from .makefile import make_define_body, make_invocation_owners, make_target_body
 from .sources import REPOSITORY_ROOT
@@ -135,11 +137,11 @@ class MakeHelpTests(unittest.TestCase):
     def test_literal_help_commands_name_make_targets(self) -> None:
         makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
         help_recipe = make_target_body(makefile, "help")
-        literal_targets = set(re.findall(r"\bmake ([a-z0-9][a-z0-9/-]*)(?=\s|')", help_recipe))
+        literal_targets = set(re.findall(r"'make ([a-z0-9][a-z0-9/-]*)(?=\s|')", help_recipe))
         self.assertTrue(literal_targets)
         for target in sorted(literal_targets):
             with self.subTest(target=target):
-                self.assertRegex(makefile, rf"(?m)^{re.escape(target)}:")
+                self.assertRegex(makefile, rf"(?m)^(?:[a-z0-9][a-z0-9/-]*\s+)*{re.escape(target)}(?:\s+[a-z0-9][a-z0-9/-]*)*:")
 
 
 class MakeRecipeOwnershipTests(unittest.TestCase):
@@ -147,6 +149,10 @@ class MakeRecipeOwnershipTests(unittest.TestCase):
         self.make = shutil.which("make")
         if self.make is None:
             self.fail("make must be installed in the repository-check image")
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.fixture_bin = Path(directory.name)
+        (self.fixture_bin / "docker").symlink_to(REPOSITORY_ROOT / "repository_checks/fixtures/containers/docker.py")
 
     def test_recipe_macros_ignore_makeflags_assignments(self) -> None:
         makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
@@ -201,9 +207,11 @@ class MakeRecipeOwnershipTests(unittest.TestCase):
         makeflags: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
+        environment["PATH"] = str(self.fixture_bin) + ":" + environment["PATH"]
+        environment["PYTHONPATH"] = str(REPOSITORY_ROOT)
         if makeflags is not None:
             environment["MAKEFLAGS"] = makeflags
-        command = [self.make, "--no-print-directory", "--dry-run"]
+        command = [self.make, "--no-print-directory", "--dry-run", "DOCKER_CONTEXT=fixture-local"]
         if target is not None:
             command.append(target)
         return subprocess.run(

@@ -10,8 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nmrnet_provider import native_child, worker_main
 from tests.unit.normative.test_worker_main import COMMON
+
+from nmrnet_provider import native_child, worker_main
 
 
 class RunnerProfileRefusalTests(unittest.TestCase):

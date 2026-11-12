@@ -5,9 +5,9 @@ import unittest
 from dataclasses import asdict
 from unittest.mock import patch
 
+from tests.fakes.api_tls import verify_signed_request
 from tests.integration.nmrnet.admission_ports import AdmissionPeers, feed_response
 from tests.integration.nmrnet.smiles_ports import SessionPorts
-from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionPolicy, select_pending_start
 from nmrnet_provider.runtime import assemble_attempt
@@ -33,8 +33,8 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(body["job_ref"], ports.instructions.identity.job_ref)
             self.assertRegex(body["provider_attempt_key"], r"^[0-9a-f]{32}$")
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            self.assertEqual(ports.worker.events, [])
-            self.assertEqual(fixture.request_paths, ["/provider/v1/jobs"])
+            self.assertEqual([], ports.worker.events)
+            self.assertEqual(["/provider/v1/jobs"], fixture.request_paths)
             self.assertIn(b"has_provider_execution_attempt=false", fixture.api_peer.requests[0])
             for request, raw in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True):
                 self.assertEqual(raw, b"")
@@ -49,7 +49,7 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(checkpoint_acknowledgement(outcome).start, pending)
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
             self.assertTrue(ports.host.confirmed)
-            self.assertEqual(ports.worker.events.count("execute"), 1)
+            self.assertEqual(1, ports.worker.events.count("execute"))
 
     async def test_selection_uses_first_server_row_even_when_not_lexically_first(self):
         ports = SessionPorts()
@@ -66,12 +66,14 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                     next_cursor="Yg",
                 ),
             ]
-            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, claims=fixture.claims)
-            self.assertEqual(selected.input.job_ref, "job:z")
-            self.assertEqual(json.loads(selected.body)["job_ref"], "job:z")
-            self.assertEqual(len(fixture.api_peer.requests), 2)
+            selected = await select_pending_start(
+                fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self, claims=fixture.claims
+            )
+            self.assertEqual("job:z", selected.input.job_ref)
+            self.assertEqual("job:z", json.loads(selected.body)["job_ref"])
+            self.assertEqual(2, len(fixture.api_peer.requests))
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             await ports.session.retire()
 
     async def test_complete_empty_feed_is_idle_and_each_selection_starts_a_fresh_walk(self):
@@ -86,11 +88,13 @@ class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
                 "nmrnet_provider.admission.secrets.token_hex",
                 side_effect=AssertionError("Empty discovery must create no start key"),
             ):
-                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims))
+                self.assertIsNone(
+                    await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims)
+                )
             fixture.feed_replies = None
             selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self, claims=fixture.claims)
             self.assertEqual(selected.input, ports.instructions.identity)
             self.assertNotIn(b"cursor=", fixture.api_peer.requests[2])
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             await ports.session.retire()

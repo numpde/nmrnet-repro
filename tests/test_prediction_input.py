@@ -34,8 +34,9 @@ def encoded_request(**changes):
 
 
 class PredictionDictionary:
-    symbols = ["<s>", "<pad>", "</s>", "<unk>", "C", "H", "O", "N"]
-    indices = {symbol: index for index, symbol in enumerate(symbols)} | {"Xe": 3}
+    def __init__(self):
+        self.symbols = ["<s>", "<pad>", "</s>", "<unk>", "C", "H", "O", "N"]
+        self.indices = {symbol: index for index, symbol in enumerate(self.symbols)} | {"Xe": 3}
 
     def unk(self):
         return 3
@@ -88,53 +89,45 @@ class PredictionInputTests(unittest.TestCase):
                 atoms=atoms,
                 coordinates=[[0.0, 0.0, 0.0]] * len(atoms),
             )
-            with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, qualified_units):
-                with self.assertRaisesRegex(
+            with (
+                mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, qualified_units),
+                self.assertRaisesRegex(
                     RuntimeError,
                     f"{unqualified_element} prediction: model coordinate unit has not been qualified",
-                ):
-                    self.parse(raw)
+                ),
+            ):
+                self.parse(raw)
 
         raw = encoded_request(coordinate_unit="angstrom")
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
-        ):
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}):
             self.assertEqual("angstrom", self.parse(raw)["coordinate_unit"])
 
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}):
-            with self.assertRaisesRegex(ValueError, "coordinate_unit does not match the qualified model unit"):
-                self.parse(raw)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}),
+            self.assertRaisesRegex(ValueError, "coordinate_unit does not match the qualified model unit"),
+        ):
+            self.parse(raw)
 
     def test_context_atoms_do_not_select_heads_or_hide_a_present_head(self):
         context_only = encoded_request(atoms=["N"], coordinates=[[0.0, 0.0, 0.0]])
         self.assertEqual(["N"], self.parse(context_only)["atoms"])
 
-        carbon_with_context = encoded_request(
-            atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
-        )
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}
+        carbon_with_context = encoded_request(atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}),
+            self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
-                self.parse(carbon_with_context)
+            self.parse(carbon_with_context)
 
     def test_different_head_units_only_admit_matching_single_head_requests(self):
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "nm"}
-        ):
-            hydrogen = encoded_request(
-                coordinate_unit="angstrom", atoms=["H"], coordinates=[[0.0, 0.0, 0.0]]
-            )
-            carbon = encoded_request(
-                coordinate_unit="nm", atoms=["C"], coordinates=[[0.0, 0.0, 0.0]]
-            )
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "nm"}):
+            hydrogen = encoded_request(coordinate_unit="angstrom", atoms=["H"], coordinates=[[0.0, 0.0, 0.0]])
+            carbon = encoded_request(coordinate_unit="nm", atoms=["C"], coordinates=[[0.0, 0.0, 0.0]])
             self.assertEqual("angstrom", self.parse(hydrogen)["coordinate_unit"])
             self.assertEqual("nm", self.parse(carbon)["coordinate_unit"])
 
             combined = encoded_request(coordinate_unit="angstrom")
-            with self.assertRaisesRegex(
-                ValueError, "C prediction: coordinate_unit does not match the qualified model unit"
-            ):
+            with self.assertRaisesRegex(ValueError, "C prediction: coordinate_unit does not match the qualified model unit"):
                 self.parse(combined)
 
     def test_non_angstrom_model_input_blocks_tensor_composition(self):
@@ -154,16 +147,12 @@ class PredictionInputTests(unittest.TestCase):
                 prediction_model.compose_net_input(request, object(), "C")
 
             request["coordinate_unit"] = "angstrom"
-            with self.assertRaisesRegex(
-                ValueError, "H prediction: coordinate_unit does not match the qualified model unit"
-            ):
+            with self.assertRaisesRegex(ValueError, "H prediction: coordinate_unit does not match the qualified model unit"):
                 prediction_model.compose_net_input(request, object(), "H")
 
     def test_valid_request_preserves_atom_order_and_float32_coordinates(self):
         raw = encoded_request()
-        with mock.patch.dict(
-            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
-        ):
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}):
             parsed = self.parse(raw)
         self.assertEqual(["C", "H"], parsed["atoms"])
         self.assertEqual(1.090000033378601, parsed["coordinates"][1][0])
@@ -215,11 +204,7 @@ class PredictionInputTests(unittest.TestCase):
             self.parse(raw)
 
     def test_integer_digit_limit_has_an_input_diagnostic(self):
-        raw = (
-            b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[['
-            + b"9" * 5000
-            + b",0,0]]}"
-        )
+        raw = b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[' + b"9" * 5000 + b",0,0]]}"
         with self.assertRaisesRegex(ValueError, "integer literal exceeds the supported digit limit"):
             self.parse(raw)
 
@@ -270,12 +255,16 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
 """
         environment = os.environ.copy()
         environment.pop("NMRNET_IN_CONTAINER", None)
-        result = subprocess.run([sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True, check=False
+        )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("maintained Make target", result.stderr)
 
         environment["NMRNET_IN_CONTAINER"] = "1"
-        result = subprocess.run([sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True)
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True, check=False
+        )
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_non_angstrom_request_rejects_before_any_model_artifact_load(self):
@@ -316,9 +305,11 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         load_element = mock.Mock()
         raw = encoded_request(atoms=["C", "Xe"], coordinates=[[0, 0, 0], [1, 0, 0]])
 
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"C": "angstrom"}):
-            with self.assertRaisesRegex(ValueError, "no dedicated token.*input index 1"):
-                predict.predict_request(raw, load_dictionary, load_element)
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"C": "angstrom"}),
+            self.assertRaisesRegex(ValueError, "no dedicated token.*input index 1"),
+        ):
+            predict.predict_request(raw, load_dictionary, load_element)
 
         load_dictionary.assert_called_once_with()
         load_element.assert_not_called()
@@ -343,7 +334,8 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         def run_element(request, element, model, dictionary, scaler):
             events.append(("predict", element))
             self.assertEqual((element, dictionary, f"{element}-scaler"), (model, dictionary, scaler))
-            indices = tuple(index for index, atom in enumerate(request["atoms"]) if atom == element)
+            indices = [index for index, atom in enumerate(request["atoms"]) if atom == element]
+            # repo-check: allow-tuple-generator -- This prediction port preserves the real predictor's immutable atom-indexed row result; proof=nmrnet_inference/model.py::predict_composed_element.
             return tuple((index, float(index + 1)) for index in indices)
 
         with (
@@ -388,9 +380,9 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         with (
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch.object(prediction_model, "predict_element", side_effect=run_element),
+            self.assertRaisesRegex(RuntimeError, "injected C model failure"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "injected C model failure"):
-                predict.predict_request(raw, load_dictionary, load_element)
+            predict.predict_request(raw, load_dictionary, load_element)
 
         self.assertEqual(
             [("dictionary",), ("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")],
@@ -458,7 +450,7 @@ class PredictionSessionTests(unittest.TestCase):
         self.assertIs(caught.exception, cause)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(handle)
-        self.assertEqual(loader.call_count, 2)
+        self.assertEqual(2, loader.call_count)
 
     def test_preparation_owns_current_handle_and_loads_no_model(self):
         dictionary = PredictionDictionary()
@@ -468,13 +460,13 @@ class PredictionSessionTests(unittest.TestCase):
             first = session.prepare((encoded_request(),))
             second = session.prepare((encoded_request(),))
         loader.assert_not_called()
-        self.assertEqual(compose.call_count, 4)
+        self.assertEqual(4, compose.call_count)
         for invalid in (None, object(), first):
             with self.assertRaisesRegex(ValueError, "current prepared"):
                 session.execute(invalid)
         with mock.patch.object(prediction_model, "predict_composed_element", return_value=()):
-            self.assertEqual(tuple(session.execute(second)), ({"unit": "ppm", "predictions": []},))
-        self.assertEqual(loader.call_count, 2)
+            self.assertEqual(({"unit": "ppm", "predictions": []},), tuple(session.execute(second)))
+        self.assertEqual(2, loader.call_count)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(second)
         with self.assertRaisesRegex(ValueError, "already entered execution"):
@@ -595,7 +587,9 @@ class SelectedReleaseTests(unittest.TestCase):
         self.specification["dictionary"] = {**dictionary_source, **dictionary}
         for element in ("H", "C"):
             self.specification["elements"][element] = {
-                role: self.add_member("checkpoints", self.specification["checkpoint_archive"], f"{element}/{role}", (element + role).encode())
+                role: self.add_member(
+                    "checkpoints", self.specification["checkpoint_archive"], f"{element}/{role}", (element + role).encode()
+                )
                 for role in ("checkpoint", "scaler")
             }
         self.declaration.write_text(json.dumps(self.specification))
@@ -624,8 +618,9 @@ class SelectedReleaseTests(unittest.TestCase):
         self.declaration.write_text("{}")
         self.assertIs(self.loader._selection(), selected)
         self.assertEqual(self.loader.declaration_sha256, hashlib.sha256(original).hexdigest())
-        replacement = SelectedReleaseModels(declaration_path=self.declaration,
-                                             weight_root=self.root / "weight", checkpoint_root=self.root / "checkpoints")
+        replacement = SelectedReleaseModels(
+            declaration_path=self.declaration, weight_root=self.root / "weight", checkpoint_root=self.root / "checkpoints"
+        )
         replacement._selection()
         self.assertNotEqual(replacement.declaration_sha256, self.loader.declaration_sha256)
 
@@ -643,15 +638,19 @@ class SelectedReleaseTests(unittest.TestCase):
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
             mock.patch.object(prediction_model, "load_prediction_model_from_bytes") as decoder,
+            self.assertRaisesRegex(ValueError, "no dedicated token"),
         ):
-            with self.assertRaisesRegex(ValueError, "no dedicated token"):
-                predict.predict_request(
-                    encoded_request(atoms=["H", "Xe"]), self.loader.load_dictionary, self.loader.load_selected_element
-                )
+            predict.predict_request(
+                encoded_request(atoms=["H", "Xe"]), self.loader.load_dictionary, self.loader.load_selected_element
+            )
         decoder.assert_not_called()
 
     def test_altered_member_and_matching_receipt_cannot_replace_declared_bytes(self):
-        for tree, role, name in (("weight", "dictionary", "weight/dict.txt"), ("checkpoints", "checkpoint", "H/checkpoint"), ("checkpoints", "scaler", "H/scaler")):
+        for tree, role, name in (
+            ("weight", "dictionary", "weight/dict.txt"),
+            ("checkpoints", "checkpoint", "H/checkpoint"),
+            ("checkpoints", "scaler", "H/scaler"),
+        ):
             with self.subTest(role=role):
                 source = self.receipts[tree]
                 original = (self.root / tree / name).read_bytes()
@@ -698,13 +697,13 @@ class SelectedReleaseTests(unittest.TestCase):
             mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
             mock.patch.object(prediction_model, "load_prediction_model_from_bytes", side_effect=error) as decoder,
             mock.patch.object(prediction_model, "load_scaler_from_bytes") as scaler_decoder,
+            self.assertRaises(RuntimeError) as raised,
         ):
-            with self.assertRaises(RuntimeError) as raised:
-                predict.predict_request(
-                    encoded_request(atoms=["H", "O"]), self.loader.load_dictionary, self.loader.load_selected_element
-                )
+            predict.predict_request(
+                encoded_request(atoms=["H", "O"]), self.loader.load_dictionary, self.loader.load_selected_element
+            )
         self.assertIs(raised.exception, error)
-        self.assertEqual(decoder.call_args.args[0], b"Hcheckpoint")
+        self.assertEqual(b"Hcheckpoint", decoder.call_args.args[0])
         scaler_decoder.assert_not_called()
 
     def test_observed_artifacts_are_decoded_members_not_the_whole_selection(self):
@@ -718,7 +717,7 @@ class SelectedReleaseTests(unittest.TestCase):
             self.loader.load_selected_element("H", dictionary)
         observed = self.loader.observed_artifacts()
         self.assertEqual(observed["dictionary"]["sha256"], self.specification["dictionary"]["sha256"])
-        self.assertEqual(set(observed["elements"]), {"H"})
+        self.assertEqual({"H"}, set(observed["elements"]))
         self.assertEqual(observed["elements"]["H"]["checkpoint"]["archive_sha256"], "a" * 64)
         self.assertEqual(observed["elements"]["H"]["scaler"]["sha256"], self.specification["elements"]["H"]["scaler"]["sha256"])
         observed["elements"]["H"]["scaler"]["sha256"] = "changed"
@@ -733,7 +732,7 @@ class SelectedReleaseTests(unittest.TestCase):
         ):
             self.loader.load_selected_element("C", PredictionDictionary())
         self.assertIs(raised.exception, failure)
-        self.assertEqual(self.loader.observed_artifacts()["elements"], {})
+        self.assertEqual({}, self.loader.observed_artifacts()["elements"])
 
     def test_scaler_warning_is_retained_and_emitted_without_overriding_policy(self):
         def decode(_content):
@@ -755,9 +754,9 @@ class SelectedReleaseTests(unittest.TestCase):
                 observed = self.loader.observed_warnings()
                 self.assertEqual(len(observed) - before, expected_count)
                 if expected_count:
-                    self.assertEqual(observed[-1]["message"], "scaler compatibility observation")
-                    self.assertEqual(observed[-1]["category"], "builtins.UserWarning")
-                    self.assertEqual(observed[-1]["head"], "H")
+                    self.assertEqual("scaler compatibility observation", observed[-1]["message"])
+                    self.assertEqual("builtins.UserWarning", observed[-1]["category"])
+                    self.assertEqual("H", observed[-1]["head"])
                     self.assertIsNone(observed[-1]["versions"])
                     observed[-1]["message"] = "changed"
                     self.assertNotEqual(self.loader.observed_warnings()[-1]["message"], "changed")
@@ -779,8 +778,8 @@ class SelectedReleaseTests(unittest.TestCase):
                 self.loader.load_selected_element("C", PredictionDictionary())
             self.assertIs(raised.exception, warning)
             self.assertIs(warnings.showwarning, hook)
-        self.assertEqual(self.loader.observed_artifacts()["elements"], {})
-        self.assertEqual(self.loader.observed_warnings(), [])
+        self.assertEqual({}, self.loader.observed_artifacts()["elements"])
+        self.assertEqual([], self.loader.observed_warnings())
 
     def test_scaler_versions_are_captured_from_attributes_not_message_text(self):
         warning_type = type("InconsistentVersionWarning", (UserWarning,), {"__module__": "sklearn.exceptions"})
@@ -800,9 +799,9 @@ class SelectedReleaseTests(unittest.TestCase):
             ):
                 self.loader.load_selected_element("C", PredictionDictionary())
         observed = self.loader.observed_warnings()
-        self.assertEqual(observed[0]["head"], "C")
-        self.assertEqual(observed[0]["versions"], {"original": "1.5.2", "current": "1.8.0"})
-        self.assertEqual(observed[0]["message"], "private unstructured prose")
+        self.assertEqual("C", observed[0]["head"])
+        self.assertEqual({"original": "1.5.2", "current": "1.8.0"}, observed[0]["versions"])
+        self.assertEqual("private unstructured prose", observed[0]["message"])
 
     def test_default_warning_suppression_survives_repeated_loads(self):
         def decode(_content):
@@ -817,8 +816,8 @@ class SelectedReleaseTests(unittest.TestCase):
             ):
                 for element in ("H", "C"):
                     self.loader.load_selected_element(element, PredictionDictionary())
-        self.assertEqual(len(emitted), 1)
-        self.assertEqual(len(self.loader.observed_warnings()), 1)
+        self.assertEqual(1, len(emitted))
+        self.assertEqual(1, len(self.loader.observed_warnings()))
 
     def test_missing_runtime_metadata_cannot_enter_model_execution(self):
         session = ReleasedPredictionSession(self.loader)

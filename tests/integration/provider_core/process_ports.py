@@ -14,20 +14,19 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers
-from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.api_tls import api_tls_peer, verify_signed_request
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import job, page
 from tests.integration.nmrnet.config_ports import ConfigFiles
 from tests.integration.nmrnet.runtime_ports import HELD_FIXTURES, RuntimePeers
 from tests.integration.nmrnet.smiles_ports import InputPorts
-from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.config import load_provider_config
 from provider_core.delivery_store import QueueLimits
-from provider_core.shared_delivery_ipc import SharedDeliverySocket
-from provider_core.shared_delivery_service import SharedDeliveryService
 from provider_core.lifetime import ProviderLifetime
 from provider_core.provider_proxy import ServicePolicy, ServiceProxyServer
+from provider_core.shared_delivery_ipc import SharedDeliverySocket
+from provider_core.shared_delivery_service import SharedDeliveryService
 
 
 class JoinedServiceProxy(ServiceProxyServer):
@@ -109,10 +108,13 @@ class ProcessPeers:
         self.config.delivery.endpoint.socket_path.parent.chmod(0o710)
         endpoint = self.config.delivery.endpoint
         self.relay = SharedDeliveryService(
-            relay_root, limits=QueueLimits(8, 16777216, 8, 16777216),
+            relay_root,
+            limits=QueueLimits(8, 16777216, 8, 16777216),
             socket=SharedDeliverySocket(endpoint.socket_path, endpoint.socket_group_id),
-            proxy_socket=self.root / "proxy.sock", request_seconds=2,
-            retry_initial_seconds=0.01, retry_max_seconds=0.1,
+            proxy_socket=self.root / "proxy.sock",
+            request_seconds=2,
+            retry_initial_seconds=0.01,
+            retry_max_seconds=0.1,
             on_notice=lambda error, facts: self.delivery_notices.append((error, facts)),
             diagnostic_status=lambda: {"output_failures": 0},
         )
@@ -258,7 +260,7 @@ class ProcessPeers:
         result.update(analysis_kind_ref="peaks_from_mol", jobs=jobs, next_cursor=None)
         return json.dumps(result).encode()
 
-    async def observed(self, name):
+    async def observed(self, name, *, wait_seconds):
         async def wait():
             while not (self.diagnostics / name).exists():
                 if self.process is not None and self.process.returncode is not None:
@@ -266,7 +268,7 @@ class ProcessPeers:
                     raise AssertionError("Foreground process exited before " + name + ": " + stderr.decode())
                 await asyncio.sleep(0.01)
 
-        await asyncio.wait_for(wait(), 5)
+        await asyncio.wait_for(wait(), wait_seconds)
 
     def assert_lifetime_released(self):
         """Reacquire the real supervisor lock without creating legacy bookkeeping."""

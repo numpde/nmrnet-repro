@@ -38,25 +38,27 @@ from tools.container_guard import require_container
 
 require_container()
 
+import asyncio
 import hashlib
 import json
-import asyncio
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.prepared_input import DEFAULT_OUTPUT
-from provider_core.diagnostics import operator_redactor
 from provider_core.conversation import (
     ToolFinished,
     ToolRejected,
     ToolReply,
 )
+from provider_core.diagnostics import operator_redactor
 from provider_core.interpreter import Interpreter, ModelReportedInterpretationProblem, ModelWindowExpired
 from provider_core.response_json import ResponseRejected
 from provider_core.result_verbosity import ResultVerbosity
 from provider_core.upload_response import require_upload_ref
 from provider_core.uploads import UploadInputRejected
 
+# The interpreter uses this code-owned selection contract and records its digest as evidence.
+# repo-check: allow-module-constant
 PROMPT = f"""Select molecular structures for NMRNet H/C chemical-shift prediction.
 
 Task and authority
@@ -159,8 +161,14 @@ def _tool(name, description, properties):
     }
 
 
+# Tool declarations share this fixed JSON Schema integer vocabulary.
+# repo-check: allow-module-constant
 _INTEGER = {"type": "integer"}
+# Tool declarations share this fixed JSON Schema string vocabulary.
+# repo-check: allow-module-constant
 _TEXT = {"type": "string"}
+# Admitted input-problem codes map to these provider-authored public explanations.
+# repo-check: allow-module-constant
 _PROBLEM_GUIDANCE = {
     "source_unit_unclear": (
         "The language model could not determine the coordinate unit. Specify angstrom, nm or bohr in the request instructions."
@@ -179,6 +187,8 @@ _PROBLEM_GUIDANCE = {
         "or SMILES with an explicit conformer count."
     ),
 }
+# Each interpreter decodes its own tool declarations from this fixed serialized contract.
+# repo-check: allow-module-constant
 _TOOLS = json.dumps(
     [
         _tool(
@@ -238,6 +248,7 @@ _TOOLS = json.dumps(
     separators=(",", ":"),
 ).encode("ascii")
 
+
 @dataclass(frozen=True, slots=True)
 class _InputProblemReport:
     """Pair a provider-defined issue category with the private model explanation."""
@@ -249,8 +260,7 @@ class _InputProblemReport:
 class ModelReportedInputProblem(RuntimeError):
     """End selection with an unverified model report and retain its private evidence."""
 
-    # silent-defaults: allow-contract -- A model can report an input problem without an earlier endpoint failure; an empty history means no earlier failure was observed.
-    def __init__(self, report, observation, *, endpoint_failures=(), correction_failures=()):
+    def __init__(self, report):
         """Expose provider-written guidance and keep the model explanation private."""
         # Even after credential redaction, the admitted explanation may contain
         # private molecular data. Public guidance comes only from the issue category.
@@ -260,9 +270,6 @@ class ModelReportedInputProblem(RuntimeError):
         )
         self.issue = report.issue
         self.explanation = report.explanation
-        self.observation = observation
-        self.endpoint_failures = tuple(endpoint_failures)
-        self.correction_failures = tuple(correction_failures)
 
 
 class InspectionUnavailable(RuntimeError):
@@ -283,15 +290,18 @@ class InputInterpreter:
         self._on_endpoint_failure = on_endpoint_failure
         self._secrets = secrets
         self._redact = operator_redactor(secrets=secrets)
-        self._conversation = Interpreter(endpoint_factories, timeout_seconds=timeout_seconds,
-                                         context_bytes=context_bytes, secrets=secrets)
+        self._conversation = Interpreter(
+            endpoint_factories, timeout_seconds=timeout_seconds, context_bytes=context_bytes, secrets=secrets
+        )
         self._tools = json.loads(_TOOLS)
         self._operations = []
         self._diagnostic_recipient = None
 
     async def run(self, instructions, capability):
         if self._diagnostic_recipient is not None and self._diagnostic_recipient is not capability:
-            raise ValueError("This interpreter already has its diagnostic recipient; create a new interpreter for another input owner.")
+            raise ValueError(
+                "This interpreter already has its diagnostic recipient; create a new interpreter for another input owner."
+            )
         self._diagnostic_recipient = capability
 
         async def dispatch(name, arguments, *, not_after):
@@ -307,15 +317,17 @@ class InputInterpreter:
                 if not deadline.expired() or not isinstance(cancellation, asyncio.CancelledError):
                     raise
                 retained = await capability.settle_interrupted_inspection()
-                failures = tuple(item for index, item in enumerate((cancellation.__cause__, retained))
-                                 if item is not None and (index == 0 or item is not cancellation.__cause__))
+                failures = [
+                    item
+                    for index, item in enumerate((cancellation.__cause__, retained))
+                    if item is not None and (index == 0 or item is not cancellation.__cause__)
+                ]
                 if failures:
                     cause = failures[0] if len(failures) == 1 else BaseExceptionGroup("Input inspection failures", failures)
                     raise InspectionUnavailable() from cause
                 raise ModelWindowExpired() from failure
 
-        messages = [{"role": "system", "content": PROMPT},
-                    {"role": "user", "content": instructions.specification_text}]
+        messages = [{"role": "system", "content": PROMPT}, {"role": "user", "content": instructions.specification_text}]
         try:
             result = await self._conversation.run(messages, self._tools, dispatch)
         finally:
@@ -332,8 +344,7 @@ class InputInterpreter:
             "operations": self._operations,
             "outcome": "selected",
         }
-        return json.dumps(observation, ensure_ascii=True, allow_nan=False,
-                          sort_keys=True, separators=(",", ":")).encode("ascii")
+        return json.dumps(observation, ensure_ascii=True, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("ascii")
 
     async def retire(self):
         try:
@@ -345,21 +356,20 @@ class InputInterpreter:
         if self._diagnostic_recipient is None:
             return
         from nmrnet_provider.process_reports import failure_evidence  # noqa: PLC0415
+
         history = [
             {"endpoint_index": visit - 1, "failure": failure_evidence(failure, secrets=self._secrets)}
             for visit, failure in self._conversation.failures
         ]
         history.extend(
-            {"endpoint_index": visit - 1, "turn_index": turn,
-             "failure": failure_evidence(failure, secrets=self._secrets)}
+            {"endpoint_index": visit - 1, "turn_index": turn, "failure": failure_evidence(failure, secrets=self._secrets)}
             for visit, turn, failure in self._conversation.correction_failures
         )
         if self._conversation.last_failure is not None:
             history.append({"failure": failure_evidence(self._conversation.last_failure, secrets=self._secrets)})
         if history:
             self._diagnostic_recipient.retain_interpreter_diagnostics(
-                json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True,
-                           separators=(",", ":")).encode("ascii")
+                json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
             )
 
     def _admit_arguments(self, name, arguments):
@@ -437,7 +447,7 @@ class InputInterpreter:
             if not message.strip() or not message.isprintable() or len(message.encode("utf-8")) > 2048:
                 raise ToolRejected("Provide a nonblank, single-line printable explanation within 2048 UTF-8 bytes.")
             report = _InputProblemReport(arguments["issue"], message)
-            cause = ModelReportedInputProblem(report, b"{}")
+            cause = ModelReportedInputProblem(report)
             raise ModelReportedInterpretationProblem(model_summary=_PROBLEM_GUIDANCE[report.issue]) from cause
         if name == "prepare_smiles":
             await capability.prepare_smiles(**arguments)

@@ -8,6 +8,7 @@ from tests.fakes.credential import document, encoded
 
 
 def ca_line(path):
+    # silent-defaults: allow-contract -- An absent fixture CA omits the optional TOML field; supplied paths are serialized explicitly.
     return "" if path is None else "ca_file = " + json.dumps(str(path)) + "\n"
 
 
@@ -23,6 +24,7 @@ def execution_source_files(root):
 
 
 class ConfigFiles:
+    # silent-defaults: allow-contract -- Author a valid disposable configuration with inert example origins and two live slots; tests replace origins, trust and capacity for their scenario.
     def __init__(
         self,
         root,
@@ -50,10 +52,10 @@ class ConfigFiles:
         self.endpoint_directory = self.root / "interpreter.d"
         self.endpoint_directory.mkdir(mode=0o700, exist_ok=True)
         self.endpoint = self.endpoint_directory / "00-primary.toml"
-        self.endpoint.write_text(f'''url = {json.dumps(model_origin + "/chat")}
+        self.endpoint.write_text(f"""url = {json.dumps(model_origin + "/chat")}
 model = "fixture-model"
 key_file = {json.dumps(str(self.key))}
-{model_ca}''')
+{model_ca}""")
         self.endpoint.chmod(0o600)
         self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v4"
 

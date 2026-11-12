@@ -12,6 +12,7 @@ from .input_geometry import InputRejected, decode_source, parse_atom_row, prepar
 
 # This is an internal reader work bound, not an advertised provider batch limit.
 # The offering must choose measured lower limits against its entire result budget.
+# repo-check: allow-module-constant
 MAX_RECORDS = 128
 
 

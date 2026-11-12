@@ -1,13 +1,12 @@
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "tools/compose_image_ids.py"
+ROOT = Path("/workspace")
+SCRIPT = ROOT / "host/compose_image_ids.py"
 IMAGE = "sha256:" + "a" * 64
 SERVICES = ("provider", "prediction", "reader", "smiles", "interpreter", "store")
 
@@ -24,38 +23,42 @@ class ComposeImageIdsTests(unittest.TestCase):
         self.path.write_text(json.dumps({"services": services}))
 
     def run_command(self, *arguments):
-        return subprocess.run([sys.executable, str(SCRIPT), *arguments, str(self.path)],
-                              capture_output=True, text=True, check=False)
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *arguments, str(self.path)], capture_output=True, text=True, check=False
+        )
 
     def test_services_prints_the_complete_immutable_mapping(self):
         self.write_services()
         result = self.run_command("services")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(result.stdout.splitlines(), [f"{role}\t{IMAGE}" for role in SERVICES])
 
     def test_shared_runtime_requires_interpreter_and_store_to_match(self):
         self.write_services()
         result = self.run_command("shared-runtime")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual(result.stdout, IMAGE + "\n")
 
         services = {role: {"image": IMAGE} for role in SERVICES}
         services["store"] = {"image": "sha256:" + "b" * 64}
         self.write_services(services)
         result = self.run_command("shared-runtime")
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(2, result.returncode)
         self.assertIn("do not share one runtime image", result.stderr)
 
     def test_incomplete_service_set_or_mutable_image_refuses(self):
-        for services in ({"provider": {"image": IMAGE}},
-                         {**{role: {"image": IMAGE} for role in SERVICES}, "unexpected": {"image": IMAGE}},
-                         {**{role: {"image": IMAGE} for role in SERVICES}, "provider": {"image": "local:latest"}}):
+        for services in (
+            {"provider": {"image": IMAGE}},
+            {**{role: {"image": IMAGE} for role in SERVICES}, "unexpected": {"image": IMAGE}},
+            {**{role: {"image": IMAGE} for role in SERVICES}, "provider": {"image": "local:latest"}},
+            {**{role: {"image": IMAGE} for role in SERVICES}, "provider": []},
+        ):
             with self.subTest(services=services):
                 self.write_services(services)
                 result = self.run_command("services")
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(2, result.returncode)
                 self.assertIn("Cannot read frozen Compose image IDs", result.stderr)
-                self.assertEqual(result.stdout, "")
+                self.assertEqual("", result.stdout)
 
 
 if __name__ == "__main__":

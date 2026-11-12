@@ -21,16 +21,17 @@ from enum import Enum, auto
 
 from nmrnet_provider.admission import AdmissionPolicy, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
+from provider_core.analysis import AnalysisOutcomeUnresolved
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.controller import ControllerFailed
-from provider_core.analysis import AnalysisOutcomeUnresolved
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ObservationGapExpired
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims, LiveCapacityFull
 from provider_core.task_boundary import contain_task_exit
 from provider_core.uploads import UploadRecoveryExhausted
 
-
+# This module retains its process-local logger handle; entrypoints configure logging.
+# repo-check: allow-module-constant
 LOGGER = logging.getLogger(__name__)
 
 
@@ -60,11 +61,11 @@ class ServicePolicy:
             self.settle_seconds,
             self.api_backoff_max_seconds,
         ):
-            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            if not (type(value) in (int, float) and math.isfinite(value) and value > 0):
                 raise ValueError(
                     "Cannot configure NMRNet service: cadence, backoff, drain and settlement waits must be finite positive seconds."
                 )
-        if self.api_backoff_max_seconds < self.idle_seconds:
+        if not (self.idle_seconds <= self.api_backoff_max_seconds):
             raise ValueError("Cannot configure NMRNet service: API backoff maximum must be at least idle_seconds.")
 
 
@@ -141,11 +142,22 @@ class ProviderService:
         on_observed_crash,
         factory_ready,
         on_held_attempt,
+        prose_retry_seconds,
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
-                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered,
-                           on_observed_crash, factory_ready, on_held_attempt)
+                callable,
+                (
+                    open_attempt,
+                    current_announcement,
+                    on_started,
+                    on_api_retry,
+                    on_api_recovered,
+                    on_observed_crash,
+                    factory_ready,
+                    on_held_attempt,
+                    prose_retry_seconds,
+                ),
             )
         ):
             raise ValueError(
@@ -159,6 +171,7 @@ class ProviderService:
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self._on_observed_crash = on_observed_crash
         self._factory_ready, self._on_held_attempt = factory_ready, on_held_attempt
+        self._prose_retry_seconds = prose_retry_seconds
         self.policy = policy
         self.hello_api = ProviderAPI(
             config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology
@@ -186,9 +199,14 @@ class ProviderService:
         """Keep pending reports alive even after their workers and I/O stop."""
         return (
             self._state not in (_State.RUNNING, _State.SETTLING)
-            and all(task is None or task.done() for task in (
-                self.work_task, self._hello_task, *self._settlement_tasks.values(),
-            ))
+            and all(
+                task is None or task.done()
+                for task in (
+                    self.work_task,
+                    self._hello_task,
+                    *self._settlement_tasks.values(),
+                )
+            )
             and all(controller.shutdown_ready for controller in self._owned_controllers())
             and self.api.retirement_confirmed
             and self.hello_api.retirement_confirmed
@@ -238,6 +256,7 @@ class ProviderService:
         stopped = asyncio.create_task(self._stop.wait())
         try:
             await asyncio.wait({self.work_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            # silent-defaults: allow-contract -- A completed startup task supplies its result or exception even when stop also completes; an unfinished startup returns False so run enters shutdown and settles that same task.
             return self.work_task.result() if self.work_task.done() else False
         finally:
             stopped.cancel()
@@ -253,8 +272,7 @@ class ProviderService:
         return not self._stop.is_set()
 
     async def _select_job(self):
-        return await select_pending_start(self.config, self.api, policy=self.policy.admission,
-                                          owner=self, claims=self._claims)
+        return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self, claims=self._claims)
 
     async def _read_until_available(self, operation):
         """Repeat the supplied Job discovery in its original task.
@@ -283,8 +301,10 @@ class ProviderService:
                 result = await operation()
             except asyncio.CancelledError as cause:
                 if (
-                    api is self.api and cause.__cause__ is None
-                    and api.last_failure is not None and api.last_failure is not previous_failure
+                    api is self.api
+                    and cause.__cause__ is None
+                    and api.last_failure is not None
+                    and api.last_failure is not previous_failure
                 ):
                     # Startup reads now run in a retained child task. Preserve
                     # its new interruption; Hello has its own uncertainty output.
@@ -301,7 +321,9 @@ class ProviderService:
                 if self._stop.is_set():
                     return None
                 outage = failure
-                wait = random.uniform(delay / 2, delay) + (failure.retry_after_seconds or 0)
+                wait = random.uniform(delay / 2, delay)
+                if failure.retry_after_seconds is not None:
+                    wait += failure.retry_after_seconds
                 self._on_api_retry(kind, failure, wait)
                 if await self._pause(wait):
                     return None
@@ -343,8 +365,18 @@ class ProviderService:
         while not await self._pause(self.policy.hello_seconds):
             await self._hello_until_available()
 
+    async def _wait_for_prose_service(self):
+        """Do not START a known prose-dependent Job during a captured wait."""
+        seconds = self._prose_retry_seconds()
+        if seconds > 0:
+            await self._pause(seconds)
+            return True
+        return False
+
     async def _work_loop(self):
         while not self._stop.is_set():
+            if await self._wait_for_prose_service():
+                continue
             if not self._snapshot().analysis_offerings:
                 await self._pause(self.policy.idle_seconds)
                 continue
@@ -358,6 +390,10 @@ class ProviderService:
                 # Withdrawal can occur during either network walk. Discard this
                 # selection; resumption must start with fresh observations.
                 await self._pause(self.policy.idle_seconds)
+                continue
+            # A discovery page is not START permission. Another Job may have
+            # observed a model 503 while this request was in flight.
+            if await self._wait_for_prose_service():
                 continue
             self._attempt_stopping = asyncio.Event()
             if self._stop.is_set():
@@ -373,8 +409,11 @@ class ProviderService:
                 await self._observe_attempt(controller, pending)
             except ControllerFailed as failure:
                 execution = failure.cause
-                if (type(execution) is ExecutionFailed and type(execution.cause) in
-                        (UploadRecoveryExhausted, ObservationGapExpired, AnalysisOutcomeUnresolved)):
+                if type(execution) is ExecutionFailed and type(execution.cause) in (
+                    UploadRecoveryExhausted,
+                    ObservationGapExpired,
+                    AnalysisOutcomeUnresolved,
+                ):
                     controller.require_held_failure(pending, failure)
                     if not self._factory_ready():
                         raise
@@ -412,7 +451,8 @@ class ProviderService:
                     report_crash()
                 except (Exception, BaseExceptionGroup, SystemExit, KeyboardInterrupt) as notice:
                     raise BaseExceptionGroup(
-                        "Attempt failed and its crash diagnostic could not be reported.", (primary, notice),
+                        "Attempt failed and its crash diagnostic could not be reported.",
+                        (primary, notice),
                     ) from None
                 raise
             try:

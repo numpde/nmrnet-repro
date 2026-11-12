@@ -29,10 +29,19 @@ class GeometryImageTests(unittest.TestCase):
         (self.root / "bin/git").symlink_to(shutil.which("git"))
         shutil.rmtree(self.root / ".git")
         self.git("init", "-q", "--initial-branch=main")
-        self.inputs = tuple(subprocess.check_output(
-            ["bash", "-eu", "-c", 'repository_root=$1; source "$1/tools/geometry_image.sh"; printf "%s\\n" "${geometry_image_inputs[@]}"',
-             "bash", str(ROOT)], text=True,
-        ).splitlines())
+        self.inputs = tuple(
+            subprocess.check_output(
+                [
+                    "bash",
+                    "-eu",
+                    "-c",
+                    'repository_root=$1; source "$1/tools/geometry_image.sh"; printf "%s\\n" "${geometry_image_inputs[@]}"',
+                    "bash",
+                    str(ROOT),
+                ],
+                text=True,
+            ).splitlines()
+        )
         for name in (*self.inputs, "tools/geometry_image.sh"):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +54,9 @@ class GeometryImageTests(unittest.TestCase):
         self.fixture.environment["NMRNET_WHEELHOUSE_INPUT"] = str(self.wheelhouse)
         shutil.rmtree(self.wheelhouse)
         self.wheelhouse.mkdir()
+        pin = (self.root / "requirements/wheelhouse-tool-assets.in").read_text().splitlines()[-1]
+        tool_name = pin.split("#", 1)[0].rsplit("/", 1)[-1]
+        shutil.copyfile(Path("/opt/checker-tools") / tool_name, self.wheelhouse / tool_name)
         self.selected = wheel(self.wheelhouse, "geometryfixture", "1.0")
         wheel(self.wheelhouse, "unrelated-project", "9.0")
         lock = self.root / "requirements/preparation.lock"
@@ -110,12 +122,10 @@ class GeometryImageTests(unittest.TestCase):
 
     def test_changed_committed_inputs_reject_previous_image_before_worker_launch(self):
         self.assertEqual(0, self.fixture.run("container.sh", "geometry/image/build").returncode)
-        build = next(
-            call["arguments"]
-            for call in self.fixture.calls()
-            if "build" in call["arguments"] and "--build-context" in call["arguments"]
-        )
-        old_identity = build[build.index("--build-arg") + 1].removeprefix("GEOMETRY_INPUTS=")
+        build = next(call["arguments"] for call in self.fixture.calls() if call["arguments"][:1] == ["build"])
+        self.assertEqual("-", build[-1])
+        old_identity = next(value.removeprefix("GEOMETRY_INPUTS=") for value in build if value.startswith("GEOMETRY_INPUTS="))
+        previous_calls = len(self.fixture.calls())
         with (self.root / "requirements/preparation.lock").open("ab") as stream:
             stream.write(b"# changed provenance with the same package versions\n")
         self.commit()
@@ -124,7 +134,7 @@ class GeometryImageTests(unittest.TestCase):
         )
         self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("build-input label", result.stderr)
-        self.assertFalse(any(call["arguments"][:1] == ["run"] for call in self.fixture.calls()))
+        self.assertFalse(any(call["arguments"][:1] == ["run"] for call in self.fixture.calls()[previous_calls:]))
 
     def test_wrong_built_image_label_does_not_publish_a_record(self):
         result = self.fixture.run(

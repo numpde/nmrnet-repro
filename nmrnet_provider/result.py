@@ -32,16 +32,26 @@ from nmrnet_provider.prepared_input import (
 )
 from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
+# Published results identify this provider-owned document schema.
+# repo-check: allow-module-constant
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v2"
+# Result planning and interpretation admission share this fixed serialization ceiling.
+# repo-check: allow-module-constant
 MAX_RESULT_BYTES = 786432
+# Public warning projection copies this reviewed scaler-compatibility notice.
+# repo-check: allow-module-constant
 SCALER_WARNING = {
     "code": "scaler_version_mismatch",
     "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
 }
+# Public warning projection copies this notice without publishing arbitrary warning text.
+# repo-check: allow-module-constant
 ADDITIONAL_WARNING = {
     "code": "additional_scaler_warnings",
     "message": "Additional warnings occurred while loading the listed scalers. Their details are retained in protected diagnostics for review.",
 }
+# Direct-coordinate results publish these limitations of the qualified prediction path.
+# repo-check: allow-module-constant
 SCIENTIFIC_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
     "Only H and C atoms receive shifts; other supplied atoms provide molecular context.",
@@ -53,6 +63,8 @@ SCIENTIFIC_LIMITS = (
     "Coordinates affect predictions. No experimental spectrum, confidence interval or bond assignment is inferred.",
     "Float32 coordinates describe admitted numeric inputs; model centering and padding occur later.",
 )
+# Generated-coordinate results publish these limitations of generation and prediction.
+# repo-check: allow-module-constant
 GENERATED_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
     "Each returned conformer receives its own prediction; generated conformers are not guaranteed to be distinct.",
@@ -205,7 +217,7 @@ class ResultPlan:
         existing evidence ceiling. Future private warning growth remains unknown.
         """
         envelope = json.loads(self._envelope)
-        return tuple(
+        return [
             {
                 "request_sha256": geometry["request_sha256"],
                 "prediction": {"unit": "ppm", "predictions": _prediction_reservation(geometry)},
@@ -216,7 +228,7 @@ class ResultPlan:
                 "private_warnings": [],
             }
             for geometry in envelope["geometries"]
-        )
+        ]
 
     def finish(self, worker_results):
         """Validate and encode the complete result, or raise without returning bytes.
@@ -239,6 +251,7 @@ class ResultPlan:
                     rounded = float(format(row["shift_ppm"], f".{envelope['output']['shift_significant_digits']}g"))
                     if not math.isfinite(rounded):
                         raise ResultRejected("Cannot round the admitted shift to a finite binary64 output value.")
+                    # silent-defaults: allow-contract -- Public numeric shifts normalize signed zero after finite precision rounding; the original worker outcome remains unchanged in protected scientific evidence.
                     row["shift_ppm"] = 0.0 if rounded == 0 else rounded
             except ResultRejected as cause:
                 raise ResultRejected(f"{geometry['geometry_id']}: {cause}") from cause
@@ -474,7 +487,7 @@ def _geometry_identity(geometry):
 
 
 def _positions(geometry):
-    return tuple((index, atom) for index, atom in enumerate(geometry["prepared_request"]["atoms"]) if atom in {"H", "C"})
+    return [(index, atom) for index, atom in enumerate(geometry["prepared_request"]["atoms"]) if atom in {"H", "C"}]
 
 
 def _located_warnings(geometry, warnings):
@@ -566,6 +579,7 @@ def _public_warnings(observed, loaded_heads):
             compatibility[head] = None
         else:
             compatibility[head] = versions
+    # silent-defaults: allow-contract -- Every scaler compatibility warning remains public; version_details reports whether bounded, consistent version identifiers can accompany it, while original observations remain private.
     result = [
         {
             **SCALER_WARNING,

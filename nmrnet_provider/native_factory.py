@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.geometry_client import GeometryClient
+from nmrnet_provider.native_session import NativeOperation, NativeWorkerExited
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
@@ -78,6 +78,7 @@ class NativeAttemptFactory:
         on_operator_notice,
         start_policy,
         on_delivery_retry,
+        prose_services,
     ):
         if type(policy) is not NativePolicy:
             raise ValueError("Native factory requires explicit admitted allocation and channel budgets.")
@@ -94,6 +95,7 @@ class NativeAttemptFactory:
         if not callable(on_unconfirmed_phase_progress):
             raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
         self.config, self.claims = config, claims
+        self.prose_services = prose_services
         self.admission_stopping = admission_stopping
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
@@ -107,6 +109,11 @@ class NativeAttemptFactory:
         self.allocations, self.clients = [], {}
         self.last_failure = None
         self._operation = None
+
+    @property
+    def prose_retry_seconds(self):
+        """Earliest configured prose service can resume new HTTP work."""
+        return min((service.retry_seconds for service in self.prose_services), default=0.0)
 
     @property
     def shutdown_ready(self):
@@ -127,8 +134,12 @@ class NativeAttemptFactory:
                 selected_artifacts=self.selected_artifacts,
                 allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
                 on_prediction_failure=lambda failure, attempt: self.on_operator_notice(
-                    failure, {"event": "prediction_failed", "job_ref": pending.input.job_ref,
-                              "execution_attempt_ref": attempt.admission.execution_attempt_ref}
+                    failure,
+                    {
+                        "event": "prediction_failed",
+                        "job_ref": pending.input.job_ref,
+                        "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+                    },
                 ),
                 on_interpreter_failure=lambda index, failure: self.on_operator_notice(
                     failure, {"event": "interpreter_endpoint_failed", "job_ref": pending.input.job_ref, "endpoint_index": index}
@@ -141,6 +152,7 @@ class NativeAttemptFactory:
                 ),
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
+                prose_services=self.prose_services,
                 observation_recovery=self.observation_recovery,
                 condition_recovery=self.condition_recovery,
                 on_unconfirmed_phase_progress=self.on_unconfirmed_phase_progress,
@@ -191,10 +203,7 @@ class NativeAttemptFactory:
             self._operation = None
 
     def _begin_setup(self):
-        if (
-            self._operation is not None
-            or self.allocations
-        ):
+        if self._operation is not None or self.allocations:
             raise RuntimeError(
                 "Cannot acquire new native work: await active setup and settle this factory's original obligations first."
             )
@@ -246,8 +255,7 @@ class NativeAttemptFactory:
         writer = None
         try:
             reader, writer = await allocation.start()
-            options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds,
-                       "native": allocation}
+            options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds, "native": allocation}
             if role == "prediction":
                 options["operation_seconds"] = self.policy.prediction_seconds
                 options["declaration_sha256"] = self.execution_identity["prediction_declaration_sha256"]
@@ -296,6 +304,7 @@ class NativeAttemptFactory:
                 if isinstance(cleanup, asyncio.CancelledError):
                     interruption = cleanup
                     break
+        # silent-defaults: allow-contract -- Cancellation retains its original cause when setup and cleanup fail independently; proof=tests/integration/provider_core/adversarial/test_nmrnet_native_factory.py::NativeFactoryTests.test_cancellation_during_cleanup_remains_interruption_after_ordinary_setup_failure.
         failure = NativeSetupFailed(
             cause,
             tuple(failures),
@@ -304,6 +313,7 @@ class NativeAttemptFactory:
         )
         # Resolved failures belong to the caller receiving this exception. Keep
         # factory diagnostics only while their original cleanup remains held.
+        # silent-defaults: allow-contract -- Factory diagnostics follow unresolved allocation cleanup ownership; settled failures transfer to the caller; proof=tests/integration/provider_core/adversarial/test_nmrnet_native_factory.py::NativeFactoryTests.test_unsettled_allocation_io_keeps_the_original_grant_until_settlement.
         self.last_failure = failure if self.allocations else None
         if interruption is not None:
             raise interruption from failure

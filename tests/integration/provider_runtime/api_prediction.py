@@ -40,12 +40,12 @@ from nmr_api.canonical_base64 import decode_canonical_base64
 from nmr_api.canonical_json import decode_strict_json
 from nmr_api.discovery_examples.sign_request import main as sign_request
 from nmr_api.json_datetime import CANONICAL_JSON_DATETIME_PATTERN
+from nmr_api.operations.job_refs import require_job_ref
 from nmr_api.public.job_create_request import canonicalize_job_create_request_body
 from nmr_api.public.job_upload_set_replace_request import parse_job_upload_set_replace_request
 from nmr_api.public.schema_ids import UPLOAD_PUBLISH_CAPABILITY_RESPONSE_SCHEMA_ID
 from nmr_api.public.upload_create_request import parse_upload_create_request
 from nmr_api.request_ids import require_request_id
-from nmr_api.operations.job_refs import require_job_ref
 from nmr_api.security.project_refs import require_project_ref
 from nmr_api.security.user_credential_artifacts import validate_user_credential_artifacts
 from nmr_api.security.user_ids import UserAuthorityRefs
@@ -53,6 +53,7 @@ from nmr_api.upload_refs import require_upload_ref
 from nmr_api.upload_store_target import UploadStoreTarget
 from nmr_api.upload_transfer_capabilities import UPLOAD_TRANSFER_CAPABILITY_MAX_CHARACTERS
 from nmr_api.upload_transfer_http_contract import UPLOAD_BYTES_PUBLISH_METHOD
+
 
 def require(condition, message):
     if not condition:
@@ -71,6 +72,7 @@ class Client:
         self.proxy_socket = proxy_socket
         self.identity, self.project_ref, self.user = identity, project_ref, user
         origin = urlsplit(identity["origin"])
+        # silent-defaults: allow-contract -- The admitted HTTPS origin keeps its explicit port or uses the HTTPS port 443; source=http.client.HTTPSConnection.default_port and tools/provider_deployment.py::client_inputs; the existing transport regression checks an explicit port only.
         self.host, self.port = origin.hostname, origin.port if origin.port is not None else 443
         self.trust = ssl.create_default_context(cafile="/input/api-ca.crt")
 
@@ -104,6 +106,7 @@ class Client:
             json.dumps(
                 {
                     "status": response.status,
+                    # silent-defaults: allow-contract -- Capture a matching singleton topology or null evidence; signed requests separately reject mismatched original headers in _api_accepted, while unsigned store PUT accepts its status and size without API topology; source=_capture_head, request, publication_grant and publish_bytes.
                     "topology": self.identity["topology"] if topology == [self.identity["topology"]] else None,
                     "request_id": request_id,
                 }
@@ -125,6 +128,7 @@ class Client:
             connection._tunnel()
             connection.sock = self.trust.wrap_socket(outbound, server_hostname=self.host)
             phase = "request dispatch"
+            # silent-defaults: allow-contract -- HTTP request-target grammar appends a question mark only for a nonempty query; the same query is signed separately without that delimiter; source=_signed_response and _exchange.
             connection.request(method, path + ("?" + query if query else ""), body=body, headers=headers)
             phase = "response headers"
             response = connection.getresponse()
@@ -153,15 +157,16 @@ class Client:
             "The API did not identify the selected topology",
         )
 
+    # silent-defaults: allow-contract -- This API helper expects ordinary success 200; Job and Upload creation explicitly request 201 and _api_accepted checks the selected status; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiReadSigningTests.test_retention_window_refusal_refreshes_only_the_get_signature_and_keeps_both_replies and ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job.
     def request(self, label, method, path, query="", body=None, status=200):
         for signature_attempt in range(3):
             prefix, response, content = self._signed_response(label, method, path, query, body, 1048576)
             Path(str(prefix) + ".response.json").write_bytes(content)
-            if signature_attempt < 2 and self._read_window_closed(method, response, content):
-                continue
-            self._api_accepted(response, status)
-            require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
-            return decode_strict_json(content.decode("utf-8"))
+            if signature_attempt == 2 or not self._read_window_closed(method, response, content):
+                break
+        self._api_accepted(response, status)
+        require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
+        return decode_strict_json(content.decode("utf-8"))
 
     def _read_window_closed(self, method, response, content):
         """Refresh a GET signature after the API's no-effect replay-epoch refusal.
@@ -172,16 +177,22 @@ class Client:
         Concurrent pruning can advance the watermark during admission; this does
         not imply an old signature. The process alarm still bounds all attempts.
         """
-        if (method != "GET" or response.status != 401
-                or [value for key, value in response.getheaders() if key.lower() == "nmr-api-topology"] != [self.identity["topology"]]):
+        if (
+            method != "GET"
+            or response.status != 401
+            or [value for key, value in response.getheaders() if key.lower() == "nmr-api-topology"] != [self.identity["topology"]]
+        ):
             return False
         try:
             problem = decode_strict_json(content.decode("utf-8"))
         except (ValueError, UnicodeError):
             return False
-        return (type(problem) is dict and problem.get("status") == 401
-                and problem.get("type") == "urn:nmr-api:problem:authentication-failed"
-                and problem.get("code") == "authentication_window_closed")
+        return (
+            type(problem) is dict
+            and problem.get("status") == 401
+            and problem.get("type") == "urn:nmr-api:problem:authentication-failed"
+            and problem.get("code") == "authentication_window_closed"
+        )
 
     def publication_grant(self, upload):
         """Keep authorization bodies transient on success, rejection and interruption."""
@@ -303,6 +314,7 @@ class Client:
 
 
 def submit(client, case, *, case_kind, upload_receipt=None):
+    # silent-defaults: allow-contract -- Only the selected XYZ or SDF ZIP profile owns source bytes; other explicit case kinds submit without an Upload; source=main case-kind choices and submit; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer, test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_delayed_result_crosses_old_reader_and_process_limits_without_another_job.
     source = preflight_upload() if case_kind == "upload" else None
     if case_kind == "sdf-zip":
         source = preflight_sdf_zip()
@@ -313,6 +325,7 @@ def submit(client, case, *, case_kind, upload_receipt=None):
         any(item["provider_ref"] == client.identity["provider_ref"] for item in directory["providers"]),
         "The dedicated NMRNet offering was not discoverable",
     )
+    # silent-defaults: allow-contract -- Publish one Upload only for a profile with prepared source bytes; profiles without source proceed directly to Job submission and skip attachment; source=submit; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer, test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_delayed_result_crosses_old_reader_and_process_limits_without_another_job.
     upload = publish_upload(client, source, case_kind=case_kind, reservation=upload_receipt) if source is not None else None
     body = json.dumps(
         {
@@ -390,8 +403,11 @@ def publish_upload(client, source, *, case_kind, reservation=None):
             "operation_ref": "nmrnet-upload:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "byte_length": len(source),
+            # silent-defaults: allow-contract -- The selected XYZ or SDF ZIP profile names its pinned source file; source=preflight_upload and preflight_sdf_zip; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer.
             "filename": "butane_conformers.sdf.zip" if sdf else "atom_order.xyz",
+            # silent-defaults: allow-contract -- The selected XYZ or SDF ZIP profile declares its source media type before API request admission; source=preflight_upload, preflight_sdf_zip and parse_upload_create_request; proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer.
             "media_type": "application/zip" if sdf else "chemical/x-xyz",
+            # silent-defaults: allow-contract -- These authored descriptions identify the pinned XYZ or two-record SDF source, units and population; source=preflight_upload and preflight_sdf_zip; publication-path proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job and test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer.
             "description": "butane_conformers.sdf; SDF, angstrom, both carbon-only records"
             if sdf
             else "atom_order.xyz; XYZ, angstrom, one record; supplied chloromethane",
@@ -473,6 +489,7 @@ def receive(client, receipt, *, readback_seconds, case_kind, prediction_image_id
                 "Decoded result fingerprint differs",
             )
             (client.output / "scientific-result.json").write_bytes(content)
+            # silent-defaults: allow-contract -- The captured scripted profile requires exact retained source; real profiles pass their admitted interpreter for received-source and route checks; source=materialize_api_config.py and compare_scientific_documents; comparator proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_scripted_comparison_still_accepts_only_its_exact_source_and_science and test_real_whitespace_or_xyz_header_changes_only_received_source_evidence.
             compare_science(
                 content,
                 receipt,
@@ -571,29 +588,42 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind, predi
         "Scientific qualification requires the explicitly requested max verbosity and 17 significant digits",
     )
     if case_kind == "pasted":
-        compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id)
+        compare_scientific_documents(
+            actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id
+        )
     elif case_kind == "sdf-zip":
         compare_sdf_scientific_documents(
             actual,
             retained,
             receipt,
             metadata,
-            interpreter=interpreter, prediction_image_id=prediction_image_id,
+            interpreter=interpreter,
+            prediction_image_id=prediction_image_id,
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
         )
     elif case_kind in ("smiles", "smiles-multiple"):
+        # silent-defaults: allow-contract -- These two explicit SMILES profiles select the authored CCl one-conformer or CCCC three-conformer fixture; source=tests/fixtures/preparation/smiles.json and compare_smiles_scientific_documents; multiple-profile selection proof=tests/integration/provider_runtime/normative/test_api_prediction.py::ApiPredictionTests.test_multiple_mode_selects_the_authored_three_conformer_case_and_describes_butane.
         fixture_name = "implicit_hydrogens" if case_kind == "smiles" else "flexible_multiple"
         expected = next(
             case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == fixture_name
         )
-        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id=prediction_image_id, expected=expected)
+        compare_smiles_scientific_documents(
+            actual,
+            retained,
+            receipt,
+            metadata,
+            interpreter=interpreter,
+            prediction_image_id=prediction_image_id,
+            expected=expected,
+        )
     else:
         compare_upload_scientific_documents(
             actual,
             retained,
             receipt,
             metadata,
-            interpreter=interpreter, prediction_image_id=prediction_image_id,
+            interpreter=interpreter,
+            prediction_image_id=prediction_image_id,
             upload=json.loads((Path("/output") / "upload.json").read_bytes()),
             source=_fixture_bytes("/fixture/atom_order.xyz"),
             expected=json.loads(_fixture_bytes("/fixture/expected.json"))["geometries"]["chloromethane"],
@@ -611,12 +641,19 @@ def require_selected_interpretation(observation, interpreter, operation):
         observation["schema_id"] == "nmrnet.input_interpretation.v2"
         and observation["outcome"] == "selected"
         and 0 < len(visits) <= len(interpreter["endpoints"])
-        and all(type(visit["turns_started"]) is int and 0 < visit["turns_started"] <= 12
-                and type(visit["corrections"]) is int and 0 <= visit["corrections"] <= 3
-                for visit in visits)
-        and all(all(route["endpoint"] == endpoint for route in visit["routes"])
-                for visit, endpoint in zip(visits, interpreter["endpoints"], strict=False))
-        and operations and operations[-1] == operation,
+        and all(
+            type(visit["turns_started"]) is int
+            and 0 < visit["turns_started"] <= 12
+            and type(visit["corrections"]) is int
+            and 0 <= visit["corrections"] <= 3
+            for visit in visits
+        )
+        and all(
+            all(route["endpoint"] == endpoint for route in visit["routes"])
+            for visit, endpoint in zip(visits, interpreter["endpoints"], strict=False)
+        )
+        and operations
+        and operations[-1] == operation,
         "Selected interpretation differs from the admitted endpoints, turn budget or successful input operation",
     )
 
@@ -811,7 +848,9 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
     require_selected_interpretation(actual["interpretation"], interpreter, "prepare_smiles")
 
 
-def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload, source, expected, prediction_image_id):
+def compare_upload_scientific_documents(
+    actual, retained, receipt, metadata, *, interpreter, upload, source, expected, prediction_image_id
+):
     """Compare existing XYZ values exactly while retaining the actual wire digest."""
     require(
         actual["job_ref"] == receipt["job_ref"]
@@ -893,8 +932,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
     for key in ("selected_models", "runtime"):
         require(actual[key] == retained[key], f"SDF scientific {key} differs from R46")
     require(
-        actual["execution"]["image_id"] == prediction_image_id
-        and len(actual["geometries"]) == len(retained["geometries"]) == 2,
+        actual["execution"]["image_id"] == prediction_image_id and len(actual["geometries"]) == len(retained["geometries"]) == 2,
         "SDF prediction image or two-record population differs",
     )
     archive = {
@@ -966,7 +1004,10 @@ def main():
     project_ref = require_project_ref("project_ref", args.project_ref)
     validate_user_credential_artifacts(artifacts=artifacts, profile=identity["profile"], user_id=user.user_id)
     case = json.loads(Path("/fixture/case.json").read_bytes())
-    require(re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None, "Expected prediction image pin is malformed")
+    require(
+        re.fullmatch(r"sha256:[0-9a-f]{64}", identity["prediction_image_id"]) is not None,
+        "Expected prediction image pin is malformed",
+    )
     if args.case_kind == "sdf-zip":
         _retained_sdf_science()
     else:
@@ -982,10 +1023,18 @@ def main():
                 raw = stream.read(65537)
             require(len(raw) <= 65536, "Original Job receipt exceeds the readback ceiling")
             receipt = decode_strict_json(raw.decode("utf-8"))
-            require(isinstance(receipt, dict) and receipt.get("project_ref") == project_ref,
-                    "Original Job receipt must name the selected project")
+            require(
+                isinstance(receipt, dict) and receipt.get("project_ref") == project_ref,
+                "Original Job receipt must name the selected project",
+            )
             require_job_ref("Original Job receipt job_ref", receipt.get("job_ref"))
-        receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind, prediction_image_id=identity["prediction_image_id"])
+        receive(
+            client,
+            receipt,
+            readback_seconds=args.readback_seconds,
+            case_kind=args.case_kind,
+            prediction_image_id=identity["prediction_image_id"],
+        )
         (output / "passed.json").write_text(
             json.dumps(
                 {

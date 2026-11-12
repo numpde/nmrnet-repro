@@ -19,18 +19,20 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
+from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
-from nmrnet_provider.interpreter import InspectionUnavailable, ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
-from nmrnet_provider.smiles import ConformerShortfall
-from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
-from nmrnet_provider.worker_client import ModelCallFailed, PredictionExecutionFailed, WorkerExchangeTimedOut, WorkerResultRejected
-from provider_core.analysis import AnalysisFailure, AnalysisOutcomeUnresolved, AnalysisSuccess, ObservedWorkerCrash, PreparedAnalysis
+from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
+from provider_core.analysis import (
+    AnalysisFailure,
+    AnalysisOutcomeUnresolved,
+    AnalysisSuccess,
+    ObservedWorkerCrash,
+    PreparedAnalysis,
+)
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
-from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected
 from provider_core.task_boundary import contain_task_exit
 
 
@@ -146,27 +148,6 @@ def _prepared_identity(plan, prepared, interpreter_diagnostics):
         raise PreparationEvidenceFailed(document) from cause
 
 
-def _generation_failure(cause):
-    """Keep native provenance and ordered payload identities for failed Job evidence."""
-    if isinstance(cause, ConformerShortfall):
-        kind = "conformer_shortfall"
-        evidence = conformer_evidence(cause.partial)
-    else:
-        kind = "conformer_output_limit"
-        reply = json.loads(cause.diagnostic)
-        # Allocation identity belongs to the transport owner. The protocol has
-        # already admitted this summary; retain only scientific failure evidence.
-        evidence = {key: reply[key] for key in ("coordinates_available", "provenance_utf8", "diagnostic", "conformers")}
-    provenance = evidence["provenance_utf8"].encode("utf-8")
-    return {
-        "kind": kind,
-        "requested_count": json.loads(provenance)["requested_count"],
-        "actual_count": len(evidence["conformers"]),
-        "provenance_sha256": hashlib.sha256(provenance).hexdigest(),
-        **evidence,
-    }
-
-
 @dataclass(frozen=True, slots=True, repr=False)
 class _PreparedExecution:
     handle: PreparedAnalysis
@@ -191,15 +172,18 @@ class NMRNetSession:
         selected_artifacts,
         input_preparation,
         on_prediction_failure=None,
-        max_retries=0,
+        max_retries,
         prediction_seconds=None,
     ):
         if not callable(allocate_prediction):
             raise ValueError("Scientific session requires a prediction allocation owner.")
         if type(max_retries) is not int or max_retries not in (0, 1):
             raise ValueError("Scientific session permits zero or one prediction retry.")
-        if max_retries and (type(prediction_seconds) not in (int, float) or not 0 < prediction_seconds
-                            or not math.isfinite(2 * prediction_seconds)):
+        if max_retries and (
+            type(prediction_seconds) not in (int, float)
+            or not prediction_seconds > 0
+            or not math.isfinite(2 * prediction_seconds)
+        ):
             raise ValueError("Prediction retry requires a finite positive prediction deadline.")
         self._max_retries = max_retries
         self._prediction_seconds = prediction_seconds
@@ -235,9 +219,7 @@ class NMRNetSession:
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
         self._acknowledged = acknowledged
         try:
-            prepared = await self._input_preparation.prepare(
-                instructions, require_execution=report_condition.require_execution
-            )
+            prepared = await self._input_preparation.prepare(instructions, require_execution=report_condition.require_execution)
         except (NativeWorkerExited, PreparationRetirementFailed) as cause:
             original = cause
             while type(original) is PreparationRetirementFailed:
@@ -245,17 +227,7 @@ class NMRNetSession:
             if type(original) is not NativeWorkerExited:
                 raise
             raise self._worker_crash(original, cause=cause) from None
-        except (
-            InputRejected,
-            ConformerShortfall,
-            ConformerOutputLimit,
-            ModelReportedInputProblem,
-            InterpretationFailed,
-            InterpretationInputRejected,
-            InspectionUnavailable,
-            InputWorkerCallLimit,
-            InputSelectionTimeLimit,
-        ) as cause:
+        except InputRejected as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
@@ -286,8 +258,10 @@ class NMRNetSession:
         # Core binds this identity to the live Attempt before execute(). Keep
         # the admitted bytes here so the worker receives that same preparation.
         if type(prepared) is GeneratedJobInput:
+            # repo-check: allow-tuple-generator -- PredictionClient.prepare requires a tuple of exact bytes; retain the generated batch for execution; proof=tests/integration/provider_core/normative/test_nmrnet_smiles_session.py::SmilesSessionTests.test_generated_batch_keeps_order_and_diagnostics_through_one_prediction_path
             requests = tuple(item.request_bytes for item in prepared.generated.conformers)
         else:
+            # repo-check: allow-tuple-generator -- PredictionClient.prepare requires a tuple of exact bytes; retain the supplied batch for execution; proof=tests/integration/provider_core/test_nmrnet_session.py::NMRNetSessionTests.test_preparation_owner_supplies_one_ordered_batch_and_retires_with_session
             requests = tuple(geometry.request_bytes for geometry in prepared.geometries)
         self._prepared = _PreparedExecution(handle, requests, plan)
         self._phase = _Phase.PREPARED
@@ -301,35 +275,11 @@ class NMRNetSession:
         try:
             if self._input_preparation.interpreter_diagnostics is not None:
                 document["interpreter_diagnostics"] = json.loads(self._input_preparation.interpreter_diagnostics)
-            if type(cause) is InputWorkerCallLimit:
-                code = "input_worker_call_limit"
-                document[code] = {"maximum_calls": cause.maximum_calls, "calls_started": cause.calls_started}
-            elif type(cause) is InputSelectionTimeLimit:
-                code = "input_selection_time_limit"
-                document[code] = {"seconds": cause.seconds}
-            elif type(cause) is InterpretationFailed:
-                code = "interpretation_failed"
-            elif type(cause) is InterpretationInputRejected:
-                code = "interpretation_input_rejected"
-            elif type(cause) is InspectionUnavailable:
-                code = "interpretation_failed"
-            elif isinstance(cause, ModelReportedInputProblem):
-                code = "interpreter_reported_input_problem"
-                document["model_report"] = {
-                    "issue": cause.issue,
-                    "explanation": cause.explanation,
-                    "independently_verified": False,
-                    "interpretation": json.loads(cause.observation),
-                }
-            elif isinstance(cause, ResultCapacityExceeded):
+            if isinstance(cause, ResultCapacityExceeded):
                 code = "result_size_limit"
-            elif isinstance(cause, InputRejected):
+            else:
                 code = "invalid_input"
                 document.update(preparation_failure=str(cause), diagnostic=cause.diagnostic)
-            else:
-                generation = _generation_failure(cause)
-                code = generation["kind"]
-                document["generation_failure"] = generation
             evidence = _evidence(document)
         except Exception as evidence_failure:
             # Retain the original typed failure too: a capacity/encoding error
@@ -338,32 +288,13 @@ class NMRNetSession:
         return AnalysisFailure(code, str(cause), evidence)
 
     async def execute(self, handle, *, report_condition):
+        """Run the prepared batch with configured retry and preserve operator failures."""
         if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:
             raise ValueError("Scientific execution requires this session's current prepared handle.")
         prepared = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
-        try:
-            result = await self._predict(prepared.requests, report_condition.require_execution)
-        except PredictionExecutionFailed as cause:
-            if self._phase is not _Phase.EXECUTING:
-                raise ValueError("Scientific failure arrived after retirement began; it cannot be accepted.") from cause
-            try:
-                diagnostic = json.dumps(cause.diagnostic, ensure_ascii=True).encode("ascii")
-                prediction_failure = {
-                    "diagnostic_encoding": "JSON string encoded as ASCII",
-                    "diagnostic_bytes": len(diagnostic),
-                    "diagnostic_sha256": hashlib.sha256(diagnostic).hexdigest(),
-                }
-                if type(cause) is ModelCallFailed and cause.retry_not_started is not None:
-                    prediction_failure["retry_not_started"] = cause.retry_not_started
-                evidence = _evidence({"prediction_failure": prediction_failure})
-            except Exception as evidence_failure:
-                raise evidence_failure from cause
-            if self._on_prediction_failure is not None:
-                self._on_prediction_failure(cause, self._acknowledged)
-            self._phase = _Phase.FINISHED
-            return AnalysisFailure("prediction_execution_failed", "Prediction did not return a complete verified result.", evidence)
+        result = await self._predict(prepared.requests, report_condition.require_execution)
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
@@ -480,9 +411,12 @@ class NMRNetSession:
             timeout = cause.__cause__
             if timeout is not None:
                 interruption = timeout.__cause__
-                if (type(timeout) is not TimeoutError or type(interruption) is not asyncio.CancelledError
-                        or interruption.__cause__ is not None
-                        or (interruption.__context__ is not None and interruption.__context__ is not first_failure)):
+                if (
+                    type(timeout) is not TimeoutError
+                    or type(interruption) is not asyncio.CancelledError
+                    or interruption.__cause__ is not None
+                    or (interruption.__context__ is not None and interruption.__context__ is not first_failure)
+                ):
                     raise
             raise AnalysisOutcomeUnresolved(
                 "Prediction was sent, but its response was not confirmed before the exchange deadline."
@@ -494,13 +428,13 @@ class NMRNetSession:
                 "Prediction returned a reply that could not be admitted as a complete result."
             ) from cause
         except (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError) as cause:
-            if (type(cause) not in (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError)
-                    or cause.__cause__ is not None
-                    or (cause.__context__ is not None and cause.__context__ is not first_failure)):
+            if (
+                type(cause) not in (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError)
+                or cause.__cause__ is not None
+                or (cause.__context__ is not None and cause.__context__ is not first_failure)
+            ):
                 raise
-            raise AnalysisOutcomeUnresolved(
-                "Prediction's connection ended before its response was confirmed."
-            ) from cause
+            raise AnalysisOutcomeUnresolved("Prediction's connection ended before its response was confirmed.") from cause
 
     def _worker_crash(self, failure, *, cause):
         if self._phase is _Phase.PREPARING:
@@ -515,9 +449,15 @@ class NMRNetSession:
             phase=phase,
             owner=self,
             runner=runner,
-            evidence=_evidence({"native_operation": {
-                "role": runner.role, "generation": runner.generation, "operation": runner.operation,
-            }}),
+            evidence=_evidence(
+                {
+                    "native_operation": {
+                        "role": runner.role,
+                        "generation": runner.generation,
+                        "operation": runner.operation,
+                    }
+                }
+            ),
             cause=cause,
         )
 
@@ -557,8 +497,12 @@ class NMRNetSession:
         worker, retirement = self._worker, self._retirement
         if retirement is not None:
             failures.extend(await self._retire_prediction(worker, retirement, retry=True))
-        if (self._prediction_pending or self._prediction_setup is not None
-                or self._worker is not worker or self._retirement is not retirement):
+        if (
+            self._prediction_pending
+            or self._prediction_setup is not None
+            or self._worker is not worker
+            or self._retirement is not retirement
+        ):
             failures.append(
                 (
                     "prediction_acquisition",
@@ -571,11 +515,10 @@ class NMRNetSession:
             self._raise_retirement_failure(failures)
         self._phase = _Phase.RETIRED
 
+    # silent-defaults: allow-contract -- Join the original prediction retirement task; only final session retirement may retry a failed cleanup task.
     async def _retire_prediction(self, worker, retirement, *, retry=False):
         task = self._prediction_retirement_task
-        failed = task is not None and task.done() and (
-            task.cancelled() or task.exception() is not None or bool(task.result())
-        )
+        failed = task is not None and task.done() and (task.cancelled() or task.exception() is not None or bool(task.result()))
         if task is None or (retry and failed):
             task = asyncio.create_task(contain_task_exit(retirement.retire_channel, worker))
             self._prediction_retirement_task = task

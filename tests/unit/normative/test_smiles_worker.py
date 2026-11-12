@@ -36,7 +36,7 @@ class SmilesWorkerNormativeTests(unittest.IsolatedAsyncioTestCase):
                         connection, allocation=ALLOCATION, settings=GenerationSettings(**SETTINGS), io_seconds=2
                     )
                 generate.assert_called_once_with(SOURCE, 2, **SETTINGS)
-                self.assertEqual(len(connection.sent), 1)
+                self.assertEqual(1, len(connection.sent))
                 reader = asyncio.StreamReader()
                 reader.feed_data(connection.sent[0])
                 reader.feed_eof()
@@ -54,4 +54,4 @@ class SmilesWorkerNormativeTests(unittest.IsolatedAsyncioTestCase):
                 await client.wait_closed()
                 with self.assertRaises(ValueError):
                     await client.generate(SOURCE, 2)
-                self.assertEqual(writer.write.call_count, 1)
+                self.assertEqual(1, writer.write.call_count)

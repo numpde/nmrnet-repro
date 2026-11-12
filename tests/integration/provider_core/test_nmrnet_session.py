@@ -14,29 +14,32 @@ import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.fakes.api import api
 from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
-from tests.fakes.execution import unexpected_condition
 from tests.fakes.checkpoint_execution import RecordingDelivery
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.job_input import facts, response
-from tests.fakes.api import api
+from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from tests.integration.nmrnet.session_ports import CoordinateJsonPreparation
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit
+from nmrnet_provider.interpreter import InspectionUnavailable, ModelReportedInputProblem, _InputProblemReport
 from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
-from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
     acknowledge_start,
 )
-from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.controller import AttemptController, LiveStartPolicy
+from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected, ModelReportedInterpretationProblem
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
+from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.result_verbosity import ResultVerbosity
 from provider_core.transport import HttpTransport
 
@@ -58,6 +61,7 @@ class ScientificWorker:
         if handle is not self.handle:
             raise AssertionError("Wrong worker handle")
         self.events.append("execute")
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(self.outcome(raw)[0] for raw in self.requests)
         for ordinal, outcome in enumerate(outcomes, 1):
             for prediction in outcome["prediction"]["predictions"]:
@@ -126,6 +130,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture"},
             selected_artifacts=self.worker.artifacts,
             input_preparation=preparation,
+            max_retries=0,
         )
 
     async def test_initial_prediction_is_acquired_after_input_and_before_result_planning(self):
@@ -135,15 +140,17 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.session = self.make_session(preparation)
 
         async def acquire():
-            preparation.prepare.assert_awaited_once_with(self.instructions, require_execution=unexpected_condition.require_execution)
-            self.assertEqual(self.worker.events, [])
+            preparation.prepare.assert_awaited_once_with(
+                self.instructions, require_execution=unexpected_condition.require_execution
+            )
+            self.assertEqual([], self.worker.events)
             return self.worker, self.host, self.worker.runtime
 
         self.allocate_prediction.side_effect = acquire
         self.allocate_prediction.assert_not_called()
         await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         self.allocate_prediction.assert_awaited_once_with()
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await self.session.retire()
 
     async def test_retirement_cannot_release_an_initial_allocation_still_handing_off(self):
@@ -168,7 +175,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 await preparing
             await self.session.retire()
             self.assertTrue(self.host.confirmed)
-            self.assertEqual(self.worker.events, ["close", "closed"])
+            self.assertEqual(["close", "closed"], self.worker.events)
         finally:
             release.set()
             await asyncio.gather(preparing, return_exceptions=True)
@@ -212,7 +219,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             await self.session.retire()
         self.assertEqual(caught.exception.failures, (("input_retirement", failure),))
         self.assertTrue(self.host.confirmed)
-        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertEqual(["close", "closed"], self.worker.events)
 
     async def test_retirement_during_input_preparation_prevents_scientific_dispatch(self):
         await self.assert_late_input_blocked(rejected=False)
@@ -243,15 +250,19 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         release.set()
         with self.assertRaisesRegex(ValueError, "retirement"):
             await task
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         self.allocate_prediction.assert_not_awaited()
 
     async def test_identity_capacity_stops_dispatch_even_when_the_whole_result_fits(self):
         """Inject a planned batch at the binding seam; this does not qualify batch execution."""
         raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["O"] * 128, "coordinates": [[0, 0, 0]] * 128}).encode()
         geometry = replace(
-            prepare_json(raw), source_position_kind="atom_id", source_positions=tuple(2**53 - 1 - index for index in range(128))
+            prepare_json(raw),
+            source_position_kind="atom_id",
+            # repo-check: allow-tuple-generator -- The fixture preserves tuple-valued source positions for each ordered geometry; proof=nmrnet_provider/input_geometry.py::PreparedGeometry.
+            source_positions=tuple(2**53 - 1 - index for index in range(128)),
         )
+        # repo-check: allow-tuple-generator -- PreparedJobInput freezes ordered geometries as a tuple; proof=nmrnet_provider/prepared_input.py::PreparedJobInput.
         geometries = tuple(replace(geometry, source_record_number=index) for index in range(1, 113))
         plan = ResultPlan(
             PreparedJobInput(geometries, "mol2"),
@@ -279,18 +290,20 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         session = self.make_session(preparation)
         outcome = await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         self.assertIs(type(outcome), AnalysisFailure)
-        self.assertEqual(outcome.code, "result_size_limit")
+        self.assertEqual("result_size_limit", outcome.code)
         self.assertIn("did not run", outcome.message)
         self.assertIn("may exceed", outcome.message)
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await session.retire()
         self.assertTrue(self.host.confirmed)
 
     async def test_other_result_rejection_remains_internal(self):
-        with patch("nmrnet_provider.session.ResultPlan", side_effect=ResultRejected("structural failure")):
-            with self.assertRaisesRegex(ResultRejected, "structural failure"):
-                await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
-        self.assertEqual(self.worker.events, [])
+        with (
+            patch("nmrnet_provider.session.ResultPlan", side_effect=ResultRejected("structural failure")),
+            self.assertRaisesRegex(ResultRejected, "structural failure"),
+        ):
+            await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+        self.assertEqual([], self.worker.events)
         await self.session.retire()
 
     async def test_interpreter_diagnostics_share_the_existing_total_identity_capacity(self):
@@ -302,7 +315,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         self.assertEqual(caught.exception.document["interpreter_diagnostics"], history)
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await session.retire()
         self.assertTrue(self.host.confirmed)
 
@@ -312,7 +325,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("nmrnet.prepared_input.v1", handle.identity.schema_id)
         candidate = json.loads(handle.identity.content)
         self.assertEqual(hashlib.sha256(RAW).hexdigest(), candidate["geometries"][0]["request_sha256"])
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         self.assertNotIn("prepared_request", candidate["geometries"][0])
         with self.assertRaises(ValueError):
             await self.session.execute(object(), report_condition=unexpected_condition)
@@ -329,7 +342,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.host.failure = None
         await self.session.retire()
         self.assertTrue(self.host.confirmed)
-        self.assertEqual(self.worker.events.count("execute"), 1)
+        self.assertEqual(1, self.worker.events.count("execute"))
 
     async def test_low_output_does_not_bypass_private_identity_capacity_or_start_prediction(self):
         raw = RAW
@@ -341,11 +354,12 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={"image_id": "fixture", "tool_sources": manifest},
             selected_artifacts=self.worker.artifacts,
             input_preparation=CoordinateJsonPreparation(output=OutputSettings(verbosity=ResultVerbosity.LOW)),
+            max_retries=0,
         )
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await self.session.prepare(acknowledged, verified, report_condition=unexpected_condition)
         self.assertGreater(len(json.dumps(caught.exception.document)), MAX_EVIDENCE_BYTES)
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await self.session.retire()
         self.assertTrue(self.host.confirmed)
 
@@ -356,7 +370,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             acknowledged, verify_job_input(response(raw), feed=facts(raw)), report_condition=unexpected_condition
         )
         self.assertIsInstance(outcome, AnalysisFailure)
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual("invalid_input", outcome.code)
+        self.assertEqual([], self.worker.events)
         with self.assertRaises(ValueError):
             await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         await self.session.retire()
@@ -374,10 +389,93 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         outcome = await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         self.assertIsInstance(outcome, AnalysisFailure)
         self.assertNotIn("private native", outcome.message)
-        self.assertEqual(json.loads(outcome.evidence.content)["diagnostic"], "private native canary")
+        self.assertEqual("private native canary", json.loads(outcome.evidence.content)["diagnostic"])
         self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], history)
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await session.retire()
+
+    async def test_interpretation_failure_preserves_original_visits_reports_and_corrections(self):
+        report = ModelReportedInputProblem(_InputProblemReport("other_input_problem", "PRIVATE MOLECULE"))
+        handoff = ModelReportedInterpretationProblem(model_summary="PRIVATE SUMMARY")
+        handoff.__cause__ = report
+        later_report = ModelReportedInputProblem(_InputProblemReport("source_unit_unclear", "PRIVATE UNIT"))
+        later_handoff = ModelReportedInterpretationProblem(model_summary="PRIVATE LATER SUMMARY")
+        later_handoff.__cause__ = later_report
+        another = ModelReportedInterpretationProblem(model_summary="SECOND PRIVATE SUMMARY")
+        another.__cause__ = report
+        forged = ModelReportedInterpretationProblem(model_summary="FORGED SUMMARY")
+        forged.__cause__ = RuntimeError("FORGED CAUSE")
+        operational = RuntimeError("PRIVATE OPERATIONAL FAILURE")
+        cases = (
+            ((1, operational), (2, handoff)),
+            ((1, handoff), (2, later_handoff), (2, operational)),
+            ((1, later_handoff), (2, handoff)),
+            ((1, handoff), (2, operational)),
+            ((1, handoff), (1, another)),
+            ((1, forged),),
+            ((1, report),),
+            (),
+        )
+        correction = RuntimeError("PRIVATE CORRECTION FAILURE")
+        corrections = ((1, correction),)
+        for failures in cases:
+            with self.subTest(failures=failures):
+                failure = InterpretationFailed(failures, corrections)
+                preparation = AsyncMock()
+                diagnostics = b'{"private": "PRIVATE EVIDENCE"}'
+                preparation.interpreter_diagnostics = diagnostics
+                preparation.prepare.side_effect = failure
+                session = self.make_session(preparation)
+                with self.assertRaises(InterpretationFailed) as caught:
+                    await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                self.assertIs(caught.exception, failure)
+                self.assertIs(failure.failures, failures)
+                self.assertIs(failure.correction_failures, corrections)
+                self.assertIs(handoff.__cause__, report)
+                self.assertIs(later_handoff.__cause__, later_report)
+                self.assertIs(preparation.interpreter_diagnostics, diagnostics)
+                self.assertEqual([], self.worker.events)
+                self.allocate_prediction.assert_not_awaited()
+                with self.assertRaises(ValueError):
+                    await session.execute(object(), report_condition=unexpected_condition)
+                await session.retire()
+                preparation.retire.assert_awaited_once_with()
+                self.assertFalse(self.host.confirmed)
+
+    async def test_operational_input_failures_propagate_original_objects_and_cause(self):
+        cause = TimeoutError("PRIVATE SOURCE FAILURE")
+        inspection = InspectionUnavailable()
+        inspection.__cause__ = cause
+        failures = (
+            InterpretationInputRejected("PRIVATE CONTEXT LIMIT"),
+            inspection,
+            InputWorkerCallLimit(maximum_calls=2, calls_started=2),
+            InputSelectionTimeLimit(5, cause=cause),
+        )
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                preparation = AsyncMock()
+                diagnostics = b'{"private": "PRIVATE EVIDENCE"}'
+                preparation.interpreter_diagnostics = diagnostics
+                preparation.prepare.side_effect = failure
+                session = self.make_session(preparation)
+                with self.assertRaises(type(failure)) as caught:
+                    await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                self.assertIs(caught.exception, failure)
+                self.assertIs(preparation.interpreter_diagnostics, diagnostics)
+                self.assertEqual([], self.worker.events)
+                self.allocate_prediction.assert_not_awaited()
+                with self.assertRaises(ValueError):
+                    await session.execute(object(), report_condition=unexpected_condition)
+                with self.assertRaises(ValueError):
+                    await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                await session.retire()
+                preparation.retire.assert_awaited_once_with()
+                self.assertFalse(self.host.confirmed)
+        self.assertIs(inspection.__cause__, cause)
+        self.assertIs(failures[3].cause, cause)
+        self.assertEqual((2, 2), (failures[2].maximum_calls, failures[2].calls_started))
+        self.assertEqual(5, failures[3].seconds)
 
     async def test_oversized_reader_diagnostic_is_kept_whole_when_evidence_admission_fails(self):
         rejection = InputRejected("Cannot read selected record: missing atoms.", diagnostic="private" * 40000)
@@ -388,9 +486,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         self.assertIs(caught.exception.preparation_failure, rejection)
-        self.assertEqual(len(caught.exception.document["diagnostic"]), 280000)
+        self.assertEqual(280000, len(caught.exception.document["diagnostic"]))
         self.assertIsNotNone(caught.exception.__cause__)
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await session.retire()
 
     async def test_substituted_verified_input_never_reaches_worker(self):
@@ -400,7 +498,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 verify_job_input(response(b"different"), feed=facts(b"different")),
                 report_condition=unexpected_condition,
             )
-        self.assertEqual(self.worker.events, [])
+        self.assertEqual([], self.worker.events)
         await self.session.retire()
 
     async def test_failed_assembly_preserves_received_outcome_without_rerun(self):
@@ -414,7 +512,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(failure.exception.__cause__)
             with self.assertRaises(ValueError):
                 await self.session.execute(handle, report_condition=unexpected_condition)
-            self.assertEqual(execute.await_count, 1)
+            self.assertEqual(1, execute.await_count)
         await self.session.retire()
 
     async def test_evidence_overflow_preserves_untruncated_worker_outcome(self):
@@ -436,7 +534,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         ):
             await self.session.execute(handle, report_condition=unexpected_condition)
         self.assertIs(failure.exception.worker_result, result)
-        self.assertEqual(len(result[0]["private_warnings"][0]["message"]), 280000)
+        self.assertEqual(280000, len(result[0]["private_warnings"][0]["message"]))
         await self.session.retire()
 
     async def test_cancelled_worker_preparation_cannot_reuse_the_execution_handle(self):
@@ -476,7 +574,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             release.set()
             with self.assertRaisesRegex(ValueError, "retirement"):
                 await task
-        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertEqual(["close", "closed"], self.worker.events)
         self.assertTrue(self.host.confirmed)
 
     async def test_worker_preparation_failure_preserves_cause_and_consumes_handle(self):
@@ -488,7 +586,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.session.execute(handle, report_condition=unexpected_condition)
         await self.session.retire()
-        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertEqual(["close", "closed"], self.worker.events)
         self.assertTrue(self.host.confirmed)
 
     async def test_local_close_failure_does_not_skip_host_cleanup(self):
@@ -523,7 +621,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             await shutdown
         retire_channel.assert_awaited_once_with(self.worker)
         self.assertTrue(self.host.confirmed)
-        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertEqual(["close", "closed"], self.worker.events)
 
     async def test_shutdown_does_not_repeat_retirement_that_completed_before_join(self):
         await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
@@ -550,9 +648,11 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_process_control_failure_in_retirement_stays_owned_by_task(self):
         await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
         fatal = SystemExit(7)
-        with patch.object(self.host, "retire_channel", new=AsyncMock(side_effect=fatal)):
-            with self.assertRaises(BaseExceptionGroup) as caught:
-                await self.session.retire()
+        with (
+            patch.object(self.host, "retire_channel", new=AsyncMock(side_effect=fatal)),
+            self.assertRaises(BaseExceptionGroup) as caught,
+        ):
+            await self.session.retire()
         self.assertIs(caught.exception.exceptions[0], fatal)
         await self.session.retire()
         self.assertTrue(self.host.confirmed)
@@ -586,7 +686,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             await self.session.retire()
         self.assertIs(failure.exception, cancelled)
         self.assertIs(self.session.last_retirement_failure.cause, first)
-        self.assertEqual(self.worker.events, ["closed"])
+        self.assertEqual(["closed"], self.worker.events)
 
     async def test_signed_api_receives_exact_handed_off_scientific_result_with_live_ownership(self):
         diagnostic = "PRIVATE_PREPARATION_LIFECYCLE"
@@ -611,7 +711,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             target = request.split(b"\r\n", 1)[0].split()[1]
             if target.endswith(b"/complete"):
                 self.assertTrue(self.host.confirmed)
-                self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
+                self.assertEqual(["prepare", "execute", "close", "closed"], self.worker.events)
                 content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
                 return complete_response(
                     result_schema_id="nmrnet.coordinate_shifts.result.v2",
@@ -676,9 +776,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     accepted = await controller.run(pending)
                 self.assertIs(type(accepted), DeliveryAcceptedCheckpoint)
-                self.assertEqual(claims.live_owners(), ())
+                self.assertEqual((), claims.live_owners())
                 self.assertTrue(controller.shutdown_ready)
-                self.assertEqual(len(delivery.items), 1)
+                self.assertEqual(1, len(delivery.items))
                 item = delivery.items[0]
                 self.assertEqual(item.body_sha256, accepted.selection.body_sha256)
                 candidate = json.loads(observed["identity"].content)
@@ -688,14 +788,14 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     json.loads(observed["outcome"].evidence.content)["preparation_diagnostics"][0]["diagnostic"], diagnostic
                 )
-                self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
-                self.assertEqual(len(peer.requests), 8)
+                self.assertEqual(["prepare", "execute", "close", "closed"], self.worker.events)
+                self.assertEqual(8, len(peer.requests))
                 # This is a separate signed wire assertion after recording
                 # handoff, not a claim that the fixture ran a delivery daemon.
                 receipt = await client.complete_attempt(item.body, execution_attempt_ref=item.execution_attempt_ref)
                 self.assertEqual(receipt.execution_attempt_ref, item.execution_attempt_ref)
                 self.assertEqual(peer.request_bodies[-1], item.body)
-                self.assertEqual(len(peer.requests), 9)
+                self.assertEqual(9, len(peer.requests))
             finally:
                 await self.session.retire()
             await transport.retire()

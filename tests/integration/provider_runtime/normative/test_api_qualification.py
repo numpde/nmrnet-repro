@@ -9,8 +9,8 @@ from tools.container_guard import require_container
 require_container()
 
 import os
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -41,6 +41,7 @@ provider_host_disjoint() { [[ $1 != "$2" && $1 != "$2/"* ]]; }
 provider_host_ipv4() { [[ $1 == 127.0.0.1 || $1 == 192.0.2.53 || $1 == 198.51.100.53 ]]; }
 provider_host_refuse() { provider_host_diagnostic=$1; return 2; }
 provider_host_initialize() {
+    inference_diagnostic=
     trap "$1" EXIT
     mkdir -p "$provider_host_root/components" "$provider_host_root/routes"
     source "$repository_root/tools/docker_client.sh"
@@ -72,7 +73,8 @@ provider_host_create() {
         stage)
             printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt"
             printf '%s\n' '{"provider_ref":"provider:fixture"}' > "$provider_host_root/source/identity.json"
-            mkdir -m 700 -p "$provider_host_root/deployment/secrets"
+            mkdir -m 700 -p "$provider_host_root/deployment/secrets" "$provider_host_root/deployment/interpreter.d"
+            printf 'fixture endpoint\n' > "$provider_host_root/deployment/interpreter.d/00-primary.toml"
             printf 'fixture binding\\n' > "$provider_host_root/deployment/bindings.toml"
             for file in provider.toml deployment.toml; do printf '%s\n' "$file" > "$provider_host_root/deployment/$file"; done
             for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
@@ -126,7 +128,7 @@ provider_host_command() {
 }
 """
 
-DEPLOYMENT = r'''#!/usr/bin/env bash
+DEPLOYMENT = r"""#!/usr/bin/env bash
 set -eu
 [[ $1 =~ ^(install|up|down)$ ]]
 [[ $NMRNET_DEPLOYMENT_INPUT =~ ^qualification-api-[A-Za-z0-9]{8}$ ]]
@@ -141,6 +143,7 @@ printf '%s|%s\n' "$1" "$NMRNET_DEPLOYMENT_INPUT" >> "$TEST_RECORDS/deployments"
 printf '%s\n' "$1" >> "$TEST_RECORDS/events"
 private=$root/secrets/deployments/$NMRNET_DEPLOYMENT_INPUT
 for file in provider.toml deployment.toml; do cmp -s "$public/$file" <(printf '%s\n' "$file"); done
+cmp -s "$public/interpreter.d/00-primary.toml" <(printf 'fixture endpoint\n')
 for file in api.toml signing.private.json interpreter.key api-ca.crt model-ca.pem; do
     cmp -s "$private/$file" <(printf 'fixture-%s\n' "$file")
     [[ $(stat -c '%a' "$private/$file") == 600 ]]
@@ -152,11 +155,11 @@ if [[ $1 == install ]]; then
     ln -s generation-fixture "$private/current"
 fi
 if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
-'''
+"""
 
 # This fake stops at the shared host's public Make boundary; its owner tests
 # Engine, SQLite and helper retirement separately.
-SHARED_OWNER = r'''#!/usr/bin/env bash
+SHARED_OWNER = r"""#!/usr/bin/env bash
 set -eu
 action=$1
 case $action in
@@ -173,14 +176,14 @@ case $action in
     down) [[ $PROJECT == nmrnet-qualification-* ]]; printf 'delivery-down\n' >> "$TEST_RECORDS/events" ;;
     *) exit 96 ;;
 esac
-'''
+"""
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
     def test_api_cleanup_does_not_dispatch_after_unretired_client(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            script = r'''
+            script = r"""
 source /fixture/provider_api_qualification.sh
 api_witness_mode=existing-pasted
 api_deployment_active=false
@@ -193,16 +196,22 @@ provider_host_remove() { printf '%s\n' "$1" >> "$TEST_ROOT/calls"; inference_ret
 docker_client_cleanup() { : > "$TEST_ROOT/forbidden-cleanup"; }
 sleep() { : > "$TEST_ROOT/held"; command sleep "$@"; }
 api_witness_finish
-'''
-            process = subprocess.Popen(["bash", "-c", script], env=dict(os.environ, TEST_ROOT=str(root)),
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+"""
+            process = subprocess.Popen(
+                ["bash", "-c", script],
+                env=dict(os.environ, TEST_ROOT=str(root)),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
             try:
                 deadline = time.monotonic() + 2
                 while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
                     time.sleep(0.01)
                 self.assertIsNone(process.poll())
                 self.assertTrue((root / "held").exists())
-                self.assertEqual((root / "calls").read_text().splitlines(), ["client"])
+                self.assertEqual(["client"], (root / "calls").read_text().splitlines())
                 self.assertFalse((root / "forbidden-cleanup").exists())
             finally:
                 if process.poll() is None:
@@ -213,7 +222,7 @@ api_witness_finish
         for phase in ("logs",):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                script = r'''
+                script = r"""
 source /workspace/tools/compose_qualification.sh
 scratch=$TEST_ROOT
 deployment_installed=false
@@ -245,17 +254,22 @@ case $TEST_PHASE in
     logs) (exit 7) ;;
 esac
 compose_witness_finish
-'''
-                process = subprocess.Popen(["bash", "-c", script],
+"""
+                process = subprocess.Popen(
+                    ["bash", "-c", script],
                     env=dict(os.environ, TEST_ROOT=str(root), TEST_PHASE=phase),
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
                 try:
                     deadline = time.monotonic() + 2
                     while not (root / "held").exists() and process.poll() is None and time.monotonic() < deadline:
                         time.sleep(0.01)
-                    self.assertIsNone(process.poll(), "finish released the original local owner")
+                    self.assertIsNone(process.poll(), msg="finish released the original local owner")
                     self.assertTrue((root / "held").exists())
-                    self.assertEqual(len((root / "calls").read_text().splitlines()), 1)
+                    self.assertEqual(1, len((root / "calls").read_text().splitlines()))
                     self.assertFalse((root / "forbidden-retirement").exists())
                     self.assertFalse((root / "forbidden-cleanup").exists())
                 finally:
@@ -266,18 +280,25 @@ compose_witness_finish
                 self.assertIn("original cleanup client diagnostic", stderr)
 
     def test_api_delivery_cleanup_preserves_failed_client_before_restore(self):
-        script = r'''
+        script = r"""
 source /fixture/provider_api_qualification.sh
 api_deployment_active=false
 qualification_delivery_down() { printf 'unexpected shared shutdown\n'; return 7; }
 api_witness_stop_deployment 0
-'''
-        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "")
+"""
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=3, check=False)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
 
     def test_existing_deployment_mode_owns_only_one_client_and_never_replaces_the_provider(self):
-        for scenario in ("normal", "query-failure", "existing-output", "ignored-output", "missing-parent", "missing-volume"):
+        for scenario, expected_status in (
+            ("normal", 0),
+            ("query-failure", 7),
+            ("existing-output", 2),
+            ("ignored-output", 0),
+            ("missing-parent", 0),
+            ("missing-volume", 2),
+        ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 repository, records, output = root / "repository", root / "records", root / "output"
@@ -299,63 +320,84 @@ api_witness_stop_deployment 0
                     'repository_git() { if [[ $* != *status* ]]; then printf "%040d\\n" 1; fi; }\n'
                 )
                 (tools / "git_inputs.sh").write_text(
-                    'copy_git_blobs() { local source=$2 target=$4; shift 5; '
+                    "copy_git_blobs() { local source=$2 target=$4; shift 5; "
                     'for path in "$@"; do mkdir -p "$(dirname -- "$target/$path")"; cp -- "$source/$path" "$target/$path"; done; }\n'
                 )
-                (tools / "provider_deployment.sh").write_text('''set -eu
+                (tools / "provider_deployment.sh").write_text("""set -eu
 [[ $# == 1 && $1 == client-inputs && $NMRNET_DEPLOYMENT_INPUT == original ]]
 printf '%s\\n' "$1" > "$TEST_RECORDS/query"
 [[ $TEST_QUERY_FAILED == false ]] || exit 7
 printf '%s\\n' '{"fixture":"admitted original identity"}'
-''')
-                for name in ("tools/inference_native.sh", "tools/worker_retirement.sh",
-                             "tools/container_guard.py", "tests/integration/provider_runtime/api_prediction.py",
-                             "tests/fixtures/preparation/api_pasted.json"):
+""")
+                for name in (
+                    "tools/inference_native.sh",
+                    "tools/worker_retirement.sh",
+                    "tools/container_guard.py",
+                    "tests/integration/provider_runtime/api_prediction.py",
+                    "tests/fixtures/preparation/api_pasted.json",
+                ):
                     path = repository / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.touch()
                 local_settings = repository / "config/deployments/original/deployment.toml"
                 local_settings.parent.mkdir(parents=True)
                 local_settings.write_text('[deployment]\nproject = "fixture"\ngid = 1001\n')
-                environment = dict(PATH=os.environ["PATH"], TEST_RECORDS=str(records),
-                    TEST_PYTHON=sys.executable,
-                    NMRNET_SHARED_RUNTIME_IMAGE_INPUT="sha256:" + "a" * 64,
-                    TEST_QUERY_FAILED=str(scenario == "query-failure").lower(), NMRNET_DEPLOYMENT_INPUT="original",
-                    TEST_VOLUME_MISSING=str(scenario == "missing-volume").lower(),
-                    NMRNET_PROJECT_REF_INPUT="project:fixture", NMRNET_USER_ID_INPUT="fixture",
-                    NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT=str(root / "credentials"),
-                    NMRNET_CA_FILE_INPUT=str(root / "ca.pem"), NMRNET_RETAINED_RESULT_INPUT=str(root / "oracle.json"),
-                    NMRNET_ADDRESS_INPUT="127.0.0.1", NMRNET_INTERFACE_INPUT="fixture0",
-                    NMRNET_API_CLIENT_IMAGE_INPUT="sha256:" + "a" * 64, NMRNET_OUTPUT_INPUT=str(output))
-                result = subprocess.run(["bash", str(script), "existing-pasted"], env=environment,
-                                        capture_output=True, text=True, timeout=10, check=False)
+                environment = {
+                    "PATH": os.environ["PATH"],
+                    "TEST_RECORDS": str(records),
+                    "TEST_PYTHON": sys.executable,
+                    "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "sha256:" + "a" * 64,
+                    "TEST_QUERY_FAILED": str(scenario == "query-failure").lower(),
+                    "NMRNET_DEPLOYMENT_INPUT": "original",
+                    "TEST_VOLUME_MISSING": str(scenario == "missing-volume").lower(),
+                    "NMRNET_PROJECT_REF_INPUT": "project:fixture",
+                    "NMRNET_USER_ID_INPUT": "fixture",
+                    "NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT": str(root / "credentials"),
+                    "NMRNET_CA_FILE_INPUT": str(root / "ca.pem"),
+                    "NMRNET_RETAINED_RESULT_INPUT": str(root / "oracle.json"),
+                    "NMRNET_ADDRESS_INPUT": "127.0.0.1",
+                    "NMRNET_INTERFACE_INPUT": "fixture0",
+                    "NMRNET_API_CLIENT_IMAGE_INPUT": "sha256:" + "a" * 64,
+                    "NMRNET_OUTPUT_INPUT": str(output),
+                }
+                result = subprocess.run(
+                    ["bash", str(script), "existing-pasted"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
                 if scenario == "existing-output":
-                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                     self.assertIn("Use fresh client output", result.stderr)
                     self.assertFalse((records / "query").exists())
                     self.assertFalse((records / "creates").exists())
                     continue
-                self.assertEqual(result.returncode, 7 if scenario == "query-failure" else 2 if scenario == "missing-volume" else 0, result.stderr)
-                self.assertEqual((records / "query").read_text(), "client-inputs\n")
+                self.assertEqual(expected_status, result.returncode, msg=result.stderr)
+                self.assertEqual("client-inputs\n", (records / "query").read_text())
                 self.assertFalse((records / "deployments").exists())
                 if scenario == "query-failure":
                     self.assertFalse(output.exists())
                     self.assertFalse((records / "creates").exists())
                 elif scenario == "missing-volume":
                     self.assertNotIn("client|", (records / "creates").read_text())
-                    self.assertEqual((records / "removals").read_text(), "grants\n")
+                    self.assertEqual("grants\n", (records / "removals").read_text())
                 else:
                     if scenario == "missing-parent":
                         self.assertEqual(output.parent.stat().st_mode & 0o777, 0o700)
-                    self.assertEqual((records / "creates").read_text().splitlines(),
-                                     ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"])
-                    self.assertEqual((records / "removals").read_text(), "grants\nclient\n")
+                    self.assertEqual(
+                        (records / "creates").read_text().splitlines(),
+                        ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"],
+                    )
+                    self.assertEqual("grants\nclient\n", (records / "removals").read_text())
                     grants = (records / "client.grants").read_bytes()
                     self.assertNotIn(b"/attempts", grants)
                     self.assertNotIn(b"model_peer", grants)
                     self.assertIn(b"fixture-proxy-socket", grants)
                     self.assertIn(b"--group-add\x001001\x00", grants)
 
+    # silent-defaults: allow-contract -- This fixture starts with an unchanged successful ambiguity probe; explicit switches select formats or probe/source failures; proof=ApiQualificationCompositionTests.test_ambiguity_mode_has_one_external_route_and_no_api_native_or_state_grants, test_format_choice_mode_reuses_the_same_route_retirement_and_metadata_only_grants and test_ambiguity_failure_or_changed_sources_still_retires_original_helpers.
     def _ambiguity(self, root, *, missing=None, failed=False, changed=False, probe="ambiguity"):
         repository, records, output = root / "repository", root / "records", root / "output"
         records.mkdir()
@@ -374,6 +416,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
             "tools/git_metadata.sh",
             "tests/integration/provider_runtime/interpreter_ambiguity.py",
             "tests/integration/provider_runtime/stage_api_config.py",
+            "tests/integration/provider_runtime/interpreter_fragment.py",
             "tests/integration/provider_core/config_ports.py",
             "tests/integration/provider_runtime/binding_inputs.py",
             "tests/fixtures/preparation/interpreter_ambiguity.json",
@@ -406,7 +449,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
     def test_ambiguity_mode_has_one_external_route_and_no_api_native_or_state_grants(self):
         with tempfile.TemporaryDirectory() as temporary:
             result, records, output, key, ca = self._ambiguity(Path(temporary))
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             creates = [line.split("|") for line in (records / "creates").read_text().splitlines()]
             self.assertEqual(
                 [(row[0], row[1]) for row in creates],
@@ -431,7 +474,6 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 self.assertNotIn(forbidden, selection + proxy + probe)
             argv = (records / "proxy.argv").read_text().split("\0")[:-1]
             self.assertEqual(
-                argv[argv.index("--mode"):],
                 [
                     "--mode",
                     "external",
@@ -448,36 +490,37 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "--status-directory",
                     "/diagnostics",
                 ],
+                argv[argv.index("--mode") :],
             )
-            self.assertEqual((output / "resolv.conf").read_text(), "nameserver 192.0.2.53\nnameserver 198.51.100.53\n")
+            self.assertEqual("nameserver 192.0.2.53\nnameserver 198.51.100.53\n", (output / "resolv.conf").read_text())
             waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
             self.assertIn(int(waits["probe"]), (2420, 2419))
-            self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
+            self.assertEqual(["selection", "admission", "probe", "proxy"], (records / "removals").read_text().splitlines())
             self.assertIn("no API Jobs or science", result.stdout)
             self.assertFalse((records / "deployments").exists())
 
     def test_format_choice_mode_reuses_the_same_route_retirement_and_metadata_only_grants(self):
         with tempfile.TemporaryDirectory() as temporary:
             result, records, _output, _key, _ca = self._ambiguity(Path(temporary), probe="formats")
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             creates = [line.split("|")[:2] for line in (records / "creates").read_text().splitlines()]
             self.assertEqual(creates, [["selection", "none"], ["admission", "none"], ["proxy", "host"], ["probe", "none"]])
             for role in ("admission", "probe"):
                 argv = (records / (role + ".argv")).read_text().split("\0")
-                self.assertEqual(argv[argv.index("--probe") + 1], "formats")
+                self.assertEqual("formats", argv[argv.index("--probe") + 1])
             grants = (records / "probe.grants").read_text()
             self.assertIn("interpreter_formats.json,dst=/fixture/cases.json,readonly", grants)
             self.assertNotIn("/native", grants)
             self.assertNotIn("/input/provider.json", grants)
             self.assertNotIn("/input/retained-result.json", grants)
-            self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
+            self.assertEqual(["selection", "admission", "probe", "proxy"], (records / "removals").read_text().splitlines())
             self.assertFalse((records / "deployments").exists())
 
     def test_ambiguity_selector_refusal_has_zero_helper_dispatch(self):
         for missing in ("INTERPRETER_CONFIG", "EXTERNAL_INTERFACE", "RESOLVERS", "OUTPUT"):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
                 result, records, _output, _key, _ca = self._ambiguity(Path(temporary), missing=missing)
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(2, result.returncode)
                 self.assertIn(missing, result.stderr)
                 self.assertFalse((records / "creates").exists())
 
@@ -485,35 +528,126 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
         for failed, changed in ((True, False), (False, True)):
             with self.subTest(failed=failed, changed=changed), tempfile.TemporaryDirectory() as temporary:
                 result, records, _output, _key, _ca = self._ambiguity(Path(temporary), failed=failed, changed=changed)
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(2, result.returncode)
                 self.assertNotIn("qualified;", result.stdout)
                 removals = (records / "removals").read_text().splitlines()
                 self.assertLess(removals.index("probe"), removals.index("proxy"))
-                self.assertEqual((records / "creates").read_text().count("probe|"), 1)
+                self.assertEqual(1, (records / "creates").read_text().count("probe|"))
                 if changed:
                     self.assertIn("source bytes changed", result.stderr)
 
     def test_actual_script_delegates_scripted_and_real_profiles_without_cross_grants(self):
         deployment_names = set()
-        for profile, clocks in (
-            ("scripted-pasted", (180, 240, 260)),
-            ("real-pasted", (900, 960, 980)),
-            ("real-smiles", (900, 960, 980)),
-            ("real-smiles-multiple", (900, 960, 980)),
-            ("real-upload", (900, 1020, 1040)),
-            ("real-sdf-zip", (900, 1200, 1220)),
-            ("resume-sdf-zip", (900, 1200, 1220)),
-            ("failed-install", (180, 240, 260)),
-            ("failed-up", (180, 240, 260)),
-            ("failed-down", (180, 240, 260)),
+        for case in (
+            {
+                "profile": "scripted-pasted",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "pasted",
+                "roles": ["grants", "peer", "stage", "client"],
+                "fixture": "api_pasted.json",
+            },
+            {
+                "profile": "real-pasted",
+                "clocks": (900, 960, 980),
+                "mode": "real-pasted",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "pasted",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_pasted.json",
+            },
+            {
+                "profile": "real-smiles",
+                "clocks": (900, 960, 980),
+                "mode": "real-smiles",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "smiles",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_smiles.json",
+            },
+            {
+                "profile": "real-smiles-multiple",
+                "clocks": (900, 960, 980),
+                "mode": "real-smiles-multiple",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "smiles-multiple",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_smiles_multiple.json",
+            },
+            {
+                "profile": "real-upload",
+                "clocks": (900, 1020, 1040),
+                "mode": "real-upload",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "upload",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_upload.json",
+            },
+            {
+                "profile": "real-sdf-zip",
+                "clocks": (900, 1200, 1220),
+                "mode": "real-sdf-zip",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "sdf-zip",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_sdf_zip.json",
+            },
+            {
+                "profile": "resume-sdf-zip",
+                "clocks": (900, 1200, 1220),
+                "mode": "real-sdf-zip",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "sdf-zip",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_sdf_zip.json",
+            },
+            {
+                "profile": "failed-install",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": "install",
+                "status": 7,
+                "deployment_calls": ["install"],
+            },
+            {
+                "profile": "failed-up",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": "up",
+                "status": 7,
+                "deployment_calls": ["install", "up", "down"],
+            },
+            {
+                "profile": "failed-down",
+                "clocks": (180, 240, 260),
+                "mode": "scripted-pasted",
+                "failed": "down",
+                "status": 7,
+                "deployment_calls": ["install", "up", "down", "down"],
+            },
         ):
+            profile, clocks = case["profile"], case["clocks"]
             with self.subTest(mode=profile), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repository, records, output = root / "repository", root / "records", root / "output"
                 records.mkdir()
                 resumed = profile == "resume-sdf-zip"
-                failed = profile.removeprefix("failed-") if profile.startswith("failed-") else None
-                mode = "scripted-pasted" if failed else "real-sdf-zip" if resumed else profile
+                failed, mode = case["failed"], case["mode"]
                 script = repository / "tools/provider_api_qualification.sh"
                 script.parent.mkdir(parents=True)
                 shutil.copyfile("/fixture/provider_api_qualification.sh", script)
@@ -526,7 +660,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 (shared / "record.sh").write_text(SHARED_OWNER)
                 (shared / "Makefile").write_text("delivery/deployment/%:\n\t@bash record.sh $*\n")
                 (repository / "tools/wheelhouse_path.sh").write_text(
-                    'select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }; lock_wheelhouse() { :; }\n'
+                    "select_wheelhouse() { wheelhouse_directory=$NMRNET_WHEELHOUSE_INPUT; }; require_wheelhouse_pool() { :; }; lock_wheelhouse() { :; }\n"
                 )
                 (repository / "config/deployments").mkdir(parents=True)
                 (repository / "tools/docker_client.sh").write_text(
@@ -553,6 +687,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     "requirements/provider-core-release.json",
                     "tests/integration/provider_runtime/model_peer.py",
                     "tests/integration/provider_runtime/stage_api_config.py",
+                    "tests/integration/provider_runtime/interpreter_fragment.py",
+                    "tests/integration/provider_runtime/materialize_api_config.py",
                     "tests/integration/provider_runtime/binding_inputs.py",
                     "tests/integration/provider_runtime/api_prediction.py",
                     "tests/integration/provider_core/config_ports.py",
@@ -637,15 +773,14 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 result = subprocess.run(
                     ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
-                expected_status = 7 if failed else 0
-                self.assertEqual(result.returncode, expected_status, result.stderr)
+                self.assertEqual(case["status"], result.returncode, msg=result.stderr)
                 calls = [row.split("|") for row in (records / "deployments").read_text().splitlines()]
                 if failed:
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("qualified;", result.stdout)
                     if failed == "down":
-                        self.assertEqual([row[0] for row in calls], ["install", "up", "down", "down"])
-                        self.assertEqual((records / "creates").read_text().count("client|"), 1)
+                        self.assertEqual(case["deployment_calls"], [row[0] for row in calls])
+                        self.assertEqual(1, (records / "creates").read_text().count("client|"))
                         events = (records / "events").read_text().splitlines()
                         self.assertNotIn("signal-peer", events)
                         self.assertNotIn("peer", events)
@@ -653,13 +788,13 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         self.assertIn("DEPLOYMENT=" + calls[0][1], result.stderr)
                     else:
                         self.assertNotIn("client|", (records / "creates").read_text())
-                        self.assertEqual([row[0] for row in calls], ["install", "up", "down"] if failed == "up" else ["install"])
+                        self.assertEqual(case["deployment_calls"], [row[0] for row in calls])
                     if failed == "up":
                         events = (records / "events").read_text().splitlines()
                         self.assertLess(events.index("down"), events.index("peer"))
                     continue
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
+                self.assertEqual(0, result.returncode, msg=result.stderr)
+                self.assertEqual(case["deployment_calls"], [row[0] for row in calls])
                 self.assertEqual({row[1] for row in calls}, {(output / "deployment-name").read_text().strip()})
                 self.assertNotIn(calls[0][1], deployment_names)
                 deployment_names.add(calls[0][1])
@@ -674,11 +809,11 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 stage_argv = (records / "stage.argv").read_text().split("\0")[:-1]
                 self.assertIn("--deployment", stage_argv)
                 self.assertEqual(
-                    stage_argv[stage_argv.index("--deployment-settings") + 1],
                     "/input/deployment.toml",
+                    stage_argv[stage_argv.index("--deployment-settings") + 1],
                 )
-                self.assertEqual(stage_argv[stage_argv.index("--api-interface") + 1], "lo")
-                self.assertEqual(stage_argv[stage_argv.index("--api-address") + 1], "127.0.0.1")
+                self.assertEqual("lo", stage_argv[stage_argv.index("--api-interface") + 1])
+                self.assertEqual("127.0.0.1", stage_argv[stage_argv.index("--api-address") + 1])
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
                 self.assertEqual(
                     client_argv[-8:-2] if resumed else client_argv[-6:],
@@ -688,7 +823,7 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                         "--process-seconds",
                         str(clocks[1]),
                         "--case-kind",
-                        mode.removeprefix("real-") if mode != "scripted-pasted" else "pasted",
+                        case["client_kind"],
                     ],
                 )
                 self.assertEqual(
@@ -697,8 +832,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 )
                 creates = (records / "creates").read_text().splitlines()
                 self.assertEqual(
+                    case["roles"],
                     [line.split("|")[0] for line in creates],
-                    ["grants", "peer", "stage", "client"] if mode == "scripted-pasted" else ["grants", "selection", "stage", "client"],
                 )
                 self.assertTrue(all(line.endswith("|true") for line in creates))
                 self.assertIn(f"stage|none|{image}|true", creates)
@@ -716,20 +851,14 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 client_grants = (records / "client.grants").read_text().split("\0")[:-1]
                 self.assertIn("--group-add", client_grants)
                 self.assertIn("type=volume,src=fixture-proxy-socket,dst=/run/nmr-api-proxy,readonly,volume-nocopy", client_grants)
-                self.assertEqual(client_argv[client_argv.index("--proxy-socket") + 1], "/run/nmr-api-proxy/proxy.sock")
+                self.assertEqual("/run/nmr-api-proxy/proxy.sock", client_argv[client_argv.index("--proxy-socket") + 1])
                 self.assertEqual(any("dst=/input/upload-receipt.json,readonly" in grant for grant in client_grants), resumed)
                 if resumed:
-                    self.assertEqual(client_argv[-2:], ["--upload-receipt", "/input/upload-receipt.json"])
+                    self.assertEqual(["--upload-receipt", "/input/upload-receipt.json"], client_argv[-2:])
                 self.assertTrue(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in stage_grants))
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))
-                expected_fixture = (
-                    "api_sdf_zip.json"
-                    if mode == "real-sdf-zip"
-                    else "api_smiles_multiple.json"
-                    if mode == "real-smiles-multiple"
-                    else "api_" + mode.rsplit("-", 1)[-1] + ".json"
-                )
+                expected_fixture = case["fixture"]
                 source_root = output / "qualification-source" if mode == "real-sdf-zip" else repository
                 self.assertTrue(
                     any(
@@ -756,23 +885,26 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertIn("tests/integration/provider_runtime/api_prediction.py", capture)
                     self.assertIn("tests/fixtures/preparation/normative/butane_conformers.sdf", capture)
                 if mode != "scripted-pasted":
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "external")
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "fixture0")
-                    self.assertEqual([stage_argv[index + 1] for index, arg in enumerate(stage_argv) if arg == "--resolver"], selectors["RESOLVERS"].split())
+                    self.assertEqual("external", stage_argv[stage_argv.index("--interpreter-route") + 1])
+                    self.assertEqual("fixture0", stage_argv[stage_argv.index("--interpreter-interface") + 1])
+                    self.assertEqual(
+                        [stage_argv[index + 1] for index, arg in enumerate(stage_argv) if arg == "--resolver"],
+                        selectors["RESOLVERS"].split(),
+                    )
                     self.assertNotIn("--interpreter-network", stage_argv)
                     selection_grants = (records / "selection.grants").read_text().split("\0")[:-1]
                     self.assertFalse(any(selected_key in grant or selected_ca in grant for grant in selection_grants))
                     self.assertIn(f"type=bind,src={selected_key},dst=/input/interpreter.key,readonly", stage_grants)
                     self.assertIn(f"type=bind,src={selected_ca},dst=/input/interpreter-ca.pem,readonly", stage_grants)
                     self.assertEqual(
-                        (records / "stage.argv").read_text().split("\0")[-3:-1],
                         ["--interpreter-config", "/input/interpreter.toml"],
+                        (records / "stage.argv").read_text().split("\0")[-3:-1],
                     )
                     self.assertFalse(any("model-ready" in grant for grant in stage_grants))
                 else:
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "local")
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "eth0")
+                    self.assertEqual("local", stage_argv[stage_argv.index("--interpreter-route") + 1])
+                    self.assertEqual("eth0", stage_argv[stage_argv.index("--interpreter-interface") + 1])
                     self.assertEqual(stage_argv[stage_argv.index("--interpreter-network") + 1], f"{2:064d}")
-                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-address") + 1], "127.0.0.1")
+                    self.assertEqual("127.0.0.1", stage_argv[stage_argv.index("--interpreter-address") + 1])
                     self.assertNotIn("--resolver", stage_argv)
                     self.assertFalse(any("interpreter.key" in grant for grant in stage_grants))

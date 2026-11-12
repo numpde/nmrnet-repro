@@ -13,13 +13,12 @@ from unittest.mock import AsyncMock, patch
 
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
-from tests.integration.nmrnet.interpreter_ports import chat_endpoint
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
-from tests.integration.nmrnet.interpreter_ports import fixture_interpreter
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected
@@ -135,7 +134,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose)
         with self.assertRaises(asyncio.CancelledError):
             await owner.prepare(ports.instructions, require_execution=lambda: None)
-        self.assertEqual(len(retained), 1)
+        self.assertEqual(1, len(retained))
         self.assertIsNotNone(retained[0])
         self.assertTrue(retained[0].done())
         self.assertIs(owner.source_failure, source_failure)
@@ -273,7 +272,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(TimeoutError) as caught:
             await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertIs(caught.exception, failure)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_owned_deadline_cannot_hide_a_late_operational_chooser_failure(self):
         ports = SessionPorts()
@@ -294,7 +293,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
         self.assertIn("Actual worker failure", rendered)
         self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_owned_deadline_cannot_hide_an_operational_cause_carried_by_chooser_cancellation(self):
         for nested in (False, True):
@@ -325,7 +324,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
         self.assertIn("Independent worker failure", rendered)
         self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_model_fault_observed_during_retirement_cannot_become_a_job_time_limit(self):
         for observation in ("io", "status"):
@@ -357,14 +356,14 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             try:
                 with self.assertRaises(BaseExceptionGroup) as caught:
                     await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-                self.assertTrue(any(head is not None for head in observed_heads), "Model response headers were not observed")
+                self.assertTrue(any(head is not None for head in observed_heads), msg="Model response headers were not observed")
                 rendered = json.dumps(failure_evidence(caught.exception, secrets=("PRIVATE_MODEL_KEY",)))
                 self.assertIn("request:late-model", rendered)
                 self.assertIn('"errno": 5' if observation == "io" else '"status": 503', rendered)
                 self.assertNotIn("PRIVATE_MODEL_KEY", rendered)
                 self.assertNotIn("PRIVATE_LATE_IO", rendered)
-                self.assertEqual(len(peer.requests), 1)
-                self.assertEqual(ports.worker.events, [])
+                self.assertEqual(1, len(peer.requests))
+                self.assertEqual([], ports.worker.events)
             finally:
                 await session.retire()
 
@@ -390,7 +389,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertIs(owner.source_failure, failure)
         self.assertIn(failure, caught.exception.exceptions)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_owned_deadline_with_failed_cleanup_remains_operational(self):
         ports = SessionPorts()
@@ -407,7 +406,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(caught.exception.operation_failure, TimeoutError)
             self.assertIs(caught.exception.failures[0][1], cleanup)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
         finally:
             chooser.retire.side_effect = None
             await session.retire()
@@ -435,7 +434,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             evidence = json.dumps(failure_evidence(caught.exception, secrets=()))
             self.assertIn('"errno": 5', evidence)
             self.assertNotIn("PRIVATE_GENERATOR_CLEANUP", evidence)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             self.assertFalse(ports.generator_host.confirmed)
         finally:
             ports.generator_host.failure = None
@@ -465,7 +464,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(owner.source_failure.__cause__, outage)
         self.assertIn(outage, caught.exception.exceptions)
         self.assertIn("cumulative deadline", json.dumps(failure_evidence(caught.exception, secrets=())))
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_external_cancellation_during_deadline_retirement_stays_the_same_cancellation(self):
         ports = SessionPorts()
@@ -494,7 +493,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 await task
             self.assertIs(caught.exception, interruptions[0])
             self.assertIsInstance(caught.exception.__cause__, PreparationRetirementFailed)
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
         finally:
             ports.transports[0].retire.side_effect = None
             if not task.done():
@@ -525,7 +524,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("operator", protected)
         self.assertNotIn("PRIVATE_MODEL_KEY", protected)
         self.assertNotIn("PRIVATE_CREDENTIAL", protected)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         ports.allocate_reader.assert_awaited_once()
         ports.allocate_generator.assert_not_awaited()
         chooser.retire.side_effect = None
@@ -575,7 +574,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose)
         self.addAsyncCleanup(owner.retire)
         prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
-        self.assertEqual(prepared.output.as_dict(), {"verbosity": "medium", "shift_significant_digits": 4})
+        self.assertEqual({"verbosity": "medium", "shift_significant_digits": 4}, prepared.output.as_dict())
         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
 
     async def test_parent_cancellation_retains_the_original_late_operational_child_failure_after_clean_join(self):
@@ -606,7 +605,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(caught.exception.__cause__, failure)
             self.assertIsNone(owner.last_retirement_failure)
             chooser.retire.assert_awaited_once()
-            self.assertEqual(ports.worker.events, [])
+            self.assertEqual([], ports.worker.events)
             await owner.retire()
             output = io.StringIO()
             with (
@@ -645,10 +644,10 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(caught.exception.operation_failure)
         self.assertIs(caught.exception.failures[0][1], cleanup)
         self.assertNotIn("PRIVATE", str(caught.exception))
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         chooser.retire.side_effect = None
         await session.retire()
-        self.assertEqual(chooser.retire.await_count, 2)
+        self.assertEqual(2, chooser.retire.await_count)
         self.assertIs(preparation.last_retirement_failure, caught.exception)
 
     async def test_primary_failure_and_cancellation_survive_later_model_cleanup_failure(self):
@@ -673,7 +672,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(failure.failures[0][1], cleanup)
                 chooser.retire.side_effect = None
                 await owner.retire()
-                self.assertEqual(chooser.retire.await_count, 2)
+                self.assertEqual(2, chooser.retire.await_count)
 
     async def test_full_retirement_still_attempts_source_transports_after_model_cleanup_failure(self):
         ports = SessionPorts()
@@ -685,7 +684,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             transport.retire.assert_awaited_once()
         chooser.retire.side_effect = None
         await owner.retire()
-        self.assertEqual(chooser.retire.await_count, 2)
+        self.assertEqual(2, chooser.retire.await_count)
 
     async def test_preparation_cause_survives_cancellation_and_a_later_chooser_cleanup_failure(self):
         ports = SessionPorts()
@@ -767,7 +766,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(session.retire)
         with self.assertRaisesRegex(ResultRejected, "byte limit"):
             await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
 
     async def test_concurrent_retirement_joins_the_run_and_closes_the_chooser_once(self):
         ports = SessionPorts()
@@ -815,7 +814,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(session.retire)
         with self.assertRaises(PreparationEvidenceFailed):
             await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         chooser.retire.assert_awaited_once()
 
     async def test_late_chooser_failure_does_not_reach_the_default_event_loop_logger(self):

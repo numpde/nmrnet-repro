@@ -71,7 +71,7 @@ class SelectedReleaseModels:
             # if the mounted file grows while being read.
             with artifacts.regular_file(self.declaration_path, os.O_RDONLY) as stream:
                 content = stream.read(64 * 1024 + 1)
-            if len(content) > 64 * 1024:
+            if not (len(content) <= 64 * 1024):
                 raise ValueError("Cannot load prediction models: declaration exceeds the 64 KiB byte limit.")
             self._specification = json.loads(content)
             self.declaration_sha256 = hashlib.sha256(content).hexdigest()
@@ -122,7 +122,7 @@ class SelectedReleaseModels:
         # default-policy suppression of warnings already emitted by this process.
         previous = warnings.showwarning
 
-        # silent-defaults: allow-contract -- Match Python's warning-hook signature; forwarding preserves the destination and optional source line.
+        # Match Python's warning-hook signature; forward its destination and optional source line.
         def observe(message, category, filename, lineno, file=None, line=None):
             category_name = category.__module__ + "." + category.__qualname__
             versions = None
@@ -184,6 +184,7 @@ class ReleasedPredictionSession:
                 name: importlib.metadata.version(name) for name in ("torch", "numpy", "scikit-learn", "joblib")
             },
         }
+        # repo-check: allow-tuple-generator -- Retain ordered prepared-request hashes for execution and completed-input failure evidence; proof=tests/test_prediction_input.py::test_later_batch_failure_keeps_original_cause_and_completed_input_identity
         self._request_hashes = tuple(hashlib.sha256(raw).hexdigest() for raw in raw_requests)
         return handle
 
@@ -211,7 +212,8 @@ class ReleasedPredictionSession:
                     )
                 except Exception as recording_failure:
                     raise ExceptionGroup(
-                        "Prediction failed and its evidence could not be recorded", (cause, recording_failure),
+                        "Prediction failed and its evidence could not be recorded",
+                        (cause, recording_failure),
                     ) from None
                 raise
             outcomes.append(

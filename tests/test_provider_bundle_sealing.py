@@ -29,9 +29,11 @@ class ProviderBundleSealingTests(unittest.TestCase):
             def record_chown(path, uid, gid, **options):
                 operations.append(("chown", Path(path).relative_to(bundle).as_posix(), uid, gid))
 
-            with patch("tools.provider_deployment.os.geteuid", side_effect=(os.getuid(), 0)), \
-                    patch("tools.provider_deployment.os.chmod", side_effect=record_chmod), \
-                    patch("tools.provider_deployment.os.chown", side_effect=record_chown):
+            with (
+                patch("tools.provider_deployment.os.geteuid", side_effect=(os.getuid(), 0)),
+                patch("tools.provider_deployment.os.chmod", side_effect=record_chmod),
+                patch("tools.provider_deployment.os.chown", side_effect=record_chown),
+            ):
                 seal_deployment_bundle(bundle, 1234, 1234)
             for relative in ("compose.json", "config/provider.toml", "secrets/provider/credential"):
                 file_operations = [operation[0] for operation in operations if operation[1] == relative]

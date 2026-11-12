@@ -36,11 +36,7 @@ def surface_files(
     paths: set[Path] = set()
     for pattern in patterns:
         paths.update(REPO_ROOT.glob(pattern))
-    return sorted(
-        path
-        for path in paths
-        if path.is_file() and not exclude_parts.intersection(repo_path(path).parts)
-    )
+    return sorted(path for path in paths if path.is_file() and not exclude_parts.intersection(repo_path(path).parts))
 
 
 def surface_lines(

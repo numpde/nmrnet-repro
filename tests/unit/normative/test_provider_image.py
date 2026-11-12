@@ -24,7 +24,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             fixture.pool_wheels = {name: shared / path.name for name, path in fixture.pool_wheels.items()}
             self.assertFalse((fixture.repository / ".work/provider-core").exists())
             result, capture = fixture.capture()
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             runtime = capture / "runtime-wheels"
             self.assertFalse((capture / "build-wheels").exists())
             self.assertFalse(runtime.exists())
@@ -46,7 +46,7 @@ class ProviderImageCommandTests(unittest.TestCase):
                     check=False,
                     timeout=5,
                 )
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assertIn("misleading ID sha256:" + "b" * 64, result.stdout)
                 self.assertEqual(record.read_bytes(), ("sha256:" + "a" * 64 + "\n").encode())
 
@@ -54,9 +54,10 @@ class ProviderImageCommandTests(unittest.TestCase):
         with ImageSource() as fixture:
             (fixture.repository / "PRIVATE_CANARY").write_text("outside the image grant")
             first, before = fixture.capture()
-            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(0, first.returncode, msg=first.stderr)
             captured = {str(path.relative_to(before / "context")) for path in (before / "context").rglob("*") if path.is_file()}
             self.assertIn("nmrnet_provider/process.py", captured)
+            self.assertIn("tools/provider_deployment.py", captured)
             self.assertNotIn("tools/provider_proxy.py", captured)
             self.assertNotIn("tools/bound_http_proxy.py", captured)
             self.assertFalse(any(name.startswith("packages/provider-core/") for name in captured))
@@ -66,7 +67,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             fixture.git("add", "--", "PRIVATE_CANARY")
             fixture.git("commit", "--quiet", "-m", "Unrelated committed canary", "--", "PRIVATE_CANARY")
             second, after = fixture.capture()
-            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(0, second.returncode, msg=second.stderr)
             self.assertEqual((before / "inputs").read_bytes(), (after / "inputs").read_bytes())
 
     def test_build_target_uses_existing_offline_launcher(self):
@@ -109,22 +110,21 @@ class ProviderImageCommandTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
             captures = [command for command in commands if "tools.wheelhouse" in command]
-            self.assertEqual(captures, [], result.stdout)
-            (build_command,) = [command for command in commands if "--build-context" in command]
+            self.assertEqual(captures, [], msg=result.stdout)
+            (build_command,) = [command for command in commands if "build" in command]
             capture = root / ".work/provider/.build.PRINT"
             command = build_command
-            self.assertEqual(command[command.index("--network") + 1], "none")
+            self.assertEqual("none", command[command.index("--network") + 1])
             self.assertIn("--pull=false", command)
-            self.assertEqual(command[command.index("--builder") + 1], "default")
-            self.assertEqual(command[command.index("--progress") + 1], "plain")
+            self.assertEqual("default", command[command.index("--builder") + 1])
+            self.assertEqual("plain", command[command.index("--progress") + 1])
             self.assertNotIn("--quiet", command)
             self.assertEqual(command[command.index("--iidfile") + 1], str(capture / "built-image-id"))
-            self.assertEqual(command[-1], str(capture / "context"))
-            contexts = {command[index + 1] for index, word in enumerate(command) if word == "--build-context"}
-            self.assertEqual(contexts, {f"runtime-wheels={root}/.work/wheelhouse"})
+            self.assertEqual("-", command[-1])
+            self.assertNotIn("--build-context", command)
             self.assertFalse(capture.exists())
             self.assertFalse((root / ".work/provider").exists())
             self.assertNotIn("--secret", command)

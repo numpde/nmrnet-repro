@@ -311,8 +311,8 @@ compose_witness_finish() {
 compose_witness_main() {
     set -euo pipefail
     umask 077
-    [[ $# -le 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
-    local scientific_case=${1-pasted}
+    [[ $# -eq 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
+    local scientific_case=$1
     case $scientific_case in pasted|smiles|references|capacity|successive|recovery) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     print_command=false
@@ -355,7 +355,7 @@ compose_witness_main() {
     printf '%s\n' "$revision" > "$scratch/source-revision"
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
-        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/runner_crash_probe.py \
+        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/compose_peer_runtime.py tests/integration/provider_runtime/runner_crash_probe.py \
         tests/integration/provider_core tools/compose_runner_events.sh tools/compose_fixture_shared.sh tools/provider_consumer_tests.py \
         requirements/provider-core-release.json tests/integration/provider_runtime/binding_inputs.py \
         tests/fixtures/preparation/expected.json tests/fixtures/preparation/smiles.json tests/fixtures/scientific_inputs \
@@ -376,6 +376,7 @@ compose_witness_main() {
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/binding_inputs.py,dst=/fixture/binding_inputs.py,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_core,dst=/fixture/binding-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer.py,dst=/fixture/compose_peer.py,readonly" \
+        --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer_runtime.py,dst=/fixture/compose_peer_runtime.py,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/preparation/smiles.json,dst=/fixture/smiles.json,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly" \

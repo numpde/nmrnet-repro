@@ -22,8 +22,17 @@ def run_suite(suite, arguments):
         shutil.copyfile("/input/provider-core-install.lock", lock)
         python = install_provider(root / "provider", Path("/consumer"), lock, Path("/wheelhouse"))
         if suite == "integration":
-            command = [str(python), "-I", "-B", "/workspace/tools/provider_consumer_tests.py", "run",
-                       "--release", "/input/provider-core-release.json", "--pool", "/wheelhouse"]
+            command = [
+                str(python),
+                "-I",
+                "-B",
+                "/workspace/tools/provider_consumer_tests.py",
+                "run",
+                "--release",
+                "/input/provider-core-release.json",
+                "--pool",
+                "/wheelhouse",
+            ]
             if arguments:
                 command.extend(["--pattern", *arguments])
         else:

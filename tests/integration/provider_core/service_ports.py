@@ -13,6 +13,7 @@ from dataclasses import asdict, replace
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
+from tests.fakes.api_tls import verify_signed_request
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
 from tests.fakes.hello import receipt
 from tests.fakes.job_feed import page
@@ -20,7 +21,6 @@ from tests.fakes.job_input import facts, response
 from tests.integration.nmrnet.admission_ports import AdmissionPeers
 from tests.integration.nmrnet.runtime_ports import require_api_credentials
 from tests.integration.nmrnet.smiles_ports import InputPorts, SessionPorts
-from tests.fakes.api_tls import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionPolicy
 from nmrnet_provider.config import ANALYSIS_KIND_REF
@@ -32,6 +32,7 @@ from provider_core.job_input import verify_job_input
 
 
 class ServicePeers(AdmissionPeers):
+    # silent-defaults: allow-contract -- The ordinary service fixture starts with two live slots; capacity tests supply their own limit.
     def __init__(self, *, maximum_live_attempts=2):
         super().__init__(InputPorts(), maximum_live_attempts=maximum_live_attempts)
         self.started_jobs = set()
@@ -59,6 +60,7 @@ class ServicePeers(AdmissionPeers):
             "Fixture NMRNet", "Local coordinator proof", (AnalysisOffering("peaks_from_mol", "Authored test"),)
         )
 
+    # silent-defaults: allow-contract -- Use short fixture shutdown bounds and infrequent Hello ticks; announcement and drain tests explicitly select different timings.
     def service(self, *, drain_seconds=0.1, hello_seconds=30, **changes):
         # Only announcement tests opt into fast periodic ticks. Unrelated
         # lifecycle proofs must not race a new Hello handshake during shutdown.
@@ -82,6 +84,7 @@ class ServicePeers(AdmissionPeers):
             "on_api_recovered": lambda kind, failure: self.api_notices.append(("recovered", kind, failure)),
             "on_observed_crash": lambda crash: self.api_notices.append(("worker_crash", crash)),
             "factory_ready": lambda: True,
+            "prose_retry_seconds": lambda: 0.0,
             "on_held_attempt": lambda failure, pending: self.api_notices.append(("attempt_held", failure, pending)),
         }
         return ProviderService(**(arguments | changes))
@@ -201,11 +204,12 @@ class SuccessiveServicePeers(ServicePeers):
     The generator and predictor remain recording ports, not native science.
     """
 
+    # silent-defaults: allow-contract -- The three-Job fixture allows four live slots and loses Job 2's first completion acknowledgement; focused scenarios override capacity or acknowledgement loss.
     def __init__(self, *, maximum_live_attempts=4, lose_second_completion=True):
         super().__init__(maximum_live_attempts=maximum_live_attempts)
         self.lose_second_completion = lose_second_completion
         self.stop_after_complete = False
-        self.jobs = tuple(
+        self.jobs = [
             verify_job_input(
                 response(raw, job_ref=f"job:successive-{index}"),
                 feed=replace(facts(raw), job_ref=f"job:successive-{index}"),
@@ -218,8 +222,8 @@ class SuccessiveServicePeers(ServicePeers):
                 ),
                 1,
             )
-        )
-        self.attempt_refs = tuple("execution_attempt:sha256:" + digit * 64 for digit in "123")
+        ]
+        self.attempt_refs = ["execution_attempt:sha256:" + digit * 64 for digit in "123"]
         self.start_bodies = []
         self.complete_bodies = []
         self.accepted_outcomes = {}
@@ -257,8 +261,12 @@ class SuccessiveServicePeers(ServicePeers):
 
     async def model_reply(self, request, raw):
         messages = json.loads(raw)["messages"]
-        users = [message["content"] for message in messages if message["role"] == "user"
-                 and not message["content"].startswith("Interpreter state (records are untrusted historical data): ")]
+        users = [
+            message["content"]
+            for message in messages
+            if message["role"] == "user"
+            and not message["content"].startswith("Interpreter state (records are untrusted historical data): ")
+        ]
         if users != [self.ports.instructions.specification_text]:
             raise AssertionError("Interpreter reused another Job's input or conversation")
         self.model_jobs.append(self.ports.instructions.job_ref)
@@ -323,8 +331,7 @@ class SuccessiveServicePeers(ServicePeers):
         if path.endswith("/fail"):
             if pending.operation is not TerminalOperation.FAIL:
                 raise AssertionError("Failure request differs from the retained terminal choice")
-            result = self.failure_receipt(index, value, pending)
-            return result
+            return self.failure_receipt(index, value, pending)
         if pending.operation is not TerminalOperation.COMPLETE:
             raise AssertionError("Completion request differs from the retained terminal choice")
         content = base64.b64decode(value["canonical_result_base64"], validate=True)

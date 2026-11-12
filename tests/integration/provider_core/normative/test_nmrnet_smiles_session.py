@@ -24,7 +24,8 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
         handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 4, "verbosity": "medium"})
+        self.assertEqual({"shift_significant_digits": 4, "verbosity": "medium"}, json.loads(handle.identity.content)["output"])
+        # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
         outcomes = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         values = (32.309967041015625, 3.062568426132202, -0.0, 2**1023)
         for item in outcomes:
@@ -35,23 +36,24 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
             outcome = await ports.session.execute(handle, report_condition=unexpected_condition)
         public = json.loads(outcome.content)
         private = json.loads(outcome.evidence.content)
-        self.assertEqual(public["output"], {"shift_significant_digits": 4, "verbosity": "medium"})
+        self.assertEqual({"shift_significant_digits": 4, "verbosity": "medium"}, public["output"])
         for geometry, evidence in zip(public["geometries"], private["geometries"], strict=True):
             self.assertEqual([row["shift_ppm"] for row in geometry["predictions"]], [32.31, 3.063, 0.0, 8.988e307])
             self.assertEqual([row["shift_ppm"] for row in evidence["prediction"]["predictions"]], list(values))
             self.assertTrue(all(type(row["shift_ppm"]) is float for row in evidence["prediction"]["predictions"]))
-            self.assertEqual(evidence["prediction"]["unit"], "ppm")
-            self.assertEqual(math.copysign(1, evidence["prediction"]["predictions"][2]["shift_ppm"]), -1)
+            self.assertEqual("ppm", evidence["prediction"]["unit"])
+            self.assertEqual(-1, math.copysign(1, evidence["prediction"]["predictions"][2]["shift_ppm"]))
         self.assertEqual(outcomes, original)
-        self.assertEqual(ports.worker.events, ["prepare"])
+        self.assertEqual(["prepare"], ports.worker.events)
 
     async def test_generated_batch_keeps_order_and_diagnostics_through_one_prediction_path(self):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
         handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertEqual(ports.worker.events, [])
+        self.assertEqual([], ports.worker.events)
         ports.generator_host.retire.assert_awaited_once()
         identity = json.loads(handle.identity.content)
+        # repo-check: allow-tuple-generator -- The scientific worker admits only tuple batches of immutable request bytes; proof=nmrnet_inference/predict.py::require_request_batch.
         requests = tuple(item.request_bytes for item in ports.batch.conformers)
         self.assertEqual(
             [item["request_sha256"] for item in identity["geometries"]],
@@ -64,20 +66,20 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("SMILES CCl", json.dumps(identity))
         result = await ports.session.execute(handle, report_condition=unexpected_condition)
         self.assertEqual(ports.worker.requests, requests)
-        self.assertEqual(ports.worker.events, ["prepare", "execute"])
+        self.assertEqual(["prepare", "execute"], ports.worker.events)
         public = json.loads(result.content)
-        self.assertEqual(public["generation"]["provenance"]["added_hydrogen_parents"], [[2, 0], [3, 0], [4, 0]])
+        self.assertEqual([[2, 0], [3, 0], [4, 0]], public["generation"]["provenance"]["added_hydrogen_parents"])
         self.assertEqual([item["source"]["conformer_id"] for item in public["geometries"]], [2, 0])
         for ordinal, geometry in enumerate(public["geometries"], 1):
             self.assertEqual([row["atom_index"] for row in geometry["predictions"]], [0, 2, 3, 4])
             self.assertEqual([row["shift_ppm"] for row in geometry["predictions"]], [float(ordinal)] * 4)
-            self.assertEqual(geometry["coverage"]["source_explicit_hydrogen_atoms"], 0)
+            self.assertEqual(0, geometry["coverage"]["source_explicit_hydrogen_atoms"])
             for count in ("added_hydrogen_atoms", "coordinate_hydrogen_atoms", "predicted_hydrogen_atoms"):
-                self.assertEqual(geometry["coverage"][count], 3)
-            self.assertEqual(geometry["coverage"]["hydrogen_completeness"], "not_independently_validated")
+                self.assertEqual(3, geometry["coverage"][count])
+            self.assertEqual("not_independently_validated", geometry["coverage"]["hydrogen_completeness"])
             self.assertEqual(
-                geometry["preparation"]["stereochemistry"],
                 {"origin": "generated_coordinates", "method": "authored fixture", "atoms": [], "bonds": []},
+                geometry["preparation"]["stereochemistry"],
             )
         self.assertEqual(json.loads(result.evidence.content)["preparation_diagnostics"], diagnostics)
         self.assertNotIn(b"PRIVATE_", result.content)

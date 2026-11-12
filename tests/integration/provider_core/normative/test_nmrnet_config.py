@@ -17,10 +17,10 @@ from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.native_factory import NativePolicy
 from nmrnet_provider.service import Announcement, ServicePolicy
 from nmrnet_provider.startup_capture import startup_authorities
-from provider_core.ownership import LiveAttemptLimits
 from provider_core.chat import ChatEndpoint
-from provider_core.transport import HttpTransport
 from provider_core.hello import hello_body
+from provider_core.ownership import LiveAttemptLimits
+from provider_core.transport import HttpTransport
 from provider_core.uploads import UploadLimits
 
 
@@ -32,15 +32,14 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
             second = files.endpoint_directory / "10-second.toml"
             second.write_text(files.endpoint.read_text().replace('model = "fixture-model"', 'model = "second-model"'))
             after = load_provider_config(files.path)
-            self.assertEqual([endpoint.spec.model for endpoint in after.interpreter.endpoints],
-                             ["fixture-model", "second-model"])
+            self.assertEqual([endpoint.spec.model for endpoint in after.interpreter.endpoints], ["fixture-model", "second-model"])
             self.assertNotEqual(before.source_sha256, after.source_sha256)
 
     def test_scientific_retry_selection_is_retained(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
             files.write(files.raw.replace(b"max_retries = 0", b"max_retries = 1"))
-            self.assertEqual(load_provider_config(files.path).scientific_max_retries, 1)
+            self.assertEqual(1, load_provider_config(files.path).scientific_max_retries)
 
     def test_scientific_retry_rejects_values_outside_the_contract(self):
         for value in (b"true", b"-1", b"2"):
@@ -56,15 +55,16 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
             lifecycle = load_provider_config(files.path).lifecycle
 
             self.assertEqual(lifecycle.lifetime_root, files.state)
-            self.assertEqual(lifecycle.live_limits.maximum_attempts, 2)
-            self.assertEqual(lifecycle.live_limits.maximum_control_bytes, 262144)
-            self.assertEqual(lifecycle.live_limits.maximum_pending_terminal_bytes, 4194304)
+            self.assertEqual(2, lifecycle.live_limits.maximum_attempts)
+            self.assertEqual(262144, lifecycle.live_limits.maximum_control_bytes)
+            self.assertEqual(4194304, lifecycle.live_limits.maximum_pending_terminal_bytes)
             self.assertEqual((lifecycle.start_replays, lifecycle.start_seconds), (1, 90))
             self.assertFalse(files.state.exists())
 
     def test_execution_declaration_hashes_actual_sources_and_keeps_caller_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             source_root, names = execution_source_files(directory)
+            (source_root / "tools/worker.py").write_bytes(b"large source\n" * 100000)
             identities = {
                 "image_id": "sha256:" + "b" * 64,
                 "geometry_image_id": "sha256:" + "c" * 64,
@@ -83,16 +83,25 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     capture_execution(source_root, destination, names, **identities)
                     declaration = json.loads((destination / "execution.json").read_bytes())
                     self.assertEqual({name: declaration[name] for name in identities}, identities)
-                    self.assertEqual(declaration["runtime_identity_source"], "caller")
-                    self.assertEqual(declaration["tool_sources"], {
-                        name: {"size": len((source_root / name).read_bytes()),
-                               "sha256": hashlib.sha256((source_root / name).read_bytes()).hexdigest()}
-                        for name in names
-                    })
-                    self.assertEqual(declaration["tool_sources"]["requirements/inference.lock"]["size"], 110000)
+                    self.assertEqual("caller", declaration["runtime_identity_source"])
+                    self.assertEqual(
+                        declaration["tool_sources"],
+                        {
+                            name: {
+                                "size": len((source_root / name).read_bytes()),
+                                "sha256": hashlib.sha256((source_root / name).read_bytes()).hexdigest(),
+                            }
+                            for name in names
+                        },
+                    )
+                    self.assertEqual(110000, declaration["tool_sources"]["requirements/inference.lock"]["size"])
+                    if case == "original":
+                        self.assertEqual(1300000, declaration["tool_sources"]["tools/worker.py"]["size"])
                     self.assertEqual((destination / "execution.json").stat().st_mode & 0o777, 0o600)
                     self.assertEqual({path.name for path in destination.iterdir()}, {"execution.json"})
-            self.assertEqual({path.relative_to(source_root).as_posix() for path in source_root.rglob("*") if path.is_file()}, set(names))
+            self.assertEqual(
+                {path.relative_to(source_root).as_posix() for path in source_root.rglob("*") if path.is_file()}, set(names)
+            )
 
     def test_capture_preserves_omitted_default_and_custom_destination_ports(self):
         for port, expected, roles in (
@@ -105,7 +114,9 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 raw = files.raw
                 for role in roles:
                     if role == "model":
-                        files.endpoint.write_text(files.endpoint.read_text().replace("https://model.example", f"https://model.example{port}"))
+                        files.endpoint.write_text(
+                            files.endpoint.read_text().replace("https://model.example", f"https://model.example{port}")
+                        )
                     else:
                         raw = raw.replace(f"https://{role}.example".encode(), f"https://{role}.example{port}".encode())
                 files.write(raw)
@@ -139,7 +150,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 (0.2, 2, 1, 5, 30),
             )
             self.assertEqual(configured.native, NativePolicy(allocation_seconds=30, prediction_seconds=90, source_seconds=10))
-            self.assertEqual(config.lifecycle.observation_gap_seconds, 30)
+            self.assertEqual(30, config.lifecycle.observation_gap_seconds)
             snapshot = configured.announcement
             body = json.loads(
                 hello_body(
@@ -148,12 +159,15 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     analysis_offerings=snapshot.analysis_offerings,
                 )
             )
-            self.assertEqual(body["display_name"], "NMRNet local fixture")
+            self.assertEqual("NMRNet local fixture", body["display_name"])
             self.assertEqual(
-                body["analysis_offerings"], [{
-                    "analysis_kind_ref": "peaks_from_mol",
-                    "description": (Path(config_module.__file__).with_name("about") / "hello.md").read_text(encoding="utf-8"),
-                }]
+                body["analysis_offerings"],
+                [
+                    {
+                        "analysis_kind_ref": "peaks_from_mol",
+                        "description": (Path(config_module.__file__).with_name("about") / "hello.md").read_text(encoding="utf-8"),
+                    }
+                ],
             )
             self.assertFalse(files.state.exists())
 
@@ -169,23 +183,23 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 config = load_provider_config(files.path)
                 self.assertEqual(config.api.identity.origin, peer.origin)
-                self.assertEqual(config.api.expected_topology, "dev-local")
-                self.assertEqual(config.api.identity.credential_ref, "credential:example")
-                self.assertEqual(config.lifecycle.scope.provider_ref, "provider:example")
-                self.assertEqual(config.lifecycle.scope.generation_id, "generation:stable-fixture")
+                self.assertEqual("dev-local", config.api.expected_topology)
+                self.assertEqual("credential:example", config.api.identity.credential_ref)
+                self.assertEqual("provider:example", config.lifecycle.scope.provider_ref)
+                self.assertEqual("generation:stable-fixture", config.lifecycle.scope.generation_id)
                 self.assertIs(type(config.lifecycle.live_limits), LiveAttemptLimits)
                 self.assertEqual(config.lifecycle.live_limits, LiveAttemptLimits(2, 262144, 4194304))
                 self.assertIsInstance(config.uploads.limits, UploadLimits)
-                self.assertEqual(config.preparation.generation_settings.seed, 17)
+                self.assertEqual(17, config.preparation.generation_settings.seed)
                 digest = hashlib.sha256(files.raw)
                 name, endpoint_raw = files.endpoint.name.encode(), files.endpoint.read_bytes()
                 digest.update(len(name).to_bytes(4, "big") + name + len(endpoint_raw).to_bytes(8, "big") + endpoint_raw)
                 self.assertEqual(config.source_sha256, digest.hexdigest())
                 self.assertFalse(files.state.exists())
-                self.assertEqual(peer.requests, [])
+                self.assertEqual([], peer.requests)
                 endpoint = config.interpreter.endpoints[0]
-                self.assertEqual(endpoint.spec.api_key, "PRIVATE_MODEL_KEY")
-                self.assertEqual(config.api.http.trust.cert_store_stats()["x509"], 1)
+                self.assertEqual("PRIVATE_MODEL_KEY", endpoint.spec.api_key)
+                self.assertEqual(1, config.api.http.trust.cert_store_stats()["x509"])
                 for trust in (config.api.http.trust, config.uploads.http.trust, endpoint.trust):
                     self.assertEqual(trust.verify_mode, ssl.CERT_REQUIRED)
                     self.assertTrue(trust.check_hostname)
@@ -198,8 +212,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 peer_ca = Path(peer.scratch.name) / "cert.pem"
                 ca = Path(directory) / "api-ca.pem"
                 ca.write_bytes(peer_ca.read_bytes())
-                files = ConfigFiles(directory, api_origin=peer.origin, ca_file=ca,
-                                    model_ca_file=peer_ca, store_ca_file=peer_ca)
+                files = ConfigFiles(directory, api_origin=peer.origin, ca_file=ca, model_ca_file=peer_ca, store_ca_file=peer_ca)
                 credential_bytes = files.credential.read_bytes()
                 ca_bytes = ca.read_bytes()
                 read_file = config_module.read_startup_file
@@ -220,8 +233,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(config.publication.ca_bytes, ca_bytes)
                 self.assertEqual(config.publication.origin, config.api.identity.origin)
                 self.assertEqual(config.publication.provider_ref, config.lifecycle.scope.provider_ref)
-                self.assertEqual(config.api.identity.credential_ref, "credential:example")
-                self.assertEqual(config.api.http.trust.cert_store_stats()["x509"], 1)
+                self.assertEqual("credential:example", config.api.identity.credential_ref)
+                self.assertEqual(1, config.api.http.trust.cert_store_stats()["x509"])
                 self.assertNotIn(credential_bytes.decode(), repr(config))
                 self.assertNotIn(credential_bytes.decode(), repr(config.publication))
 
@@ -255,5 +268,5 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.addAsyncCleanup(endpoint.retire)
                 reply = await endpoint.complete([{"role": "user", "content": "fixture"}], [])
-                self.assertEqual(reply["content"], "fixture")
-                self.assertEqual(len(peer.requests), 1)
+                self.assertEqual("fixture", reply["content"])
+                self.assertEqual(1, len(peer.requests))

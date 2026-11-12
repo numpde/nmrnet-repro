@@ -146,7 +146,7 @@ def _selected_rows(records, alternate_location):
                 f"Cannot read PDB atom at line {number}: explicit element columns are required; isotope labels D/T are unsupported."
             )
         try:
-            coordinates = tuple(float(line[start : start + 8]) for start in (30, 38, 46))
+            coordinates = (float(line[30:38]), float(line[38:46]), float(line[46:54]))
         except ValueError:
             raise InputRejected(f"Cannot read PDB atom at line {number}: fixed X/Y/Z columns must contain numbers.") from None
         rows.append((serial, element.capitalize(), coordinates))

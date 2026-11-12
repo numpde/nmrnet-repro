@@ -87,9 +87,13 @@ for input in "${inputs[@]}"; do
     fi
 done
 if [[ "$1" == download ]]; then
+    # This launcher owns deferred selection; only the normalized parent grant is inherited.
+    unset interface
     source "$repository_root/tools/acquisition_interface.sh"
     source "$repository_root/tools/inference_native.sh"
-    if "$print_command" || [[ -n ${NMRNET_NETWORK_INTERFACE_INPUT-} || ${NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN-} == 'command line' ]]; then
+    if "$print_command" \
+        || { [[ -v NMRNET_NETWORK_INTERFACE_INPUT ]] && [[ -n $NMRNET_NETWORK_INTERFACE_INPUT ]]; } \
+        || { [[ -v NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN ]] && [[ $NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN == 'command line' ]]; }; then
         select_acquisition_interface
     fi
     if ! "$print_command"; then
@@ -250,8 +254,8 @@ if [[ "$1" == download ]]; then
         printf '%s\n' 'After acquisition, repeat the offline probe.'
         exit
     fi
-    python3 -B "$repository_root/tools/acquisition_bootstrap.py"
-    source "$repository_root/tools/bootstrap/acquisition/acquisition_tool/owner.sh"
+    python3 -B "$repository_root/host/acquisition_bootstrap.py" --root "$repository_root"
+    source "$repository_root/host/bootstrap/acquisition/acquisition_tool/owner.sh"
     source "$repository_root/tools/acquisition_wheelhouse.sh"
     wheelhouse_warm=false
     if acquisition_scope --endpoint "$NMRNET_DOCKER_ENDPOINT_INPUT" --bootstrap-image "$image" -- nmrnet_acquire_wheelhouse; then :; else exit "$?"; fi

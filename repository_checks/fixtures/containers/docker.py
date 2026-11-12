@@ -15,7 +15,8 @@ import stat
 import sys
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import read_engine_calls, record_engine_call
+from repository_checks.fixtures.containers.acquisition_engine import AcquisitionEngine
+from repository_checks.fixtures.containers.engine_log import read_engine_calls, record_engine_call
 
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
@@ -72,73 +73,70 @@ record_engine_call(
 )
 # silent-defaults: allow-contract -- Empty argv selects only the rejection sentinel, never a supported engine verb; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_unknown_formats_and_nonexact_argv_reject_before_fault_responses
 command = arguments[0] if arguments else ""
-for fault_name, accepted_values in (
-    ("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),
-    ("NMRNET_FAKE_HOLD_CREATE", {"1"}),
-    ("NMRNET_FAKE_PROXY_NO_READY", {"1"}),
-):
+for fault_name, accepted_values in (("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),):
     if fault_name in os.environ and os.environ[fault_name] not in accepted_values:
         sys.stderr.write("unexpected fake docker invocation: unmodeled acquisition fault selector\n")
         raise SystemExit(97)
+if "NMRNET_FAKE_ACQUISITION_SCOPE" in os.environ:
+    if os.environ["NMRNET_FAKE_ACQUISITION_SCOPE"] != "1":
+        raise SystemExit(97)
+    raise SystemExit(AcquisitionEngine(Path(log_path).parent).run(arguments))
 if command in {"build", "create", "start", "stop", "inspect", "rm"}:
     log = Path(log_path)
 if command == "build":
     import hashlib
-    import shlex
+    import tarfile
 
-    context = Path(arguments[-1])
-    named_contexts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--build-context"]
-    if any("=" not in value for value in named_contexts):
-        sys.stderr.write("unexpected fake docker invocation: named context has no name/path separator\n")
+    dockerfile = arguments[arguments.index("--file") + 1]
+    captures_by_dockerfile = {
+        "containers/inference/Dockerfile": "inference",
+        "containers/geometry/Dockerfile": "preparation",
+    }
+    if arguments[-1] != "-" or dockerfile not in captures_by_dockerfile:
+        sys.stderr.write("unexpected fake docker invocation: expected a streamed image context\n")
         raise SystemExit(97)
-    contexts = dict(value.split("=", 1) for value in named_contexts)
-    if len(named_contexts) != 2 or set(contexts) != {"wheelhouse", "runtime-wheels"}:
-        sys.stderr.write("unexpected fake docker invocation: exact science and released-core wheel contexts are required" + "\n")
+    captures = list((Path(os.environ["NMRNET_FIXTURE_ROOT"]) / ".work" / captures_by_dockerfile[dockerfile]).glob(".build.*"))
+    if len(captures) != 1:
         raise SystemExit(97)
-    wheelhouse = Path(contexts["wheelhouse"])
-    dockerfile = Path(arguments[arguments.index("--file") + 1])
-    if not context.is_dir() or not dockerfile.is_file() or not dockerfile.is_relative_to(context):
-        sys.stderr.write("unexpected fake docker invocation: build requires an existing owned context and Dockerfile" + "\n")
-        raise SystemExit(97)
+    capture = captures[0]
+    context = capture / "context"
     mutation = os.environ.get("NMRNET_FAKE_MUTATE_INPUT")
     if mutation:
         Path(mutation).write_bytes(b"concurrent worktree mutation\n")
         Path(mutation).chmod(0o755)
     manifest = {}
-    for instruction in dockerfile.read_text().splitlines():
-        if not instruction.startswith("COPY ") or "--from=" in instruction:
-            continue
-        sources = shlex.split(instruction)[1:-1]
-        sources = [source for source in sources if not source.startswith("--")]
-        for source in sources:
-            path = context / source
-            if not path.exists() or path.is_symlink():
-                sys.stderr.write("unexpected fake docker invocation: required COPY input is absent or symlinked" + "\n")
-                raise SystemExit(97)
-            # silent-defaults: allow-contract -- Admitted COPY directories contribute their recursive file leaves; a single-file source contributes that file; proof=repository_checks/test_inference_inputs.py::CapturedInputTests.test_source_executable_mode_is_materialized_from_the_committed_tree
-            files = sorted(path.rglob("*")) if path.is_dir() else [path]
-            for file in files:
-                if file.is_file():
-                    manifest[str(file.relative_to(context))] = {
-                        "sha256": hashlib.sha256(file.read_bytes()).hexdigest(),
-                        "mode": stat.S_IMODE(file.stat().st_mode),
-                    }
-    wheelhouse_manifest = {
-        file.name: {"sha256": hashlib.sha256(file.read_bytes()).hexdigest(), "mode": stat.S_IMODE(file.stat().st_mode)}
-        for file in wheelhouse.iterdir()
+    wheelhouse_manifest = {}
+    directory_modes = {
+        str(directory.relative_to(context)): stat.S_IMODE(directory.stat().st_mode)
+        for directory in sorted(context.rglob("*"))
+        if directory.is_dir()
     }
+    seen = set()
+    with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
+        for member in archive:
+            name = member.name.removeprefix("./").rstrip("/")
+            if name in seen or name.startswith("/") or ".." in Path(name).parts:
+                raise SystemExit("unexpected fake docker invocation: duplicate or unsafe archive path")
+            seen.add(name)
+            if member.isdir():
+                directory_modes[name] = member.mode
+            elif member.isfile():
+                content = archive.extractfile(member).read()
+                evidence = {"sha256": hashlib.sha256(content).hexdigest(), "mode": member.mode}
+                if name.startswith("wheelhouse/"):
+                    wheelhouse_manifest[Path(name).name] = evidence
+                else:
+                    manifest[name] = evidence
+            else:
+                raise SystemExit("unexpected fake docker invocation: unsupported archive member")
     (log.parent / "build-evidence.json").write_text(
         json.dumps(
             {
                 "context": str(context),
-                "wheelhouse": str(wheelhouse),
-                "capture_mode": stat.S_IMODE(context.parent.stat().st_mode),
-                "capture_uid": context.parent.stat().st_uid,
-                "directory_modes": {
-                    str(directory.relative_to(context)): stat.S_IMODE(directory.stat().st_mode)
-                    for directory in sorted(context.rglob("*"))
-                    if directory.is_dir()
-                },
+                "wheelhouse": os.environ["NMRNET_WHEELHOUSE_INPUT"],
+                "capture_mode": stat.S_IMODE(capture.stat().st_mode),
+                "capture_uid": capture.stat().st_uid,
+                "directory_modes": directory_modes,
                 "manifest": manifest,
                 "wheelhouse_manifest": wheelhouse_manifest,
                 "content_identity": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
@@ -156,9 +154,7 @@ elif arguments[:2] == ["image", "pull"]:
     image = "docker.io/library/python"
     worker_version = "3.12.12-slim-bookworm"
     worker_sha = "593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
-    if arguments not in (
-        ["image", "pull", f"{image}:{worker_version}@sha256:{worker_sha}"],
-    ):
+    if arguments not in (["image", "pull", f"{image}:{worker_version}@sha256:{worker_sha}"],):
         sys.stderr.write("unexpected fake docker invocation: unmodeled image pull argv\n")
         raise SystemExit(97)
     if os.environ["NMRNET_FAKE_ENGINE_STATUS"] != "0":
@@ -177,7 +173,17 @@ elif arguments[:2] == ["image", "inspect"]:
     label_projection = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
     geometry_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-inputs"}}'
     inference_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}'
-    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection, inference_projection}:
+    wheels_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}'
+    geometry_wheels_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-wheels"}}'
+    if projection not in {
+        "{{.Id}}",
+        label_projection,
+        "{{.Id}}|" + label_projection,
+        geometry_projection,
+        inference_projection,
+        wheels_projection,
+        geometry_wheels_projection,
+    }:
         sys.stderr.write("unexpected fake docker invocation: unmodeled image inspect format\n")
         raise SystemExit(97)
     if os.environ.get("NMRNET_FAKE_INSPECT_PRIVATE_ERROR"):
@@ -190,8 +196,13 @@ elif arguments[:2] == ["image", "inspect"]:
         response = identity
     elif projection == label_projection:
         response = revision
-    elif projection in (geometry_projection, inference_projection):
-        label = "GEOMETRY_INPUTS" if projection == geometry_projection else "INFERENCE_INPUTS"
+    elif projection in (geometry_projection, inference_projection, wheels_projection, geometry_wheels_projection):
+        label = {
+            geometry_projection: "GEOMETRY_INPUTS",
+            inference_projection: "INFERENCE_INPUTS",
+            wheels_projection: "INFERENCE_WHEELS",
+            geometry_wheels_projection: "GEOMETRY_WHEELS",
+        }[projection]
         fault = "NMRNET_FAKE_" + label
         if fault in os.environ:
             response = os.environ[fault]
@@ -221,16 +232,9 @@ elif command == "create":
     identifier = os.environ[f"NMRNET_FAKE_{role.upper()}_CID"]
     receipt = Path(arguments[arguments.index("--cidfile") + 1])
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
-        if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {
-            "exact",
-            "empty",
-            "disagree",
-            "nul",
-            "cap",
-        }:
+        if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] != "exact":
             sys.stderr.write("unexpected fake docker invocation: unmodeled create output fault\n")
             raise SystemExit(97)
-        output_kind = os.environ["NMRNET_FAKE_CREATE_OUTPUT"]
         if (
             "NMRNET_FAKE_CREATE_STATUS" not in os.environ
             or re.fullmatch(r"0|[1-9][0-9]{0,2}", os.environ["NMRNET_FAKE_CREATE_STATUS"]) is None
@@ -254,30 +258,11 @@ elif command == "create":
         if argument.startswith("type=bind,src=") and argument.endswith(",dst=/ready"):
             (log.parent / "ready-path").write_text(argument.split("src=", 1)[1].split(",dst=", 1)[0])
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
-        # Emit bytes before the real cancellation marker. The controller must
-        # retain contradictory stdout even when the exact CID already exists.
-        if output_kind == "exact":
-            create_output = identifier.encode("ascii") + b"\n"
-        elif output_kind == "empty":
-            create_output = b""
-        elif output_kind == "disagree":
-            # silent-defaults: allow-contract -- Emit a valid 64-hex CID different from the selected identity: e unless that identity is all e, then f; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
-            create_output = (b"e" if identifier != "e" * 64 else b"f") * 64 + b"\n"
-        elif output_kind == "nul":
-            create_output = identifier.encode("ascii") + b"\0"
-        elif output_kind == "cap":
-            create_output = b"x" * 4096
-        sys.stdout.buffer.write(create_output)
+        sys.stdout.buffer.write(identifier.encode("ascii") + b"\n")
         sys.stdout.buffer.flush()
         if os.environ.get("NMRNET_FAKE_CREATE_PRIVATE_ERROR"):
             sys.stderr.write(os.environ["NMRNET_FAKE_CREATE_PRIVATE_ERROR"] + "\n")
             sys.stderr.flush()
-        if os.environ.get("NMRNET_FAKE_HOLD_CREATE") == "1":
-            import signal
-
-            (log.parent / "create-held").write_text(role + "\n" + str(os.getpid()) + "\n")
-            while True:
-                signal.pause()
         raise SystemExit(create_fault_status)
     sys.stdout.write(identifier + "\n")
 elif command == "start":
@@ -289,8 +274,7 @@ elif command == "start":
         raise SystemExit(97)
     if "--attach" not in arguments:
         path = Path((log.parent / "ready-path").read_text())
-        if os.environ.get("NMRNET_FAKE_PROXY_NO_READY") != "1":
-            (path / "port").write_text("12345\n")
+        (path / "port").write_text("12345\n")
     else:
         if "NMRNET_FAKE_WORKER_STDOUT" in os.environ:
             sys.stdout.write(os.environ["NMRNET_FAKE_WORKER_STDOUT"])
@@ -362,6 +346,50 @@ elif command == "logs":
     sys.stderr.write("private native fixture output" + "\n")
     raise SystemExit(int(os.environ["NMRNET_FAKE_PROXY_LOG_STATUS"]))
 elif command == "run":
+    if "python3" in arguments and arguments[arguments.index("python3") :][:5] == [
+        "python3",
+        "-B",
+        "-m",
+        "tools.wheelhouse",
+        "report",
+    ]:
+        import subprocess
+
+        mounts = {}
+        for index, value in enumerate(arguments[:-1]):
+            if value == "--mount":
+                fields = dict(field.split("=", 1) for field in arguments[index + 1].split(",") if "=" in field)
+                mounts[fields["dst"]] = fields["src"]
+        lock = mounts["/input/requirements.lock"]
+        pool = mounts["/wheelhouse"]
+        requested_hash = arguments[arguments.index("--lock-sha256") + 1]
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "tools.wheelhouse",
+                "report",
+                "--lock",
+                lock,
+                "--lock-sha256",
+                requested_hash,
+                "--pool",
+                pool,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=Path(mounts["/workspace/tools/wheelhouse.py"]).parent.parent,
+        )
+        sys.stderr.write(result.stderr)
+        if result.returncode == 0:
+            report = json.loads(result.stdout)
+            for item in report["install"]:
+                url = item["download_info"]["url"]
+                item["download_info"]["url"] = "file:///wheelhouse/" + url.rsplit("/", 1)[-1]
+            json.dump(report, sys.stdout)
+        raise SystemExit(result.returncode)
     if os.environ.get("NMRNET_FAKE_HOLD_MODE"):
         import subprocess
         import time

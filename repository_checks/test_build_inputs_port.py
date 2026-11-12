@@ -152,7 +152,7 @@ class ImmutableBuildInputTests(unittest.TestCase):
             upstream_canary.parent.mkdir(parents=True, exist_ok=True)
             upstream_canary.write_bytes(b"ignored upstream interpreter output")
             result = fixture.run("inference_image.sh", "build")
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             manifest = fixture.build_evidence()["manifest"]
             self.assertNotIn("tools/__pycache__/private.pyc", manifest)
             self.assertNotIn("NMRNetplusplus/uninmr/__pycache__/private.pyc", manifest)

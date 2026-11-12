@@ -17,8 +17,8 @@ import json
 import secrets
 import traceback
 
-from nmrnet_inference.predict import MAX_GEOMETRIES, require_request_batch
 from nmrnet_inference.model import ModelCallFailed
+from nmrnet_inference.predict import MAX_GEOMETRIES, require_request_batch
 from nmrnet_provider.worker_protocol import (
     WorkerProtocolError,
     receive,
@@ -61,14 +61,19 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
                 ):
                     raise WorkerProtocolError("Preparation requires a bounded ordered list of encoded geometry requests")
                 try:
+                    # repo-check: allow-tuple-generator -- require_request_batch admits an exact tuple of request bytes before preparation; proof=tests/test_provider_worker.py::PredictionWorkerTests.test_real_worker_returns_the_whole_ordered_batch_once
                     raw_requests = tuple(base64.b64decode(item, validate=True) for item in encoded)
                 except (ValueError, binascii.Error) as cause:
                     raise WorkerProtocolError("Preparation request is not valid base64") from cause
                 require_request_batch(raw_requests)
                 prepared = prediction.prepare(raw_requests)
                 token = secrets.token_hex(16)
-                reply = {"kind": "prepared", "allocation": allocation, "token": token,
-                         "declaration_sha256": prediction.declaration_sha256}
+                reply = {
+                    "kind": "prepared",
+                    "allocation": allocation,
+                    "token": token,
+                    "declaration_sha256": prediction.declaration_sha256,
+                }
             elif operation == "execute" and set(request) == {"operation", "allocation", "token"}:
                 if token is None or request["token"] != token:
                     raise WorkerProtocolError("Execution requires this connection's current preparation token")
@@ -85,8 +90,14 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             diagnostic = "".join(traceback.format_exception(cause))
             # The distinct model-call fact requires a consumed execution token;
             # it does not by itself authorize another calculation.
-            kind = ("model_call_failed" if execution_entered and type(cause) is ModelCallFailed
-                    else "execution_failed" if execution_entered else "failure")
+            # silent-defaults: allow-contract -- Wire kind records whether execution began and whether the failure is exactly model-only; proof=tests/test_provider_worker.py::WorkerFramingTests.test_model_failure_with_failed_evidence_recording_is_not_model_only.
+            kind = (
+                "model_call_failed"
+                if execution_entered and type(cause) is ModelCallFailed
+                else "execution_failed"
+                if execution_entered
+                else "failure"
+            )
             send(connection, {"kind": kind, "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
             return
         try:

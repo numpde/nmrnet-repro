@@ -14,26 +14,31 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import tomllib
-
 from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
 from provider_core.api_config import (
-    ApiConfigurationRejected, ApiPublicationMaterial, ApiSettings, HttpsSettings,
-    api_settings_with_material, https_settings, https_trust,
+    ApiConfigurationRejected,
+    ApiPublicationMaterial,
+    ApiSettings,
+    HttpsSettings,
+    api_settings_with_material,
+    https_settings,
+    https_trust,
 )
 from provider_core.attempt_record import RecoveryScope
-from provider_core.ownership import LiveAttemptLimits
+from provider_core.chat import ChatEndpointSpec, require_chat_limits
 from provider_core.delivery_client import DeliveryEndpoint
 from provider_core.delivery_worker import require_delivery_retry_settings
-from provider_core.transport import _positive_seconds, require_unix_socket_path
-from provider_core.chat import ChatEndpointSpec, require_chat_limits
 from provider_core.execution import require_execution_settings, require_observation_gap
-from provider_core.startup_file import StartupFileRejected, read_startup_file as core_read_startup_file
+from provider_core.ownership import LiveAttemptLimits
+from provider_core.startup_file import StartupFileRejected
+from provider_core.startup_file import read_startup_file as core_read_startup_file
+from provider_core.transport import _positive_seconds, require_unix_socket_path
 from provider_core.uploads import UploadLimits, require_store_origin
 
 if TYPE_CHECKING:
@@ -43,12 +48,14 @@ if TYPE_CHECKING:
 # The scientific offering is code-owned, as in SECS main.py:48-59. G01 uses this
 # API kind for forward prediction: Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
 # models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/identity.py.
+# repo-check: allow-module-constant
 ANALYSIS_KIND_REF = "peaks_from_mol"
 
 
 class ConfigurationRejected(ValueError):
     """Safe startup explanation; original file/parser evidence remains private."""
 
+    # silent-defaults: allow-contract -- Metadata refusal can precede a native error; the empty tuple records no independent close failure.
     def __init__(self, message, *, cause=None, cleanup_failures=()):
         super().__init__(f"Cannot configure NMRNet provider: {message}")
         self.cause = cause
@@ -193,7 +200,11 @@ def _configuration_document(path, read_file):
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
-    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service", "scientific_retry"}, "configuration")
+    _fields(
+        document,
+        {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "delivery", "service", "scientific_retry"},
+        "configuration",
+    )
     if document["schema_id"] != "nmrnet.provider.runtime_config.v4":
         raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v4.")
     retry = document["scientific_retry"]
@@ -203,6 +214,7 @@ def _configuration_document(path, read_file):
     return raw, document
 
 
+# silent-defaults: allow-contract -- Closed tables admit no optional keys unless this schema owner supplies them.
 def _fields(document, required, label, optional=frozenset()):
     if type(document) is not dict or not required <= document.keys() or document.keys() - required - optional:
         raise ConfigurationRejected(f"{label} must contain exactly its documented fields.")
@@ -214,13 +226,16 @@ def _path(value, label):
     return Path(value)
 
 
+# silent-defaults: allow-contract -- The shared API reader protocol omits secret for public CA inputs; callers mark credentials secret=True to require private caller-owned files.
 def read_startup_file(path, *, maximum_bytes, label, secret=False):
     """Keep NMRNet's startup context around the shared descriptor admission."""
     try:
         return core_read_startup_file(path, maximum_bytes=maximum_bytes, label=label, secret=secret)
     except StartupFileRejected as failure:
         raise ConfigurationRejected(
-            str(failure), cause=failure.cause, cleanup_failures=failure.cleanup_failures,
+            str(failure),
+            cause=failure.cause,
+            cleanup_failures=failure.cleanup_failures,
         ) from None
     except BaseException as interruption:
         # Preserve the original interruption identity and earlier cause while
@@ -228,7 +243,9 @@ def read_startup_file(path, *, maximum_bytes, label, secret=False):
         failure = interruption.__cause__
         if type(failure) is StartupFileRejected:
             raise interruption from ConfigurationRejected(
-                str(failure), cause=failure.cause, cleanup_failures=failure.cleanup_failures,
+                str(failure),
+                cause=failure.cause,
+                cleanup_failures=failure.cleanup_failures,
             )
         raise
 
@@ -275,8 +292,13 @@ def _interpreter(table, directory, read_file, digest):
         except (ValueError, UnicodeError) as cause:
             raise ConfigurationRejected("interpreter endpoint requires UTF-8 TOML.", cause=cause) from None
         _fields(document, {"url", "model", "key_file"}, "interpreter endpoint", {"ca_file", "reasoning_effort"})
-        endpoint = {**document, "configuration_id": path.stem, "request_bytes": 65536,
-                    "response_bytes": 262144, "retirement_seconds": 5}
+        endpoint = {
+            **document,
+            "configuration_id": path.stem,
+            "request_bytes": 65536,
+            "response_bytes": 262144,
+            "retirement_seconds": 5,
+        }
         endpoints.append(_endpoint(endpoint, read_file))
     return InterpreterSettings(tuple(endpoints), table["timeout_seconds"])
 
@@ -321,8 +343,7 @@ def _endpoint(table, read_file):
         trust = https_trust(raw_ca, label="interpreter")
     except ApiConfigurationRejected as failure:
         raise ConfigurationRejected(str(failure), cause=failure.cause) from None
-    return InterpreterEndpointSettings(spec, trust, table["request_bytes"], table["response_bytes"],
-                                       table["retirement_seconds"])
+    return InterpreterEndpointSettings(spec, trust, table["request_bytes"], table["response_bytes"], table["retirement_seconds"])
 
 
 def _uploads(table, read_file):
@@ -380,8 +401,9 @@ def _lifecycle(table, api_origin, provider_ref):
     return LifecycleSettings(
         RecoveryScope(api_origin, provider_ref, table["consumer_id"], table["generation_id"]),
         _path(table["lifetime_root"], "Provider lifetime directory"),
-        LiveAttemptLimits(table["maximum_live_attempts"], table["maximum_control_bytes"],
-                          table["maximum_pending_terminal_bytes"]),
+        LiveAttemptLimits(
+            table["maximum_live_attempts"], table["maximum_control_bytes"], table["maximum_pending_terminal_bytes"]
+        ),
         table["start_replays"],
         table["start_seconds"],
         states,
@@ -394,9 +416,11 @@ def _lifecycle(table, api_origin, provider_ref):
 def _delivery(table, api_origin, provider_ref):
     _fields(table, {"socket_path", "socket_group_id", "retry_initial_seconds", "retry_max_seconds"}, "delivery")
     return DeliverySettings(
-        DeliveryEndpoint(api_origin, provider_ref, _path(table["socket_path"], "Delivery socket"),
-                         socket_group_id=table["socket_group_id"]),
-        table["retry_initial_seconds"], table["retry_max_seconds"],
+        DeliveryEndpoint(
+            api_origin, provider_ref, _path(table["socket_path"], "Delivery socket"), socket_group_id=table["socket_group_id"]
+        ),
+        table["retry_initial_seconds"],
+        table["retry_max_seconds"],
     )
 
 
