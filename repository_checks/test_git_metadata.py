@@ -18,6 +18,18 @@ from repository_checks.quality.sources import ROOT
 
 
 class GitMetadataTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        host_bin = Path(directory.name)
+        # Model only host identity; provenance still uses the real Git binary.
+        (host_bin / "id").symlink_to(ROOT / "repository_checks/fixtures/containers/id.sh")
+        self.host_environment = {
+            "PATH": str(host_bin) + ":" + os.environ["PATH"],
+            "NMRNET_FIXTURE_UID": "1000",
+            "NMRNET_FIXTURE_GID": "1000",
+        }
+
     def git(self, repository, *arguments):
         environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
         environment |= {
@@ -66,7 +78,7 @@ class GitMetadataTests(unittest.TestCase):
             self.git(foreign, "update-index", "--add", "--cacheinfo", "160000," + "c" * 40 + ",NMRNetplusplus")
             self.git(foreign, "commit", "-m", "Foreign provenance")
             self.assertNotEqual(selected, self.git(foreign, "rev-parse", "HEAD"))
-            environment = fixture.environment | {"PATH": os.environ["PATH"]}
+            environment = fixture.environment | self.host_environment
             # silent-defaults: allow-pop-default -- Remove any inherited exported Git function before observing provenance through the real executable; proof=repository_checks/test_git_metadata.py::GitMetadataTests.test_baseline_reads_selected_head_and_index_under_ambient_poison
             environment.pop("BASH_FUNC_git%%", None)
             record = fixture.root / ".work/inference/image-id"
@@ -140,7 +152,7 @@ class GitMetadataTests(unittest.TestCase):
                     self.git(module, "update-index", "--add", "--cacheinfo", "160000," + parent + ",NMRNetplusplus")
                 result = subprocess.run(
                     ["bash", str(fixture.root / "tools/inference_image.sh"), "--print", "build"],
-                    env=os.environ | fixture.git_environment | {"PATH": os.environ["PATH"]} | poison,
+                    env=os.environ | fixture.git_environment | self.host_environment | poison,
                     capture_output=True,
                     text=True,
                     timeout=5,

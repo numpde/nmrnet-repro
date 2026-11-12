@@ -35,13 +35,17 @@ def process_status():
 
 class RuntimePostureTests(unittest.TestCase):
     def test_runs_as_explicit_non_root_caller_identity(self):
+        # A rootless engine can map the nonroot host owner to container root.
+        for variable in ("NMRNET_HOST_UID", "NMRNET_HOST_GID"):
+            host_identity = os.environ[variable]
+            self.assertTrue(host_identity.isdecimal(), msg=variable)
+            self.assertGreater(int(host_identity), 0, msg=variable)
         for variable, actual in (("NMRNET_EXPECTED_UID", os.getuid()), ("NMRNET_EXPECTED_GID", os.getgid())):
             expected = os.environ.get(variable)
             self.assertIsNotNone(expected, msg=f"Cannot verify caller identity: the maintained launcher must inject {variable}.")
             self.assertTrue(
                 expected.isdecimal(), msg=f"Cannot verify caller identity: {variable} must contain a numeric identity."
             )
-            self.assertNotEqual(int(expected), 0)
             self.assertEqual(int(expected), actual, msg=f"Process identity differs from the launcher grant for {variable}.")
 
     def test_root_is_read_only_and_tmp_is_writable(self):
