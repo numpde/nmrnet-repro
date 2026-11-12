@@ -249,7 +249,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     if fail_operation:
                         report.assert_called_once()
                         causes = [cause for _operation, cause in report.call_args.args[0]]
-                        self.assertEqual(len(causes), 3)
+                        self.assertEqual(3, len(causes))
                         self.assertIs(causes[0], operation_failure)
                         self.assertIs(causes[1], outage)
                         self.assertIs(causes[2], sink_failure)
