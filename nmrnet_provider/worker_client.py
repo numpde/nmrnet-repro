@@ -156,7 +156,9 @@ class WorkerClient:
         self._writer.close()
 
     def _close_after_failure(self, primary):
+        # silent-defaults: allow-contract -- A successful geometry operation has no primary cause; otherwise preserve the existing cause before channel cleanup can change exception chaining.
         previous_cause = None if primary is None else primary.__cause__
+        # silent-defaults: allow-contract -- Preserve a primary failure's existing context separately from its explicit cause; successful geometry operations have no exception context to retain.
         previous_context = None if primary is None else primary.__context__
         try:
             self.close()

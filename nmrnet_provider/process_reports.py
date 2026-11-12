@@ -212,6 +212,7 @@ def _preparation_summary(document, text, diagnostic_window):
                     # The interpreter already owns this redacted exception
                     # graph. Window it; never serialize raw model exchanges.
                     try:
+                        # silent-defaults: allow-contract -- Only object-valued protected failure graphs become diagnostic text; absent or non-object values leave that text omitted while entry metadata remains.
                         diagnostic = (
                             json.dumps(entry["failure"], ensure_ascii=True, allow_nan=False)
                             if type(entry.get("failure")) is dict
@@ -247,6 +248,7 @@ def _describe_scientific_owner(current, text, diagnostic_window):
         else:
             if type(reply) is dict:
                 kind, result = reply.get("kind"), reply.get("result")
+                # silent-defaults: allow-contract -- Project only recognized worker reply kinds; unfamiliar values remain identified by the retained reply's hash and byte length without exposing arbitrary payload text.
                 evidence["worker_reply"]["kind"] = (
                     kind if kind in ("result", "failure", "execution_failed", "model_call_failed") else "unrecognized"
                 )
