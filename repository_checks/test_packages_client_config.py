@@ -1039,7 +1039,11 @@ class PackagesClientTests(unittest.TestCase):
             start_new_session=True,
         )
         self.addCleanup(self._retire_failed_probe, current)
-        self._wait_path(self.root / "inspect-ready")
+        ready = self.root / "inspect-ready"
+        deadline = time.monotonic() + 20
+        while not ready.is_file() and current.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(ready.is_file(), msg=f"Built-image inspection did not reach held client; caller status {current.poll()!r}")
         current_call = self.fixture.calls()[-1]
         self._retire_failed_probe(current)
         self.assertEqual(-signal.SIGKILL, current.returncode)
