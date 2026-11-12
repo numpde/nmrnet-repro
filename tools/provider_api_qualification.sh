@@ -341,8 +341,7 @@ api_witness_main() {
     if [[ $mode == real-smiles-multiple ]]; then case_kind=smiles-multiple case_fixture=api_smiles_multiple.json; fi
     if [[ $mode == real-upload ]]; then case_kind=upload case_fixture=api_upload.json; fi
     if [[ $mode == real-sdf-zip ]]; then case_kind=sdf-zip case_fixture=api_sdf_zip.json; fi
-    local upload_receipt=${NMRNET_UPLOAD_RECEIPT_INPUT-}
-    if [[ -n $upload_receipt && $mode != real-sdf-zip ]]; then
+    if [[ -v NMRNET_UPLOAD_RECEIPT_INPUT && -n $NMRNET_UPLOAD_RECEIPT_INPUT && $mode != real-sdf-zip ]]; then
         printf '%s\n' 'UPLOAD_RECEIPT resumes only the SDF ZIP reservation after explicit storage reconciliation.' >&2; return 2
     fi
     local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_address= external_interface= resolvers= print_command=false
@@ -380,7 +379,7 @@ api_witness_main() {
     provider_host_disjoint "$provider_host_root" "$repository_root" || return $?
     local -a input_paths=("$NMRNET_PROVIDER_CREDENTIAL_INPUT" "$NMRNET_CA_FILE_INPUT" "$NMRNET_RETAINED_RESULT_INPUT"
         "$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT")
-    if [[ -n $upload_receipt ]]; then input_paths+=("$upload_receipt"); fi
+    if [[ -v NMRNET_UPLOAD_RECEIPT_INPUT && -n $NMRNET_UPLOAD_RECEIPT_INPUT ]]; then input_paths+=("$NMRNET_UPLOAD_RECEIPT_INPUT"); fi
     for path in "${input_paths[@]}"; do
         provider_host_path "$path" || return $?
         provider_host_disjoint "$path" "$provider_host_root" || return $?
@@ -605,14 +604,14 @@ api_witness_main() {
     fi
     if [[ $mode == real-sdf-zip ]]; then
         provider_host_grants+=(--mount "type=bind,src=$qualification_source_root/tests/fixtures/preparation/normative/butane_conformers.sdf,dst=/fixture/butane_conformers.sdf,readonly")
-        if [[ -n $upload_receipt ]]; then
-            provider_host_grants+=(--mount "type=bind,src=$upload_receipt,dst=/input/upload-receipt.json,readonly")
+        if [[ -v NMRNET_UPLOAD_RECEIPT_INPUT && -n $NMRNET_UPLOAD_RECEIPT_INPUT ]]; then
+            provider_host_grants+=(--mount "type=bind,src=$NMRNET_UPLOAD_RECEIPT_INPUT,dst=/input/upload-receipt.json,readonly")
         fi
     fi
     provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py \
         --proxy-socket "$shared_proxy_socket" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" \
         --readback-seconds "$readback_seconds" --process-seconds "$process_seconds" --case-kind "$case_kind")
-    if [[ -n $upload_receipt ]]; then provider_host_argv+=(--upload-receipt /input/upload-receipt.json); fi
+    if [[ -v NMRNET_UPLOAD_RECEIPT_INPUT && -n $NMRNET_UPLOAD_RECEIPT_INPUT ]]; then provider_host_argv+=(--upload-receipt /input/upload-receipt.json); fi
     provider_host_create client none "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client "$host_seconds" || return $?
     provider_host_remove client || return $?

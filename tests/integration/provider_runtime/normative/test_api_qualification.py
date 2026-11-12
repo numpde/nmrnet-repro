@@ -316,6 +316,7 @@ api_witness_stop_deployment 0
             ("identity-empty-receipt", 2),
             ("empty-job-pair", 0),
             ("original-job-pair", 0),
+            ("scripted-wrong-upload-receipt", 2),
         ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -417,6 +418,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     identity.write_text('{"fixture":"original identity"}\n')
                     environment["NMRNET_JOB_RECEIPT_INPUT"] = str(receipt)
                     environment["NMRNET_JOB_IDENTITY_INPUT"] = str(identity)
+                elif scenario == "scripted-wrong-upload-receipt":
+                    environment["NMRNET_UPLOAD_RECEIPT_INPUT"] = str(root / "upload.json")
                 result = subprocess.run(
                     ["bash", str(script), mode],
                     env=environment,
@@ -425,6 +428,13 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     timeout=10,
                     check=False,
                 )
+                if scenario == "scripted-wrong-upload-receipt":
+                    self.assertEqual(2, result.returncode, msg=result.stderr)
+                    self.assertIn("UPLOAD_RECEIPT resumes only the SDF ZIP reservation", result.stderr)
+                    self.assertFalse(output.exists())
+                    self.assertFalse((records / "deployment-invocations").exists())
+                    self.assertFalse((records / "creates").exists())
+                    continue
                 if scenario.endswith("-deployment"):
                     self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                     if scenario.endswith("invalid-deployment"):
@@ -726,6 +736,17 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 "fixture": "api_sdf_zip.json",
             },
             {
+                "profile": "empty-sdf-zip",
+                "clocks": (900, 1200, 1220),
+                "mode": "real-sdf-zip",
+                "failed": None,
+                "status": 0,
+                "deployment_calls": ["install", "up", "down"],
+                "client_kind": "sdf-zip",
+                "roles": ["grants", "selection", "stage", "client"],
+                "fixture": "api_sdf_zip.json",
+            },
+            {
                 "profile": "failed-install",
                 "clocks": (180, 240, 260),
                 "mode": "scripted-pasted",
@@ -877,6 +898,8 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                 environment["NMRNET_WHEELHOUSE_INPUT_ORIGIN"] = "command line"
                 if resumed:
                     environment["NMRNET_UPLOAD_RECEIPT_INPUT"] = str(root / "original-upload.json")
+                elif profile == "empty-sdf-zip":
+                    environment["NMRNET_UPLOAD_RECEIPT_INPUT"] = ""
                 if failed:
                     environment["TEST_FAIL"] = failed
                 result = subprocess.run(
