@@ -34,6 +34,7 @@ def serve(connection, parent):
 
 
 class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
+    # silent-defaults: allow-contract -- Ordinary authored fixtures use angstroms; the nanometre case explicitly exercises conversion.
     async def read(self, source, *, source_format, source_unit="angstrom", selection=None, member=None):
         parent, child = socket.socketpair()
         worker = multiprocessing.get_context("fork").Process(target=serve, args=(child, parent))
