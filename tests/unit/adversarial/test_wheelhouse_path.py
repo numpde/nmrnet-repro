@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 class WheelhousePathRefusalTests(unittest.TestCase):
+    # silent-defaults: allow-contract -- Path cases use command-line origin unless a case explicitly selects an ambient origin.
     def select(self, value, origin="command line"):
         return subprocess.run(
             ["bash", "-euc", 'source tools/wheelhouse_path.sh; select_wheelhouse; printf "%s" "$wheelhouse_directory"'],

@@ -154,7 +154,7 @@ elif args[1] == "stream":
             check=True,
         ).stdout
 
-    def capture(self, *, kind="provider"):
+    def capture(self):
         self.capture_count += 1
         capture_directory = self.root / str(self.capture_count)
         capture_directory.mkdir(mode=0o700)
@@ -163,12 +163,11 @@ elif args[1] == "stream":
                 "bash",
                 "-eu",
                 "-c",
-                'repository_root=$1; image_input_directory=$2; wheelhouse_directory=$3; image_kind=$4; source "$repository_root/tools/${image_kind}_image.sh"; "capture_${image_kind}_inputs"',
+                'repository_root=$1; image_input_directory=$2; wheelhouse_directory=$3; source "$repository_root/tools/provider_image.sh"; capture_provider_inputs',
                 "image-capture",
                 str(self.repository),
                 str(capture_directory),
                 str(self.wheelhouse),
-                kind,
             ],
             capture_output=True,
             text=True,

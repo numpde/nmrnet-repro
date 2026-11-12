@@ -8,13 +8,13 @@ import hashlib
 import zipfile
 
 
-# silent-defaults: allow-contract -- Wheel-pool fixtures use a universal wheel and arbitrary payload unless a test selects a different tag or content.
-def wheel(directory, name, version, tag="py3-none-any", payload=b"fixture wheel\n"):
+# silent-defaults: allow-contract -- Wheel-pool fixtures use a universal wheel unless a test selects an incompatible tag.
+def wheel(directory, name, version, tag="py3-none-any"):
     stem = f"{name.replace('-', '_')}-{version}"
     path = directory / f"{stem}-{tag}.whl"
     metadata = f"{stem}.dist-info"
     entries = {
-        "fixture_payload.txt": payload,
+        "fixture_payload.txt": b"fixture wheel\n",
         f"{metadata}/METADATA": f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n\n".encode(),
         f"{metadata}/WHEEL": f"Wheel-Version: 1.0\nGenerator: repo-fixture\nRoot-Is-Purelib: true\nTag: {tag}\n".encode(),
         f"{metadata}/RECORD": b"",
