@@ -41,6 +41,7 @@ provider_host_disjoint() { [[ $1 != "$2" && $1 != "$2/"* ]]; }
 provider_host_ipv4() { [[ $1 == 127.0.0.1 || $1 == 192.0.2.53 || $1 == 198.51.100.53 ]]; }
 provider_host_refuse() { provider_host_diagnostic=$1; return 2; }
 provider_host_initialize() {
+    inference_diagnostic=
     trap "$1" EXIT
     mkdir -p "$provider_host_root/components" "$provider_host_root/routes"
     source "$repository_root/tools/docker_client.sh"

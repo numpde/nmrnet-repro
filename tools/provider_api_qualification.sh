@@ -66,7 +66,7 @@ print(json.dumps(shared_grants(Path("/input/deployment.toml")).compose(), sort_k
 
 
 api_witness_stop_deployment() {
-    if [[ ${api_deployment_active-false} == true ]]; then
+    if [[ $api_deployment_active == true ]]; then
         NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
         api_deployment_active=false
     fi
@@ -75,9 +75,9 @@ api_witness_stop_deployment() {
 api_witness_finish() {
     local status=$? role cleanup=0
     trap - EXIT
-    [[ -z ${inference_diagnostic-} ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
+    [[ -z $inference_diagnostic ]] || printf '%s\n' "$inference_diagnostic" >&2 || cleanup=2
     if [[ $inference_retirement_confirmed == true ]]; then
-        if [[ ${api_witness_mode-} == real-ambiguity ]]; then
+        if [[ $api_witness_mode == real-ambiguity ]]; then
             for role in probe admission selection; do
                 [[ $inference_retirement_confirmed == true ]] || break
                 provider_host_remove "$role" || cleanup=2
@@ -101,9 +101,9 @@ api_witness_finish() {
         printf 'Qualification still owns an unretired local client at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
     fi
-    if [[ ${api_deployment_active-false} == true || ${#provider_host_ids[@]} != 0 ]]; then
+    if [[ $api_deployment_active == true || ${#provider_host_ids[@]} != 0 ]]; then
         printf 'Qualification stopped with unresolved deployment/helper obligations. Containers and original receipts remain at %q; their dependencies were retained.\n' "$provider_host_root" >&2 || :
-        if [[ ${api_deployment_active-false} == true ]]; then
+        if [[ $api_deployment_active == true ]]; then
             source "$repository_root/tools/operator_guidance.sh"
             next_make_command 'Reconcile the original deployment before retiring its model peer:' \
                 provider/deployment/down "DEPLOYMENT=$api_deployment_name" >&2 || :
@@ -113,9 +113,9 @@ api_witness_finish() {
     docker_client_cleanup || cleanup=2
     if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
     if [[ $status == 0 ]]; then
-        if [[ ${api_witness_mode-} == real-ambiguity ]]; then
+        if [[ $api_witness_mode == real-ambiguity ]]; then
             printf 'Selected-model interpreter probe and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
-        elif [[ ${api_witness_mode-} == existing-pasted && -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+        elif [[ $api_witness_mode == existing-pasted && -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
             printf 'Original Job readback and client retirement passed; no new prediction. Private evidence: %s\n' "$provider_host_root"
         else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
     fi
@@ -152,7 +152,7 @@ api_witness_ambiguity() {
         provider_host_ipv4 "$resolver" && [[ $resolver != 0.* && $resolver != 127.* ]] \
             || { provider_host_refuse 'External resolvers require literal nonloopback IPv4 addresses.'; return 2; }
     done
-    api_witness_mode=real-ambiguity
+    api_witness_mode=real-ambiguity api_deployment_active=false
     provider_host_initialize api_witness_finish || return $?
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -228,7 +228,7 @@ api_witness_ambiguity() {
 api_witness_admission_finish() {
     local status=$?
     trap - EXIT
-    if [[ -n ${provider_host_diagnostic-} ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || exit "$status"; fi
+    if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || exit "$status"; fi
     exit "$status"
 }
 
