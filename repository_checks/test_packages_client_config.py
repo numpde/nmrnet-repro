@@ -10,7 +10,6 @@ from tools.container_guard import require_container
 
 require_container()
 
-import fcntl
 import json
 import os
 import re
@@ -1065,60 +1064,89 @@ class PackagesClientTests(unittest.TestCase):
                 self.assertFalse(Path("/proc", str(observed["pid"])).exists())
                 self.assertFalse(Path(observed["config"]).parent.exists())
 
-    def test_full_unread_review_stdout_cancellation_finishes_before_drain(self):
-        # No removal fault is selected in this publisher observation.
+    def test_full_unread_guidance_stderr_cancellation_finishes_before_drain(self):
         target = self.root / "bin/rm"
         target.unlink()
         target.symlink_to(Path("/bin/rm"))
+        program = b'printf "%s\\n" "$1" >&2'
         for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
             with self.subTest(interrupt=interrupt):
                 for name in ("controller-returned", "report.json"):
                     (self.root / name).unlink(missing_ok=True)
-                process = subprocess.Popen(
-                    ["bash", str(self.root / "tools/packages.sh"), "stage"],
-                    env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_FILL_STDOUT": "1"},
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    start_new_session=True,
-                )
+                before_stages = set(self.stage.parent.iterdir())
+                before_calls = len(self.fixture.calls())
+                read_fd, write_fd = os.pipe()
+                process = None
                 try:
-                    self._wait_path(self.root / "report.json")
-                    report = json.loads((self.root / "report.json").read_text())
+                    os.set_blocking(write_fd, False)
+                    filled = 0
+                    while True:
+                        try:
+                            filled += os.write(write_fd, b"x" * 4096)
+                        except BlockingIOError:
+                            break
+                    os.set_blocking(write_fd, True)
+                    process = subprocess.Popen(
+                        ["bash", str(self.root / "tools/packages.sh"), "stage"],
+                        env=self.environment | {"NMRNET_NETWORK_INTERFACE_INPUT": "lo"},
+                        stdout=subprocess.PIPE, stderr=write_fd, start_new_session=True,
+                    )
+                    os.close(write_fd)
+                    write_fd = None
+                    report_path = self.root / "report.json"
+                    deadline = time.monotonic() + 20
+                    while not report_path.is_file() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(report_path.is_file(), msg="Stage did not reach guidance reporting")
+                    anchor = json.loads(report_path.read_text())["anchor"]
                     controller = int((self.root / "controller-returned").read_text())
                     self.assertFalse(Path("/proc", str(controller)).exists())
-                    children = Path("/proc", str(report["anchor"]), "task", str(report["anchor"]), "children")
+                    stages = set(self.stage.parent.iterdir()) - before_stages
+                    self.assertEqual(1, len(stages))
+                    stage = stages.pop()
+                    expected = (
+                        f"Review {stage}/inference.lock and {stage}/advisories.json for dependency changes and advisory findings.\n"
+                        f"\nAfter that review, apply this stage:\n  make packages/lock/apply STAGE={stage.name}"
+                    ).encode()
+                    children = Path("/proc", str(anchor), "task", str(anchor), "children")
                     deadline = time.monotonic() + 5
                     publisher = None
                     while publisher is None and time.monotonic() < deadline:
                         for child in children.read_text().split():
-                            # The anchor's short-lived sleeps can finish between
-                            # enumeration and inspection; the blocked writer stays.
-                            try:
-                                command = Path("/proc", child, "cmdline").read_bytes()
-                                if b"Review %s, then apply with make %s STAGE=%s" in command:
-                                    channel = Path("/proc", child, "wchan").read_text().strip()
-                                    if channel in {"pipe_write", "anon_pipe_write"}:
-                                        publisher = int(child)
-                                        break
-                            except (FileNotFoundError, ProcessLookupError):
-                                continue
+                            with suppress(FileNotFoundError, ProcessLookupError):
+                                command = Path("/proc", child, "cmdline").read_bytes().split(b"\0")
+                                channel = Path("/proc", child, "wchan").read_text().strip()
+                                if command[1:4] == [b"-eu", b"-c", program] and channel in {"pipe_write", "anon_pipe_write"}:
+                                    self.assertEqual(expected, command[5])
+                                    publisher = int(child)
+                                    break
                         if publisher is None:
                             time.sleep(0.01)
-                    self.assertIsNotNone(publisher, msg="actual Review publisher pipe-write wait was not observed")
-                    self.assertEqual(report["anchor"], os.getpgid(publisher))
+                    self.assertIsNotNone(publisher, msg="Exact guidance reporter pipe-write wait was not observed")
+                    self.assertEqual(anchor, os.getpgid(publisher))
+                    self.assertEqual(process.pid, os.getsid(anchor))
+                    calls = [call for call in self.fixture.calls()[before_calls:] if call["config"] is not None]
+                    self.assertEqual(["build", "image"], [call["arguments"][0] for call in calls])
+                    for call in calls:
+                        self.assertFalse(Path("/proc", str(call["pid"])).exists())
+                        self.assertFalse(Path(call["config"]).parent.exists())
+                    self.assertEqual(self.identity, (stage / "image-id").read_bytes())
                     self.assertIsNone(process.poll())
                     process.send_signal(interrupt)
-                    process.wait(timeout=5)  # Deliberately do not drain either pipe first.
-                    self.assertEqual(status, process.returncode)
+                    self.assertEqual(status, process.wait(timeout=5))
                     self.assertFalse(Path("/proc", str(publisher)).exists())
-                    self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
-                    _, stderr = process.communicate(timeout=2)
-                    self._remember(stderr)
+                    self.assertFalse(Path("/proc", str(anchor)).exists())
+                    self.assertEqual(b"", process.stdout.read())
+                    self.assertEqual(b"x" * filled, os.read(read_fd, filled))
                 finally:
-                    # Retire this observed case before reusing its cards in
-                    # another signal subcase; the existing authority gates stay.
-                    self._retire_failed_probe(process)
+                    try:
+                        if process is not None:
+                            self._retire_failed_probe(process)
+                            process.communicate(timeout=3)
+                    finally:
+                        if write_fd is not None:
+                            os.close(write_fd)
+                        os.close(read_fd)
 
     def test_full_unread_mismatch_stderr_reports_after_cleanup_and_cancels_before_drain(self):
         # The exact reporter is admitted below through its live argv and wchan.
@@ -1474,10 +1502,6 @@ def fake_controller(arguments):
                  "--mount", f"type=bind,src={capture},dst=/output/.inputs,readonly", "--", "stage", "inference"]
     if arguments[3:] != expected:
         return 97
-    if os.environ.get("NMRNET_PACKAGE_FILL_STDOUT"):
-        capacity = fcntl.fcntl(1, fcntl.F_GETPIPE_SZ)
-        if os.write(1, b"x" * capacity) != capacity:
-            return 98
     (root / "controller-returned").write_text(str(os.getpid()))
     return int((root / "controller-status").read_text())
 
