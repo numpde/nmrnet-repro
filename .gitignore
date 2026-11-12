@@ -1,4 +1,5 @@
 /.work/
+/.idea/
 # Keep generic TOML examples tracked; named deployment inputs stay local.
 /config/deployments/
 /secrets/
