@@ -47,9 +47,8 @@ from tests.integration.nmrnet.runtime_ports import (
 )
 from tests.integration.nmrnet.scientific_inputs import load_scientific_inputs
 
-from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
-
 from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
 from provider_core.job_input import verify_job_input
 
 
@@ -75,7 +74,8 @@ def successive_api_reply(peer, path, body, completed, inputs):
         raise AssertionError("Successive witness received another scientific operation after both completions")
     current = inputs[completed]
     job = current.identity.job_ref
-    attempt = "execution_attempt:sha256:" + ("a" if completed == 0 else "c") * 64
+    attempt_suffix, result_suffix = {0: ("a", "b"), 1: ("c", "d")}[completed]
+    attempt = "execution_attempt:sha256:" + attempt_suffix * 64
     if path == f"/provider/v1/jobs/{job}/input":
         return response(current.specification_bytes, job_ref=job)
     if path == "/provider/v1/execution-attempts/start":
@@ -96,7 +96,7 @@ def successive_api_reply(peer, path, body, completed, inputs):
             raise AssertionError("Successive result changed its Job or Attempt association")
         return complete_response(
             execution_attempt_ref=attempt,
-            analysis_result_ref="analysis_result:sha256:" + ("b" if completed == 0 else "d") * 64,
+            analysis_result_ref="analysis_result:sha256:" + result_suffix * 64,
             result_schema_id=peer.result["schema_id"],
             result_byte_length=len(content),
             result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
@@ -121,7 +121,11 @@ def require_exported_result(result, case, manifest):
         reference = pinned_packet("/fixture/reference-cpu-float32.json", REFERENCE_SHA256)
         production = pinned_packet("/fixture/prediction-cpu-float32.json", PRODUCTION_SHA256)
         return require_reference_predictions(
-            manifest["records"], [item["predictions"] for item in geometries], reference, production, significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS
+            manifest["records"],
+            [item["predictions"] for item in geometries],
+            reference,
+            production,
+            significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS,
         )
     for element, geometry in zip(("H", "C"), geometries, strict=True):
         predictions = geometry["predictions"]
@@ -205,11 +209,10 @@ def require_generated_result(result, fixture):
 
 
 async def serve(root, seconds, case, delivery_project):
-
+    expected_jobs = {"pasted": 1, "smiles": 1, "references": 1, "capacity": 1, "successive": 2, "recovery": 0}[case]
     os.umask(0o077)
     peer = ProcessPeers()
     direct_case = case in ("pasted", "smiles", "successive", "recovery")
-    expected_jobs = {"successive": 2, "recovery": 0}.get(case, 1)
     peer.output = {"verbosity": "max"}
     if case == "references":
         # Compare the reference population at the public maximum precision.

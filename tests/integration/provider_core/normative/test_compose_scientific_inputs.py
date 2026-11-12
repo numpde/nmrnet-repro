@@ -1,5 +1,6 @@
 """Historical producer identity remains separate from current scientific execution."""
 
+import asyncio
 import base64
 import copy
 import json
@@ -22,6 +23,11 @@ from provider_core.job_input import verify_job_input
 
 
 class ScientificInputTests(unittest.TestCase):
+    def test_unknown_compose_case_is_rejected_before_peer_setup(self):
+        serve = runpy.run_path("/consumer/compose_peer_runtime.py")["serve"]
+        with self.assertRaises(KeyError):
+            asyncio.run(serve(None, 1, "unknown", "fixture"))
+
     def test_successive_fixture_keeps_distinct_job_attempt_and_result_identities(self):
         reply = runpy.run_path("/consumer/compose_peer_runtime.py")["successive_api_reply"]
         inputs = [
@@ -30,7 +36,7 @@ class ScientificInputTests(unittest.TestCase):
         ]
         peer = SimpleNamespace(result=None)
         results = []
-        for index, item in enumerate(inputs):
+        for index, (item, attempt_suffix, result_suffix) in enumerate(zip(inputs, ("a", "c"), ("b", "d"), strict=True)):
             job = item.identity.job_ref
             offered = json.loads(reply(peer, "/provider/v1/jobs", None, index, inputs))
             self.assertEqual([entry["job_ref"] for entry in offered["jobs"]], [job])
@@ -40,6 +46,7 @@ class ScientificInputTests(unittest.TestCase):
                 reply(peer, "/provider/v1/execution-attempts/start", json.dumps({"job_ref": job}).encode(), index, inputs)
             )
             attempt = started["execution_attempt_ref"]
+            self.assertEqual("execution_attempt:sha256:" + attempt_suffix * 64, attempt)
             self.assertEqual(started["job_ref"], job)
             observed = json.loads(reply(peer, f"/provider/v1/execution-attempts/{attempt}", None, index, inputs))
             self.assertEqual((observed["job_ref"], observed["execution_attempt_ref"]), (job, attempt))
@@ -53,6 +60,7 @@ class ScientificInputTests(unittest.TestCase):
             completed = json.loads(reply(peer, "/provider/v1/execution-attempts/complete", body, index, inputs))
             self.assertEqual(peer.result, result)
             self.assertEqual(completed["execution_attempt_ref"], attempt)
+            self.assertEqual("analysis_result:sha256:" + result_suffix * 64, completed["analysis_result_ref"])
             results.append(completed["analysis_result_ref"])
             with self.assertRaises(AssertionError):
                 reply(peer, f"/provider/v1/jobs/{inputs[1 - index].identity.job_ref}/input", None, index, inputs)
@@ -103,11 +111,16 @@ assert not forbidden.intersection(sys.modules), forbidden.intersection(sys.modul
         _, manifest = load_scientific_inputs(Path("/fixture/scientific_inputs"), "references")
         production = pinned_packet("/fixture/prediction-cpu-float32.json", PRODUCTION_SHA256)
         fixtures = production["qualification"]["real_model_callable"]["fixture_observations"]
+
+        def public_rows(rows):
+            # The connected witness requests ten significant digits in its public result.
+            return [row | {"shift_ppm": float(format(row["shift_ppm"], ".10g"))} for row in rows]
+
         result = {
             "geometries": [
                 {
                     "prepared_request": record["original_request"],
-                    "predictions": fixture["result"]["predictions"],
+                    "predictions": public_rows(fixture["result"]["predictions"]),
                     "source": {
                         "record_number": record["source_record_number"],
                         "positions": record["source_positions"],
