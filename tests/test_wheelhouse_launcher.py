@@ -72,14 +72,13 @@ acquisition_worker() {
     printf -v "$result_name" '%s' "$status"
 }
 """)
-        self.env = os.environ | {
+        interface_inputs = {"NMRNET_NETWORK_INTERFACE_INPUT", "NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN"}
+        ambient = {name: value for name, value in os.environ.items() if name not in interface_inputs}
+        self.env = ambient | {
             "NMRNET_WHEELHOUSE_INPUT": str(self.root / "pool"),
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "FIXTURE_STATE": str(self.root / "state"),
         }
-        for name in ("NMRNET_NETWORK_INTERFACE_INPUT", "NMRNET_NETWORK_INTERFACE_INPUT_ORIGIN"):
-            self.env.pop(name, None)
-
     # silent-defaults: allow-contract -- Omitted profile and statuses select the inference fixture with one successful offline probe; callers select other profiles or probe outcomes explicitly.
     def launch(self, profile="inference", *, statuses=(0,), additions=None):
         for index, status in enumerate(statuses, 1):
