@@ -10,7 +10,7 @@ from tests.fakes.conversation import call, endpoint
 from nmrnet_provider.config import _interpreter
 
 
-def settings(root, *, exchange_seconds=45):
+def settings(root):
     key = root / "model.key"
     key.write_bytes(b"PRIVATE_PROBE_KEY\n")
     key.chmod(0o600)
@@ -23,9 +23,10 @@ def settings(root, *, exchange_seconds=45):
     endpoint_path.chmod(0o600)
     from nmrnet_provider.config import read_startup_file  # noqa: PLC0415 -- This fixture uses the real key admission.
 
-    return _interpreter({"timeout_seconds": exchange_seconds}, endpoint_directory, read_startup_file, hashlib.sha256())
+    return _interpreter({"timeout_seconds": 45}, endpoint_directory, read_startup_file, hashlib.sha256())
 
 
+# silent-defaults: allow-contract -- The baseline reports a problem without preparation; opted-in preparation uses SMILES unless the scenario selects another tool.
 def scripted_carrier(case, *, issue=None, prepare=False, prepare_name="prepare_smiles", prepare_arguments=None, operational=None):
     issue = case["expected_issue"] if issue is None else issue
     replies = []
