@@ -79,6 +79,7 @@ acquisition_worker() {
             "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "FIXTURE_STATE": str(self.root / "state"),
         }
+
     # silent-defaults: allow-contract -- Omitted profile and statuses select the inference fixture with one successful offline probe; callers select other profiles or probe outcomes explicitly.
     def launch(self, profile="inference", *, statuses=(0,), additions=None):
         for index, status in enumerate(statuses, 1):
