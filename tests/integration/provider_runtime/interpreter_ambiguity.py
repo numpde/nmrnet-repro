@@ -358,9 +358,8 @@ async def run_batch(settings, cases, *, output, configuration_sha256, probe):
             ]
             if not reports:
                 failures.append(("input interpretation", exhausted))
-                reports = []
-            report = reports[-1] if reports else None
-            if report is not None:
+            else:
+                report = reports[-1]
                 observed.update(
                     issue=report.issue,
                     guidance=str(report),
