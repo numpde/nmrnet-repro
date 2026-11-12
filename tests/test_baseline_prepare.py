@@ -16,6 +16,15 @@ from tools import baseline_prepare
 
 
 class ExecutionIdentityTests(unittest.TestCase):
+    def test_tool_source_names_must_be_repository_relative_paths(self):
+        for name in (None, "", "/absolute", "tools//model.py", "tools/../model.py", "./model.py"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "exact repository-relative path"):
+                baseline_prepare.execution_identity(
+                    image_id="sha256:" + "a" * 64,
+                    repository_revision="b" * 40,
+                    tool_sources=[(name, "/unused")],
+                )
+
     def test_identity_tracks_actual_tool_bytes_independently_of_revision_and_image(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "tools/baseline_prepare.py"

@@ -162,7 +162,9 @@ def execution_identity(*, image_id, repository_revision, tool_sources):
         raise ValueError("Cannot record baseline provenance: repository_revision must be a full Git commit ID")
     tool_identities = {}
     for name, mounted_path in tool_sources:
-        path_parts = name.split("/") if isinstance(name, str) else ()
+        if not isinstance(name, str):
+            raise ValueError("Cannot record baseline provenance: tool source name must be an exact repository-relative path")
+        path_parts = name.split("/")
         if not path_parts or any(part in ("", ".", "..") for part in path_parts):
             raise ValueError("Cannot record baseline provenance: tool source name must be an exact repository-relative path")
         if name in tool_identities:
