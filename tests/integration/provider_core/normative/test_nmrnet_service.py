@@ -24,11 +24,12 @@ from provider_core.delivery_client import DeliveryClient
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_rate_limited_background_calls_respect_retry_after_and_stop(self):
-        for route in ("jobs", "hello"):
+        for route, expected_notice_kind in (("jobs", "read"), ("hello", "hello")):
             with self.subTest(route=route):
                 async with ServicePeers() as fixture:
                     notices = []
 
+                    # silent-defaults: allow-contract -- Capture this case's route and peer before asynchronous callbacks run.
                     async def response(request, body, *, route=route, fixture=fixture):
                         fixture.api_peer.response_status = 200
                         fixture.api_peer.response_headers = response_headers()
@@ -39,6 +40,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                             return b"rate limited"
                         return await fixture.api_reply(request, body)
 
+                    # silent-defaults: allow-contract -- Capture this case's notice collection and stop owner for the registered retry callback.
                     def retry(kind, failure, seconds, *, notices=notices, fixture=fixture):
                         notices.append((kind, failure.status, seconds))
                         fixture.stop.set()
@@ -48,7 +50,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                     fixture.stack.push_async_callback(fixture.settle_service, service)
                     await asyncio.wait_for(service.run(fixture.stop), 3)
                     self.assertEqual(1, len(notices))
-                    self.assertEqual(notices[0][:2], ("read" if route == "jobs" else "hello", 429))
+                    self.assertEqual(notices[0][:2], (expected_notice_kind, 429))
                     self.assertGreaterEqual(notices[0][2], 60)
                     self.assertEqual([], fixture.allocations)
 
@@ -81,15 +83,21 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_timing_refusals_preserve_the_existing_operation_owners(self):
         for code in ("authentication_window_closed", "signature_expired"):
-            for route in ("jobs", "hello", "execution-attempts/start", "execution-attempts/complete"):
+            for route, refusal_count, expected_notice_kind in (
+                ("jobs", 3, "read"),
+                ("hello", 3, "hello"),
+                ("execution-attempts/start", 1, None),
+                ("execution-attempts/complete", 1, None),
+            ):
                 with self.subTest(code=code, route=route):
-                    await self.assert_timing_refresh(route, code)
+                    await self.assert_timing_refresh(
+                        route, code, refusal_count=refusal_count, expected_notice_kind=expected_notice_kind
+                    )
 
-    async def assert_timing_refresh(self, route, code):
+    async def assert_timing_refresh(self, route, code, *, refusal_count, expected_notice_kind):
         async with ServicePeers() as fixture:
             requests = []
             target = "/provider/v1/" + route
-            refusals = 3 if route in ("jobs", "hello") else 1
 
             async def response(request, body):
                 fixture.api_peer.response_status = 200
@@ -100,7 +108,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                         request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key
                     )
                     requests.append((request, body))
-                    if len(requests) <= refusals:
+                    if len(requests) <= refusal_count:
                         fixture.api_peer.response_status = 401
                         fixture.api_peer.response_headers = response_headers(status=401, request_id=b"request:window")
                         return signature_window_problem("request:window", code=code)
@@ -113,21 +121,21 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
             except ServiceFailed as failure:
                 self.fail(json.dumps(failure_evidence(failure, secrets=())))
-            self.assertGreaterEqual(len(requests), refusals + 1)
+            self.assertGreaterEqual(len(requests), refusal_count + 1)
             signatures = [
                 next(line for line in request.split(b"\r\n") if line.lower().startswith(b"signature-input:"))
-                for request, _body in requests[: refusals + 1]
+                for request, _body in requests[: refusal_count + 1]
             ]
-            self.assertEqual(len(set(signatures)), refusals + 1)
+            self.assertEqual(len(set(signatures)), refusal_count + 1)
             self.assertEqual(requests[0][1], requests[1][1], msg="A timing refusal must not change a retained write body.")
             self.assertEqual(1, fixture.events.count("start"))
             self.assertEqual(1, len(fixture.model_peer.requests))
             self.assertEqual(1, len(fixture.allocations))
             self.assertEqual(1, fixture.allocations[0].worker.events.count("execute"))
-            if route in ("jobs", "hello"):
-                kind = "read" if route == "jobs" else "hello"
+            if expected_notice_kind is not None:
                 self.assertEqual(
-                    [notice[:2] for notice in fixture.api_notices], [("retry", kind)] * refusals + [("recovered", kind)]
+                    [notice[:2] for notice in fixture.api_notices],
+                    [("retry", expected_notice_kind)] * refusal_count + [("recovered", expected_notice_kind)],
                 )
                 self.assertEqual("request:window", fixture.api_notices[0][2].request_id)
 
