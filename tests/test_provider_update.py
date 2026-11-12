@@ -80,6 +80,7 @@ class ProviderUpdateTests(unittest.TestCase):
     def test_image_lease_spans_build_and_install_but_not_retirement(self):
         tools = self.root / "tools"
         for name in ("container.sh", "provider_deployment.sh", "image_retirement.sh"):
+            # silent-defaults: allow-contract -- Retirement expects the lease released; build and install expect it held.
             expected = "success" if name == "image_retirement.sh" else "busy"
             (tools / name).write_text(
                 "#!/usr/bin/env bash\n"

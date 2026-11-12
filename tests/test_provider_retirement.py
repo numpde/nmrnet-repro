@@ -71,6 +71,7 @@ class WorkerRetirementTests(unittest.TestCase):
 
     def calls(self):
         path = self.root / "calls"
+        # silent-defaults: allow-contract -- The fixture creates the call log on engine invocation; an absent log records no fixture engine call.
         return path.read_text().splitlines() if path.exists() else []
 
     def test_exact_stopped_container_is_removed_and_private_cause_retained(self):

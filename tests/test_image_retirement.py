@@ -97,6 +97,7 @@ else: raise SystemExit(91)
 
     def removed(self):
         path = self.root / "removed"
+        # silent-defaults: allow-contract -- The fixture creates the removal log on image rm; an absent log records no fixture removal.
         return path.read_text().splitlines() if path.exists() else []
 
     def test_only_obsolete_owned_images_are_removed_with_no_parent_pruning(self):
