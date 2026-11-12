@@ -167,6 +167,7 @@ def assert_runtime_grants(
     expected_tmpfs = {"/tmp": (tmpfs_max, False)}
     if runtime_tmpfs:
         expected_tmpfs["/runtime"] = (128 * 1024**2, True)
+    # silent-defaults: allow-contract -- Missing tmpfs options produce an empty list so the expected mount count fails.
     mounts = values.get("--tmpfs", [])
     case.assertEqual(len(expected_tmpfs), len(mounts))
     seen = set()
@@ -177,7 +178,9 @@ def assert_runtime_grants(
         seen.add(target)
         limit, executable = expected_tmpfs[target]
         flags = set(settings.split(","))
+        # silent-defaults: allow-contract -- The expected tmpfs profile selects whether execution must be enabled.
         case.assertTrue({"rw", "nosuid", "nodev", "exec" if executable else "noexec"} <= flags)
+        # silent-defaults: allow-contract -- The opposite execution flag is forbidden for the selected tmpfs profile.
         case.assertFalse({"suid", "dev", "noexec" if executable else "exec"} & flags)
         sizes = [setting.split("=", 1)[1] for setting in flags if setting.startswith("size=")]
         case.assertEqual(1, len(sizes), msg="Writable tmpfs has no single finite owned size.")
@@ -258,6 +261,7 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
                     # needs the separately seeded prepared prerequisite.
                     prepared.rename(saved)
                 try:
+                    # silent-defaults: allow-contract -- Only the repository-test launcher prints its command; other lanes execute their action.
                     result = fixture.run(launcher, *(("--print", action) if printed else (action,)), additions=additions)
                 finally:
                     if saved.exists():

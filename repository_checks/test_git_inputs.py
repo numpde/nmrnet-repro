@@ -97,9 +97,11 @@ class GitInputTests(unittest.TestCase):
             path.write_bytes(contents)
             path.chmod(mode)
             self.git(self.repository, "add", name)
+            # silent-defaults: allow-contract -- The fixture stages each declared mode using Git's executable-bit option.
             self.git(self.repository, "update-index", "--chmod=" + ("+x" if mode == 0o755 else "-x"), name)
         self.commit(self.repository)
         for name, (mode, _) in committed.items():
+            # silent-defaults: allow-contract -- Invert the live mode to prove capture uses the independently committed mode.
             (self.repository / name).chmod(0o755 if mode == 0o644 else 0o644)
 
         def capture(destination):
