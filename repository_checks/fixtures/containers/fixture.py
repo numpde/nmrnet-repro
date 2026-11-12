@@ -89,7 +89,7 @@ class LauncherFixture:
             ("docker", "docker.py"),
             ("git", "git.sh"),
             ("id", "id.sh"),
-            ("stat", "stat.py"),
+            ("stat", "stat.sh"),
             ("python3", "python.sh"),
         ):
             (root / "bin" / name).symlink_to(FIXTURES / source)
