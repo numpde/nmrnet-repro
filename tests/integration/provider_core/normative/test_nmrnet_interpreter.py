@@ -21,10 +21,13 @@ from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
-from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
-
 from nmrnet_provider.input_geometry import PreparedUploadMember
 from nmrnet_provider.interpreter import PROMPT, ModelReportedInputProblem
+from nmrnet_provider.prepared_input import (
+    DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+    MAX_SHIFT_SIGNIFICANT_DIGITS,
+    MIN_SHIFT_SIGNIFICANT_DIGITS,
+)
 from nmrnet_provider.upload_archive import inspect_upload, select_member
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.chat_errors import ChatFailed
@@ -140,7 +143,8 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         ["low", "medium", "max"], parameters["properties"]["output"]["properties"]["verbosity"]["enum"]
                     )
                     self.assertEqual(
-                        {"verbosity": "medium", "shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS}, parameters["properties"]["output"]["default"]
+                        {"verbosity": "medium", "shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS},
+                        parameters["properties"]["output"]["default"],
                     )
                     self.assertNotIn("output", parameters["required"])
             return tool_reply(
@@ -280,6 +284,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     (UploadMember(UPLOAD_REF, "Authored XYZ source", len(ports.source), None),),
                 )
 
+                # silent-defaults: allow-contract -- Bind this iteration's route and ports to the asynchronous TLS callback.
                 async def respond(_headers, raw, route=route, ports=ports):
                     request = json.loads(raw)
                     messages = request["messages"]
@@ -328,7 +333,9 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     prepared_identity = json.loads(handle.identity.content)
                     outcome = await session.execute(handle, report_condition=unexpected_condition)
                     result = json.loads(outcome.content)
-                    self.assertEqual({"shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS, "verbosity": "max"}, result["output"])
+                    self.assertEqual(
+                        {"shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS, "verbosity": "max"}, result["output"]
+                    )
                     self.assertEqual(result["interpretation"], prepared_identity["interpretation"])
                     self.assertEqual("selected", result["interpretation"]["outcome"])
                     interpretation = result["interpretation"]
@@ -337,6 +344,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         hashlib.sha256(PROMPT.encode()).hexdigest(),
                     )
                     requests = [json.loads(raw) for raw in peer.request_bodies]
+                    # silent-defaults: allow-contract -- Upload first lists its attachments and then prepares; SMILES and pasted routes prepare in one model turn.
                     self.assertEqual(len(requests), 2 if route == "upload" else 1)
                     self.assertNotIn("submit", [tool["function"]["name"] for tool in requests[0]["tools"]])
                     tools = json.dumps(
@@ -366,6 +374,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         b"PRIVATE_GENERATOR_DIAGNOSTIC",
                     ):
                         self.assertNotIn(private, json.dumps(result["interpretation"]).encode())
+                    # silent-defaults: allow-contract -- Pasted input yields one geometry; SMILES generates two conformers and Upload selects two records.
                     self.assertEqual(len(ports.worker.requests), 1 if route == "pasted" else 2)
                     if route == "smiles":
                         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
