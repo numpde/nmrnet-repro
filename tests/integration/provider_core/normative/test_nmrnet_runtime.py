@@ -456,10 +456,13 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ports.allocate_generator.assert_not_awaited()
                     ports.uploads.acquire.assert_not_awaited()
                     self.assertEqual([], ports.worker.events)
+                    call_id, unit = "corrected", "nm"
+                else:
+                    call_id, unit = "invalid", "unknown"
                 return tool_reply(
-                    "corrected" if corrected else "invalid",
+                    call_id,
                     "prepare_pasted",
-                    {"source_text": source.decode(), "source_format": "table", "source_unit": "nm" if corrected else "unknown"},
+                    {"source_text": source.decode(), "source_format": "table", "source_unit": unit},
                 )
 
             fixture.model_peer.response_factory = model_reply
@@ -658,6 +661,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             await fixture.wait_published()
             self.assertEqual(1, fixture.result["interpretation"]["visits"][-1]["corrections"])
             self.assertEqual(fixture.result["interpretation"], json.loads(selected.content)["interpretation"])
+            # silent-defaults: allow-contract -- The not-inspected case starts at preparation; the other cases first inspect the Upload and therefore use one more turn.
             self.assertEqual(len(fixture.model_peer.requests), 3 if mistake == "not_inspected" else 4)
             self.assertEqual(1, len(fixture.store_peer.requests))
             self.assertEqual(1, sum(b"/read-capability " in request for request in fixture.api_peer.requests))
