@@ -63,7 +63,6 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
             "duplicate_names",
             "escaping_name",
             "absolute_name",
-            "oversized",
             "image",
             "revision",
         ):
@@ -92,8 +91,6 @@ class ProviderConfigurationBoundaryTests(unittest.TestCase):
                     names = ("../private-source",)
                 elif fault == "absolute_name":
                     names = (str(source),)
-                elif fault == "oversized":
-                    source.write_bytes(b"x" * (1048576 + 1))
                 elif fault == "image":
                     identities["image_id"] = "mutable:latest"
                 else:

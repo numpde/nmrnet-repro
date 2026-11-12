@@ -64,6 +64,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
     def test_execution_declaration_hashes_actual_sources_and_keeps_caller_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             source_root, names = execution_source_files(directory)
+            (source_root / "tools/worker.py").write_bytes(b"large source\n" * 100000)
             identities = {
                 "image_id": "sha256:" + "b" * 64,
                 "geometry_image_id": "sha256:" + "c" * 64,
@@ -94,6 +95,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                         },
                     )
                     self.assertEqual(110000, declaration["tool_sources"]["requirements/inference.lock"]["size"])
+                    if case == "original":
+                        self.assertEqual(1300000, declaration["tool_sources"]["tools/worker.py"]["size"])
                     self.assertEqual((destination / "execution.json").stat().st_mode & 0o777, 0o600)
                     self.assertEqual({path.name for path in destination.iterdir()}, {"execution.json"})
             self.assertEqual(

@@ -29,11 +29,13 @@ def capture_execution(source_root, destination, source_names, **identities):
         path = _source_path(source_root / name, source_root)
         # These are individual read-only source grants, not credential files.
         # Ordinary checkout modes remain valid; capture the bytes actually read.
+        digest = hashlib.sha256()
+        size = 0
         with path.open("rb") as source:
-            raw = source.read(1024 * 1024 + 1)
-        if len(raw) > 1024 * 1024:
-            raise ConfigurationRejected("execution source exceeds its 1048576-byte ceiling.")
-        sources[name] = {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+            for chunk in iter(lambda: source.read(65536), b""):
+                size += len(chunk)
+                digest.update(chunk)
+        sources[name] = {"size": size, "sha256": digest.hexdigest()}
     execution = _declared_execution(dict(identities, runtime_identity_source="caller", tool_sources=sources))
     encoded = (json.dumps(execution, sort_keys=True) + "\n").encode()
     if len(encoded) > 65536:
