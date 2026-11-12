@@ -46,12 +46,12 @@ if [[ ! -f "$declaration" || -L "$declaration" ]]; then
 fi
 readonly dependencies="$repository_root/.work/checker/dependencies"
 resume_arguments=()
-if [[ ${NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN-} == 'command line' ]]; then
-    resume_stage=${NMRNET_CHECKER_RESUME_STAGE_INPUT-}
-    if [[ $1 != download || ! $resume_stage =~ ^\.dependencies\.pending-[[:alnum:]_]+$ ]]; then
+if [[ -v NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN && $NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN == 'command line' ]]; then
+    if [[ $1 != download || ! -v NMRNET_CHECKER_RESUME_STAGE_INPUT || ! $NMRNET_CHECKER_RESUME_STAGE_INPUT =~ ^\.dependencies\.pending-[[:alnum:]_]+$ ]]; then
         printf '%s\n' 'RESUME_STAGE must name one retained .dependencies.pending-... directory for checker download.' >&2
         exit 2
     fi
+    resume_stage=$NMRNET_CHECKER_RESUME_STAGE_INPUT
     resume_path="$repository_root/.work/checker/$resume_stage"
     if ! "$print_command" && [[ ! -d $resume_path || -L $resume_path || $(stat -c %u -- "$resume_path") != "$caller_uid" ]]; then
         printf '%s\n' 'Cannot resume checker dependencies: select a retained caller-owned directory without a symlink.' >&2

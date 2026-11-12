@@ -140,6 +140,36 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
         self._remember(result.stderr)
         return result
 
+    def test_resume_stage_requires_an_explicit_valid_download_selector(self):
+        for name in ("NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN", "NMRNET_CHECKER_RESUME_STAGE_INPUT"):
+            if name in self.environment:
+                del self.environment[name]
+        origin = "NMRNET_CHECKER_RESUME_STAGE_INPUT_ORIGIN"
+        value = "NMRNET_CHECKER_RESUME_STAGE_INPUT"
+        ordinary = self.launch("download", preview=True)
+        self.assertEqual(0, ordinary.returncode, msg=ordinary.stderr)
+        self.assertNotIn("--resume-stage", ordinary.stdout)
+        ignored = self.launch("download", preview=True, additions={origin: "environment", value: ".dependencies.pending-good"})
+        self.assertEqual(0, ignored.returncode, msg=ignored.stderr)
+        self.assertNotIn("--resume-stage", ignored.stdout)
+        for additions in (
+            {origin: "command line"},
+            {origin: "command line", value: ""},
+            {origin: "command line", value: "../bad"},
+        ):
+            with self.subTest(additions=additions):
+                result = self.launch("download", preview=True, additions=additions)
+                self.assertEqual(2, result.returncode)
+                self.assertIn("RESUME_STAGE must name one retained", result.stderr)
+        valid = {origin: "command line", value: ".dependencies.pending-good"}
+        selected = self.launch("download", preview=True, additions=valid)
+        self.assertEqual(0, selected.returncode, msg=selected.stderr)
+        self.assertIn("--resume-stage /output/.dependencies.pending-good", selected.stdout)
+        rejected = self.launch("check", preview=True, additions=valid)
+        self.assertEqual(2, rejected.returncode)
+        self.assertIn("RESUME_STAGE must name one retained", rejected.stderr)
+        self.assertEqual([], self.calls())
+
     def calls(self):
         # Iterating first preserves missing-directory failure instead of glob's
         # empty result. Published JSON remains the existing observation format.

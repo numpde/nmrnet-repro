@@ -546,6 +546,7 @@ case "$1" in
                         tests.test_wheelhouse tests.test_wheelhouse_acquire tests.test_wheelhouse_launcher
                         tests.test_checker
                         tests.test_checker_launcher.CheckerLauncherTests.test_actual_operation_deadlines_stop_client_before_checker_teardown
+                        tests.test_checker_launcher.CheckerLauncherTests.test_resume_stage_requires_an_explicit_valid_download_selector
                         tests.test_checker_launcher.CheckerLauncherTests.test_checker_uses_mapped_owner_and_refuses_unverified_mapping
                         tests.test_checker_launcher.CheckerLauncherTests.test_failed_captured_verification_retains_borrowed_inputs
                         tests.test_checker_launcher.CheckerLauncherTests.test_check_preview_is_offline_readonly_and_download_only_writes_owned_stage
