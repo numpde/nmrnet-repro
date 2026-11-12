@@ -260,6 +260,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                     self.assertIn("private Docker client state retained", diagnostic)
                     calls = fixture.calls()
                     self.assertEqual(1, len(calls), msg="A second native call overwrote unknown retirement")
+                    # silent-defaults: allow-contract -- Build inspects the pinned base image; import inspects the image recorded before the launch.
                     image = (
                         "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
                         if action == "build" else before[0].decode().strip()
@@ -647,8 +648,8 @@ class InferenceClientConfigTests(unittest.TestCase):
                         anchors.append(identifier)
             self.assertEqual([anchor], anchors, msg="The reporter must be the sole remaining native anchor")
             calls = fixture.calls()
-            # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls before the independently observed held success reporter; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stdout_success_report_cancellation_retires_owner_before_cleanup
             engine_calls = [call["arguments"] for call in calls]
+            # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls before the independently observed held success reporter; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stdout_success_report_cancellation_retires_owner_before_cleanup
             expected_operations = (
                 ["image", "run", "run", "build", "image", "image", "image"]
                 if action == "build" else ["image", "run"]
@@ -756,8 +757,8 @@ class InferenceClientConfigTests(unittest.TestCase):
                         diagnostic = stderr.read().decode()
                     self.assertIn("native anchor retirement could not be confirmed", diagnostic)
                     self.assertIn("private Docker client state retained", diagnostic)
-                    # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls; retained inputs and record effects separately check denied reporter retirement; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record
                     engine_calls = [call["arguments"] for call in fixture.calls()]
+                    # silent-defaults: allow-contract -- Build and import scenarios expect seven and two recorded engine calls; retained inputs and record effects separately check denied reporter retirement; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record
                     expected_operations = (
                         ["image", "run", "run", "build", "image", "image", "image"]
                         if action == "build" else ["image", "run"]
@@ -852,7 +853,6 @@ class InferenceClientConfigTests(unittest.TestCase):
                                 shutil.rmtree(retained)
 
     def full_stderr_cleanup_case(self, directory, *, phase, signum, publication):
-        # silent-defaults: allow-contract -- Removal sends cancellation at the injected cleanup failure; reporting and capture cases wait for their exact blocked writer before cancellation; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stderr_pipe_cancellation_follows_all_confirmed_cleanup
         environment, caller_paths = self.caller_configuration(Path(directory))
         removal = (
             '() { case "$*" in *nmrnet-docker-client.*) '
@@ -879,6 +879,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                 except BlockingIOError:
                     break
             os.set_blocking(write_fd, True)
+            # silent-defaults: allow-contract -- Only capture injects the chmod writer used to hold stderr.
             process = subprocess.Popen(
                 ["bash", str(fixture.root / "tools/inference_image.sh"), "build"],
                 env=fixture.environment
@@ -905,6 +906,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                     msg=f"Build did not reach owned cleanup; caller status {process.poll()!r}",
                 )
             if phase in {"reporting", "capture"}:
+                # silent-defaults: allow-contract -- Capture's wait includes context setup; reporting starts its short wait after owned cleanup.
                 deadline = time.monotonic() + (30 if phase == "capture" else 3)
                 blocked = False
                 while not blocked and time.monotonic() < deadline:
@@ -935,6 +937,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                                     writer = identifier
                     if not blocked:
                         time.sleep(0.01)
+                # silent-defaults: allow-contract -- The failure message names the writer selected by the authored phase.
                 self.assertTrue(
                     blocked,
                     msg=(
@@ -996,6 +999,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                 process.send_signal(signum)
             # Keep stderr unread until exit: draining it would conceal a
             # blocking diagnostic before removal or during cancellation.
+            # silent-defaults: allow-contract -- Removal and reporting use the shorter check; capture waits longer for its held writer to retire.
             self.assertEqual(128 + signum, process.wait(timeout=4 if phase == "capture" else 2))
             if phase == "capture":
                 self.assertTrue(observation.is_file(), msg="Caller cleanup did not observe its owned paths")

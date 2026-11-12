@@ -93,12 +93,12 @@ class PackagesClientTests(unittest.TestCase):
             self.retained.add(Path(path))
 
     def caller(self, *arguments, environment):
+        # silent-defaults: allow-contract -- Stage includes capture, build and controller handoff; other commands use the shorter fixture deadline.
         result = subprocess.run(
             ["bash", str(self.root / "tools/packages.sh"), *arguments],
             env=environment,
             text=True,
             capture_output=True,
-            # Stage includes capture, build and controller handoff; cancellation probes have separate deadlines.
             timeout=20 if arguments[0] == "stage" else 8,
             check=False,
         )
@@ -771,7 +771,9 @@ class PackagesClientTests(unittest.TestCase):
                 environment = self.environment | {
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "NMRNET_PACKAGE_ENGINE_MODE": "composition",
+                    # silent-defaults: allow-contract -- The cancellation case holds the attached worker for a real signal; the numeric-status case does not hold it.
                     "NMRNET_FAKE_HOLD_ATTACH": "1" if cancellation else "0",
+                    # silent-defaults: allow-contract -- Cancellation starts with worker status zero; the other case returns numeric 143 without cancellation.
                     "NMRNET_FAKE_WORKER_STATUS": "0" if cancellation else "143",
                     "NMRNET_FAKE_WORKER_STDOUT": "composition worker stdout\n",
                     "NMRNET_FAKE_WORKER_STDERR": "composition worker stderr\n",
@@ -891,7 +893,9 @@ class PackagesClientTests(unittest.TestCase):
                     stdout, stderr = process.communicate(timeout=1)
                     self._remember(stderr.decode())
                     self.assertEqual(143, process.returncode, msg=stderr.decode())
+                    # silent-defaults: allow-contract -- Cancellation is held before worker output; numeric status 143 preserves the emitted stdout exactly.
                     self.assertEqual(b"" if cancellation else b"composition worker stdout\n", stdout)
+                    # silent-defaults: allow-contract -- Cancellation is held before worker output; numeric status 143 preserves the emitted stderr exactly.
                     self.assertEqual(b"" if cancellation else b"composition worker stderr\n", stderr)
                     self.assertFalse((self.root / "controller-returned").exists())
                     calls = self.fixture.calls()[start:]

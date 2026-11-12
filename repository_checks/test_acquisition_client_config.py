@@ -558,6 +558,7 @@ class AcquisitionClientTests(unittest.TestCase):
         evidence = scratch / "gateway"
         state = {"stopped": b"false\n", "inspect-failed": b"", "malformed": b"private malformed state\n", "exhausted": b"true\n"}
         self.assertEqual(state[scenario], (evidence / "state").read_bytes())
+        # silent-defaults: allow-contract -- Only the inspect-failed scenario emits the private inspect cause; other scenarios retain empty inspect stderr.
         expected_error = b"private inspect cause\n" if scenario == "inspect-failed" else b""
         self.assertEqual(expected_error, (evidence / "state.stderr").read_bytes())
         self.assertEqual(b"private container stdout\n", (evidence / "logs").read_bytes())
