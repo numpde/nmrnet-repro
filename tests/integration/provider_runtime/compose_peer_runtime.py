@@ -55,24 +55,20 @@ from provider_core.job_input import verify_job_input
 def successive_api_reply(peer, path, body, completed, inputs):
     """Two sequential Jobs with distinct wire identities, using existing fixtures."""
 
+    if completed not in (0, 1):
+        raise AssertionError("Successive witness received a scientific operation outside its active two-Job sequence")
+    current = inputs[completed]
     if path == "/provider/v1/jobs":
         document = page()
-        jobs = (
-            []
-            if completed == 2
-            else [
-                {
-                    **asdict(inputs[completed].identity),
-                    "analysis_kind_ref": ANALYSIS_KIND_REF,
-                    "created_at": "2026-10-18T00:00:00.123456Z",
-                }
-            ]
-        )
+        jobs = [
+            {
+                **asdict(current.identity),
+                "analysis_kind_ref": ANALYSIS_KIND_REF,
+                "created_at": "2026-10-18T00:00:00.123456Z",
+            }
+        ]
         document.update(analysis_kind_ref=ANALYSIS_KIND_REF, jobs=jobs, next_cursor=None)
         return json.dumps(document).encode()
-    if completed >= 2:
-        raise AssertionError("Successive witness received another scientific operation after both completions")
-    current = inputs[completed]
     job = current.identity.job_ref
     attempt_suffix, result_suffix = {0: ("a", "b"), 1: ("c", "d")}[completed]
     attempt = "execution_attempt:sha256:" + attempt_suffix * 64

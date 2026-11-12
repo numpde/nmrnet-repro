@@ -65,7 +65,9 @@ class ScientificInputTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 reply(peer, f"/provider/v1/jobs/{inputs[1 - index].identity.job_ref}/input", None, index, inputs)
         self.assertEqual(2, len(set(results)))
-        self.assertEqual([], json.loads(reply(peer, "/provider/v1/jobs", None, 2, inputs))["jobs"])
+        # The enclosing authenticated peer, not this active-Job helper, owns the idle feed.
+        with self.assertRaisesRegex(AssertionError, "outside its active two-Job sequence"):
+            reply(peer, "/provider/v1/jobs", None, 2, inputs)
 
     def test_connected_fixture_ports_load_without_the_displaced_native_launch_harness(self):
         program = """
