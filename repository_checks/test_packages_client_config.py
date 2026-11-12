@@ -288,7 +288,7 @@ class PackagesClientTests(unittest.TestCase):
         allocation = """() {
     local selected status
     if selected=$(command mktemp "$@"); then :; else status=$?; return "$status"; fi
-    if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-proxy.XXXXXXXX ]]; then
+    if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-preflight.XXXXXXXX ]]; then
         printf '%s\\n' "$selected" > "$NMRNET_PREFLIGHT_SCRATCH"
     fi
     printf '%s\\n' "$selected"
@@ -309,7 +309,7 @@ class PackagesClientTests(unittest.TestCase):
         self.assertEqual("", result.stderr)
         scratch = Path(observation.read_text().strip())
         self.assertEqual(Path("/tmp"), scratch.parent)
-        self.assertRegex(scratch.name, r"^nmrnet-proxy\.[A-Za-z0-9]+$")
+        self.assertRegex(scratch.name, r"^nmrnet-preflight\.[A-Za-z0-9]+$")
         self.retained.add(scratch)
         self.assertTrue(scratch.is_dir())
         self.assertFalse(scratch.is_symlink())
@@ -435,7 +435,7 @@ class PackagesClientTests(unittest.TestCase):
         self.assertFalse(evidence.is_symlink())
         self.assertEqual(0o700, stat.S_IMODE(evidence.stat().st_mode))
         self.assertEqual(
-            f"Cannot confirm inference client evidence directory removal; attempted path {evidence} (status 23).\n",
+            f"Cannot confirm native client evidence directory removal; attempted path {evidence} (status 23).\n",
             result.stderr,
         )
         controller = int((self.root / "controller-returned").read_text())
