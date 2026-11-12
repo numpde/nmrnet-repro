@@ -201,6 +201,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(operation.proof)
             self.assertEqual(-1, operation.session.control.fileno())
             notice = self.notices.call_args.args[0]
+            # silent-defaults: allow-contract -- Check the immediate members of a grouped notice or the single notice itself for startup failure.
             failures = notice.exceptions if isinstance(notice, BaseExceptionGroup) else (notice,)
             self.assertTrue(any(isinstance(failure, RunnerStartupUnavailable) for failure in failures))
         finally:

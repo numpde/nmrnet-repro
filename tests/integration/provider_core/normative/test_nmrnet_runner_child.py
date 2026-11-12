@@ -19,7 +19,10 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
         runner = RunningSupervisor(role="reader", worker_argv=[sys.executable, "-c", bootstrap, "reader", "--io-seconds", "2"])
         self.addCleanup(runner.close)
         identities = []
-        for source in (b"H 0 0 0\nC 1.09 0 0\n", b"C 0 0 0\nH 0 1.09 0\n"):
+        for source, expected_coordinates in (
+            (b"H 0 0 0\nC 1.09 0 0\n", [1.09, 0, 0]),
+            (b"C 0 0 0\nH 0 1.09 0\n", [0, 1.09, 0]),
+        ):
             operation = NativeOperation(
                 role="reader", endpoint=runner.path, operation_seconds=2, observation_seconds=0.4, on_notice=Mock()
             )
@@ -30,7 +33,7 @@ class BoundNativeChildTests(unittest.IsolatedAsyncioTestCase):
                 packet = json.loads(geometry.request_bytes)
                 self.assertEqual(packet["atoms"], [row.split()[0].decode() for row in source.splitlines()])
                 self.assertEqual((1, 2), geometry.source_positions)
-                self.assertEqual(packet["coordinates"][1], [1.09, 0, 0] if source.startswith(b"H") else [0, 1.09, 0])
+                self.assertEqual(packet["coordinates"][1], expected_coordinates)
                 identities.append(operation.allocation)
             except Exception as primary:
                 runner.close()
