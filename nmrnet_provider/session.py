@@ -227,7 +227,7 @@ class NMRNetSession:
             if type(original) is not NativeWorkerExited:
                 raise
             raise self._worker_crash(original, cause=cause) from None
-        # silent-defaults: allow-exception-outcome -- Invalid user input becomes an invalid_input result with diagnostic evidence in _failed_preparation.
+        # silent-defaults: allow-exception-outcome -- Route invalid user input through _failed_preparation; evidence failures still propagate.
         except InputRejected as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
@@ -247,7 +247,7 @@ class NMRNetSession:
                 input_fingerprint=instructions.identity.input_fingerprint,
                 **self._facts,
             )
-        # silent-defaults: allow-exception-outcome -- Result capacity refusal becomes a result_size_limit result with evidence in _failed_preparation.
+        # silent-defaults: allow-exception-outcome -- Route result capacity refusal through _failed_preparation; evidence failures still propagate.
         except ResultCapacityExceeded as cause:
             return self._failed_preparation(cause, instructions)
         diagnostics = self._input_preparation.interpreter_diagnostics

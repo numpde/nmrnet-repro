@@ -20,8 +20,8 @@ def ownership_arguments(arguments):
     try:
         canonical = Path(os.path.realpath(path, strict=True))
         owner = path.lstat()
+    # silent-defaults: allow-exception-outcome -- Forward unchanged arguments if path resolution or ownership lookup fails; real stat decides the result and any diagnostic.
     except OSError:
-        # The real stat owns missing, inaccessible and invalid-path diagnostics.
         return arguments
     if path != canonical or not path.is_relative_to(root):
         return arguments
