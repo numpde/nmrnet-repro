@@ -11,7 +11,7 @@ from dataclasses import replace
 from tests.unit.smiles_fakes import collection
 
 from nmrnet_provider.input_geometry import UploadMemberSource, UploadSource, prepare_json
-from nmrnet_provider.prepared_input import GeneratedJobInput, OutputSettings, PreparedJobInput, SelectedSmilesSource
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS, GeneratedJobInput, OutputSettings, PreparedJobInput, SelectedSmilesSource
 
 JOB_TEXT = b"SMILES C; generate 2 conformers."
 
@@ -19,7 +19,7 @@ JOB_TEXT = b"SMILES C; generate 2 conformers."
 def generated_job_input(batch):
     """Bind the authored C/N=2 selection; no interpreter or native claim is made."""
     source = SelectedSmilesSource("job:fixture", "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(), 2, b"C")
-    return GeneratedJobInput(source, batch, output=OutputSettings(shift_significant_digits=17))
+    return GeneratedJobInput(source, batch, output=OutputSettings(shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS))
 
 
 def scientific_facts():
@@ -86,7 +86,7 @@ def supplied_documents():
         len(raw),
         geometry.source_sha256,
     )
-    prepared = PreparedJobInput((geometry,), "direct_coordinate_json", source, output=OutputSettings(shift_significant_digits=17))
+    prepared = PreparedJobInput((geometry,), "direct_coordinate_json", source, output=OutputSettings(shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS))
     facts = scientific_facts()
     outcomes = (
         {

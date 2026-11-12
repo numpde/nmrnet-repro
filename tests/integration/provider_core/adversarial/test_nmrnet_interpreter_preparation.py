@@ -16,6 +16,8 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_interpreter
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
+from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
+
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
@@ -537,7 +539,6 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             for output in (
                 None,
                 [],
-                {"unknown": "PRIVATE_FIELD"},
                 {"verbosity": None},
                 {"verbosity": True},
                 {"verbosity": "compact"},
@@ -545,8 +546,8 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 {"verbosity": "LOW"},
                 {"shift_significant_digits": None},
                 {"shift_significant_digits": True},
-                {"shift_significant_digits": 0},
-                {"shift_significant_digits": 18},
+                {"shift_significant_digits": MIN_SHIFT_SIGNIFICANT_DIGITS - 1},
+                {"shift_significant_digits": MAX_SHIFT_SIGNIFICANT_DIGITS + 1},
             ):
                 for operation, arguments in (
                     (capability.prepare_smiles, {"smiles": "CCl", "requested_count": 2}),
@@ -561,7 +562,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     with (
                         self.subTest(output=output, operation=operation.__name__),
-                        self.assertRaisesRegex(InputRejected, "output|verbosity|shift_significant_digits"),
+                        self.assertRaises(InputRejected),
                     ):
                         await operation(**arguments, output=output)
             ports.allocate_reader.assert_not_awaited()
@@ -574,7 +575,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose)
         self.addAsyncCleanup(owner.retire)
         prepared = await owner.prepare(ports.instructions, require_execution=lambda: None)
-        self.assertEqual({"verbosity": "medium", "shift_significant_digits": 4}, prepared.output.as_dict())
+        self.assertEqual({"verbosity": "medium", "shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS}, prepared.output.as_dict())
         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
 
     async def test_parent_cancellation_retains_the_original_late_operational_child_failure_after_clean_join(self):

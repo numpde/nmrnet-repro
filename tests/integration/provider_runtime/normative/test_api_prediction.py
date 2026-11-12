@@ -314,9 +314,26 @@ class ApiPredictionTests(unittest.TestCase):
             self.assertEqual([call[1].rsplit("/", 1)[-1] for call in calls[-3:]], ["uploads", "providers", "state"])
             self.assertFalse(any(canary.encode() in item.read_bytes() for item in client.output.iterdir()))
 
-    def test_qualification_accepts_explicit_seventeen_digit_output_with_the_existing_oracle(self):
+    def test_qualification_compares_public_predictions_to_rounded_retained_values(self):
         actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
-        self.assertEqual({"shift_significant_digits": 17, "verbosity": "max"}, actual["output"])
+        retained["geometries"][0]["predictions"][0]["shift_ppm"] = 1.23456789123
+        actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567891
+        with patch("api_prediction._retained_science", return_value=retained):
+            compare_science(
+                json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter,
+                prediction_image_id="sha256:" + "c" * 64, case_kind="pasted",
+            )
+            actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567892
+            with self.assertRaisesRegex(AssertionError, "predictions"):
+                compare_science(
+                    json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter,
+                    prediction_image_id="sha256:" + "c" * 64, case_kind="pasted",
+                )
+        self.assertEqual(1.23456789123, retained["geometries"][0]["predictions"][0]["shift_ppm"])
+
+    def test_qualification_accepts_explicit_ten_digit_output_with_the_existing_oracle(self):
+        actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
+        self.assertEqual({"shift_significant_digits": 10, "verbosity": "max"}, actual["output"])
         self.assertNotIn("output", retained)
         with patch("api_prediction._retained_science", return_value=retained):
             compare_science(
@@ -404,6 +421,27 @@ class ApiPredictionTests(unittest.TestCase):
             expected=expected,
         )
         self.assertEqual(actual, observed)
+
+    def test_uploaded_predictions_match_the_rounded_independent_receipt(self):
+        actual, retained, receipt, metadata, interpreter, upload, source, expected = uploaded_documents()
+        retained["geometries"][0]["predictions"][0]["shift_ppm"] = 1.23456789123
+        actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567891
+        arguments = dict(interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64,
+                         upload=upload, source=source, expected=expected)
+        compare_upload_scientific_documents(actual, retained, receipt, metadata, **arguments)
+        actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567892
+        with self.assertRaisesRegex(AssertionError, "predictions"):
+            compare_upload_scientific_documents(actual, retained, receipt, metadata, **arguments)
+
+    def test_sdf_predictions_match_the_rounded_independent_receipt(self):
+        actual, retained, receipt, metadata, interpreter, upload = uploaded_sdf_documents()
+        retained["geometries"][0]["predictions"][0]["shift_ppm"] = 1.23456789123
+        actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567891
+        arguments = dict(interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64, upload=upload)
+        compare_sdf_scientific_documents(actual, retained, receipt, metadata, **arguments)
+        actual["geometries"][0]["predictions"][0]["shift_ppm"] = 1.234567892
+        with self.assertRaisesRegex(AssertionError, "predictions"):
+            compare_sdf_scientific_documents(actual, retained, receipt, metadata, **arguments)
 
     def test_ccl_one_conformer_checks_observed_generation_without_a_numerical_golden(self):
         actual, retained, receipt, metadata, interpreter, expected = generated_documents()

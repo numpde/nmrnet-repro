@@ -12,16 +12,18 @@ from dataclasses import replace
 
 from tests.unit.result_fakes import precision_documents
 
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
+
 from nmrnet_provider.result import ResultPlan
 
 
 class ResultPrecisionTests(unittest.TestCase):
-    def test_default_four_digits_are_numeric_and_frozen_with_exact_inputs(self):
+    def test_default_precision_are_numeric_and_frozen_with_exact_inputs(self):
         prepared, facts, outcomes = precision_documents((32.309967041015625, 3.062568426132202, 0.001234567, -1.23456789, -0.0))
         original = copy.deepcopy(outcomes)
         plan = ResultPlan(prepared, **facts)
         document = json.loads(plan.finish(outcomes))
-        self.assertEqual({"shift_significant_digits": 4, "verbosity": "medium"}, document["output"])
+        self.assertEqual({"shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS, "verbosity": "medium"}, document["output"])
         self.assertEqual(json.loads(plan.prepared_identity)["output"], document["output"])
         for geometry, conformer in zip(document["geometries"], prepared.generated.conformers, strict=True):
             self.assertEqual(geometry["prepared_request"], json.loads(conformer.request_bytes))
@@ -40,12 +42,14 @@ class ResultPrecisionTests(unittest.TestCase):
                 document = json.loads(plan.finish(outcomes))
                 self.assertEqual([row["shift_ppm"] for row in document["geometries"][0]["predictions"]], expected)
 
-    def test_seventeen_digits_preserve_binary64_values_and_reserve_unrounded_evidence(self):
-        values = (32.309967041015625, -1.7976931348623157e308, 5e-324, float(2**1023), 0.0)
+    def test_maximum_precision_rounds_public_values_and_reserves_unrounded_evidence(self):
+        values = (32.309967041015625, -1.2345678901234567e100, 5e-324, 1.2345678901234567e-100, 0.0)
         prepared, facts, outcomes = precision_documents(values)
-        plan = ResultPlan(replace(prepared, output=replace(prepared.output, shift_significant_digits=17)), **facts)
+        plan = ResultPlan(replace(prepared, output=replace(prepared.output, shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS)), **facts)
         document = json.loads(plan.finish(outcomes))
-        self.assertEqual([row["shift_ppm"] for row in document["geometries"][0]["predictions"]], list(values))
+        self.assertEqual([row["shift_ppm"] for row in document["geometries"][0]["predictions"]],
+                         [32.30996704, -1.23456789e100, 5e-324, 1.23456789e-100, 0.0])
+        self.assertEqual(list(values), [row["shift_ppm"] for row in outcomes[0]["prediction"]["predictions"]])
         reservation = plan.scientific_evidence_reservation()
         self.assertEqual(len(reservation), len(outcomes))
         for reserved, observed in zip(reservation, outcomes, strict=True):

@@ -83,7 +83,7 @@ def _selected_output(value):
         return value
     try:
         return OutputSettings.from_json(value)
-    except ValueError as cause:
+    except (TypeError, ValueError) as cause:
         raise InputRejected(str(cause)) from cause
 
 

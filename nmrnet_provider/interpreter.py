@@ -44,7 +44,7 @@ import json
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.prepared_input import DEFAULT_OUTPUT
+from nmrnet_provider.prepared_input import DEFAULT_OUTPUT, MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS
 from provider_core.conversation import (
     ToolFinished,
     ToolRejected,
@@ -106,7 +106,7 @@ max also includes the per-file code manifest. All levels retain the small
 interpretation record. Low omits coordinates for supplied and generated inputs,
 so the result alone cannot reproduce the numeric geometry used for prediction.
 Keep all requested geometries and all H/C predictions at every level.
-shift_significant_digits must be an integer from 1 to 17; it controls numeric
+shift_significant_digits must be an integer from {MIN_SHIFT_SIGNIFICANT_DIGITS} to {MAX_SHIFT_SIGNIFICANT_DIGITS}; it controls numeric
 presentation, not prediction accuracy. Pass both choices inside output, separately
 from molecular input. Neither choice changes embedding or prediction settings.
 
@@ -140,7 +140,7 @@ def _tool(name, description, properties):
                 "type": "object",
                 "properties": {
                     "verbosity": {"type": "string", "enum": [choice.value for choice in ResultVerbosity]},
-                    "shift_significant_digits": {"type": "integer", "minimum": 1, "maximum": 17},
+                    "shift_significant_digits": {"type": "integer", "minimum": MIN_SHIFT_SIGNIFICANT_DIGITS, "maximum": MAX_SHIFT_SIGNIFICANT_DIGITS},
                 },
                 "additionalProperties": False,
                 "default": DEFAULT_OUTPUT.as_dict(),

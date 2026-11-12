@@ -27,6 +27,8 @@ FORMAT_CASES = (
 )
 
 
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
+
 class FormatFixture:
     """Keep independent molecular facts beside their selected source records."""
 
@@ -110,7 +112,7 @@ class FormatFixture:
         self.instructions = (
             f"Predict the attached {self.format_case} fixture as {options['source_format']}, source unit {options['source_unit']}; "
             f"select {options['selection']!r} in that order, alternate location {options['alternate_location']!r}. "
-            "Keep supplied atoms and coordinates. Return shifts with 17 significant digits."
+            f"Keep supplied atoms and coordinates. Return shifts with {MAX_SHIFT_SIGNIFICANT_DIGITS} significant digits."
         ).encode()
 
     async def model_reply(self, request, raw):
@@ -136,6 +138,6 @@ class FormatFixture:
             else:
                 options = dict(self.preparation_options[0])
         arguments = json.loads(function["arguments"])
-        arguments.update(options, output={"verbosity": "max", "shift_significant_digits": 17})
+        arguments.update(options, output={"verbosity": "max", "shift_significant_digits": MAX_SHIFT_SIGNIFICANT_DIGITS})
         function["arguments"] = json.dumps(arguments)
         return json.dumps(response).encode()

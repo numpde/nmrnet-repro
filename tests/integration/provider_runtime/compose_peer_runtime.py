@@ -47,6 +47,8 @@ from tests.integration.nmrnet.runtime_ports import (
 )
 from tests.integration.nmrnet.scientific_inputs import load_scientific_inputs
 
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS
+
 from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
 from provider_core.job_input import verify_job_input
 
@@ -119,7 +121,7 @@ def require_exported_result(result, case, manifest):
         reference = pinned_packet("/fixture/reference-cpu-float32.json", REFERENCE_SHA256)
         production = pinned_packet("/fixture/prediction-cpu-float32.json", PRODUCTION_SHA256)
         return require_reference_predictions(
-            manifest["records"], [item["predictions"] for item in geometries], reference, production
+            manifest["records"], [item["predictions"] for item in geometries], reference, production, significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS
         )
     for element, geometry in zip(("H", "C"), geometries, strict=True):
         predictions = geometry["predictions"]
@@ -210,10 +212,8 @@ async def serve(root, seconds, case, delivery_project):
     expected_jobs = {"successive": 2, "recovery": 0}.get(case, 1)
     peer.output = {"verbosity": "max"}
     if case == "references":
-        # Seventeen digits preserve a binary64 scalar's round trip. Compare the
-        # original unrounded reference values, without changing product defaults
-        # or weakening the existing exact population comparison.
-        peer.output["shift_significant_digits"] = 17
+        # Compare the reference population at the public maximum precision.
+        peer.output["shift_significant_digits"] = MAX_SHIFT_SIGNIFICANT_DIGITS
     if case == "smiles":
         peer.route = "smiles"
         instructions = b"Predict CCl from SMILES, generating two conformers."

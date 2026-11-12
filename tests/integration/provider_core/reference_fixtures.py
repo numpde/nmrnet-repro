@@ -124,12 +124,12 @@ def _require_exact_population(observed, expected, subject):
             f"{subject} keys differ: {len(missing)} missing, {len(unexpected)} unexpected; "
             f"first five missing {sorted(missing)[:5]}, unexpected {sorted(unexpected)[:5]}"
         )
-    for key, value in expected.items():
+    for (key, value) in expected.items():
         if observed[key] != value:
             raise AssertionError(f"{subject} differs at {key}: observed {observed[key]!r}, original {value!r}")
 
 
-def require_reference_predictions(records, predictions, reference, production):
+def require_reference_predictions(records, predictions, reference, production, *, significant_digits):
     """Compare complete producer/nucleus/atom populations, then the original mask."""
     qualified = production["qualification"]["real_model_callable"]
     fixtures = qualified["fixture_observations"]
@@ -140,6 +140,8 @@ def require_reference_predictions(records, predictions, reference, production):
     if len(expected) != 137 or Counter(key[2] for key in expected) != {"H": 82, "C": 55}:
         raise AssertionError("Original production oracle does not contain the qualified 137-output population")
     observed = indexed_predictions([(item["source_element"], item["source_key_hex"]) for item in records], predictions)
+    if significant_digits is not None:
+        expected = {key: float(format(value, f".{significant_digits}g")) for (key, value) in expected.items()}
     _require_exact_population(observed, expected, "Complete connected population")
     historical = {}
     for element in ("H", "C"):
@@ -154,6 +156,8 @@ def require_reference_predictions(records, predictions, reference, production):
     }
     if set(historical) != original_mask or Counter(key[2] for key in historical) != {"H": 42, "C": 22}:
         raise AssertionError("Historical 64-position mask differs from the independently recorded original population")
+    if significant_digits is not None:
+        historical = {key: float(format(value, f".{significant_digits}g")) for (key, value) in historical.items()}
     _require_exact_population({key: observed[key] for key in historical}, historical, "Historical 64-position population")
     return {
         "complete_predictions": len(observed),

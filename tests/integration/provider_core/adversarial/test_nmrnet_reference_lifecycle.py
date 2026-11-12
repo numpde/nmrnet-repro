@@ -36,7 +36,7 @@ class ReferenceFixtureRefusalTests(unittest.TestCase):
             else:
                 production["qualification"]["real_model_callable"]["exact_reference_population"][0]["atom_index"] = 127
             with self.subTest(change=change), self.assertRaises(AssertionError):
-                require_reference_predictions(records, predictions, reference, production)
+                require_reference_predictions(records, predictions, reference, production, significant_digits=None)
 
     def test_pinned_producers_and_original_request_refuse_self_consistent_local_substitution(self):
         original = b'{"coordinate_unit": "angstrom", "atoms": ["H"], "coordinates": [[0.1, 0.0, 0.0]]}'

@@ -9,7 +9,8 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass, field, fields
 
 from nmrnet_provider.input_geometry import UploadMemberSource, UploadSource
 from nmrnet_provider.smiles import GeneratedConformers
@@ -18,41 +19,57 @@ from provider_core.result_verbosity import ResultVerbosity
 # NMRNet owns this default presentation precision for omitted output settings.
 # repo-check: allow-module-constant
 DEFAULT_SHIFT_SIGNIFICANT_DIGITS = 4
+# repo-check: allow-module-constant
+(MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS) = (1, 10)
 
-
-def require_shift_significant_digits(value):
-    if type(value) is not int or not 1 <= value <= 17:
-        raise ValueError("The shift_significant_digits field must be an integer from 1 to 17.")
-    return value
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
 class OutputSettings:
-    """One presentation choice shared by direct input and interpreter tools.
-
-    Precision is NMRNet policy. The shared enum supplies vocabulary only; it
-    neither chooses the default nor knows any scientific result fields.
-    """
+    """Output preferences shared by all preparation routes."""
 
     verbosity: ResultVerbosity = ResultVerbosity.MEDIUM
     shift_significant_digits: int = DEFAULT_SHIFT_SIGNIFICANT_DIGITS
 
     def __post_init__(self):
-        if type(self.verbosity) is not ResultVerbosity:
-            raise ValueError("The verbosity field must be an admitted low, medium or max choice.")
-        require_shift_significant_digits(self.shift_significant_digits)
+        for f in fields(self):
+            if not (type(value := getattr(self, f.name)) is f.type):
+                raise TypeError(f"Unexpected {f.name} {type(value) = }")
+
+        (min, max) = (MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS)
+
+        if not (min <= self.shift_significant_digits <= max):
+            raise ValueError(f"Expected: {min} <= {self.shift_significant_digits=} <= {max}")
 
     @classmethod
-    def from_json(cls, value):
-        if type(value) is not dict or not set(value) <= {"verbosity", "shift_significant_digits"}:
-            raise ValueError("The output field must be an object containing only verbosity and shift_significant_digits.")
-        settings = value.copy()
-        if "verbosity" in settings:
+    def from_json(cls, settings_json: dict):
+        if not (type(settings_json) is dict):
+            raise TypeError(f"Unexpected {type(settings_json) = }")
+
+        defaults = { f.name: f.default for f in fields(cls) }
+        settings = { **defaults, **settings_json }
+
+        if unknown := settings.keys() - defaults.keys():
+            log.warning("Ignoring unknown output settings: %s", unknown)
+
+            for name in unknown:
+                del settings[name]
+
+        if "verbosity" in settings_json:
             settings["verbosity"] = ResultVerbosity.parse(settings["verbosity"])
+
         return cls(**settings)
 
     def as_dict(self):
-        return {"verbosity": self.verbosity.value, "shift_significant_digits": self.shift_significant_digits}
+        serialized = {
+            "verbosity": str(self.verbosity),
+            "shift_significant_digits": int(self.shift_significant_digits),
+        }
+
+        assert set(serialized) == {f.name for f in fields(self)}
+
+        return serialized
 
 
 # Frozen output settings supply the same presentation defaults to every input path.

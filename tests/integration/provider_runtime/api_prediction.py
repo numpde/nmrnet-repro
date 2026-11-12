@@ -584,8 +584,8 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind, predi
         and set(output) == {"verbosity", "shift_significant_digits"}
         and output["verbosity"] == "max"
         and type(output["shift_significant_digits"]) is int
-        and output["shift_significant_digits"] == 17,
-        "Scientific qualification requires the explicitly requested max verbosity and 17 significant digits",
+        and output["shift_significant_digits"] == 10,
+        "Scientific qualification requires the explicitly requested max verbosity and 10 significant digits",
     )
     if case_kind == "pasted":
         compare_scientific_documents(
@@ -720,8 +720,11 @@ def compare_scientific_documents(actual, retained, receipt, metadata, *, interpr
         "loaded_elements",
         "predictions",
     ):
+        expected_value = retained["geometries"][0][key]
+        if key == "predictions":
+            expected_value = [{**row, "shift_ppm": float(format(row["shift_ppm"], ".10g"))} for row in expected_value]
         require(
-            actual["geometries"][0][key] == retained["geometries"][0][key],
+            actual["geometries"][0][key] == expected_value,
             f"Scientific geometry {key} differs from the retained receipt",
         )
 
@@ -903,8 +906,11 @@ def compare_upload_scientific_documents(
         "Uploaded XYZ preparation facts differ",
     )
     for key in ("prediction_unit", "loaded_elements", "predictions", "coverage"):
+        expected_value = retained["geometries"][0][key]
+        if key == "predictions":
+            expected_value = [{**row, "shift_ppm": float(format(row["shift_ppm"], ".10g"))} for row in expected_value]
         require(
-            key in geometry and geometry[key] == retained["geometries"][0][key],
+            key in geometry and geometry[key] == expected_value,
             f"Uploaded scientific {key} differs from the pinned predictions",
         )
     require_selected_interpretation(actual["interpretation"], interpreter, "prepare_upload")
@@ -914,7 +920,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
     """Compare supplied SDF science across new API Job and Upload identities.
 
     R46 pins the native reference; R48 owns member-versus-archive provenance.
-    This compares exact science, not independent accuracy or GUI behavior.
+    This compares predictions at public precision, not independent accuracy or GUI behavior.
     The comparison was ported from compareSubmittedScience at:
     https://github.com/numpde/nmrnet-repro/blob/2efc810/tests/integration/provider_runtime/gui_science.mjs
     """
@@ -956,7 +962,10 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
             "predictions",
             "coverage",
         ):
-            require(actual_geometry[key] == original[key], f"SDF scientific {key} differs from R46")
+            expected_value = original[key]
+            if key == "predictions":
+                expected_value = [{**row, "shift_ppm": float(format(row["shift_ppm"], ".10g"))} for row in expected_value]
+            require(actual_geometry[key] == expected_value, f"SDF scientific {key} differs from R46")
     require_selected_interpretation(actual["interpretation"], interpreter, "prepare_upload")
 
 

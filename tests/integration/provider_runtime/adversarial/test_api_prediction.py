@@ -169,19 +169,20 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 submit(client, {"specification": "Read both SDF records."}, case_kind="sdf-zip")
             self.assertEqual(calls, [])
 
-    def test_every_qualification_route_requires_explicit_integer_seventeen_digit_output(self):
+    def test_every_qualification_route_requires_explicit_integer_ten_digit_output(self):
         for case_kind in ("pasted", "smiles", "smiles-multiple", "upload"):
             for output in (
                 None,
                 {},
-                {"shift_significant_digits": 17, "verbosity": "low"},
-                {"shift_significant_digits": 17, "verbosity": "medium"},
-                {"shift_significant_digits": 17, "verbosity": "compact"},
-                {"shift_significant_digits": 4},
-                {"shift_significant_digits": 17.0},
-                {"shift_significant_digits": True},
-                {"shift_significant_digits": "17"},
-                {"shift_significant_digits": 17, "extra": 1},
+                {"shift_significant_digits": 10, "verbosity": "low"},
+                {"shift_significant_digits": 10, "verbosity": "medium"},
+                {"shift_significant_digits": 10, "verbosity": "compact"},
+                {"shift_significant_digits": 4, "verbosity": "max"},
+                {"shift_significant_digits": 11, "verbosity": "max"},
+                {"shift_significant_digits": 10.0, "verbosity": "max"},
+                {"shift_significant_digits": True, "verbosity": "max"},
+                {"shift_significant_digits": "10", "verbosity": "max"},
+                {"shift_significant_digits": 10, "verbosity": "max", "extra": 1},
             ):
                 with self.subTest(case_kind=case_kind, output=output):
                     actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
@@ -198,7 +199,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                         patch("api_prediction.compare_scientific_documents") as pasted,
                         patch("api_prediction.compare_smiles_scientific_documents") as smiles,
                         patch("api_prediction.compare_upload_scientific_documents") as upload,
-                        self.assertRaisesRegex(AssertionError, "17 significant digits"),
+                        self.assertRaisesRegex(AssertionError, "10 significant digits"),
                     ):
                         compare_science(
                             json.dumps(actual).encode(),

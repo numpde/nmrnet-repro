@@ -21,6 +21,8 @@ from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
+from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
+
 from nmrnet_provider.input_geometry import PreparedUploadMember
 from nmrnet_provider.interpreter import PROMPT, ModelReportedInputProblem
 from nmrnet_provider.upload_archive import inspect_upload, select_member
@@ -131,14 +133,14 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                 if function["name"].startswith("prepare_"):
                     parameters = function["parameters"]
                     self.assertEqual(
-                        {"type": "integer", "minimum": 1, "maximum": 17},
+                        {"type": "integer", "minimum": MIN_SHIFT_SIGNIFICANT_DIGITS, "maximum": MAX_SHIFT_SIGNIFICANT_DIGITS},
                         parameters["properties"]["output"]["properties"]["shift_significant_digits"],
                     )
                     self.assertEqual(
                         ["low", "medium", "max"], parameters["properties"]["output"]["properties"]["verbosity"]["enum"]
                     )
                     self.assertEqual(
-                        {"verbosity": "medium", "shift_significant_digits": 4}, parameters["properties"]["output"]["default"]
+                        {"verbosity": "medium", "shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS}, parameters["properties"]["output"]["default"]
                     )
                     self.assertNotIn("output", parameters["required"])
             return tool_reply(
@@ -326,7 +328,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     prepared_identity = json.loads(handle.identity.content)
                     outcome = await session.execute(handle, report_condition=unexpected_condition)
                     result = json.loads(outcome.content)
-                    self.assertEqual({"shift_significant_digits": 4, "verbosity": "max"}, result["output"])
+                    self.assertEqual({"shift_significant_digits": DEFAULT_SHIFT_SIGNIFICANT_DIGITS, "verbosity": "max"}, result["output"])
                     self.assertEqual(result["interpretation"], prepared_identity["interpretation"])
                     self.assertEqual("selected", result["interpretation"]["outcome"])
                     interpretation = result["interpretation"]

@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 from nmrnet_provider.input_geometry import UploadSource, prepare_json
-from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS, OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan, ResultRejected
 from nmrnet_provider.xyz import prepare_xyz
 
@@ -46,7 +46,7 @@ class ResultTests(unittest.TestCase):
 
     def make_plan(self):
         return ResultPlan(
-            PreparedJobInput((self.geometry,), "direct_coordinate_json", output=OutputSettings(shift_significant_digits=17)),
+            PreparedJobInput((self.geometry,), "direct_coordinate_json", output=OutputSettings(shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS)),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
@@ -57,7 +57,7 @@ class ResultTests(unittest.TestCase):
 
     def batch_plan(self, geometries, method, source_upload=None):
         return ResultPlan(
-            PreparedJobInput(geometries, method, source_upload, output=OutputSettings(shift_significant_digits=17)),
+            PreparedJobInput(geometries, method, source_upload, output=OutputSettings(shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS)),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
@@ -200,7 +200,7 @@ class ResultTests(unittest.TestCase):
         self.execution["fixture_metadata"] = text * ((MAX_RESULT_BYTES - base) // width)
         plan = self.batch_plan(geometries, "direct_coordinate_json")
         # repo-check: allow-tuple-generator -- ResultPlan.finish rejects outcome batches that are not tuples; proof=nmrnet_provider/result.py::ResultPlan.finish.
-        outcomes = tuple(self.outcome(geometry, -1.7976931348623157e308) for geometry in geometries)
+        outcomes = tuple(self.outcome(geometry, -1.797693134e308) for geometry in geometries)
         for outcome in outcomes:
             outcome["private_warnings"] = [
                 {
@@ -439,7 +439,7 @@ class ResultTests(unittest.TestCase):
 
     def test_extreme_finite_shifts_fit_the_pre_execution_bound(self):
         for row in self.result["prediction"]["predictions"]:
-            row["shift_ppm"] = -1.7976931348623157e308
+            row["shift_ppm"] = -1.797693134e308
         content = self.plan.finish((self.result,))
         self.assertLessEqual(len(content), self.plan.maximum_result_bytes)
 
@@ -467,7 +467,7 @@ class ResultTests(unittest.TestCase):
         plan = self.make_plan()
         self.assertLessEqual(plan.maximum_result_bytes, MAX_RESULT_BYTES)
         self.assertGreater(plan.maximum_result_bytes, MAX_RESULT_BYTES - encoded_width)
-        extremes = (-1.7976931348623157e308, -2.2250738585072014e-308, -5e-324)
+        extremes = (-1.797693134e308, -2.2250738585072014e-308, -5e-324)
         self.result["request_sha256"] = hashlib.sha256(self.raw).hexdigest()
         self.result["prediction"]["predictions"] = [
             {"atom_index": i, "element": atom, "shift_ppm": extremes[i % len(extremes)]} for i, atom in enumerate(atoms)

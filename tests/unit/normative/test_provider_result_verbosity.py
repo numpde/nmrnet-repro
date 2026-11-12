@@ -11,6 +11,8 @@ from dataclasses import replace
 
 from tests.unit.result_fakes import precision_documents, supplied_documents
 
+from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
+
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan
 from provider_core.result_verbosity import ResultVerbosity
 
@@ -25,7 +27,7 @@ class ResultVerbosityTests(unittest.TestCase):
         public = json.loads(plan.finish(outcomes))
         retained = json.loads(plan.prepared_identity)
         self.assertEqual("nmrnet.coordinate_shifts.result.v2", public["schema_id"])
-        self.assertEqual({"verbosity": "medium", "shift_significant_digits": 17}, public["output"])
+        self.assertEqual({"verbosity": "medium", "shift_significant_digits": MAX_SHIFT_SIGNIFICANT_DIGITS}, public["output"])
         self.assertNotIn("tool_sources", public["execution"])
         self.assertEqual({"outcome": "prepared"}, public["interpretation"])
         self.assertEqual("caller", public["execution"]["runtime_identity_source"])
@@ -37,7 +39,7 @@ class ResultVerbosityTests(unittest.TestCase):
 
     def test_every_tier_keeps_scientific_values_source_mapping_and_private_evidence(self):
         for route in ("supplied", "generated"):
-            for digits in (1, 4, 17):
+            for digits in (MIN_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS):
                 with self.subTest(route=route, digits=digits):
                     prepared, facts, outcomes = (
                         supplied_documents()
