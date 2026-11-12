@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Committed input modes and deferred repository qualification at the recorded checkpoint.">
+  <title>025 — Committed input mode follow-up — NMRNet++</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> ·
+    <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html">Technical reference</a> ·
+    <a href="index.html" aria-current="page">Design records</a>
+  </nav>
+  <main id="main">
+    <h1>025 — Committed input mode follow-up</h1>
+    <p>Recorded 12 November 2026. This checkpoint describes the state at the named revisions.
+      See the <a href="https://github.com/numpde/nmrnet-repro/blob/fe4abf9b6e59041b4353b18d773c8a0aa377c479/notes/025_committed_input_mode_followup.txt">original note at its recorded commit</a>.</p>
+    <h2 id="committed-input-mode">Committed input mode follow-up</h2>
+    <p>Build and package capture materialize file bytes and executable modes from the
+      selected Git commit. They no longer compare each live file's executable bits
+      with that commit. Live bytes and path types remain checked; Git status may still
+      report mode-only changes when the repository tracks file modes.</p>
+    <p>Revisit live executable-mode admission only if an actual consumer needs it or
+      there is evidence that the committed capture is insufficient. Any future
+      check should name the affected executable and avoid adding per-file probes to
+      inputs that are interpreted rather than executed directly.</p>
+    <h2 id="deferred-qualification">Deferred repository qualification</h2>
+    <p>At revision 5f489f5, the maintained repository run was interrupted after
+      repeated failures and retained test processes; it did not finish and is not a
+      passing gate. A separate static inventory reported 169 Python findings: seven
+      in the provider, eleven in tools, eighteen in repository checks and 133 in
+      tests. The shell checks reported sixteen ops findings and twenty-three surface
+      findings, with overlap. These are scanner findings, not individually proven
+      defects. Keep the rules and review the remaining contracts separately.</p>
+    <p>The first failing cancellation subcase did not observe its diagnostic reporter
+      within three seconds. A fresh focused run reproduced that result; a subsequent
+      trace found source capture still running before any engine call. In the same
+      checker image, one hundred fixture mode-only stat calls took 9.029 seconds via
+      the Python ownership double and 0.110 seconds via the system stat. The per-file
+      live mode probe has since been removed; rerun the focused cancellation witness
+      before attributing any other failure to this overhead. Preserve its deadline
+      and physical retirement assertions.</p>
+    <p>The package-input fixture also has unrelated outstanding failures: its expected
+      capture diagnostic differs from the current diagnostic, and a full-stage mode
+      probe timed out. Existing editable dependency-intent mode-race checks remain
+      in place. Reconcile these fixtures separately; the real-Git copier test and
+      focused inference capture tests do not qualify the full repository gate.</p>
+  </main>
+  <footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
+</body>
+</html>
