@@ -11,6 +11,7 @@ from nmrnet_provider.prepared_input import DEFAULT_OUTPUT, PreparedJobInput
 class CoordinateJsonPreparation:
     interpreter_diagnostics = None
 
+    # silent-defaults: allow-contract -- Omission uses the shared fixture output settings; explicit settings are forwarded unchanged.
     def __init__(self, *, output=DEFAULT_OUTPUT):
         self.output = output
 

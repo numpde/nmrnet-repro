@@ -54,6 +54,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         self.readers.append((reader, host))
         return reader, host
 
+    # silent-defaults: allow-contract -- Ordinary preparation allows two reader calls and one second; budget and deadline cases supply different limits.
     def owner(self, script, *, reads=2, seconds=1, allocator=None):
         return InputPreparation(
             uploads=self.uploads,

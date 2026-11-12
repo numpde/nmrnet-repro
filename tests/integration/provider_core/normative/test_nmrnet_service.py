@@ -420,6 +420,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
         fixture.prose_services = capture_prose_services(fixture.config)
         return unavailable
 
+    # silent-defaults: allow-contract -- Durable identity excludes private content; the explicit report case allows a protected source excerpt.
     def require_prior_endpoint_evidence(self, content, *, report=False):
         history = json.loads(content)["interpreter_diagnostics"]
         self.assertIn(0, [item.get("endpoint_index") for item in history])

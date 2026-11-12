@@ -34,6 +34,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     original_reply = fixture.peer.response_factory
                     failures = []
 
+                    # silent-defaults: allow-contract -- Bind this iteration's failure ledger and original peer reply to the asynchronous callback.
                     async def capture_failure(request, body, *, failures=failures, original_reply=original_reply):
                         target = request.split(b"\r\n", 1)[0].split(b" ")[1].decode()
                         if target.endswith("/fail"):
