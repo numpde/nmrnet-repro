@@ -16,7 +16,18 @@ from provider_core.result_verbosity import ResultVerbosity
 
 class ResultVerbosityRejectionTests(unittest.TestCase):
     def test_fragment_defaults_are_shared_and_only_exact_choices_are_admitted(self):
-        self.assertEqual(OutputSettings.from_json({}), DEFAULT_OUTPUT)
+        for fragment, expected in (
+            ({}, DEFAULT_OUTPUT),
+            ({"verbosity": "low"}, OutputSettings(verbosity=ResultVerbosity.LOW)),
+            ({"shift_significant_digits": 7}, OutputSettings(shift_significant_digits=7)),
+            ({"verbosity": "max", "shift_significant_digits": 7},
+             OutputSettings(verbosity=ResultVerbosity.MAX, shift_significant_digits=7)),
+        ):
+            with self.subTest(fragment=fragment):
+                self.assertEqual(expected, OutputSettings.from_json(fragment))
+        for value in (None, True, 0, 18):
+            with self.subTest(precision=value), self.assertRaises(ValueError):
+                OutputSettings.from_json({"shift_significant_digits": value})
         for value in (None, True, 0, "", "compact", "full", "MAX", " max", [], {}):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, "verbosity.*low.*medium.*max"):
                 OutputSettings.from_json({"verbosity": value})

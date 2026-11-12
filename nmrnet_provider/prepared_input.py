@@ -46,10 +46,10 @@ class OutputSettings:
     def from_json(cls, value):
         if type(value) is not dict or not set(value) <= {"verbosity", "shift_significant_digits"}:
             raise ValueError("The output field must be an object containing only verbosity and shift_significant_digits.")
-        return cls(
-            verbosity=ResultVerbosity.parse(value.get("verbosity", DEFAULT_OUTPUT.verbosity.value)),
-            shift_significant_digits=value.get("shift_significant_digits", DEFAULT_OUTPUT.shift_significant_digits),
-        )
+        settings = value.copy()
+        if "verbosity" in settings:
+            settings["verbosity"] = ResultVerbosity.parse(settings["verbosity"])
+        return cls(**settings)
 
     def as_dict(self):
         return {"verbosity": self.verbosity.value, "shift_significant_digits": self.shift_significant_digits}
