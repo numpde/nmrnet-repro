@@ -412,11 +412,11 @@ case "$1" in
                 ;;
             test/unit/provider/api-client)
                 for directory in tools tests/integration/provider_runtime; do require_source_directory "$directory"; done
-                api_test_image=${NMRNET_API_CLIENT_IMAGE_INPUT-}
-                [[ $api_test_image =~ ^sha256:[0-9a-f]{64}$ ]] || {
+                [[ -v NMRNET_API_CLIENT_IMAGE_INPUT && $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] || {
                     pending_diagnostic+='API client tests require explicit API_CLIENT_IMAGE as an immutable local image ID. '
                     exit 2
                 }
+                api_test_image=$NMRNET_API_CLIENT_IMAGE_INPUT
                 command+=(--init --entrypoint /usr/local/bin/python --env PYTHONPATH=/fixture
                     --mount "type=bind,src=$repository_root/tools/provider_api_qualification.sh,dst=/fixture/provider_api_qualification.sh,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"

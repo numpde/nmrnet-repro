@@ -29,6 +29,31 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_api_client_test_lane_requires_an_immutable_image_before_engine_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            (fixture.root / "tests/integration/provider_runtime").mkdir(parents=True)
+            name = "NMRNET_API_CLIENT_IMAGE_INPUT"
+            fixture.environment = {key: value for key, value in fixture.environment.items() if key != name}
+            for selected in (None, "", "mutable:latest", "sha256:" + "a" * 64):
+                with self.subTest(selected=selected):
+                    additions = {}
+                    if selected is not None:
+                        additions[name] = selected
+                    result = fixture.run("container.sh", "--print", "test/unit/provider/api-client", additions=additions)
+                    if selected is None or selected in ("", "mutable:latest"):
+                        self.assertEqual(2, result.returncode, msg=result.stderr)
+                        self.assertIn("API client tests require explicit API_CLIENT_IMAGE", result.stderr)
+                    else:
+                        self.assertEqual(0, result.returncode, msg=result.stderr)
+                        self.assertIn(selected, shlex.split(result.stdout))
+                    self.assertFalse(fixture.calls())
+            rejected = fixture.run("container.sh", "test/unit/provider/api-client", additions={name: "mutable:latest"})
+            self.assertEqual(2, rejected.returncode, msg=rejected.stderr)
+            self.assertIn("API client tests require explicit API_CLIENT_IMAGE", rejected.stderr)
+            self.assertFalse(fixture.calls())
+
     def test_make_preserves_optional_override_identity_and_rejects_ambient_input(self):
         recipe = """logging-probe:
 	@bash -eu -c 'source /workspace/tools/provider_logging.sh; provider_logging_configure; printf "%s\\n" "$${provider_logging_options[@]}"'
@@ -513,8 +538,15 @@ class AcquisitionRetirementTests(unittest.TestCase):
                 fixture = LauncherFixture(Path(directory))
                 self.addCleanup(fixture.dispose)
                 result = fixture.run(
-                    "acquisition_run.sh", "--retired-receipt", str(fixture.root / "retired"),
-                    "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                    "acquisition_run.sh",
+                    "--retired-receipt",
+                    str(fixture.root / "retired"),
+                    "--image",
+                    "sha256:" + "b" * 64,
+                    "--",
+                    "--read-only",
+                    "--",
+                    "true",
                     additions={
                         "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                         "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
@@ -544,8 +576,15 @@ class AcquisitionRetirementTests(unittest.TestCase):
             damaged = b"unadmitted-worker-receipt\n"
             try:
                 result = fixture.run(
-                    "acquisition_run.sh", "--retired-receipt", str(fixture.root / "retired"),
-                    "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                    "acquisition_run.sh",
+                    "--retired-receipt",
+                    str(fixture.root / "retired"),
+                    "--image",
+                    "sha256:" + "b" * 64,
+                    "--",
+                    "--read-only",
+                    "--",
+                    "true",
                     additions={
                         "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                         "NMRNET_FAKE_ACQUISITION_SCOPE": "1",
@@ -578,7 +617,13 @@ class AcquisitionRetirementTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
             result = fixture.run(
-                "acquisition_run.sh", "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                "acquisition_run.sh",
+                "--image",
+                "sha256:" + "b" * 64,
+                "--",
+                "--read-only",
+                "--",
+                "true",
                 additions={"NMRNET_NETWORK_INTERFACE_INPUT": "lo", "NMRNET_FAKE_ACQUISITION_SCOPE": "1"},
             )
             self.assertEqual(0, result.returncode, msg=result.stderr)
@@ -602,7 +647,13 @@ class AcquisitionRetirementTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
             result = fixture.run(
-                "acquisition_run.sh", "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                "acquisition_run.sh",
+                "--image",
+                "sha256:" + "b" * 64,
+                "--",
+                "--read-only",
+                "--",
+                "true",
                 additions={
                     "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                     "NMRNET_FAKE_WORKER_STATUS": "7",
@@ -614,8 +665,9 @@ class AcquisitionRetirementTests(unittest.TestCase):
             self.assertIn("removal", result.stderr)
             self.assertIn("acquisition relay", result.stderr)
             calls = [call["arguments"] for call in fixture.calls()]
-            self.assertEqual([["rm", "--force", "3" * 64], ["rm", "--force", "2" * 64]],
-                             [call for call in calls if call[0] == "rm"])
+            self.assertEqual(
+                [["rm", "--force", "3" * 64], ["rm", "--force", "2" * 64]], [call for call in calls if call[0] == "rm"]
+            )
             creates = [call["arguments"] for call in fixture.calls() if call["arguments"][0] == "create"]
             scratch = Path(creates[0][creates[0].index("--cidfile") + 1]).parent.parent
             self.assertTrue(scratch.exists(), msg="Unconfirmed cleanup deleted the retained ownership evidence.")
@@ -821,7 +873,13 @@ class NativeCommandPostureTests(unittest.TestCase):
                 fixture = LauncherFixture(Path(directory))
                 self.addCleanup(fixture.dispose)
                 result = fixture.run(
-                    "acquisition_run.sh", "--image", "sha256:" + "b" * 64, "--", "--read-only", "--", "true",
+                    "acquisition_run.sh",
+                    "--image",
+                    "sha256:" + "b" * 64,
+                    "--",
+                    "--read-only",
+                    "--",
+                    "true",
                     additions={
                         "NMRNET_NETWORK_INTERFACE_INPUT": "lo",
                         "NMRNET_FAKE_WORKER_STATUS": str(status),
