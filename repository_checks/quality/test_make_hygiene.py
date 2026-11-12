@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from .makefile import is_private_archive_origin_gate
 from .sources import is_skipped, iter_repo_text_files, read_text, repo_path
 
 MAKE_TARGET_RE = re.compile(r"^(?P<names>[A-Za-z0-9_/-]+(?:[ \t]+[A-Za-z0-9_/-]+)*)[ \t]*:(?!:*=)[ \t]*(?P<prereqs>.*)$")
@@ -277,6 +278,39 @@ class RepositoryHygieneTest(unittest.TestCase):
         self.assertEqual(["help", "real/one", "real/two"], self.make_target_list(makefile))
         self.assertEqual("\t@echo 'recipe/target: hidden'", self.make_help_recipe(makefile))
 
+    def test_private_archive_handoff_is_not_a_second_target_rule(self):
+        gate = (
+            "provider-tools/import-checked-in-source: private override NMRNET_SOURCE_ARCHIVE_VALUE := "
+            "$(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))"
+        )
+        projection = (
+            "provider-tools/import-checked-in-source: override export NMRNET_SOURCE_ARCHIVE_INPUT = "
+            "$(value NMRNET_SOURCE_ARCHIVE_VALUE)"
+        )
+        target = "provider-tools/import-checked-in-source"
+        makefile = gate + "\n" + projection + "\n" + target + ":\n\t@echo import\n"
+        self.assertEqual([target], self.make_target_list(makefile))
+        self.assertEqual((), self.make_target_prereqs(makefile, target))
+        self.assertEqual("\t@echo import", self.make_target_recipe(makefile, target))
+        self.assertEqual([target, target], self.make_target_list(makefile.replace("private override", "export")))
+
+    def test_private_archive_handoff_keeps_its_empty_unexported_baseline(self):
+        makefile = read_text(repo_path("Makefile"))
+        declarations = (
+            "unexport INPUT_RELEASE_ARCHIVE NMRNET_SOURCE_ARCHIVE_VALUE NMRNET_SOURCE_ARCHIVE_INPUT",
+            "override NMRNET_SOURCE_ARCHIVE_VALUE :=",
+            "provider-tools/import-checked-in-source: private override NMRNET_SOURCE_ARCHIVE_VALUE := "
+            "$(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))",
+            "provider-tools/import-checked-in-source: override export NMRNET_SOURCE_ARCHIVE_INPUT = "
+            "$(value NMRNET_SOURCE_ARCHIVE_VALUE)",
+        )
+        lines = makefile.splitlines()
+        positions = []
+        for declaration in declarations:
+            self.assertEqual(1, lines.count(declaration))
+            positions.append(lines.index(declaration))
+        self.assertEqual(sorted(positions), positions)
+
     def test_duplicate_detection_retains_names_repeated_across_multi_target_rules(self):
         makefile = "first/one second/two:\nsecond/two third/three:\n"
         self.assertEqual(["first/one", "second/two", "second/two", "third/three"], self.make_target_list(makefile))
@@ -321,6 +355,8 @@ class RepositoryHygieneTest(unittest.TestCase):
     def make_target_recipe(self, makefile: str, target: str) -> str:
         lines = makefile.splitlines()
         for index, line in enumerate(lines):
+            if is_private_archive_origin_gate("Makefile", line):
+                continue
             match = MAKE_TARGET_RE.match(line)
             if match is not None and target in match.group("names").split():
                 recipe: list[str] = []
@@ -338,12 +374,14 @@ class RepositoryHygieneTest(unittest.TestCase):
         return [
             name
             for line in makefile.splitlines()
-            if (match := MAKE_TARGET_RE.match(line)) is not None
+            if not is_private_archive_origin_gate("Makefile", line) and (match := MAKE_TARGET_RE.match(line)) is not None
             for name in match.group("names").split()
         ]
 
     def make_target_prereqs(self, makefile: str, target: str) -> tuple[str, ...]:
         for line in makefile.splitlines():
+            if is_private_archive_origin_gate("Makefile", line):
+                continue
             match = MAKE_TARGET_RE.match(line)
             if match is not None and target in match.group("names").split():
                 return tuple(match.group("prereqs").split("#", 1)[0].split())

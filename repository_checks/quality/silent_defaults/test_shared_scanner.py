@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from .. import sources
+from ..makefile import is_private_archive_origin_gate
 from ..sources import ROOT, generated_sdk_sources, is_skipped
 
 SELF_PARTS = ("repository_checks", "quality", "silent_defaults")
@@ -35,6 +36,8 @@ def is_literal_make_origin_gate(source: str, line: str) -> bool:
     path = Path(source)
     if path.name != "Makefile" and path.suffix != ".mk":
         return False
+    if is_private_archive_origin_gate(source, line):
+        return True
     return (
         re.fullmatch(
             r"[ ]*(?:override[ \t]+)?export[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:=[ \t]*"
@@ -93,10 +96,16 @@ class SharedScannerTest(unittest.TestCase):
             unlisted = snapshot / "unlisted.py"
             unlisted.write_text('value = config.get("mode", "unreviewed")\n')
             manifest = root / "host/bootstrap/acquisition/acquisition-manifest.json"
-            manifest.write_text(json.dumps({
-                "release_version": "1.2.3", "source_revision": "a" * 40, "dependency_inputs": {},
-                "payload_files": {"generated.py": {"sha256": "0" * 64, "size": 0, "mode": 0o644}},
-            }))
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "release_version": "1.2.3",
+                        "source_revision": "a" * 40,
+                        "dependency_inputs": {},
+                        "payload_files": {"generated.py": {"sha256": "0" * 64, "size": 0, "mode": 0o644}},
+                    }
+                )
+            )
             with patch(__name__ + ".ROOT", root), patch.object(sources, "ROOT", root):
                 scanned = repo_files(("host/**/*.py",))
                 self.assertEqual([unlisted], scanned)

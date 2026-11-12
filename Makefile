@@ -81,7 +81,7 @@ test/unit/provider/image test/integration/provider-runtime:
 test/integration/rdkit-runtime:
 	bash tools/container.sh $@
 
-.PHONY: test/repository/operator-inputs test/repository/documentation
+.PHONY: test/repository/operator-inputs test/repository/documentation test/repository/no-default test/repository/lint
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
 .PHONY: packages/shared-tool/wheelhouse packages/shared-tool/wheelhouse/check
@@ -94,10 +94,15 @@ provider-tools/verify-checked-in-source-hashes:
 provider-tools/update-checked-in-source-from-pinned-release:
 	python3 -I -S -B host/bootstrap/acquisition/acquisition_tool/source_update.py update --source-dir host/bootstrap/acquisition --pin-file requirements/provider-tools-source.json
 
-provider-tools/import-checked-in-source: private export SOURCE_ARCHIVE_INPUT := $(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))
+unexport INPUT_RELEASE_ARCHIVE NMRNET_SOURCE_ARCHIVE_VALUE NMRNET_SOURCE_ARCHIVE_INPUT
+override NMRNET_SOURCE_ARCHIVE_VALUE :=
+# Older Make versions can pass a private export to prerequisites. Keep the
+# value private and export a projection that is empty outside the importer.
+provider-tools/import-checked-in-source: private override NMRNET_SOURCE_ARCHIVE_VALUE := $(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))
+provider-tools/import-checked-in-source: override export NMRNET_SOURCE_ARCHIVE_INPUT = $(value NMRNET_SOURCE_ARCHIVE_VALUE)
 provider-tools/import-checked-in-source:
-	@test -n "$${SOURCE_ARCHIVE_INPUT}" || { printf '%s\n' 'Set INPUT_RELEASE_ARCHIVE=<archive path> on the Make command line.' >&2; exit 2; }
-	python3 -I -S -B host/bootstrap/acquisition/acquisition_tool/source_update.py import --source-dir host/bootstrap/acquisition --pin-file requirements/provider-tools-source.json --archive "$${SOURCE_ARCHIVE_INPUT}"
+	@test -n "$${NMRNET_SOURCE_ARCHIVE_INPUT}" || { printf '%s\n' 'Set INPUT_RELEASE_ARCHIVE=<archive path> on the Make command line.' >&2; exit 2; }
+	python3 -I -S -B host/bootstrap/acquisition/acquisition_tool/source_update.py import --source-dir host/bootstrap/acquisition --pin-file requirements/provider-tools-source.json --archive "$${NMRNET_SOURCE_ARCHIVE_INPUT}"
 
 packages/images/retire:
 	bash tools/image_retirement.sh
@@ -130,6 +135,9 @@ test/repository/operator-inputs:
 	bash tools/container.sh $@
 
 test/repository/documentation:
+	bash tools/container.sh $@
+
+test/repository/no-default test/repository/lint:
 	bash tools/container.sh $@
 
 .PHONY: test/repository/native-images
@@ -383,6 +391,8 @@ help:
 		'make test/repository/operator-inputs   Check literal selectors, Docker context selection and image inspection admission offline.' \
 		'make test/repository/acquisition      Check acquisition adapters, verified snapshots and engine fixtures offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
+		'make test/repository/no-default        Run every silent-default check in the contained checker.' \
+		'make test/repository/lint              Check Python lint, formatting and import-order policy.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
 		'make test/integration/wheelhouse/acquisition Verify the released shared publisher against cached inputs offline.' \

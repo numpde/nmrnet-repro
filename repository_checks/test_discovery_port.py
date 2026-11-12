@@ -132,11 +132,16 @@ class UnittestRunnerTests(unittest.TestCase):
             (root / "NMRNetplusplus/.git").unlink()
             (root / "bin/git").unlink()
             (root / "bin/git").symlink_to(shutil.which("git", path=os.defpath))
+
             def git(*args):
                 subprocess.run(
                     [str(root / "bin/git"), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", *args],
-                    cwd=root, env=fixture.environment, capture_output=True, check=True,
+                    cwd=root,
+                    env=fixture.environment,
+                    capture_output=True,
+                    check=True,
                 )
+
             git("init", "-q")
             (root / ".git/modules").mkdir()
             git("init", "-q", "--separate-git-dir", str(root / ".git/modules/nmrnet"), str(root / "NMRNetplusplus"))
@@ -162,8 +167,8 @@ class UnittestRunnerTests(unittest.TestCase):
                         self.assertEqual(str(empty), record["mapped"][6])
                     else:
                         self.assertEqual(["bash", "-eu", "-c"], record["original"][:3])
-                        self.assertEqual(["discover", "-s", "repository_checks", "-v"], record["original"][5:])
-                        self.assertEqual(["discover", "-s", str(empty), "-v"], record["mapped"][5:])
+                        self.assertEqual(["unittest", "discover", "-s", "repository_checks", "-v"], record["original"][5:])
+                        self.assertEqual(["unittest", "discover", "-s", str(empty), "-v"], record["mapped"][5:])
                         self.assertEqual(0o700, record["home_mode"])
                         self.assertEqual(
                             "[safe]\ndirectory = /workspace\ndirectory = /workspace/NMRNetplusplus\n", record["home_config"]

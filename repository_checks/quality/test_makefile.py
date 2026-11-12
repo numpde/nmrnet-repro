@@ -50,6 +50,19 @@ class MakeSourceInspectionTests(unittest.TestCase):
             make_target_body(makefile, "first"),
         )
 
+    def test_private_archive_handoff_does_not_hide_the_recipe(self):
+        target = "provider-tools/import-checked-in-source"
+        gate = (
+            target + ": private override NMRNET_SOURCE_ARCHIVE_VALUE := "
+            "$(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))"
+        )
+        projection = target + ": override export NMRNET_SOURCE_ARCHIVE_INPUT = $(value NMRNET_SOURCE_ARCHIVE_VALUE)"
+        self.assertEqual(
+            "\t@printf import\n", make_target_body(gate + "\n" + projection + "\n" + target + ":\n\t@printf import\n", target)
+        )
+        with self.assertRaisesRegex(AssertionError, "multiple literal rules"):
+            make_target_body(gate.replace("private override", "override") + "\n" + target + ":\n\t@printf import\n", target)
+
     def test_accepts_prerequisites_without_confusing_them_for_targets(self) -> None:
         for separator in (": ", ":"):
             with self.subTest(separator=separator):

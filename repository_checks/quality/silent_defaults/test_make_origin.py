@@ -46,6 +46,55 @@ class MakeOriginGateTests(unittest.TestCase):
                     self.assertTrue(is_literal_make_origin_gate(source, line))
                     self.assertEqual(([], []), self.findings_from_both_collectors(source, line))
 
+    def test_only_the_owned_private_archive_gate_is_classified(self):
+        line = (
+            "provider-tools/import-checked-in-source: private override NMRNET_SOURCE_ARCHIVE_VALUE := "
+            "$(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))"
+        )
+        self.assertTrue(is_literal_make_origin_gate("Makefile", line))
+        self.assertRegex(line, vote.MAKE_TARGET_SPECIFIC_VARIABLE_RE)
+        self.assertEqual(([], []), self.findings_from_both_collectors("Makefile", line))
+        target_check = vote.MakeEmptyDefaultsTest("test_make_surfaces_do_not_use_target_specific_variables")
+        with patch.object(vote, "_make_surface_lines", return_value=[("Makefile", 1, line)]):
+            target_check.test_make_surfaces_do_not_use_target_specific_variables()
+        alternatives = (
+            line.replace("provider-tools/import-checked-in-source", "other/target"),
+            line.replace("private override", "override"),
+            line.replace("private override", "private"),
+            line.replace("NMRNET_SOURCE_ARCHIVE_VALUE", "OTHER_INPUT"),
+            line.replace("$(value INPUT_RELEASE_ARCHIVE)", "$(INPUT_RELEASE_ARCHIVE)"),
+            line[:-1] + ",fallback)",
+            line + " ",
+        )
+        for alternate in alternatives:
+            with self.subTest(alternate=alternate):
+                self.assertFalse(is_literal_make_origin_gate("Makefile", alternate))
+                self.assertTrue(all(self.findings_from_both_collectors("Makefile", alternate)))
+                with (
+                    patch.object(vote, "_make_surface_lines", return_value=[("Makefile", 1, alternate)]),
+                    self.assertRaises(AssertionError),
+                ):
+                    target_check.test_make_surfaces_do_not_use_target_specific_variables()
+        self.assertFalse(is_literal_make_origin_gate("tools/inputs.mk", line))
+        projection = (
+            "provider-tools/import-checked-in-source: override export NMRNET_SOURCE_ARCHIVE_INPUT = "
+            "$(value NMRNET_SOURCE_ARCHIVE_VALUE)"
+        )
+        self.assertTrue(is_literal_make_origin_gate("Makefile", projection))
+        for alternate in (
+            projection.replace("override export", "export"),
+            projection.replace("$(value NMRNET_SOURCE_ARCHIVE_VALUE)", "$(NMRNET_SOURCE_ARCHIVE_VALUE)"),
+            projection + "fallback",
+            projection.replace("provider-tools/import-checked-in-source", "other/target"),
+        ):
+            with self.subTest(alternate=alternate):
+                self.assertFalse(is_literal_make_origin_gate("Makefile", alternate))
+                with (
+                    patch.object(vote, "_make_surface_lines", return_value=[("Makefile", 1, alternate)]),
+                    self.assertRaises(AssertionError),
+                ):
+                    target_check.test_make_surfaces_do_not_use_target_specific_variables()
+
     def test_any_alternate_value_or_owner_remains_a_finding_in_both_collectors(self):
         expression = "$(if $(filter command line,$(origin PROFILE)),$(value PROFILE))"
         gate = "export PROFILE_INPUT := " + expression

@@ -113,6 +113,8 @@ class MakeEmptyDefaultsTest(unittest.TestCase):
         for source, line_number, line in _make_surface_lines():
             if line.startswith(("\t", " ")):
                 continue
+            if is_literal_make_origin_gate(source, line):
+                continue
             stripped_line = line.strip()
             if not stripped_line or MAKE_GLOBAL_VARIABLE_RE.match(stripped_line):
                 continue

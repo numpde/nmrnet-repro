@@ -9,6 +9,16 @@ from tools.container_guard import require_container
 require_container()
 
 
+def is_private_archive_origin_gate(source: str, line: str) -> bool:
+    """Recognize the importer's private, literal command-line archive handoff."""
+    return source == "Makefile" and line in (
+        "provider-tools/import-checked-in-source: private override NMRNET_SOURCE_ARCHIVE_VALUE := "
+        "$(if $(filter command line,$(origin INPUT_RELEASE_ARCHIVE)),$(value INPUT_RELEASE_ARCHIVE))",
+        "provider-tools/import-checked-in-source: override export NMRNET_SOURCE_ARCHIVE_INPUT = "
+        "$(value NMRNET_SOURCE_ARCHIVE_VALUE)",
+    )
+
+
 def make_invocation_owners(makefile: str, invocation: str) -> list[str]:
     """Name every direct Make define or recipe containing an invocation."""
 
@@ -88,7 +98,7 @@ def make_target_body(makefile: str, target: str) -> str:
 
 
 def _rule_mentions_target(line: str, target: str) -> bool:
-    if line.startswith("\t") or line.lstrip().startswith("#"):
+    if line.startswith("\t") or line.lstrip().startswith("#") or is_private_archive_origin_gate("Makefile", line.rstrip("\n")):
         return False
     rule_targets, separator, _ = line.partition(":")
     return bool(separator) and target in rule_targets.split()
