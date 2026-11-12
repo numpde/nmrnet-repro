@@ -559,7 +559,10 @@ class PackagesClientTests(unittest.TestCase):
                 result = self.caller("apply", environment=self.apply_environment())
                 self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual("package output\n", result.stdout)
-                self.assertEqual("package diagnostic\n", result.stderr)
+                expected_stderr = "package diagnostic\n"
+                if status == 0:
+                    expected_stderr += "\nNext, acquire wheels for the reviewed lock:\n  make packages/wheelhouse\n"
+                self.assertEqual(expected_stderr, result.stderr)
                 self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
 
     def test_build_failure_preserves_status_evidence_and_blocks_controller(self):
