@@ -25,22 +25,17 @@ from repository_checks import test_packages_client_config as clients
 class PackageInputCaptureTests(unittest.TestCase):
     _remove_retained = clients.PackagesClientTests._remove_retained
     _remember = clients.PackagesClientTests._remember
-    caller = clients.PackagesClientTests.caller
     owned_calls = clients.PackagesClientTests.owned_calls
 
     def setUp(self):
         clients.PackagesClientTests.setUp(self)
         (self.root / "bin/docker").unlink()
         (self.root / "bin/docker").symlink_to(Path(__file__).resolve())
-        # Keep the base fixture's exact pinned-image admission; this adapter
-        # replaces only captured-worker execution, not controller preflight.
-        client_controller = self.root / "tools/docker.package-client.sh"
-        (self.root / "tools/docker.sh").rename(client_controller)
-        (self.root / "tools/docker.sh").write_text(
-            '#!/bin/bash\nif [[ "$1" == run ]]; then shift;\n'
-            f'    exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller "$@"\n'
-            "fi\n"
-            f'exec bash {shlex.quote(str(client_controller))} "$@"\n'
+        # Keep the base fixture's pinned-image preflight; replace only the
+        # acquisition worker handoff with the finite captured worker.
+        (self.root / "tools/acquisition_run.sh").write_text(
+            "#!/bin/bash\n"
+            f'exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller "$@"\n'
         )
         self.intent = {
             "inference.in": b"torch @ https://fixture.test/torch-2.13.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256="
@@ -52,6 +47,16 @@ class PackageInputCaptureTests(unittest.TestCase):
         for name, content in self.intent.items():
             (self.root / "requirements" / name).write_bytes(content)
             (self.root / "requirements" / name).chmod(0o640)
+
+    def caller(self, *arguments, environment):
+        # This class runs the full captured build and worker, not the finite
+        # controller alone; bound the complete pipeline while allowing its cost.
+        result = subprocess.run(
+            ["bash", str(self.root / "tools/packages.sh"), *arguments],
+            env=environment, text=True, capture_output=True, timeout=20, check=False,
+        )
+        self._remember(result.stderr)
+        return result
 
     def stage_packages(self, *, additions=None):
         # silent-defaults: allow-contract -- Omitted additions leave the stage environment unchanged; supplied entries override its interface input; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair
@@ -87,6 +92,12 @@ class PackageInputCaptureTests(unittest.TestCase):
             },
             {str(path.relative_to(capture / "context")) for path in (capture / "context").rglob("*") if path.is_file()},
         )
+        arguments = json.loads((self.root / "capture-arguments.json").read_text())
+        for index in (1, arguments.index("ALL"), -2):
+            altered = arguments.copy()
+            altered[index] = "unexpected"
+            with self.subTest(argument=index), self.assertRaises(AssertionError):
+                stage_worker_arguments(altered)
         report = json.loads((stage / "advisories.json").read_bytes())
         self.assertEqual(self.expected_hashes(), report["inputs_sha256"])
         build = json.loads((self.root / "capture-build.json").read_text())
@@ -133,12 +144,13 @@ class PackageInputCaptureTests(unittest.TestCase):
         for name in ("package_lock.py", "container_guard.py"):
             (self.root / "tools" / name).write_bytes((stage / ".inputs/context/tools" / name).read_bytes())
         before = (self.root / "requirements/inference.lock").read_bytes()
+        preparation_before = (self.root / "requirements/preparation.lock").read_bytes()
         arguments = ("apply", "preparation")
         environment = self.environment | {"NMRNET_STAGE_INPUT": stage.name}
         rejected = self.caller(*arguments, environment=environment)
         self.assertNotEqual(0, rejected.returncode)
         self.assertIn("dependency inputs changed after staging", rejected.stderr)
-        self.assertFalse((self.root / "requirements/preparation.lock").exists())
+        self.assertEqual(preparation_before, (self.root / "requirements/preparation.lock").read_bytes())
         path.write_bytes(intent)
         applied = self.caller(*arguments, environment=environment)
         self.assertEqual(0, applied.returncode, msg=applied.stderr)
@@ -493,10 +505,38 @@ else:
     return result.returncode
 
 
+def stage_worker_arguments(arguments):
+    assert arguments[:3] == ["--image", "sha256:" + "b" * 64, "--"]
+    grants = arguments[3:]
+    profile = grants[-1]
+    assert profile in ("inference", "preparation")
+    names = {"inference": ("inference.in", "build.in", "unicore-source.json"),
+             "preparation": ("preparation.in",)}[profile]
+    selected = mounts(grants)
+    capture = Path(selected["/input/" + names[0]]["src"]).parent.parent
+    stage = capture.parent
+    expected = [
+        "--init", "--pull", "never", "--read-only", "--env", "NMRNET_IN_CONTAINER=1",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+        "--cpus", "2", "--memory", "2g", "--memory-swap", "2g", "--pids-limit", "64",
+        "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=1g", "--env", "UV_CACHE_DIR=/tmp/uv",
+        "--env", "UV_NO_PROGRESS=1", "--env", "UV_PYTHON_DOWNLOADS=never",
+    ]
+    for name in names:
+        expected += ["--mount", f"type=bind,src={capture / 'requirements' / name},dst=/input/{name},readonly"]
+    expected += ["--mount", f"type=bind,src={stage},dst=/output",
+                 "--mount", f"type=bind,src={capture},dst=/output/.inputs,readonly", "--", "stage", profile]
+    assert grants == expected
+    return grants
+
+
 def fixture_main():
     root = Path(os.environ["NMRNET_PACKAGE_FIXTURE_ROOT"])
     if sys.argv[1:2] == ["controller"]:
-        return actual_worker("stage", sys.argv[2:])
+        arguments = sys.argv[2:]
+        grants = stage_worker_arguments(arguments)
+        (root / "capture-arguments.json").write_text(json.dumps(arguments))
+        return actual_worker("stage", grants)
     arguments = sys.argv[1:]
     if arguments[:1] == ["--config"]:
         arguments = arguments[2:]
