@@ -64,10 +64,16 @@ class PackagesClientTests(unittest.TestCase):
             "    fi\n"
             "    exit 0\n"
             "fi\n"
-            'if [[ "$1" == run ]]; then\n'
-            f"    exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller\n"
-            "fi\n"
             f'exec bash {shlex.quote(str(original))} "$@"\n'
+        )
+        acquisition = self.root / "tools/acquisition_run.sh"
+        acquisition.rename(self.root / "tools/acquisition_run.original.sh")
+        acquisition.write_text(
+            "#!/bin/bash\n"
+            'if [[ "${NMRNET_PACKAGE_ENGINE_MODE-}" == composition ]]; then\n'
+            f'    exec bash {shlex.quote(str(self.root / "tools/acquisition_run.original.sh"))} "$@"\n'
+            "fi\n"
+            f'exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller "$@"\n'
         )
         self.stage = self.root / ".work/packages-stage/lock.fixture"
         self.stage.mkdir(parents=True)
@@ -93,7 +99,8 @@ class PackagesClientTests(unittest.TestCase):
             env=environment,
             text=True,
             capture_output=True,
-            timeout=8,
+            # Stage includes capture, build and controller handoff; cancellation probes have separate deadlines.
+            timeout=20 if arguments[0] == "stage" else 8,
             check=False,
         )
         self._remember(result.stderr)
@@ -532,8 +539,11 @@ class PackagesClientTests(unittest.TestCase):
                 staged = [path for path in self.stage.parent.iterdir() if path != self.stage]
                 self.assertEqual(1, len(staged))
                 self.assertEqual(self.identity, (staged[0] / "image-id").read_bytes())
+                self.assertEqual("", result.stdout)
                 self.assertEqual(
-                    f"Review {staged[0]}, then apply with make packages/lock/apply STAGE={staged[0].name}\n", result.stdout
+                    f"Review {staged[0]}/inference.lock and {staged[0]}/advisories.json for dependency changes and advisory findings.\n"
+                    f"\nAfter that review, apply this stage:\n  make packages/lock/apply STAGE={staged[0].name}\n",
+                    result.stderr,
                 )
         calls = self.owned_calls()
         self.assertEqual(["build", "run"], [call["arguments"][0] for call in calls])
@@ -1266,11 +1276,11 @@ def fake_command(name):
         if destination.name == "status.ready" and (root / "controller-returned").exists():
             # A previous controller card cannot make another owner's ready
             # publication evidence for the fixed Review reporter.
-            source = (root / "tools/packages.sh").read_text()
-            marker = "inference_native 'package stage review reporting' untimed stdio bash -eu -c '"
-            if source.count(marker) != 1:
+            source = (root / "tools/operator_guidance.sh").read_text()
+            marker = "inference_native 'next-action reporting' untimed stdio bash -eu -c"
+            program = b'printf "%s\\n" "$1" >&2'
+            if source.count(marker) != 1 or program.decode() not in source:
                 return 97
-            program = source.split(marker, 1)[1].split("' bash ", 1)[0].encode()
             anchor = Path("/proc", str(os.getppid()), "cmdline").read_bytes().split(b"\0")
             if anchor[10:14] == [b"bash", b"-eu", b"-c", program]:
                 pending = root / "report.pending"
@@ -1437,9 +1447,33 @@ def fake_command(name):
     return int((root / "native-status").read_text())
 
 
-def fake_controller():
-    """Return before the real Review publisher, optionally filling its pipe."""
+def fake_controller(arguments):
+    """Validate the acquisition handoff, then return before Review reporting."""
     root = Path(os.environ["NMRNET_PACKAGE_FIXTURE_ROOT"])
+    if arguments[:3] != ["--image", "sha256:" + "b" * 64, "--"] or arguments[-2:] != ["stage", "inference"]:
+        return 97
+    outputs = [value.removeprefix("type=bind,src=").removesuffix(",dst=/output") for value in arguments
+               if value.startswith("type=bind,src=") and value.endswith(",dst=/output")]
+    if len(outputs) != 1:
+        return 97
+    stage = Path(outputs[0])
+    if (stage.parent != root / ".work/packages-stage" or re.fullmatch(r"lock\.[A-Za-z0-9]+", stage.name) is None
+            or stage.name == "lock.fixture" or not stage.is_dir() or stage.is_symlink() or stage.resolve() != stage):
+        return 97
+    capture = stage / ".inputs"
+    expected = [
+        "--init", "--pull", "never", "--read-only", "--env", "NMRNET_IN_CONTAINER=1",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+        "--cpus", "2", "--memory", "2g", "--memory-swap", "2g", "--pids-limit", "64",
+        "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=1g", "--env", "UV_CACHE_DIR=/tmp/uv",
+        "--env", "UV_NO_PROGRESS=1", "--env", "UV_PYTHON_DOWNLOADS=never",
+    ]
+    for name in ("inference.in", "build.in", "unicore-source.json"):
+        expected += ["--mount", f"type=bind,src={capture / 'requirements' / name},dst=/input/{name},readonly"]
+    expected += ["--mount", f"type=bind,src={stage},dst=/output",
+                 "--mount", f"type=bind,src={capture},dst=/output/.inputs,readonly", "--", "stage", "inference"]
+    if arguments[3:] != expected:
+        return 97
     if os.environ.get("NMRNET_PACKAGE_FILL_STDOUT"):
         capacity = fcntl.fcntl(1, fcntl.F_GETPIPE_SZ)
         if os.write(1, b"x" * capacity) != capacity:
@@ -1452,6 +1486,6 @@ if __name__ == "__main__":
     name = Path(sys.argv[0]).name
     if name in {"docker", "rm", "mv"}:
         sys.exit(fake_command(name))
-    if sys.argv[1:] == ["controller"]:
-        sys.exit(fake_controller())
+    if sys.argv[1:2] == ["controller"]:
+        sys.exit(fake_controller(sys.argv[2:]))
     unittest.main()
