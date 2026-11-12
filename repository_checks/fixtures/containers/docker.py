@@ -18,6 +18,61 @@ from pathlib import Path
 from repository_checks.fixtures.containers.acquisition_engine import AcquisitionEngine
 from repository_checks.fixtures.containers.engine_log import read_engine_calls, record_engine_call
 
+
+def modeled_image_label(label, log_path):
+    fault = "NMRNET_FAKE_" + label
+    if fault in os.environ:
+        return os.environ[fault]
+    inputs = []
+    owner = {
+        "GEOMETRY_INPUTS": "containers/geometry/Dockerfile",
+        "GEOMETRY_WHEELS": "containers/geometry/Dockerfile",
+        "INFERENCE_INPUTS": "containers/inference/Dockerfile",
+        "INFERENCE_WHEELS": "containers/inference/Dockerfile",
+    }[label]
+    for call in read_engine_calls(Path(log_path)):
+        arguments = call["arguments"]
+        if arguments[:1] != ["build"]:
+            continue
+        index = 1
+        dockerfile = None
+        build_inputs = []
+        saw_context = False
+        while index < len(arguments):
+            option = arguments[index]
+            if option in {"--builder", "--network", "--file", "--build-arg"}:
+                if index + 1 >= len(arguments):
+                    sys.stderr.write("unexpected fake docker invocation: incomplete modeled build option\n")
+                    raise SystemExit(97)
+                value = arguments[index + 1]
+                if option == "--file":
+                    if dockerfile is not None:
+                        sys.stderr.write("unexpected fake docker invocation: repeated modeled Dockerfile\n")
+                        raise SystemExit(97)
+                    dockerfile = value
+                if option == "--build-arg" and value.startswith(label + "="):
+                    build_inputs.append(value.removeprefix(label + "="))
+                index += 2
+            elif option in {"--quiet", "--pull=false"}:
+                index += 1
+            elif option == "-" and index == len(arguments) - 1:
+                saw_context = True
+                index += 1
+                break
+            else:
+                sys.stderr.write("unexpected fake docker invocation: unsupported modeled build option\n")
+                raise SystemExit(97)
+        if dockerfile not in {"containers/geometry/Dockerfile", "containers/inference/Dockerfile"} or not saw_context:
+            sys.stderr.write("unexpected fake docker invocation: expected modeled Dockerfile and terminal context\n")
+            raise SystemExit(97)
+        if dockerfile == owner:
+            inputs.extend(build_inputs)
+    if len(inputs) != 1:
+        sys.stderr.write("unexpected fake docker invocation: one matching modeled image build is required\n")
+        raise SystemExit(97)
+    return inputs[0]
+
+
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
 arguments = sys.argv[1:]
@@ -203,21 +258,7 @@ elif arguments[:2] == ["image", "inspect"]:
             wheels_projection: "INFERENCE_WHEELS",
             geometry_wheels_projection: "GEOMETRY_WHEELS",
         }[projection]
-        fault = "NMRNET_FAKE_" + label
-        if fault in os.environ:
-            response = os.environ[fault]
-        else:
-            inputs = [
-                value.removeprefix(label + "=")
-                for call in read_engine_calls(Path(log_path))
-                if call["arguments"][:1] == ["build"]
-                for value in call["arguments"]
-                if value.startswith(label + "=")
-            ]
-            if len(inputs) != 1:
-                sys.stderr.write("unexpected fake docker invocation: one matching modeled image build is required\n")
-                raise SystemExit(97)
-            response = inputs[0]
+        response = modeled_image_label(label, log_path)
     else:
         response = identity + "|" + revision
     sys.stdout.write(response + "\n")
@@ -491,7 +532,9 @@ elif command == "run":
                 for index, value in enumerate(arguments[:-1])
                 if value == "--env" and arguments[index + 1].startswith("HOME=")
             ]
-            if original != ["bash", "-eu", "-c", wrapper, "bash", "discover", "-s", "repository_checks", "-v"] or homes != ["HOME=/tmp/checker-home"]:
+            if original != ["bash", "-eu", "-c", wrapper, "bash", "discover", "-s", "repository_checks", "-v"] or homes != [
+                "HOME=/tmp/checker-home"
+            ]:
                 sys.stderr.write("unexpected fake docker invocation: unmodeled checker discovery wrapper" + "\n")
                 raise SystemExit(97)
             with tempfile.TemporaryDirectory(prefix="fake-container-home-", dir=evidence.parent) as directory:

@@ -126,11 +126,7 @@ class AcquisitionEngine:
                 sys.stderr.write(os.environ["NMRNET_FAKE_WORKER_STDERR"])
                 sys.stderr.flush()
             record["phase"] = "exited"
-            statuses = (
-                json.loads(os.environ["NMRNET_FAKE_ACQ_WORKER_STATUSES"])
-                if "NMRNET_FAKE_ACQ_WORKER_STATUSES" in os.environ
-                else {}
-            )
+            statuses = json.loads(os.environ["NMRNET_FAKE_ACQ_WORKER_STATUSES"])
             record["exit_status"] = int(statuses[role] if role in statuses else os.environ["NMRNET_FAKE_WORKER_STATUS"])
         self.save()
         if role.startswith("worker-"):
@@ -185,8 +181,16 @@ class AcquisitionEngine:
                 release = self.root / "worker-removal-release"
                 pending = ready.with_suffix(".pending")
                 with pending.open("x") as receipt:
-                    json.dump({"pid": os.getpid(), "group": os.getpgrp(), "role": held_role,
-                               "arguments": arguments, "identifier": identifier}, receipt)
+                    json.dump(
+                        {
+                            "pid": os.getpid(),
+                            "group": os.getpgrp(),
+                            "role": held_role,
+                            "arguments": arguments,
+                            "identifier": identifier,
+                        },
+                        receipt,
+                    )
                 pending.replace(ready)
                 while not release.exists():
                     time.sleep(0.01)

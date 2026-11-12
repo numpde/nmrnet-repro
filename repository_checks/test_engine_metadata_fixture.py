@@ -21,10 +21,63 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from repository_checks.fixtures.containers.engine_log import record_engine_call
 from repository_checks.fixtures.containers.fixture import LauncherFixture
 
 
 class EngineMetadataFixtureTests(unittest.TestCase):
+    def test_image_label_projection_requires_one_recorded_build_argument(self):
+        geometry = "containers/geometry/Dockerfile"
+        inference = "containers/inference/Dockerfile"
+        projections = {
+            "GEOMETRY_INPUTS": ('{{index .Config.Labels "io.nmrnet-repro.geometry-inputs"}}', geometry, inference),
+            "INFERENCE_INPUTS": ('{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}', inference, geometry),
+            "INFERENCE_WHEELS": ('{{index .Config.Labels "io.nmrnet-repro.inference-wheels"}}', inference, geometry),
+            "GEOMETRY_WHEELS": ('{{index .Config.Labels "io.nmrnet-repro.geometry-wheels"}}', geometry, inference),
+        }
+        for label, (projection, owner, other) in projections.items():
+            build = ["build", "--builder", "default", "--network", "none", "--file", owner]
+            cases = (
+                ([], 97, b""),
+                ([[*build, "--label", label + "=wrong", "-"]], 97, b""),
+                ([[*build, "--build-arg", label + "=owned", "--label", "wrong", "-"]], 97, b""),
+                ([[*build, "--build-arg", label + "=owned", "-"]], 0, b"owned\n"),
+                ([["build", "--file", other, "--build-arg", label + "=wrong", "-"]], 97, b""),
+                ([[*build, "--build-arg", label + "=one", "--build-arg", label + "=two", "-"]], 97, b""),
+                ([[*build, "--build-arg", label + "=one", "-"], [*build, "--build-arg", label + "=two", "-"]], 97, b""),
+                ([[*build, "-", "--build-arg", label + "=wrong"]], 97, b""),
+                ([[*build, "--build-arg", label + "=wrong", "-", "-"]], 97, b""),
+                ([[*build, "--build-arg", label + "=wrong", "--builder", "-"]], 97, b""),
+                (
+                    [["build", "--file", other, "-"], [*build, "--quiet", "--pull=false", "--build-arg", label + "=owned", "-"]],
+                    0,
+                    b"owned\n",
+                ),
+                ([["build", "--build-arg"]], 97, b""),
+            )
+            for builds, status, output in cases:
+                with self.subTest(label=label, builds=builds), tempfile.TemporaryDirectory() as directory:
+                    with patch.dict(os.environ, {"NMRNET_FAKE_" + label: "ambient-poison"}):
+                        fixture = LauncherFixture(Path(directory))
+                    self.addCleanup(fixture.dispose)
+                    self.assertNotIn("NMRNET_FAKE_" + label, fixture.environment)
+                    for build in builds:
+                        record_engine_call(fixture.log, {"arguments": build})
+                    arguments = ["image", "inspect", "--format", projection, "sha256:" + "b" * 64]
+                    result = self.inspect(fixture, arguments, {})
+                    self.assertEqual(status, result.returncode, msg=result.stderr)
+                    self.assertEqual(output, result.stdout)
+                    for value in ("", "fault\nvalue"):
+                        overridden = self.inspect(fixture, arguments, {"NMRNET_FAKE_" + label: value})
+                        self.assertEqual(0, overridden.returncode, msg=overridden.stderr)
+                        self.assertEqual((value + "\n").encode(), overridden.stdout)
+
+    def test_acquisition_worker_status_map_is_owned_by_fixture(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"NMRNET_FAKE_ACQ_WORKER_STATUSES": "poison"}):
+            fixture = LauncherFixture(Path(directory))
+            self.addCleanup(fixture.dispose)
+            self.assertEqual("{}", fixture.environment["NMRNET_FAKE_ACQ_WORKER_STATUSES"])
+
     def test_fixture_identity_and_owned_stat_share_explicit_uid_gid(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
@@ -85,7 +138,14 @@ class EngineMetadataFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             self.addCleanup(fixture.dispose)
-            command = [sys.executable, "-B", str(fixture.root / "host/bootstrap/acquisition/acquisition_tool/source_update.py"), "verify", "--source-dir", str(fixture.root / "host/bootstrap/acquisition")]
+            command = [
+                sys.executable,
+                "-B",
+                str(fixture.root / "host/bootstrap/acquisition/acquisition_tool/source_update.py"),
+                "verify",
+                "--source-dir",
+                str(fixture.root / "host/bootstrap/acquisition"),
+            ]
             verified = subprocess.run(command, env=fixture.environment, capture_output=True, text=True, check=False)
             self.assertEqual(0, verified.returncode, msg=verified.stderr)
             (fixture.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").unlink()

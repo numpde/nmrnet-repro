@@ -156,7 +156,14 @@ class LauncherFixture:
             )
         )
         self.capture_committed_inputs()
-        self.environment = os.environ | {
+        image_label_faults = {
+            "NMRNET_FAKE_GEOMETRY_INPUTS",
+            "NMRNET_FAKE_INFERENCE_INPUTS",
+            "NMRNET_FAKE_INFERENCE_WHEELS",
+            "NMRNET_FAKE_GEOMETRY_WHEELS",
+        }
+        ambient_environment = {name: value for name, value in os.environ.items() if name not in image_label_faults}
+        self.environment = ambient_environment | {
             "NMRNET_FIXTURE_ROOT": str(root),
             "NMRNET_FIXTURE_UID": "1000",
             "NMRNET_FIXTURE_GID": "1000",
@@ -186,6 +193,7 @@ class LauncherFixture:
             "NMRNET_FAKE_IMAGE_REVISION": "a" * 40,
             # The constructor owns an ordinary worker result; additions own faults.
             "NMRNET_FAKE_WORKER_STATUS": "0",
+            "NMRNET_FAKE_ACQ_WORKER_STATUSES": "{}",
             # State bytes and inspection status jointly describe the ordinary proxy.
             "NMRNET_FAKE_PROXY_STATE": "true",
             "NMRNET_FAKE_PROXY_INSPECT_STATUS": "0",
