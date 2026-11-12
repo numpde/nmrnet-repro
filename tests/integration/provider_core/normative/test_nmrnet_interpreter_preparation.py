@@ -18,8 +18,8 @@ from tests.integration.nmrnet.interpreter_ports import UploadPorts, chat_endpoin
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit
 from nmrnet_provider.interpreter import _TOOLS
-from provider_core.analysis import AnalysisFailure
 
 OBSERVATION = b'{"endpoint":{"configuration_id":"fixture","model":"fixture-model"},"prompt_sha256":"authored-test-identity"}'
 
@@ -40,11 +40,14 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
         owner = ports.owner(choose, seconds=0.05)
         session = ports.make_session(owner)
         self.addAsyncCleanup(session.retire)
-        outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        with self.assertRaises(InputSelectionTimeLimit) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertEqual(0.05, caught.exception.seconds)
+        self.assertIsInstance(caught.exception.cause, TimeoutError)
+        self.assertIsInstance(caught.exception.cause.__cause__, asyncio.CancelledError)
         self.assertTrue(entered.is_set())
         self.assertTrue(ports.generator_host.confirmed)
-        self.assertIsInstance(outcome, AnalysisFailure)
-        self.assertEqual("input_selection_time_limit", outcome.code)
+        self.assertEqual([], ports.worker.events)
 
     async def test_deadline_waits_for_late_generation_before_selecting_failure(self):
         ports = SessionPorts()
@@ -72,10 +75,12 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(task.done())
             self.assertFalse(ports.generator_host.confirmed)
             release.set()
-            outcome = await asyncio.wait_for(task, 1)
+            with self.assertRaises(InputSelectionTimeLimit) as caught:
+                await asyncio.wait_for(task, 1)
+            self.assertEqual(0.2, caught.exception.seconds)
+            self.assertIsInstance(caught.exception.cause, TimeoutError)
+            self.assertIsInstance(caught.exception.cause.__cause__, asyncio.CancelledError)
             self.assertTrue(ports.generator_host.confirmed)
-            self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual("input_selection_time_limit", outcome.code)
             self.assertEqual([], ports.worker.events)
         finally:
             release.set()
@@ -89,24 +94,24 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(["string", "null"], tools["prepare_upload"]["properties"]["source_unit"]["type"])
         self.assertIn("source_unit", tools["prepare_pasted"]["required"])
 
-    async def test_owned_input_deadline_during_model_post_returns_job_failure_with_final_diagnostics(self):
+    async def test_owned_input_deadline_during_model_post_propagates_with_final_diagnostics(self):
         ports = SessionPorts()
         async with TlsPeer("body-stall", response_headers=((b"x-request-id", b"request:input-time-limit"),)) as peer:
             chooser = fixture_interpreter((chat_endpoint(peer, exchange_seconds=2),), timeout_seconds=2)
             owner = ports.owner(chooser.run, chooser=chooser, seconds=0.5)
             session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            outcome = await asyncio.wait_for(
-                session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition),
-                2,
-            )
-            self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual("input_selection_time_limit", outcome.code)
-            self.assertIn("0.5", outcome.message)
-            self.assertIn("operator", outcome.message)
-            evidence = json.loads(outcome.evidence.content)
-            self.assertEqual({"seconds": 0.5}, evidence["input_selection_time_limit"])
-            diagnostics = json.dumps(evidence["interpreter_diagnostics"])
+            with self.assertRaises(InputSelectionTimeLimit) as caught:
+                await asyncio.wait_for(
+                    session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition),
+                    2,
+                )
+            self.assertEqual(0.5, caught.exception.seconds)
+            self.assertIsInstance(caught.exception.cause, TimeoutError)
+            interruption = caught.exception.cause.__cause__
+            self.assertIsInstance(interruption, BaseExceptionGroup)
+            self.assertTrue(all(isinstance(error, asyncio.CancelledError) for error in interruption.exceptions))
+            diagnostics = json.dumps(json.loads(owner.interpreter_diagnostics))
             for fact in ("request:input-time-limit", "request_cancelled", "may have been processed"):
                 self.assertIn(fact, diagnostics)
             self.assertNotIn("PRIVATE_MODEL_KEY", diagnostics)
@@ -130,10 +135,14 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
             owner = ports.owner(chooser.run, chooser=chooser, seconds=2.5)
             session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual("input_selection_time_limit", outcome.code)
-            diagnostics = json.dumps(json.loads(outcome.evidence.content)["interpreter_diagnostics"])
+            with self.assertRaises(InputSelectionTimeLimit) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertEqual(2.5, caught.exception.seconds)
+            self.assertIsInstance(caught.exception.cause, TimeoutError)
+            interruption = caught.exception.cause.__cause__
+            self.assertIsInstance(interruption, BaseExceptionGroup)
+            self.assertTrue(all(isinstance(error, asyncio.CancelledError) for error in interruption.exceptions))
+            diagnostics = json.dumps(json.loads(owner.interpreter_diagnostics))
             self.assertIn('"status": 503', diagnostics)
             self.assertIn("request:after-fallback", diagnostics)
             self.assertIn("CancelledError", diagnostics)

@@ -1,4 +1,4 @@
-"""Generation capacity failures retain causes without admitting partial science."""
+"""Generation failures propagate unchanged without admitting partial science."""
 
 import asyncio
 import hashlib
@@ -11,10 +11,8 @@ from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
-from nmrnet_provider.session import PreparationEvidenceFailed
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
-from provider_core.analysis import AnalysisFailure
 
 
 def output_limit(batch):
@@ -43,81 +41,60 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
     async def run_failure(self, ports, failure):
         self.addAsyncCleanup(ports.session.retire)
         ports.generator.generate.side_effect = failure
-        outcome = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertIs(type(outcome), AnalysisFailure)
-        self.assertNotEqual(outcome.code, "invalid_input")
-        self.assertNotIn("PRIVATE_", outcome.message)
+        with self.assertRaises(type(failure)) as caught:
+            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, failure)
         self.assertEqual([], ports.worker.events)
+        self.assertFalse(ports.host.confirmed)
+        ports.generator.close.assert_called_once_with()
         ports.generator_host.retire.assert_awaited_once()
         ports.generator.wait_closed.assert_awaited_once()
-        evidence = json.loads(outcome.evidence.content)
-        self.assertEqual(evidence["input_fingerprint"], ports.instructions.identity.input_fingerprint)
-        generation = evidence["generation_failure"]
-        self.assertEqual(2, generation["requested_count"])
-        self.assertEqual(generation["provenance_sha256"], hashlib.sha256(ports.batch.provenance).hexdigest())
-        self.assertEqual(json.loads(generation["provenance_utf8"])["source_sha256"], hashlib.sha256(b"CCl").hexdigest())
-        self.assertEqual(generation["diagnostic"], ports.batch.diagnostic)
-        self.assertNotIn("PRIVATE_ALLOCATION", json.dumps(evidence))
-        self.assertTrue({"coordinates", "request_utf8", "stereochemistry_utf8"}.isdisjoint(generation))
-        originals = ports.batch.conformers[: generation["actual_count"]]
-        for item, original in zip(generation["conformers"], originals, strict=True):
-            self.assertEqual(
-                {
-                    "conformer_id",
-                    "request_sha256",
-                    "request_byte_length",
-                    "stereochemistry_sha256",
-                    "stereochemistry_byte_length",
-                },
-                set(item),
-            )
-            self.assertEqual(item["request_sha256"], hashlib.sha256(original.request_bytes).hexdigest())
-            self.assertEqual(item["stereochemistry_sha256"], hashlib.sha256(original.stereochemistry).hexdigest())
-            self.assertEqual(item["request_byte_length"], len(original.request_bytes))
-            self.assertEqual(item["stereochemistry_byte_length"], len(original.stereochemistry))
         with self.assertRaises(ValueError):
             await ports.session.execute(object(), report_condition=unexpected_condition)
-        return outcome, generation
+        with self.assertRaises(ValueError):
+            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
 
-    async def test_shortfall_preserves_actual_partial_id_and_causal_evidence_without_coordinates(self):
+    async def test_shortfall_preserves_original_partial_coordinates_and_evidence(self):
         ports = SessionPorts()
-        failure = ConformerShortfall(replace(ports.batch, conformers=ports.batch.conformers[:1]))
-        outcome, generation = await self.run_failure(ports, failure)
-        self.assertEqual("conformer_shortfall", outcome.code)
-        self.assertIn("requested 2", outcome.message)
-        self.assertIn("returned 1", outcome.message)
-        self.assertEqual(1, generation["actual_count"])
-        self.assertEqual([item["conformer_id"] for item in generation["conformers"]], [2])
+        partial = replace(ports.batch, conformers=ports.batch.conformers[:1])
+        failure = ConformerShortfall(partial)
+        await self.run_failure(ports, failure)
+        self.assertIs(failure.partial, partial)
+        self.assertIs(failure.partial.conformers[0], ports.batch.conformers[0])
+        self.assertEqual([item.conformer_id for item in failure.partial.conformers], [2])
+        self.assertIs(failure.partial.provenance, ports.batch.provenance)
+        self.assertEqual(failure.partial.diagnostic, ports.batch.diagnostic)
 
-    async def test_output_limit_preserves_compact_identity_without_allocation_or_coordinates(self):
+    async def test_output_limit_preserves_original_compact_diagnostic(self):
         ports = SessionPorts()
-        outcome, generation = await self.run_failure(ports, output_limit(ports.batch))
-        self.assertEqual("conformer_output_limit", outcome.code)
-        self.assertIn("2 MiB", outcome.message)
-        self.assertEqual(2, generation["actual_count"])
+        failure = output_limit(ports.batch)
+        original_diagnostic = failure.diagnostic
+        await self.run_failure(ports, failure)
+        self.assertIs(failure.diagnostic, original_diagnostic)
+        self.assertEqual(2, failure.requested_count)
+        self.assertEqual(2, failure.actual_count)
+        generation = json.loads(failure.diagnostic)
+        self.assertEqual("PRIVATE_ALLOCATION", generation["allocation"])
+        self.assertEqual(ports.batch.provenance.decode(), generation["provenance_utf8"])
+        self.assertEqual(ports.batch.diagnostic, generation["diagnostic"])
         self.assertIs(generation["coordinates_available"], False)
         self.assertEqual([item["conformer_id"] for item in generation["conformers"]], [2, 0])
 
     async def test_zero_returned_conformers_remain_shortfall_with_no_fabricated_payload_identities(self):
         ports = SessionPorts()
-        failure = ConformerShortfall(replace(ports.batch, conformers=()))
-        outcome, generation = await self.run_failure(ports, failure)
-        self.assertEqual("conformer_shortfall", outcome.code)
-        self.assertEqual(0, generation["actual_count"])
-        self.assertEqual([], generation["conformers"])
+        partial = replace(ports.batch, conformers=())
+        failure = ConformerShortfall(partial)
+        await self.run_failure(ports, failure)
+        self.assertIs(failure.partial, partial)
+        self.assertEqual((), failure.partial.conformers)
 
-    async def test_failure_evidence_overflow_retains_original_typed_cause_and_whole_diagnostic(self):
+    async def test_large_partial_diagnostic_propagates_without_evidence_admission(self):
         ports = SessionPorts()
-        self.addAsyncCleanup(ports.session.retire)
         partial = replace(ports.batch, conformers=ports.batch.conformers[:1], diagnostic="PRIVATE" * 40000)
         failure = ConformerShortfall(partial)
-        ports.generator.generate.side_effect = failure
-        with self.assertRaises(PreparationEvidenceFailed) as caught:
-            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertIs(caught.exception.preparation_failure, failure)
-        self.assertEqual(caught.exception.document["generation_failure"]["diagnostic"], partial.diagnostic)
-        self.assertIsNotNone(caught.exception.__cause__)
-        self.assertEqual([], ports.worker.events)
+        await self.run_failure(ports, failure)
+        self.assertIs(failure.partial, partial)
+        self.assertEqual("PRIVATE" * 40000, failure.partial.diagnostic)
 
     async def test_unconfirmed_retirement_keeps_operational_cleanup_wrapper_and_original_shortfall(self):
         ports = SessionPorts()
@@ -135,7 +112,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         finally:
             ports.generator_host.retire.side_effect = None
 
-    async def test_generation_failure_after_retirement_cannot_select_a_job_outcome(self):
+    async def test_generation_failure_after_retirement_still_propagates_original_failure(self):
         ports = SessionPorts()
         entered, release = asyncio.Event(), asyncio.Event()
         failure = ConformerShortfall(replace(ports.batch, conformers=ports.batch.conformers[:1]))
@@ -158,7 +135,8 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
             await ports.session.retire()
         finally:
             release.set()
-        with self.assertRaisesRegex(ValueError, "retirement"):
+        with self.assertRaises(ConformerShortfall) as caught:
             await asyncio.wait_for(task, timeout=1)
+        self.assertIs(caught.exception, failure)
         self.assertEqual([], ports.worker.events)
         self.assertFalse(ports.host.confirmed)

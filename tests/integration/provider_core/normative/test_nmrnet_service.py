@@ -19,7 +19,10 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.runtime import capture_prose_services
 from nmrnet_provider.service import Announcement, ServiceFailed
 from provider_core.api import ProviderAPI
+from provider_core.controller import ControllerFailed
 from provider_core.delivery_client import DeliveryClient
+from provider_core.execution import ExecutionFailed
+from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -464,7 +467,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(1, len(fixture.model_peer.requests))
 
-    async def test_model_report_reaches_the_failure_recipient_with_safe_actionable_guidance(self):
+    async def test_model_report_retains_original_operator_handoff_without_terminal_report(self):
         cases = (
             (
                 "source_unit_unclear",
@@ -493,7 +496,6 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def check_model_report(self, issue, guidance):
         report = "PRIVATE_SOURCE_EXCERPT " + "x" * 1500
-        received = []
         async with ServicePeers() as fixture:
             await self.fallback_endpoints(fixture)
 
@@ -502,55 +504,45 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn(b"signature:", request.lower())
                 return tool_reply("report", "report_interpretation_problem", {"issue": issue, "message": report})
 
-            async def recipient(request, body):
-                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
-                self.assertNotIn(b"authorization:", request.lower())
-                self.assertNotIn(b"private_model_key", request.lower())
-                if request.split(b"\r\n", 1)[0].endswith(b"/fail HTTP/1.1"):
-                    self.assertTrue(request.startswith(b"POST "))
-                    self.assertFalse(fixture.allocations[0].host.confirmed)
-                    self.assertEqual([], fixture.allocations[0].worker.events)
-                    pending = fixture.relay.queue.next_pending(
-                        fixture.config.api.identity.origin, fixture.config.lifecycle.scope.provider_ref
-                    )
-                    self.assertIsNotNone(pending)
-                    self.assertEqual(pending.body, body)
-                    received.append(body)
-                    reply = await fixture.api_reply(request, body)
-                    fixture.stop.set()
-                    return reply
-                return await fixture.api_reply(request, body)
-
             fixture.model_peer.response_factory = model_report
-            fixture.api_peer.response_factory = recipient
             service = fixture.service()
             fixture.stack.push_async_callback(fixture.settle_service, service)
-            await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
-            self.assertEqual(1, len(received))
-            wire = json.loads(received[0])
-            self.assertEqual("interpretation_failed", wire["failure_code"])
+            with self.assertRaises(ServiceFailed) as caught:
+                await asyncio.wait_for(service.run(fixture.stop), fixture.config.preparation.seconds)
+            (controller,) = fixture.claims.live_owners()
+            self.assertIs(caught.exception.cause, controller.last_failure)
+            self.assertIs(type(controller.last_failure), ControllerFailed)
+            execution = controller.last_failure.cause
+            self.assertIs(type(execution), ExecutionFailed)
+            preparation = controller.session._input_preparation
+            original = preparation.chooser_failure
+            self.assertIs(execution.cause, original)
+            self.assertIs(type(original), InterpretationFailed)
+            _, model_report = original.failures[-1]
+            self.assertIs(type(model_report), ModelReportedInterpretationProblem)
+            self.assertEqual(issue, model_report.__cause__.issue)
+            self.assertEqual(report, model_report.__cause__.explanation)
             self.assertEqual(
-                wire["failure_message"],
                 guidance
                 + " This report was not independently verified. The provider retains the model's explanation as private evidence.",
+                str(model_report.__cause__),
             )
-            self.assertNotIn(b"PRIVATE_SOURCE_EXCERPT", received[0])
-            self.assertNotIn(b"private_model_key", received[0].lower())
-            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
-            await fixture.wait_published()
-            self.assertEqual(
-                [], fixture.relay.queue.inventory(fixture.config.api.identity.origin, fixture.config.lifecycle.scope.provider_ref)
-            )
-            outcome = fixture.allocations[0].preparation_outcome
-            self.assertEqual(outcome.code, wire["failure_code"])
-            self.assertNotIn(report, outcome.message)
-            self.require_prior_endpoint_evidence(outcome.evidence.content, report=True)
-            self.assertIn("PRIVATE_SOURCE_EXCERPT", outcome.evidence.content.decode())
+            self.assertTrue(controller.shutdown_ready)
+            self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, fixture.allocations[0].instructions.job_ref))
+            self.assertFalse(any(path.endswith(("/fail", "/complete")) for path in fixture.request_paths))
+            self.assertEqual([], fixture.allocations[0].worker.events)
+            self.assertFalse(fixture.allocations[0].host.confirmed)
+            self.assertEqual(1, len(fixture.allocations))
             self.assertEqual(1, len(fixture.model_peer.requests))
             fixture.allocations[0].allocate_reader.assert_not_awaited()
             fixture.allocations[0].allocate_generator.assert_not_awaited()
             self.assertEqual([], fixture.store_peer.requests)
             self.assertIsNone(fixture.result)
+            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
+            diagnostics = preparation.interpreter_diagnostics
+            self.require_prior_endpoint_evidence(
+                json.dumps({"interpreter_diagnostics": json.loads(diagnostics)}).encode(), report=True
+            )
 
     async def test_stop_drains_the_original_execution_and_publication_when_it_finishes(self):
         async with ServicePeers() as fixture:

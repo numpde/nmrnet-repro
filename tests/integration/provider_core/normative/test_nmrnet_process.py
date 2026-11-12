@@ -11,6 +11,7 @@ import sys
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
+from functools import partial
 from unittest.mock import patch
 
 from tests.fakes.api import response_headers
@@ -97,7 +98,25 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotEqual(condition_sends[0][0], condition_sends[1][0], msg="Fresh signed request for the same report")
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(0, process.returncode, msg=stderr.decode())
+            self.assertEqual(1, process.returncode, msg=stderr.decode())
+            reports = [json.loads(line) for line in stderr.splitlines()]
+            report = reports[-1]
+            self.assertEqual("ProviderProcessFailed", report["exception_type"])
+            self.assertIs(report["requires_host_retirement"], False)
+            rendered = json.dumps(report)
+            for cause in (
+                "ControllerFailed",
+                "ExecutionFailed",
+                "InterpretationFailed",
+                "ConversationFailed",
+                "ChatFailed",
+                "TimeoutError",
+            ):
+                self.assertIn(f'"exception_type": "{cause}"', rendered)
+            self.assertIn(ATTEMPT_REF, rendered)
+            fixture.assert_lifetime_released()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
             self.assertIn(b"interpreter_endpoint_failed", stderr)
             self.assertNotIn(b"PRIVATE", stderr)
             self.assertEqual(1, len(model.requests))
@@ -145,7 +164,26 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(process.returncode)
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(0, process.returncode, msg=stderr.decode())
+            self.assertEqual(1, process.returncode, msg=stderr.decode())
+            reports = [json.loads(line) for line in stderr.splitlines()]
+            report = reports[-1]
+            self.assertEqual("ProviderProcessFailed", report["exception_type"])
+            self.assertIs(report["requires_host_retirement"], False)
+            rendered = json.dumps(report)
+            for cause in (
+                "ControllerFailed",
+                "ExecutionFailed",
+                "InterpretationFailed",
+                "ConversationFailed",
+                "ChatFailed",
+                "TimeoutError",
+            ):
+                self.assertIn(f'"exception_type": "{cause}"', rendered)
+            self.assertIn(ATTEMPT_REF, rendered)
+            fixture.assert_lifetime_released()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+            self.assertEqual(1, len(model.requests))
             self.assertIn(b"interpreter_endpoint_failed", stderr)
             self.assertNotIn(b"PRIVATE", stderr)
             self.assertNotIn(b"api_progress_recovered", stderr)
@@ -209,18 +247,20 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         work_task = unconfirmed_hello = None
                         capacity_notice_failure = outage
                         shutdown_ready = True
+                        should_fail = fail_operation
+                        failure = operation_failure
 
                         def __init__(self, **_arguments):
                             pass
 
                         async def run(self, _stop):
-                            if fail_operation:
-                                raise operation_failure
+                            if self.should_fail:
+                                raise self.failure
 
                         async def settle(self):
                             pass
 
-                    def project_failure(error, *, secrets):
+                    def project_failure(error, *, secrets, sink_failure, projection_failure):
                         nonlocal projection_attempted
                         if error is sink_failure:
                             projection_attempted = True
@@ -231,7 +271,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     with (
                         patch("nmrnet_provider.process.ProviderService", NoticeService),
                         patch("nmrnet_provider.process._write_api_notice", side_effect=sink_failure),
-                        patch("nmrnet_provider.process.failure_evidence", side_effect=project_failure),
+                        patch(
+                            "nmrnet_provider.process.failure_evidence",
+                            side_effect=partial(
+                                project_failure, sink_failure=sink_failure, projection_failure=projection_failure
+                            ),
+                        ),
                         patch("nmrnet_provider.process._failure_report", wraps=_failure_report) as report,
                         patch("nmrnet_provider.process._write_stderr", side_effect=reports.append),
                     ):
@@ -442,7 +487,25 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(process.returncode)
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(0, process.returncode, msg=stderr.decode())
+            self.assertEqual(1, process.returncode, msg=stderr.decode())
+            reports = [json.loads(line) for line in stderr.splitlines()]
+            report = reports[-1]
+            self.assertEqual("ProviderProcessFailed", report["exception_type"])
+            self.assertIs(report["requires_host_retirement"], False)
+            rendered = json.dumps(report)
+            for cause in (
+                "ControllerFailed",
+                "ExecutionFailed",
+                "InterpretationFailed",
+                "ConversationFailed",
+                "ChatFailed",
+                "TimeoutError",
+            ):
+                self.assertIn(f'"exception_type": "{cause}"', rendered)
+            self.assertIn(ATTEMPT_REF, rendered)
+            fixture.assert_lifetime_released()
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.peer.requests]
+            self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
             self.assertIn(b"interpreter_endpoint_failed", stderr)
             self.assertNotIn(b"PRIVATE", stderr)
             self.assertFalse((fixture.diagnostics / "science-entered").exists())

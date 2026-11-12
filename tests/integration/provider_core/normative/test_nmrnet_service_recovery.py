@@ -13,9 +13,11 @@ from tests.integration.nmrnet.admission_ports import feed_response
 from tests.integration.nmrnet.budget_service import InputCallLimitPeers, InputTimeLimitPeers
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
 
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import ServiceFailed
-from provider_core.controller import LiveStartPolicy
+from provider_core.controller import ControllerFailed, LiveStartPolicy
+from provider_core.execution import ExecutionFailed
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -71,17 +73,17 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(4, len(fixture.complete_bodies))
             self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
 
-    async def test_time_limited_first_job_fails_then_later_jobs_finish_in_one_active_slot(self):
+    async def test_time_limited_first_job_retains_attempt_without_starting_later_jobs(self):
         async with InputTimeLimitPeers() as fixture:
-            await self.finish(fixture, fixture.service())
-            self.assertEqual(1, len(fixture.failure_bodies))
-            first = json.loads(fixture.failure_bodies[0])
-            self.assertEqual("input_selection_time_limit", first["failure_code"])
-            self.assertEqual(first["execution_attempt_ref"], fixture.attempt_refs[0])
-            self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
-            self.assertEqual(3, len(fixture.complete_bodies))
-            self.assertTrue(any(facts["event"] == "delivery_retry" for _, facts in fixture.delivery_notices))
-            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
+            failure = await self.check_preparation_failure(fixture, InputSelectionTimeLimit)
+            self.assertEqual(fixture.selection_seconds, failure.seconds)
+            self.assertIsInstance(failure.cause, TimeoutError)
+            (controller,) = fixture.claims.live_owners()
+            diagnostics = json.dumps(json.loads(controller.session._input_preparation.interpreter_diagnostics))
+            self.assertIn("request_cancelled", diagnostics)
+            self.assertIn("may have been processed", diagnostics)
+            self.assertNotIn("PRIVATE_MODEL_KEY", diagnostics)
+            self.assertEqual(fixture.model_jobs, [fixture.jobs[0].job_ref])
 
     async def test_lost_accepted_start_reply_recovers_same_job_before_one_interpretation_and_prediction(self):
         async with ServicePeers() as fixture:
@@ -133,17 +135,38 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(notices[0][2], notices[1][2])
             self.assertTrue(notices[0][2].attempt_mutation_may_have_committed)
 
-    async def test_call_limited_first_job_fails_then_later_jobs_finish_without_repeating_science(self):
+    async def test_call_limited_first_job_retains_attempt_without_starting_later_jobs(self):
         async with InputCallLimitPeers() as fixture:
-            await self.finish(fixture, fixture.service())
-            self.assertEqual(1, len(fixture.failure_bodies))
-            first = json.loads(fixture.failure_bodies[0])
-            self.assertEqual("input_worker_call_limit", first["failure_code"])
-            self.assertEqual(first["execution_attempt_ref"], fixture.attempt_refs[0])
-            self.assertEqual(fixture.model_jobs, [fixture.jobs[index].job_ref for index in (0, 0, 1, 2)])
-            self.assertEqual(3, len(fixture.complete_bodies))
-            self.assertTrue(any(facts["event"] == "delivery_retry" for _, facts in fixture.delivery_notices))
-            self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
+            failure = await self.check_preparation_failure(fixture, InputWorkerCallLimit)
+            (controller,) = fixture.claims.live_owners()
+            self.assertIs(failure, controller.session._input_preparation.chooser_failure)
+            self.assertEqual((1, 1), (failure.maximum_calls, failure.calls_started))
+            diagnostics = json.dumps(json.loads(controller.session._input_preparation.interpreter_diagnostics))
+            self.assertIn("Cannot read coordinate table: x must be a finite number.", diagnostics)
+            self.assertNotIn("PRIVATE_MODEL_KEY", diagnostics)
+            self.assertEqual(fixture.model_jobs, [fixture.jobs[0].job_ref] * 2)
+
+    async def check_preparation_failure(self, fixture, expected_type):
+        service = fixture.service()
+        fixture.stack.push_async_callback(fixture.settle_service, service)
+        with self.assertRaises(ServiceFailed) as caught:
+            await asyncio.wait_for(service.run(fixture.stop), 8)
+        (controller,) = fixture.claims.live_owners()
+        self.assertIs(caught.exception.cause, controller.last_failure)
+        self.assertIs(type(controller.last_failure), ControllerFailed)
+        execution = controller.last_failure.cause
+        self.assertIs(type(execution), ExecutionFailed)
+        self.assertIs(type(execution.cause), expected_type)
+        self.assertTrue(controller.shutdown_ready)
+        self.assertTrue(fixture.claims.owns_job(fixture.config.lifecycle.scope, fixture.jobs[0].job_ref))
+        self.assertEqual(1, len(fixture.start_bodies))
+        self.assertEqual(1, len(fixture.allocations))
+        fixture.require_retired_science(1)
+        self.assertEqual([], fixture.complete_bodies)
+        requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+        self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+        self.assertFalse((fixture.files.state / "checkpoints.sqlite3").exists())
+        return execution.cause
 
     async def test_three_jobs_share_one_active_slot_and_relay_recovers_lost_receipt_without_repeating_science(self):
         async with SuccessiveServicePeers(maximum_live_attempts=1) as fixture:

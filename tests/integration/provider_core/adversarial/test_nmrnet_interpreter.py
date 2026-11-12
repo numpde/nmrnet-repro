@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import patch
 
 import httpcore
-from tests.fakes.attempts import ATTEMPT_REF
 from tests.fakes.controller import cancel_task
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
@@ -14,11 +13,11 @@ from tests.integration.nmrnet.interpreter_ports import chat_endpoint, fixture_in
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
+from nmrnet_provider.interpreter import InspectionUnavailable
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.session import PreparationEvidenceFailed
-from provider_core.analysis import AnalysisFailure
-from provider_core.attempt_request import fail_body
 from provider_core.conversation import ConversationFailed
+from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
 
 
 class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
@@ -44,12 +43,14 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             owner = ports.owner(chooser.run, chooser=chooser)
             session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual("interpretation_failed", outcome.code)
+            with self.assertRaises(InspectionUnavailable) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertIs(caught.exception.__cause__, failure)
             self.assertIs(owner.source_failure, failure)
             self.assertIsNone(owner._source_task)
             self.assertEqual(0, len(second.requests))
-            self.assertNotIn("PRIVATE_LATE_SOURCE_FAILURE", outcome.message)
+            self.assertNotIn("PRIVATE_LATE_SOURCE_FAILURE", str(caught.exception))
+            self.assertEqual([], ports.worker.events)
 
     async def test_interrupted_model_post_retains_final_private_diagnostics_after_received_headers(self):
         await self.check_interrupted_post(repeated_cancellation=False)
@@ -274,13 +275,15 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async with TlsPeer("success", response_factory=respond) as peer:
             chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
-            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            owner = ports.owner(chooser.run, chooser=chooser)
+            session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual("interpretation_failed", outcome.code)
-            self.assertNotIn("PRIVATE_", outcome.message)
-            self.assertIn("PRIVATE_RETAINED_REPORT", outcome.evidence.content.decode())
+            with self.assertRaises(InterpretationFailed) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertIs(caught.exception, chooser._conversation.last_failure)
+            self.assertNotIn("PRIVATE_", str(caught.exception))
+            self.assertIn("PRIVATE_RETAINED_REPORT", owner.interpreter_diagnostics.decode())
+            self.assertTrue(all(isinstance(error, ModelReportedInterpretationProblem) for _, error in caught.exception.failures))
             self.assertEqual(2, len(peer.request_bodies))
             ports.allocate_reader.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
@@ -322,14 +325,16 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             first = chat_endpoint(peer, identifier="first")
             unused = chat_endpoint(peer, identifier="unused")
             chooser = fixture_interpreter((first, unused), timeout_seconds=4)
-            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            owner = ports.owner(chooser.run, chooser=chooser)
+            session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertIsInstance(outcome, AnalysisFailure)
-            self.assertEqual("interpretation_failed", outcome.code)
-            published = fail_body(ATTEMPT_REF, outcome.code, outcome.message)
-            self.assertNotIn(b"PRIVATE_SOURCE_EXCERPT", published)
-            self.assertIn("PRIVATE_SOURCE_EXCERPT", outcome.evidence.content.decode())
+            with self.assertRaises(InterpretationFailed) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertIs(caught.exception, chooser._conversation.last_failure)
+            self.assertNotIn("PRIVATE_SOURCE_EXCERPT", str(caught.exception))
+            self.assertIn("PRIVATE_SOURCE_EXCERPT", owner.interpreter_diagnostics.decode())
+            self.assertEqual(2, len(caught.exception.failures))
+            self.assertTrue(all(isinstance(error, ModelReportedInterpretationProblem) for _, error in caught.exception.failures))
             self.assertEqual(2, len(peer.request_bodies))
             self.assertNotIn("PRIVATE_SOURCE_EXCERPT", peer.request_bodies[1].decode())
             self.assertEqual([], ports.worker.events)
@@ -366,15 +371,17 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         async with TlsPeer("success", response_factory=respond) as peer:
             chooser = fixture_interpreter((chat_endpoint(peer),), timeout_seconds=2)
-            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            owner = ports.owner(chooser.run, chooser=chooser)
+            session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual("interpretation_failed", outcome.code)
-            private = json.loads(outcome.evidence.content)["interpreter_diagnostics"]
+            with self.assertRaises(InterpretationFailed) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertIs(caught.exception, chooser._conversation.last_failure)
+            private = json.loads(owner.interpreter_diagnostics)
             self.assertIn(1, [entry.get("turn_index") for entry in private])
             self.assertIn(str(failure), json.dumps(private))
             self.assertIn("PRIVATE reader dump", json.dumps(private))
-            self.assertNotIn("PRIVATE reader dump", outcome.message)
+            self.assertNotIn("PRIVATE reader dump", str(caught.exception))
             ports.reader_host.retire.assert_awaited_once()
             self.assertEqual([], ports.worker.events)
 

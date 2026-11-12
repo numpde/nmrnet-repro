@@ -19,15 +19,58 @@ from tests.integration.nmrnet.test_nmrnet_session import HostOwner, ScientificWo
 
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.runtime import assemble_attempt
+from nmrnet_provider.smiles import ConformerShortfall
+from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
 from provider_core.attempt_record import AcknowledgedAttempt
 from provider_core.controller import ControllerFailed, StartDeferred
+from provider_core.execution import ExecutionFailed
 from provider_core.job_input import verify_job_input
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
 from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_generation_capacity_failures_retain_original_cause_without_prediction_or_terminal_report(self):
+        for failure_kind in ("shortfall", "output_limit"):
+            with self.subTest(failure_kind=failure_kind):
+                ports = SessionPorts()
+                original = (
+                    ConformerShortfall(replace(ports.batch, conformers=ports.batch.conformers[:1]))
+                    if failure_kind == "shortfall"
+                    else ConformerOutputLimit(
+                        {
+                            "kind": "conformer_output_limit",
+                            "allocation": "PRIVATE_ALLOCATION",
+                            "coordinates_available": False,
+                            **conformer_evidence(ports.batch),
+                        },
+                        requested_count=2,
+                    )
+                )
+                ports.generator.generate.side_effect = original
+                async with RuntimePeers(ports, "smiles") as fixture:
+                    pending = await fixture.discover()
+                    controller = await assemble_attempt(**fixture.arguments(pending))
+                    fixture.stack.push_async_callback(fixture.settle_controller, controller)
+                    with self.assertRaises(ControllerFailed) as caught:
+                        await controller.run(pending)
+                    self.assertIs(caught.exception, controller.last_failure)
+                    self.assertIs(type(caught.exception.cause), ExecutionFailed)
+                    self.assertIs(caught.exception.cause.cause, original)
+                    self.assertTrue(controller.shutdown_ready)
+                    self.assertTrue(fixture.claims.owns_job(pending.scope, pending.input.job_ref))
+                    self.assertTrue(ports.generator_host.confirmed)
+                    ports.generator.generate.assert_awaited_once()
+                    ports.generator.close.assert_called_once()
+                    ports.generator.wait_closed.assert_awaited_once()
+                    fixture.allocate_prediction.assert_not_awaited()
+                    ports.allocate_reader.assert_not_awaited()
+                    self.assertEqual([], ports.worker.events)
+                    self.assertEqual(1, len(fixture.model_peer.requests))
+                    requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+                    self.assertFalse(any(b"/fail HTTP/" in request or b"/complete HTTP/" in request for request in requests))
+
     async def test_malformed_prediction_reply_retains_attempt_and_original_evidence(self):
         ports = SessionPorts()
         rejected = WorkerResultRejected({"kind": "result", "result": "PRIVATE_INCOMPLETE"})
@@ -301,9 +344,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_prediction_operator_failure_retains_attempt_and_original_diagnostic_without_terminal_report(self):
         ports = SessionPorts()
-        original = ModelCallFailed(
-            "Authored prediction failure; api_key=PRIVATE_PREDICTION_DIAGNOSTIC; " + "💧" * 300000
-        )
+        original = ModelCallFailed("Authored prediction failure; api_key=PRIVATE_PREDICTION_DIAGNOSTIC; " + "💧" * 300000)
         ports.worker.execute = AsyncMock(side_effect=original)
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()

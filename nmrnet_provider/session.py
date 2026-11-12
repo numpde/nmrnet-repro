@@ -19,13 +19,10 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
-from nmrnet_provider.interpreter import InspectionUnavailable, ModelReportedInputProblem
+from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.native_session import NativeWorkerExited
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultCapacityExceeded, ResultPlan
-from nmrnet_provider.smiles import ConformerShortfall
-from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.worker_client import ModelCallFailed, WorkerExchangeTimedOut, WorkerResultRejected
 from provider_core.analysis import (
     AnalysisFailure,
@@ -35,7 +32,6 @@ from provider_core.analysis import (
     PreparedAnalysis,
 )
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
-from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected, ModelReportedInterpretationProblem
 from provider_core.job_input import VerifiedJobInput
 from provider_core.task_boundary import contain_task_exit
 
@@ -152,42 +148,6 @@ def _prepared_identity(plan, prepared, interpreter_diagnostics):
         raise PreparationEvidenceFailed(document) from cause
 
 
-def _generation_failure(cause):
-    """Keep native provenance and ordered payload identities for failed Job evidence."""
-    if isinstance(cause, ConformerShortfall):
-        kind = "conformer_shortfall"
-        evidence = conformer_evidence(cause.partial)
-    else:
-        kind = "conformer_output_limit"
-        reply = json.loads(cause.diagnostic)
-        # Allocation identity belongs to the transport owner. The protocol has
-        # already admitted this summary; retain only scientific failure evidence.
-        evidence = {key: reply[key] for key in ("coordinates_available", "provenance_utf8", "diagnostic", "conformers")}
-    provenance = evidence["provenance_utf8"].encode("utf-8")
-    return {
-        "kind": kind,
-        "requested_count": json.loads(provenance)["requested_count"],
-        "actual_count": len(evidence["conformers"]),
-        "provenance_sha256": hashlib.sha256(provenance).hexdigest(),
-        **evidence,
-    }
-
-
-def _interpretation_failure_message(cause):
-    """Publish provider-owned guidance only for an unambiguous final report."""
-    failures = cause.failures
-    if not failures:
-        return str(cause)
-    # The SDK groups failures by visit, not by occurrence within each visit.
-    final_visit = max(visit for visit, _ in failures)
-    reports = [
-        failure for visit, failure in failures if visit == final_visit and type(failure) is ModelReportedInterpretationProblem
-    ]
-    if len(reports) == 1 and type(reports[0].__cause__) is ModelReportedInputProblem:
-        return str(reports[0].__cause__)
-    return str(cause)
-
-
 @dataclass(frozen=True, slots=True, repr=False)
 class _PreparedExecution:
     handle: PreparedAnalysis
@@ -267,16 +227,7 @@ class NMRNetSession:
             if type(original) is not NativeWorkerExited:
                 raise
             raise self._worker_crash(original, cause=cause) from None
-        except (
-            InputRejected,
-            ConformerShortfall,
-            ConformerOutputLimit,
-            InterpretationFailed,
-            InterpretationInputRejected,
-            InspectionUnavailable,
-            InputWorkerCallLimit,
-            InputSelectionTimeLimit,
-        ) as cause:
+        except InputRejected as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
@@ -324,34 +275,17 @@ class NMRNetSession:
         try:
             if self._input_preparation.interpreter_diagnostics is not None:
                 document["interpreter_diagnostics"] = json.loads(self._input_preparation.interpreter_diagnostics)
-            if type(cause) is InputWorkerCallLimit:
-                code = "input_worker_call_limit"
-                document[code] = {"maximum_calls": cause.maximum_calls, "calls_started": cause.calls_started}
-            elif type(cause) is InputSelectionTimeLimit:
-                code = "input_selection_time_limit"
-                document[code] = {"seconds": cause.seconds}
-            elif type(cause) is InterpretationFailed:
-                code = "interpretation_failed"
-            elif type(cause) is InterpretationInputRejected:
-                code = "interpretation_input_rejected"
-            elif type(cause) is InspectionUnavailable:
-                code = "interpretation_failed"
-            elif isinstance(cause, ResultCapacityExceeded):
+            if isinstance(cause, ResultCapacityExceeded):
                 code = "result_size_limit"
-            elif isinstance(cause, InputRejected):
+            else:
                 code = "invalid_input"
                 document.update(preparation_failure=str(cause), diagnostic=cause.diagnostic)
-            else:
-                generation = _generation_failure(cause)
-                code = generation["kind"]
-                document["generation_failure"] = generation
             evidence = _evidence(document)
         except Exception as evidence_failure:
             # Retain the original typed failure too: a capacity/encoding error
             # must not erase its complete private observations or partial batch.
             raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
-        message = _interpretation_failure_message(cause) if type(cause) is InterpretationFailed else str(cause)
-        return AnalysisFailure(code, message, evidence)
+        return AnalysisFailure(code, str(cause), evidence)
 
     async def execute(self, handle, *, report_condition):
         """Run the prepared batch with configured retry and preserve operator failures."""

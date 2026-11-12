@@ -25,7 +25,8 @@ from tests.integration.nmrnet.retirement_ports import retire_worker_channel
 from tests.integration.nmrnet.session_ports import CoordinateJsonPreparation
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
-from nmrnet_provider.interpreter import ModelReportedInputProblem, _InputProblemReport
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit
+from nmrnet_provider.interpreter import InspectionUnavailable, ModelReportedInputProblem, _InputProblemReport
 from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
@@ -35,7 +36,7 @@ from provider_core.attempt_record import (
     acknowledge_start,
 )
 from provider_core.controller import AttemptController, LiveStartPolicy
-from provider_core.interpreter import InterpretationFailed, ModelReportedInterpretationProblem
+from provider_core.interpreter import InterpretationFailed, InterpretationInputRejected, ModelReportedInterpretationProblem
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
 from provider_core.producer_checkpoint import DeliveryAcceptedCheckpoint
@@ -369,6 +370,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             acknowledged, verify_job_input(response(raw), feed=facts(raw)), report_condition=unexpected_condition
         )
         self.assertIsInstance(outcome, AnalysisFailure)
+        self.assertEqual("invalid_input", outcome.code)
         self.assertEqual([], self.worker.events)
         with self.assertRaises(ValueError):
             await self.session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
@@ -392,7 +394,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], self.worker.events)
         await session.retire()
 
-    async def test_interpretation_failure_projects_only_an_unambiguous_final_visit_report(self):
+    async def test_interpretation_failure_preserves_original_visits_reports_and_corrections(self):
         report = ModelReportedInputProblem(_InputProblemReport("other_input_problem", "PRIVATE MOLECULE"))
         handoff = ModelReportedInterpretationProblem(model_summary="PRIVATE SUMMARY")
         handoff.__cause__ = report
@@ -405,38 +407,75 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         forged.__cause__ = RuntimeError("FORGED CAUSE")
         operational = RuntimeError("PRIVATE OPERATIONAL FAILURE")
         cases = (
-            (((1, operational), (2, handoff)), str(report)),
-            (((1, handoff), (2, later_handoff), (2, operational)), str(later_report)),
-            (((1, later_handoff), (2, handoff)), str(report)),
-            (((1, handoff), (2, operational)), None),
-            (((1, handoff), (1, another)), None),
-            (((1, forged),), None),
-            (((1, report),), None),
-            ((), None),
+            ((1, operational), (2, handoff)),
+            ((1, handoff), (2, later_handoff), (2, operational)),
+            ((1, later_handoff), (2, handoff)),
+            ((1, handoff), (2, operational)),
+            ((1, handoff), (1, another)),
+            ((1, forged),),
+            ((1, report),),
+            (),
         )
-        for failures, expected in cases:
+        correction = RuntimeError("PRIVATE CORRECTION FAILURE")
+        corrections = ((1, correction),)
+        for failures in cases:
             with self.subTest(failures=failures):
-                failure = InterpretationFailed(failures, ())
+                failure = InterpretationFailed(failures, corrections)
                 preparation = AsyncMock()
-                preparation.interpreter_diagnostics = b'{"private": "PRIVATE EVIDENCE"}'
+                diagnostics = b'{"private": "PRIVATE EVIDENCE"}'
+                preparation.interpreter_diagnostics = diagnostics
                 preparation.prepare.side_effect = failure
                 session = self.make_session(preparation)
-                outcome = await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
-                self.assertEqual("interpretation_failed", outcome.code)
-                self.assertEqual(outcome.message, expected if expected is not None else str(failure))
-                for private in (
-                    "PRIVATE MOLECULE",
-                    "PRIVATE UNIT",
-                    "PRIVATE SUMMARY",
-                    "PRIVATE LATER SUMMARY",
-                    "PRIVATE OPERATIONAL",
-                    "FORGED",
-                ):
-                    self.assertNotIn(private, outcome.message)
-                self.assertEqual({"private": "PRIVATE EVIDENCE"}, json.loads(outcome.evidence.content)["interpreter_diagnostics"])
-                self.assertEqual(failure.failures, failures)
+                with self.assertRaises(InterpretationFailed) as caught:
+                    await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                self.assertIs(caught.exception, failure)
+                self.assertIs(failure.failures, failures)
+                self.assertIs(failure.correction_failures, corrections)
                 self.assertIs(handoff.__cause__, report)
+                self.assertIs(later_handoff.__cause__, later_report)
+                self.assertIs(preparation.interpreter_diagnostics, diagnostics)
+                self.assertEqual([], self.worker.events)
+                self.allocate_prediction.assert_not_awaited()
+                with self.assertRaises(ValueError):
+                    await session.execute(object(), report_condition=unexpected_condition)
                 await session.retire()
+                preparation.retire.assert_awaited_once_with()
+                self.assertFalse(self.host.confirmed)
+
+    async def test_operational_input_failures_propagate_original_objects_and_cause(self):
+        cause = TimeoutError("PRIVATE SOURCE FAILURE")
+        inspection = InspectionUnavailable()
+        inspection.__cause__ = cause
+        failures = (
+            InterpretationInputRejected("PRIVATE CONTEXT LIMIT"),
+            inspection,
+            InputWorkerCallLimit(maximum_calls=2, calls_started=2),
+            InputSelectionTimeLimit(5, cause=cause),
+        )
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                preparation = AsyncMock()
+                diagnostics = b'{"private": "PRIVATE EVIDENCE"}'
+                preparation.interpreter_diagnostics = diagnostics
+                preparation.prepare.side_effect = failure
+                session = self.make_session(preparation)
+                with self.assertRaises(type(failure)) as caught:
+                    await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                self.assertIs(caught.exception, failure)
+                self.assertIs(preparation.interpreter_diagnostics, diagnostics)
+                self.assertEqual([], self.worker.events)
+                self.allocate_prediction.assert_not_awaited()
+                with self.assertRaises(ValueError):
+                    await session.execute(object(), report_condition=unexpected_condition)
+                with self.assertRaises(ValueError):
+                    await session.prepare(self.acknowledged, self.instructions, report_condition=unexpected_condition)
+                await session.retire()
+                preparation.retire.assert_awaited_once_with()
+                self.assertFalse(self.host.confirmed)
+        self.assertIs(inspection.__cause__, cause)
+        self.assertIs(failures[3].cause, cause)
+        self.assertEqual((2, 2), (failures[2].maximum_calls, failures[2].calls_started))
+        self.assertEqual(5, failures[3].seconds)
 
     async def test_oversized_reader_diagnostic_is_kept_whole_when_evidence_admission_fails(self):
         rejection = InputRejected("Cannot read selected record: missing atoms.", diagnostic="private" * 40000)
