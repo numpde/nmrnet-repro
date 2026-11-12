@@ -22,7 +22,13 @@ from tests.integration.nmrnet.process_ports import ProcessPeers
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
-from nmrnet_provider.process import _runtime_facts, _write_api_notice, route_provider_config, run_provider
+from nmrnet_provider.process import (
+    _failure_report,
+    _runtime_facts,
+    _write_api_notice,
+    route_provider_config,
+    run_provider,
+)
 from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ServiceFailed
 from nmrnet_provider.worker_client import PredictionExecutionFailed
@@ -187,6 +193,76 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual("capacity_notice_unconfirmed", notices[0]["event"])
                     if fail_first:
                         self.assertEqual("provider_shutdown_observation", notices[1]["event"])
+
+    async def test_shutdown_notice_projection_failure_preserves_retirement_and_original_causes(self):
+        """Replay rendering cannot veto cleanup or replace the first retained notice failure."""
+        for fail_operation, expected_status in ((False, 0), (True, 1)):
+            with self.subTest(fail_operation=fail_operation):
+                async with ProcessPeers() as fixture:
+                    outage = ApiFailure("Capacity notice", "maintenance")
+                    sink_failure = BrokenPipeError(errno.EPIPE, "PRIVATE_SINK_FAILURE")
+                    projection_failure = ValueError("PRIVATE_PROJECTION_FAILURE")
+                    operation_failure = RuntimeError("Authored service failure")
+                    projection_attempted = False
+
+                    class NoticeService:
+                        work_task = unconfirmed_hello = None
+                        capacity_notice_failure = outage
+                        shutdown_ready = True
+
+                        def __init__(self, **_arguments):
+                            pass
+
+                        async def run(self, _stop):
+                            if fail_operation:
+                                raise operation_failure
+
+                        async def settle(self):
+                            pass
+
+                    def project_failure(error, *, secrets):
+                        nonlocal projection_attempted
+                        if error is sink_failure:
+                            projection_attempted = True
+                            raise projection_failure
+                        return failure_evidence(error, secrets=secrets)
+
+                    reports = []
+                    with (
+                        patch("nmrnet_provider.process.ProviderService", NoticeService),
+                        patch("nmrnet_provider.process._write_api_notice", side_effect=sink_failure),
+                        patch("nmrnet_provider.process.failure_evidence", side_effect=project_failure),
+                        patch("nmrnet_provider.process._failure_report", wraps=_failure_report) as report,
+                        patch("nmrnet_provider.process._write_stderr", side_effect=reports.append),
+                    ):
+                        status = await run_provider(
+                            fixture.config,
+                            execution_identity={},
+                            selected_artifacts={},
+                            stop=asyncio.Event(),
+                            diagnostics=fixture.diagnostics,
+                        )
+                    self.assertEqual(expected_status, status)
+                    self.assertTrue(projection_attempted)
+                    fixture.assert_lifetime_released()
+                    self.assertEqual("stopping", json.loads((fixture.diagnostics / "status.json").read_bytes())["phase"])
+                    if fail_operation:
+                        report.assert_called_once()
+                        causes = [cause for _operation, cause in report.call_args.args[0]]
+                        self.assertEqual(len(causes), 3)
+                        self.assertIs(causes[0], operation_failure)
+                        self.assertIs(causes[1], outage)
+                        self.assertIs(causes[2], sink_failure)
+                        self.assertIs(report.call_args.kwargs["held"], False)
+                        rendered = json.loads(reports[0])
+                        self.assertIn("ApiFailure", json.dumps(rendered))
+                        self.assertIn("BrokenPipeError", json.dumps(rendered))
+                        self.assertNotIn("PRIVATE", json.dumps(rendered))
+                    else:
+                        report.assert_not_called()
+                        self.assertEqual([], reports)
+                    self.assertFalse((fixture.diagnostics / "result.json").exists())
+                    self.assertFalse((fixture.diagnostics / "failure.json").exists())
 
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
         for recovery_kind in ("observation", "start", "delivery", "condition", "native"):

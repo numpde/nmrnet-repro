@@ -296,7 +296,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         process_status.refresh("ready")
         status_phase = "ready"
 
-    def report_operator_notice(failure, facts):
+    def report_operator_notice(failure, facts, *, output_failure=None):
         """Emit protected lifecycle evidence without making a log sink stop the daemon.
 
         Keep the first failed output and its original outage for final reporting;
@@ -304,6 +304,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         """
         nonlocal notice_failure
         try:
+            if output_failure is not None:
+                facts = {**facts, "output": failure_evidence(output_failure, secrets=secrets)}
             facts = {name: redact(value) if isinstance(value, str) else value for name, value in facts.items()}
             content = {**facts, "failure": failure_evidence(failure, secrets=secrets)}
             _write_api_notice((json.dumps(content, separators=(",", ":")) + "\n").encode())
@@ -503,20 +505,15 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 ("first operator notice cause", outage),
                 ("operator notice output", output_failure),
             )
-            # suppress() can split exception groups; this handler catches only the whole exception.
-            try:  # noqa: SIM105
-                report_operator_notice(
-                    outage,
-                    {
-                        "event": "provider_shutdown_observation",
-                        "operation": "Notice delivery was not confirmed",
-                        "notice": facts,
-                        "output": failure_evidence(output_failure, secrets=secrets),
-                    },
-                )
-            except Exception:
-                # Diagnostic rendering cannot veto completed work or cleanup.
-                pass
+            report_operator_notice(
+                outage,
+                {
+                    "event": "provider_shutdown_observation",
+                    "operation": "Notice delivery was not confirmed",
+                    "notice": facts,
+                },
+                output_failure=output_failure,
+            )
         if failures:
             _failure_report(
                 (*failures, *observations),
