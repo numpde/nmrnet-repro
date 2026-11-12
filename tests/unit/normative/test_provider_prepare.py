@@ -4,12 +4,27 @@ from tools.container_guard import require_container
 
 require_container()
 
+import os
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from tests.unit.provider_prepare_fakes import PreparationFixture
 
 
 class ProviderPreparationTests(unittest.TestCase):
+    def test_fixture_owns_python_import_path(self):
+        with patch.dict(os.environ, {"PYTHONPATH": "/untrusted/ambient"}):
+            fixture = PreparationFixture()
+        self.addCleanup(fixture.close)
+        self.assertEqual(str(Path.cwd()), fixture.environment["PYTHONPATH"])
+        result = fixture.run("../cache")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual(
+            ["context inspect --format {{.Endpoints.docker.Host}} fixture-local"],
+            (fixture.root / "context-calls").read_text().splitlines(),
+        )
+
     def test_literal_choices_reach_all_owners_and_existing_extractions_are_kept(self):
         fixture = PreparationFixture()
         self.addCleanup(fixture.close)

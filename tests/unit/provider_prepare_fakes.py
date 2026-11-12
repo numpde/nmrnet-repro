@@ -33,7 +33,7 @@ class PreparationFixture:
         (binary / "docker").symlink_to(Path(__file__).resolve().parents[1] / "test_docker_context_selection.py")
         self.environment.update(
             PATH=str(binary) + ":" + os.environ["PATH"],
-            PYTHONPATH=str(Path.cwd()) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+            PYTHONPATH=str(Path.cwd()),
             FAKE_LOCAL_ENDPOINT="unix:///var/run/docker.sock",
         )
         self.environment["FAKE_CONTEXT_CALLS"] = str(self.root / "context-calls")
