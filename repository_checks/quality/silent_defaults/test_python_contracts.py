@@ -1087,7 +1087,9 @@ class PythonContractApplicabilityTests(unittest.TestCase):
 
         for exception in ("Exception", "OSError", "errors.TimeoutError", "TimeoutAlias", "(TimeoutError, OSError)"):
             with self.subTest(exception=exception):
-                raw, applicable = self.exercise_property(source.replace("except TimeoutError:", f"except {exception}:"), accepted=True)
+                raw, applicable = self.exercise_property(
+                    source.replace("except TimeoutError:", f"except {exception}:"), accepted=True
+                )
                 self.assertEqual(1, len(raw))
                 self.assertEqual([], applicable)
         for exception in ("", "select_errors()", "errors[0]", "factory().Error"):
@@ -1109,7 +1111,9 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 raw, applicable = self.exercise_property(source.replace("run()", protected), accepted=False)
                 self.assertTrue(raw)
                 self.assertTrue(all(finding in applicable for finding in raw))
-                raw, applicable = self.exercise_property(source.replace("return False", f"{protected}\n        return False"), accepted=False)
+                raw, applicable = self.exercise_property(
+                    source.replace("return False", f"{protected}\n        return False"), accepted=False
+                )
                 self.assertTrue(all(finding in applicable for finding in raw))
         for replacement in (
             "# silent-defaults: allow-exception-outcome\n",
@@ -1129,7 +1133,13 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             "return failed_input(cause)",
             "if type(cause) is not Failed:\n            raise\n        return await retry(cause)",
         ):
-            source = "async def run():\n    try:\n        await work()\n    " + tag + "    except Failed as cause:\n        " + body + "\n"
+            source = (
+                "async def run():\n    try:\n        await work()\n    "
+                + tag
+                + "    except Failed as cause:\n        "
+                + body
+                + "\n"
+            )
             with self.subTest(body=body):
                 raw, applicable = self.exercise_property(source, accepted=True)
                 self.assertEqual(1, len(raw))
@@ -1150,13 +1160,17 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             root = Path(directory)
             baseline = root / "nmrnet_provider/service.py"
             baseline.parent.mkdir()
-            baseline.write_text("\n".join(line for line in path.read_text().splitlines()
-                                          if "Timer expiry completes the wait" not in line) + "\n")
+            baseline.write_text(
+                "\n".join(line for line in path.read_text().splitlines() if "Timer expiry completes the wait" not in line) + "\n"
+            )
             with patch.object(policy, "ROOT", root):
                 prior_raw = policy.python_default_findings(baseline)
                 prior_applicable = policy.python_operator_default_findings(baseline)
+
         # Compare source snippets: adding a comment shifts subsequent line numbers.
-        snippets = lambda findings: [finding.split(": ", 1)[1] for finding in findings]
+        def snippets(findings):
+            return [finding.split(": ", 1)[1] for finding in findings]
+
         self.assertEqual(snippets(prior_raw), snippets(raw))
         timeout = [finding for finding in snippets(prior_applicable) if "except TimeoutError: return False" in finding]
         self.assertEqual(1, len(timeout))

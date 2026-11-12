@@ -526,7 +526,12 @@ def python_operator_default_findings(path: Path) -> list[str]:
     lambda_bodies = [node.body for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT or not token.string.startswith(
-            ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default", "# silent-defaults: allow-lambda-body", "# silent-defaults: allow-exception-outcome")
+            (
+                "# silent-defaults: allow-contract",
+                "# silent-defaults: allow-pop-default",
+                "# silent-defaults: allow-lambda-body",
+                "# silent-defaults: allow-exception-outcome",
+            )
         ):
             continue
         prefix, separator, reason = token.string.partition(" -- ")
@@ -663,7 +668,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
             accepted.update(node for node, _ in selected)
         else:
             if prefix == "# silent-defaults: allow-exception-outcome":
-                requirement = "an explanation and one immediate typed handler ending in a returned outcome without operator inputs"
+                requirement = (
+                    "an explanation and one immediate typed handler ending in a returned outcome without operator inputs"
+                )
             elif prefix == "# silent-defaults: allow-lambda-body":
                 requirement = "an explanation and one immediate generic lambda result at the same column, without nested lambdas or operator inputs"
             else:
