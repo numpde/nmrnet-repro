@@ -109,6 +109,36 @@ class DisposableSharedFixtureTests(unittest.TestCase):
             check=False,
         )
 
+    def test_qualification_requires_explicit_shared_inputs(self):
+        variables = {"NMRNET_PROVIDER_TOOLS_INPUT", "NMRNET_SHARED_RUNTIME_IMAGE_INPUT"}
+        base = {name: value for name, value in self.env.items() if name not in variables}
+        script = "source /workspace/tools/compose_qualification.sh; qualification_shared_tools; "
+        script += 'printf "%s\\n%s\\n" "$qualification_provider_tools" "$qualification_shared_image"'
+        command = ["bash", "-eu", "-c", script]
+        valid = {"NMRNET_PROVIDER_TOOLS_INPUT": str(self.root), "NMRNET_SHARED_RUNTIME_IMAGE_INPUT": self.image}
+        for supplied in (
+            {},
+            {"NMRNET_PROVIDER_TOOLS_INPUT": str(self.root)},
+            {"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": self.image},
+            valid | {"NMRNET_PROVIDER_TOOLS_INPUT": ""},
+            valid | {"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": ""},
+            valid | {"NMRNET_SHARED_RUNTIME_IMAGE_INPUT": "mutable:tag"},
+        ):
+            with self.subTest(supplied=supplied):
+                result = subprocess.run(command, env=base | supplied, text=True, capture_output=True, check=False)
+                self.assertEqual(2, result.returncode, msg=result.stderr)
+                self.assertIn("Qualification requires explicit PROVIDER_TOOLS", result.stderr)
+        result = subprocess.run(command, env=base | valid, text=True, capture_output=True, check=False)
+        self.assertEqual(2, result.returncode)
+        (self.root / "Makefile").touch()
+        alias = self.scratch / "shared-link"
+        alias.symlink_to(self.root, target_is_directory=True)
+        result = subprocess.run(
+            command, env=base | valid | {"NMRNET_PROVIDER_TOOLS_INPUT": str(alias)}, text=True, capture_output=True, check=False
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual([str(self.root), self.image], result.stdout.splitlines())
+
     def start(self):
         for name in ("proxy", "init", self.project + "-proxy-socket", self.project + "-outbox-socket", self.project + "-queue"):
             (self.root / name).touch()

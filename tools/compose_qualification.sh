@@ -3,12 +3,12 @@
 # The local signed peers own fixture data; no host delivery singleton is changed.
 
 qualification_shared_tools() {
-    qualification_provider_tools=${NMRNET_PROVIDER_TOOLS_INPUT-}
-    qualification_shared_image=${NMRNET_SHARED_RUNTIME_IMAGE_INPUT-}
-    [[ -n $qualification_provider_tools && $qualification_shared_image =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    [[ -v NMRNET_PROVIDER_TOOLS_INPUT && -n $NMRNET_PROVIDER_TOOLS_INPUT && -v NMRNET_SHARED_RUNTIME_IMAGE_INPUT && $NMRNET_SHARED_RUNTIME_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] || {
         printf '%s\n' 'Qualification requires explicit PROVIDER_TOOLS=<shared checkout> and SHARED_RUNTIME_IMAGE=<immutable local image ID>.' >&2
         return 2
     }
+    qualification_provider_tools=$NMRNET_PROVIDER_TOOLS_INPUT
+    qualification_shared_image=$NMRNET_SHARED_RUNTIME_IMAGE_INPUT
     qualification_provider_tools=$(realpath -e -- "$qualification_provider_tools") || return $?
     [[ -f $qualification_provider_tools/Makefile ]] || return 2
 }
