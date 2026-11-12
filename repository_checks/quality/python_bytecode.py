@@ -87,14 +87,15 @@ def _python(value):
 def _inline_imports(source):
     try:
         tree = ast.parse(source)
+    # silent-defaults: allow-exception-outcome -- The target interpreter may accept syntax this checker cannot parse; require bytecode suppression rather than assume no first-party imports.
     except SyntaxError:
-        return False
+        return True
     modules = {name.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for name in node.names}
     modules.update(node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module)
     return bool(modules - sys.stdlib_module_names - _COMPILERS)
 
 
-def _needs_flag(arguments, env_enabled=False):
+def _needs_flag(arguments, env_enabled):
     disabled = isolated = False
     index = 0
     while index < len(arguments):
@@ -165,6 +166,7 @@ def shell_findings(path, source):
             if path.as_posix() == "tools/compose_deployment.sh" and tokens[0] == "helper":
                 continue  # This helper supplies -I -B in its own Docker command.
             entrypoint = index > 0 and tokens[index - 1] == "--entrypoint"
+            # silent-defaults: allow-contract -- Docker entrypoints skip the image token before the Python arguments.
             arguments = tokens[index + (2 if entrypoint else 1) :]
             if entrypoint and index + 1 < len(tokens) and tokens[index + 1].startswith("--"):
                 continue  # Docker option/environment ordering is not parsed.
@@ -181,6 +183,7 @@ def shell_findings(path, source):
             ):
                 continue  # E.g. helper(image, python3, uid, gid), not a launch.
             prefix = tokens[:index]
+            # silent-defaults: allow-contract -- A Docker entrypoint cannot inherit the host shell's bytecode setting.
             enabled = False if entrypoint else global_env
             for position, value in enumerate(prefix):
                 if value in {"-i", "--ignore-environment", "--unset=" + _ENV} or (
@@ -231,7 +234,9 @@ def python_findings(path, source):
         if not isinstance(node, ast.Call) or not node.args:
             continue
         function = node.func
-        name = function.attr if isinstance(function, ast.Attribute) else function.id if isinstance(function, ast.Name) else ""
+        if not isinstance(function, ast.Name | ast.Attribute):
+            continue
+        name = function.attr if isinstance(function, ast.Attribute) else function.id
         if name not in {"run", "Popen", "call", "check_call", "check_output"}:
             continue
         argv = node.args[0]

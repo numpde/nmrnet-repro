@@ -43,6 +43,11 @@ class PythonBytecodePostureTests(unittest.TestCase):
             1, len(findings(Path("launcher.sh"), "env PYTHONDONTWRITEBYTECODE=1 -u PYTHONDONTWRITEBYTECODE python3 helper.py"))
         )
 
+    def test_inline_syntax_unknown_to_checker_still_requires_bytecode_suppression(self):
+        command = "python3.13 -c 'import first_party; type Alias[T = int] = list[T]'"
+        self.assertEqual(1, len(findings(Path("launcher.sh"), command)))
+        self.assertEqual([], findings(Path("launcher.sh"), command.replace(" -c ", " -B -c ")))
+
     def test_entrypoint_declarations_shared_arrays_and_compilers_are_explicit_boundaries(self):
         for source in (
             "options=(--entrypoint python3)",
