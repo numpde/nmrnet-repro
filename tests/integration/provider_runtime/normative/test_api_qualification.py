@@ -310,6 +310,12 @@ api_witness_stop_deployment 0
             ("scripted-missing-image", 2),
             ("scripted-empty-image", 2),
             ("scripted-invalid-image", 2),
+            ("receipt-only", 2),
+            ("identity-only", 2),
+            ("receipt-empty-identity", 2),
+            ("identity-empty-receipt", 2),
+            ("empty-job-pair", 0),
+            ("original-job-pair", 0),
         ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -393,6 +399,24 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     environment["NMRNET_API_CLIENT_IMAGE_INPUT"] = ""
                 elif scenario in ("invalid-image", "scripted-invalid-image"):
                     environment["NMRNET_API_CLIENT_IMAGE_INPUT"] = "mutable:latest"
+                elif scenario in ("receipt-only", "receipt-empty-identity"):
+                    environment["NMRNET_JOB_RECEIPT_INPUT"] = str(root / "job.json")
+                    if scenario == "receipt-empty-identity":
+                        environment["NMRNET_JOB_IDENTITY_INPUT"] = ""
+                elif scenario in ("identity-only", "identity-empty-receipt"):
+                    environment["NMRNET_JOB_IDENTITY_INPUT"] = str(root / "identity.json")
+                    if scenario == "identity-empty-receipt":
+                        environment["NMRNET_JOB_RECEIPT_INPUT"] = ""
+                elif scenario == "empty-job-pair":
+                    environment["NMRNET_JOB_RECEIPT_INPUT"] = ""
+                    environment["NMRNET_JOB_IDENTITY_INPUT"] = ""
+                elif scenario == "original-job-pair":
+                    receipt = root / "job.json"
+                    identity = root / "identity.json"
+                    receipt.write_text('{"job_ref":"job:original"}\n')
+                    identity.write_text('{"fixture":"original identity"}\n')
+                    environment["NMRNET_JOB_RECEIPT_INPUT"] = str(receipt)
+                    environment["NMRNET_JOB_IDENTITY_INPUT"] = str(identity)
                 result = subprocess.run(
                     ["bash", str(script), mode],
                     env=environment,
@@ -422,6 +446,36 @@ printf '%s\\n' '{"fixture":"admitted original identity"}'
                     self.assertFalse((records / "deployment-invocations").exists())
                     self.assertFalse((records / "query").exists())
                     self.assertFalse((records / "creates").exists())
+                    continue
+                if scenario in ("receipt-only", "identity-only", "receipt-empty-identity", "identity-empty-receipt"):
+                    self.assertEqual(expected_status, result.returncode, msg=result.stderr)
+                    missing = {
+                        "receipt-only": "JOB_IDENTITY",
+                        "receipt-empty-identity": "JOB_IDENTITY",
+                        "identity-only": "JOB_RECEIPT",
+                        "identity-empty-receipt": "JOB_RECEIPT",
+                    }[scenario]
+                    self.assertIn("Missing explicit command-line selector: " + missing, result.stderr)
+                    self.assertFalse(output.exists())
+                    self.assertFalse((records / "deployment-invocations").exists())
+                    self.assertFalse((records / "creates").exists())
+                    continue
+                if scenario == "original-job-pair":
+                    self.assertEqual(expected_status, result.returncode, msg=result.stderr)
+                    self.assertFalse((records / "deployment-invocations").exists())
+                    self.assertFalse((records / "query").exists())
+                    self.assertEqual(identity.read_bytes(), (output / "source/identity.json").read_bytes())
+                    grants = (records / "client.grants").read_bytes().split(b"\0")
+                    self.assertIn(f"type=bind,src={receipt},dst=/input/job-receipt.json,readonly".encode(), grants)
+                    arguments = (records / "client.argv").read_bytes().split(b"\0")
+                    receipt_index = arguments.index(b"--job-receipt")
+                    self.assertEqual(b"/input/job-receipt.json", arguments[receipt_index + 1])
+                    self.assertEqual(
+                        (records / "creates").read_text().splitlines(),
+                        ["grants|none|sha256:" + "a" * 64 + "|true", "client|none|sha256:" + "a" * 64 + "|true"],
+                    )
+                    self.assertEqual("grants\nclient\n", (records / "removals").read_text())
+                    self.assertIn("Original Job readback and client retirement passed", result.stdout)
                     continue
                 if scenario == "existing-output":
                     self.assertEqual(expected_status, result.returncode, msg=result.stderr)

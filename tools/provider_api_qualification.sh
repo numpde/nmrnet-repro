@@ -115,7 +115,7 @@ api_witness_finish() {
     if [[ $status == 0 ]]; then
         if [[ $api_witness_mode == real-ambiguity ]]; then
             printf 'Selected-model interpreter probe and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
-        elif [[ $api_witness_mode == existing-pasted && -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+        elif [[ $api_witness_mode == existing-pasted && -v NMRNET_JOB_RECEIPT_INPUT && -n $NMRNET_JOB_RECEIPT_INPUT ]]; then
             printf 'Original Job readback and client retirement passed; no new prediction. Private evidence: %s\n' "$provider_host_root"
         else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
     fi
@@ -235,7 +235,7 @@ api_witness_admission_finish() {
 api_witness_existing_pasted() {
     local selector alias value path identity revision
     local -a required=(PROJECT_REF USER_ID CLIENT_CREDENTIAL_DIRECTORY CA_FILE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT DEPLOYMENT SHARED_RUNTIME_IMAGE)
-    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} || -n ${NMRNET_JOB_IDENTITY_INPUT-} ]]; then
+    if [[ ( -v NMRNET_JOB_RECEIPT_INPUT && -n $NMRNET_JOB_RECEIPT_INPUT ) || ( -v NMRNET_JOB_IDENTITY_INPUT && -n $NMRNET_JOB_IDENTITY_INPUT ) ]]; then
         required+=(JOB_RECEIPT JOB_IDENTITY)
     fi
     for selector in "${required[@]}"; do
@@ -262,7 +262,7 @@ api_witness_existing_pasted() {
     done
     [[ $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { provider_host_refuse 'Supply an immutable API client image ID.'; return 2; }
-    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+    if [[ -v NMRNET_JOB_RECEIPT_INPUT && -n $NMRNET_JOB_RECEIPT_INPUT ]]; then
         # Historical readback uses the original caller capture, even after the
         # producer stops or its image changes. Received results cannot self-pin.
         for path in "$NMRNET_JOB_RECEIPT_INPUT" "$NMRNET_JOB_IDENTITY_INPUT"; do
@@ -278,7 +278,7 @@ api_witness_existing_pasted() {
     mkdir -p -m 700 -- "$(dirname -- "$provider_host_root")" || return $?
     mkdir -m 700 -- "$provider_host_root" || return $?
     mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/source" "$provider_host_root/client"
-    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+    if [[ -v NMRNET_JOB_RECEIPT_INPUT && -n $NMRNET_JOB_RECEIPT_INPUT ]]; then
         cp -- "$NMRNET_JOB_IDENTITY_INPUT" "$provider_host_root/source/identity.json"
         chmod 600 "$provider_host_root/source/identity.json"
     else
@@ -321,7 +321,7 @@ api_witness_existing_pasted() {
     local -a provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py
         --proxy-socket "$shared_proxy_socket" --project-ref "$NMRNET_PROJECT_REF_INPUT"
         --user-id "$NMRNET_USER_ID_INPUT" --readback-seconds 900 --process-seconds 960 --case-kind pasted)
-    if [[ -n ${NMRNET_JOB_RECEIPT_INPUT-} ]]; then
+    if [[ -v NMRNET_JOB_RECEIPT_INPUT && -n $NMRNET_JOB_RECEIPT_INPUT ]]; then
         provider_host_path "$NMRNET_JOB_RECEIPT_INPUT" || return $?
         [[ -f $NMRNET_JOB_RECEIPT_INPUT && ! -L $NMRNET_JOB_RECEIPT_INPUT ]] || return 2
         provider_host_grants+=(--mount "type=bind,src=$NMRNET_JOB_RECEIPT_INPUT,dst=/input/job-receipt.json,readonly")
