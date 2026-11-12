@@ -4,7 +4,7 @@ from pathlib import Path
 import runpy
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path.cwd()
 
 
 class AcquisitionSourceTests(unittest.TestCase):
