@@ -6,7 +6,7 @@ repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 [[ $# == 2 ]] || exit 2
 role=$1 action=$2
 [[ $role == provider && $action =~ ^(install|update|up|down|status|logs|client-inputs|retire-generations|retire-api-route)$ ]] || exit 2
-[[ -z ${NMRNET_RETAIN_PRIOR_INPUT-} || ${NMRNET_RETAIN_PRIOR_INPUT} == 1 ]] || {
+[[ ! -v NMRNET_RETAIN_PRIOR_INPUT || -z $NMRNET_RETAIN_PRIOR_INPUT || $NMRNET_RETAIN_PRIOR_INPUT == 1 ]] || {
     printf '%s\n' 'Provider deployment accepts RETAIN_PRIOR=1 to preserve previous images and configuration generations.' >&2; exit 2;
 }
 caller_uid=$(id -u) caller_gid=$(id -g)
@@ -33,8 +33,8 @@ runtime_directory() {
     [[ -d $1 && ( $ownership == "$caller_uid:$caller_gid:700" || $ownership == "$service_host_uid:$service_host_gid:700" ) ]] \
         || { refuse 'runtime leaves must be private directories owned by the caller or selected Engine-mapped service user.'; return 2; }
 }
-deployment_name=${NMRNET_DEPLOYMENT_INPUT-}
-[[ $deployment_name =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || { refuse 'supply an explicit DEPLOYMENT name.'; exit 2; }
+[[ -v NMRNET_DEPLOYMENT_INPUT && $NMRNET_DEPLOYMENT_INPUT =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$ ]] || { refuse 'supply an explicit DEPLOYMENT name.'; exit 2; }
+deployment_name=$NMRNET_DEPLOYMENT_INPUT
 root=$repository_root/secrets/deployments/$deployment_name
 digest=$(printf '%s\0%s' "$repository_root" "$deployment_name" | sha256sum)
 project=nmrnet-${digest:0:20}
@@ -536,7 +536,7 @@ if [[ $action == install || $action == update ]]; then
     ln -s "bundles/${bundle##*/}" "$root/.current-${helper_uuid//-/}"
     mv -T "$root/.current-${helper_uuid//-/}" "$root/current"
     printf 'Installed %s configuration.\n' "$role"
-    if [[ ${NMRNET_RETAIN_PRIOR_INPUT-} == 1 ]]; then
+    if [[ -v NMRNET_RETAIN_PRIOR_INPUT && $NMRNET_RETAIN_PRIOR_INPUT == 1 ]]; then
         printf '%s\n' 'Retained previous configuration generations.'
     else
         retire_generations
@@ -622,7 +622,7 @@ case $action in
         prediction_image=$(run 20 inspect --type container --format '{{.Image}}' "$prediction_id")
         [[ $prediction_image =~ ^sha256:[0-9a-f]{64}$ ]] || exit 2
         image_record provider; controller_image=$selected_image
-        [[ -n ${NMRNET_OUTPUT_INPUT-} ]] || exit 2
+        [[ -v NMRNET_OUTPUT_INPUT && -n $NMRNET_OUTPUT_INPUT ]] || exit 2
         path "$NMRNET_OUTPUT_INPUT"
         helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle,readonly"
             --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
