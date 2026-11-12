@@ -19,7 +19,9 @@ class UploadedMemberResultTests(unittest.TestCase):
         geometries = prepare_xyz(raw, source_unit="angstrom", selection=(2, 1))
         upload = UploadSource("job:fixture", "upload:sha256:" + "a" * 64, 300, "b" * 64)
         source = UploadMemberSource(upload, "molecules/two.xyz", len(raw), hashlib.sha256(raw).hexdigest())
-        prepared = PreparedJobInput(geometries, "xyz", source, output=OutputSettings(shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS))
+        prepared = PreparedJobInput(
+            geometries, "xyz", source, output=OutputSettings(shift_significant_digits=MAX_SHIFT_SIGNIFICANT_DIGITS)
+        )
         facts = scientific_facts()
         plan = ResultPlan(prepared, **facts)
         outcome = plan.finish(scientific_outcomes(SimpleNamespace(conformers=geometries), facts))

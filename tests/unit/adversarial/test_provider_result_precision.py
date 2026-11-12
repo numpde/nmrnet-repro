@@ -9,17 +9,20 @@ from dataclasses import replace
 
 from tests.unit.result_fakes import precision_documents
 
-from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS
-
+from nmrnet_provider.prepared_input import MAX_SHIFT_SIGNIFICANT_DIGITS, MIN_SHIFT_SIGNIFICANT_DIGITS
 from nmrnet_provider.result import ResultPlan, ResultRejected
 
 
 class ResultPrecisionRejectionTests(unittest.TestCase):
     def test_precision_requires_an_integer_from_declared_range(self):
         prepared, facts, _outcomes = precision_documents((1.0,) * 5)
-        for (digits, error) in (
-            (MIN_SHIFT_SIGNIFICANT_DIGITS - 1, ValueError), (MAX_SHIFT_SIGNIFICANT_DIGITS + 1, ValueError),
-            (True, TypeError), (4.0, TypeError), ("4", TypeError), (None, TypeError),
+        for digits, error in (
+            (MIN_SHIFT_SIGNIFICANT_DIGITS - 1, ValueError),
+            (MAX_SHIFT_SIGNIFICANT_DIGITS + 1, ValueError),
+            (True, TypeError),
+            (4.0, TypeError),
+            ("4", TypeError),
+            (None, TypeError),
         ):
             with self.subTest(digits=digits), self.assertRaises(error):
                 ResultPlan(replace(prepared, output=replace(prepared.output, shift_significant_digits=digits)), **facts)

@@ -11,8 +11,11 @@ from dataclasses import replace
 
 from tests.unit.result_fakes import precision_documents, supplied_documents
 
-from nmrnet_provider.prepared_input import MIN_SHIFT_SIGNIFICANT_DIGITS, MAX_SHIFT_SIGNIFICANT_DIGITS, DEFAULT_SHIFT_SIGNIFICANT_DIGITS
-
+from nmrnet_provider.prepared_input import (
+    DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+    MAX_SHIFT_SIGNIFICANT_DIGITS,
+    MIN_SHIFT_SIGNIFICANT_DIGITS,
+)
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultCapacityExceeded, ResultPlan
 from provider_core.result_verbosity import ResultVerbosity
 
