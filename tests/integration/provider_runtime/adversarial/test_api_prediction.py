@@ -525,7 +525,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 elif fault == "missing-coverage":
                     del geometry["coverage"]
                 else:
-                    actual["interpretation"]["turns_started"] = 1
+                    actual["interpretation"]["visits"][0]["turns_started"] = 1
                 with self.assertRaises(AssertionError):
                     compare_upload_scientific_documents(
                         actual,
@@ -597,7 +597,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 elif fault == "coverage":
                     geometry["coverage"]["predicted_hydrogen_atoms"] = 2
                 else:
-                    actual["interpretation"]["turns_started"] = 2
+                    actual["interpretation"]["visits"][0]["turns_started"] = 2
                 with self.assertRaises(AssertionError):
                     compare_smiles_scientific_documents(
                         actual,
@@ -610,7 +610,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                     )
 
     def test_real_atom_order_binary32_coordinate_prediction_and_interpretation_changes_fail(self):
-        for fault in ("order", "binary32", "prediction", "unit", "head", "model", "turns", "endpoint"):
+        for fault in ("order", "binary32", "prediction", "unit", "head", "model", "turns", "endpoint", "empty-routes"):
             with self.subTest(fault=fault):
                 actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
                 geometry = actual["geometries"][0]
@@ -627,9 +627,11 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 elif fault == "model":
                     actual["selected_models"]["H"] = "changed-checkpoint"
                 elif fault == "turns":
-                    actual["interpretation"]["turns_started"] = 2
+                    actual["interpretation"]["visits"][0]["turns_started"] = 2
+                elif fault == "endpoint":
+                    actual["interpretation"]["visits"][0]["routes"][0]["endpoint"]["model"] = "different-model"
                 else:
-                    actual["interpretation"]["routes"][0]["endpoint"]["model"] = "different-model"
+                    actual["interpretation"]["visits"][0]["routes"] = []
                 with self.assertRaises(AssertionError):
                     compare_scientific_documents(
                         actual, retained, receipt, metadata, interpreter=interpreter, prediction_image_id="sha256:" + "c" * 64

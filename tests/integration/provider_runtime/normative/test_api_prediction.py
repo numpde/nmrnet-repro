@@ -199,12 +199,15 @@ class ApiPredictionTests(unittest.TestCase):
         interpreter["endpoints"].append(fallback)
         observation = actual["interpretation"]
         observation.update(
-            turns_started=3,
-            corrections=1,
             operations=["prepare_pasted", "prepare_pasted"],
-            routes=[
-                {"endpoint": interpreter["endpoints"][0], "turns_started": 1, "failure": "exchange_failed", "http_status": 503},
-                {"endpoint": fallback, "turns_started": 2},
+            visits=[
+                {"turns_started": 1, "corrections": 0, "routes": [
+                    {"endpoint": interpreter["endpoints"][0], "turns_started": 1,
+                     "failure": "exchange_failed", "http_status": 503},
+                ]},
+                {"turns_started": 2, "corrections": 1, "routes": [
+                    {"endpoint": fallback, "turns_started": 2},
+                ]},
             ],
         )
         before = copy.deepcopy(actual)
@@ -215,11 +218,11 @@ class ApiPredictionTests(unittest.TestCase):
         for change in ("budget", "route", "count"):
             changed = copy.deepcopy(actual)
             if change == "budget":
-                changed["interpretation"]["turns_started"] = 7
+                changed["interpretation"]["visits"][1]["turns_started"] = 13
             elif change == "route":
-                changed["interpretation"]["routes"][1]["endpoint"]["model"] = "unconfigured"
+                changed["interpretation"]["visits"][1]["routes"][0]["endpoint"]["model"] = "unconfigured"
             else:
-                changed["interpretation"]["routes"][1]["turns_started"] = 1
+                changed["interpretation"]["visits"][1]["routes"][0]["turns_started"] = 1
             with self.subTest(change=change), self.assertRaisesRegex(AssertionError, "Selected interpretation"):
                 compare_scientific_documents(
                     changed,

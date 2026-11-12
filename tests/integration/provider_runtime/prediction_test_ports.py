@@ -409,9 +409,10 @@ def uploaded_sdf_documents():
     actual["schema_id"] = "nmrnet.coordinate_shifts.result.v2"
     actual["interpretation"].update(
         operations=["inspect_uploads", "inspect_upload", "prepare_upload"],
-        turns_started=3,
-        turn_limit=6,
-        routes=[{"endpoint": interpreter["endpoints"][0], "turns_started": 3}],
+        visits=[{
+            "turns_started": 3, "corrections": 0,
+            "routes": [{"endpoint": interpreter["endpoints"][0], "turns_started": 3}],
+        }],
     )
     return actual, retained, receipt, metadata, interpreter, upload
 
@@ -457,8 +458,10 @@ def uploaded_documents():
     )
     actual["interpretation"].update(
         operations=["inspect_uploads", "prepare_upload"],
-        turns_started=2,
-        routes=[{"endpoint": interpreter["endpoints"][0], "turns_started": 2}],
+        visits=[{
+            "turns_started": 2, "corrections": 0,
+            "routes": [{"endpoint": interpreter["endpoints"][0], "turns_started": 2}],
+        }],
     )
     upload = {
         "upload_ref": "upload:sha256:" + "d" * 64,

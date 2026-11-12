@@ -635,6 +635,7 @@ def require_selected_interpretation(observation, interpreter, operation):
 
     ToolConversation owns the total turn ceiling and ordered endpoint fallback.
     Delivery qualification must not turn a valid correction into another Job.
+    Each visit's route counters must account for its reported started turns.
     """
     visits, operations = observation["visits"], observation["operations"]
     require(
@@ -646,6 +647,11 @@ def require_selected_interpretation(observation, interpreter, operation):
             and 0 < visit["turns_started"] <= 12
             and type(visit["corrections"]) is int
             and 0 <= visit["corrections"] <= 3
+            and all(
+                type(route["turns_started"]) is int and 0 <= route["turns_started"]
+                for route in visit["routes"]
+            )
+            and sum(route["turns_started"] for route in visit["routes"]) == visit["turns_started"]
             for visit in visits
         )
         and all(
