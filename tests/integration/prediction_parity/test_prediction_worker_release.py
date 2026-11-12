@@ -101,7 +101,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             asyncio.run(self.worker_prediction((requests[0],), "failed-post-hook", released_worker_with_failed_post_hook))
         self.assertIn("authored post-hook failure", failed.exception.diagnostic)
         expected = [predict_request(raw, loader.load_dictionary, loader.load_selected_element) for raw in requests]
-        actual = asyncio.run(self.worker_prediction(requests, "ordered-batch"))
+        actual = asyncio.run(self.worker_prediction(requests, "ordered-batch", released_worker))
         self.assertEqual(expected, [item["prediction"] for item in actual])
         self.assertEqual([{"H", "C"}, {"C"}, set()], [set(item["provenance"]["artifacts"]["elements"]) for item in actual])
         self.assertEqual([hashlib.sha256(raw).hexdigest() for raw in requests], [item["request_sha256"] for item in actual])
@@ -160,14 +160,14 @@ class ReleasedWorkerTests(unittest.TestCase):
     def test_no_eligible_atoms_reports_dictionary_but_no_loaded_heads(self):
         raw = b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}'
         plan = self.result_plan((raw,), "no-eligible-heads")
-        (result,) = asyncio.run(self.worker_prediction((raw,), "no-eligible-heads"))
+        (result,) = asyncio.run(self.worker_prediction((raw,), "no-eligible-heads", released_worker))
         self.assertEqual([], json.loads(plan.finish((result,)))["geometries"][0]["predictions"])
         self.assertEqual({"unit": "ppm", "predictions": []}, result["prediction"])
         self.assertIsNotNone(result["provenance"]["artifacts"]["dictionary"])
         self.assertEqual({}, result["provenance"]["artifacts"]["elements"])
         self.assertEqual([], result["private_warnings"])
 
-    async def worker_prediction(self, raw_requests, allocation, worker_target=released_worker):
+    async def worker_prediction(self, raw_requests, allocation, worker_target):
         parent, child = socket.socketpair()
         worker = multiprocessing.get_context("spawn").Process(target=worker_target, args=(child, allocation))
         writer = None
@@ -221,7 +221,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             raw = json.dumps(request, allow_nan=False).encode()
             plan = self.result_plan((raw,), f"fixture-{index}")
             direct = predict_request(raw, loader.load_dictionary, loader.load_selected_element)
-            (worker_result,) = asyncio.run(self.worker_prediction((raw,), f"fixture-{index}"))
+            (worker_result,) = asyncio.run(self.worker_prediction((raw,), f"fixture-{index}", released_worker))
             self.assertEqual({"request_sha256", "prediction", "provenance", "private_warnings"}, set(worker_result))
             result_bytes = plan.finish((worker_result,))
             result = json.loads(result_bytes)

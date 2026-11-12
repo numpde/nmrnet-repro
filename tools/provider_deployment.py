@@ -533,6 +533,7 @@ def main(arguments=None):
         elif operation == "prepare-runtime":
             prepare_runtime(**values)
             return 0
+    # silent-defaults: allow-exception-outcome -- The CLI reports the causal evidence and exits nonzero; it does not supply replacement configuration.
     except (ConfigurationRejected, OSError) as failure:
         # Protected Docker-stderr projection for this finite receiving boundary:
         # preserve owned causal evidence without arbitrary exception stringify.

@@ -119,7 +119,7 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertIn("--init", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertIn("sha256:" + "a" * 64, args)
-        self.assertEqual(args[args.index("--user") + 1], "MAPPED_UID:MAPPED_GID")
+        self.assertEqual("MAPPED_UID:MAPPED_GID", args[args.index("--user") + 1])
         self.assertEqual("ALL", args[args.index("--cap-drop") + 1])
         for flag in ("--cpus", "--memory", "--memory-swap", "--pids-limit", "--tmpfs"):
             self.assertIn(flag, args)

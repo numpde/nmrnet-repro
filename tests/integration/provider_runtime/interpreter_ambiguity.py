@@ -515,7 +515,7 @@ def main():
         return asyncio.run(_run_signalled(run()))
     except (Exception, asyncio.CancelledError) as cause:
         _failure_report((("selected-model interpreter probe", cause),), secrets=secrets, held=False)
-        return 1
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ def inspect_interpreter(path, output):
     _table, inputs = interpreter_fragment(path)
     for name in ("key_file", "ca_file"):
         with (output / (name + ".txt")).open("x") as stream:
+            # silent-defaults: allow-contract -- An absent optional file is serialized as an empty line for the shell reader.
             stream.write((inputs[name] or "") + "\n")
     with (output / "interpreter-inputs.json").open("x") as stream:
         stream.write(json.dumps(inputs) + "\n")
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--interpreter-interface")
     parser.add_argument("--interpreter-network")
     parser.add_argument("--interpreter-address")
-    parser.add_argument("--resolver", action="append", default=[])
+    parser.add_argument("--resolver", action="append")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--inspect-interpreter", type=Path)
     selection.add_argument("--interpreter-config", type=Path)

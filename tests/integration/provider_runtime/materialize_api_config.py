@@ -74,6 +74,8 @@ def stage_deployment(
         if name in api:
             api[name] = str(secrets / Path(api[name]).name)
     grants = shared_grants(deployment_settings)
+    # silent-defaults: allow-contract -- Only the external interpreter route receives resolver grants; local routes have none.
+    route_resolvers = resolvers if interpreter_route == "external" else []
     write_deployment_inputs(
         destination,
         document,
@@ -83,7 +85,8 @@ def stage_deployment(
         project=grants.project,
         gid=grants.gid,
         maximum_startup_bytes=2097152,
-        resolvers=resolvers if interpreter_route == "external" else [],
+        resolvers=route_resolvers,
+        shared_fixture=False,
     )
     endpoint_directory = destination / "interpreter.d"
     endpoint_directory.mkdir(mode=0o700)
@@ -164,8 +167,7 @@ def stage(root, origin, topology, *, inputs, interpreter_config, prediction_imag
         raw = raw.replace(b"\nseconds = 10\n", b"\nseconds = 300\n")
     files.write(raw)
     admitted = load_provider_config(files.path)
-    parts = urlsplit(admitted.api.identity.origin)
-    host, _port = authority_parts(f"{parts.hostname}:{parts.port if parts.port is not None else 443}")
+    host, _port = authority_parts(admitted.api.identity.authority)
     # Nonsecret facts from the exact admitted configuration, shared with the
     # public client. The key and raw model/configuration text stay separate.
     identity = {

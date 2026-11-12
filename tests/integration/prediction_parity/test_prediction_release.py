@@ -144,6 +144,7 @@ class ReleasedPredictionTests(unittest.TestCase):
             if element == "H":
                 with torch.no_grad():
                     scalar = next(model.parameters()).view(-1)[0]
+                    # silent-defaults: allow-contract -- Deliberately change the selected checkpoint scalar to prove mismatched tensor detection.
                     scalar.fill_(1 if scalar.item() == 0 else 0)
                 with self.assertRaisesRegex(AssertionError, "tensor values differ"):
                     self.assert_loaded_checkpoint_state(model, expected, element)
@@ -223,7 +224,9 @@ class ReleasedPredictionTests(unittest.TestCase):
             ("weight.zip", [specification["dictionary"]]),
             ("checkpoints.zip", [member for head in specification["elements"].values() for member in head.values()]),
         ):
-            selection_name = "weight.selection.json" if archive_name == "weight.zip" else "checkpoints.selection.json"
+            selection_name = {"weight.zip": "weight.selection.json", "checkpoints.zip": "checkpoints.selection.json"}[
+                archive_name
+            ]
             selection = json.loads(read_fixture_receipt(Path("/input") / selection_name))
             self.assertTrue(all(member["member"] in selection["members"] for member in members))
             self.assertLessEqual(sum(member["size"] for member in members), selection["max_bytes"])
@@ -384,7 +387,7 @@ class ReleasedPredictionTests(unittest.TestCase):
 
     def verified_bytes(self, root, archive_name, expected):
         archive = next(item for item in self.release["files"] if item["name"] == archive_name)
-        selection_name = "weight.selection.json" if archive_name == "weight.zip" else "checkpoints.selection.json"
+        selection_name = {"weight.zip": "weight.selection.json", "checkpoints.zip": "checkpoints.selection.json"}[archive_name]
         selection = json.loads(read_fixture_receipt(Path("/input") / selection_name))
         self.assertIn(expected["member"], selection["members"])
         self.assertLessEqual(expected["size"], selection["max_bytes"])

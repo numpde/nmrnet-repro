@@ -8,7 +8,7 @@ import tomli_w
 
 
 def write_deployment_inputs(
-    directory, document, *, api, api_route, routes, project, gid, maximum_startup_bytes, resolvers, shared_fixture=False
+    directory, document, *, api, api_route, routes, project, gid, maximum_startup_bytes, resolvers, shared_fixture
 ):
     """Keep provider identity private and optionally author a disposable host."""
     document.pop("api")
@@ -30,7 +30,9 @@ def write_deployment_inputs(
     api_path.chmod(0o600)
     if shared_fixture:
         origin = urlsplit(api["origin"])
+        # silent-defaults: allow-contract -- HTTPS origins without an explicit port use the protocol port 443.
         authority = f"{origin.hostname}:{origin.port if origin.port is not None else 443}"
+        # silent-defaults: allow-contract -- The disposable proxy must use a UID distinct from the invoking test user.
         proxy_uid = 65534 if os.geteuid() != 65534 else 65533
         shared = {
             "deployment": {"project": project, "uid": os.geteuid(), "proxy_uid": proxy_uid, "gid": gid, "request_seconds": 30},

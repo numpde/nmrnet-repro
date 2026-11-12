@@ -439,6 +439,7 @@ async def serve(root, seconds, case, delivery_project):
         if case == "recovery":
             assert crash is not None, "Recovery qualification omitted its reader supervisor crash."
             await asyncio.shield(crash)
+        # silent-defaults: allow-contract -- Reader recovery keeps one provider lifetime; the restart case must witness two Hellos.
         minimum_hellos = 1 if case == "recovery" else 2
         if (
             calls["model"] != expected_model_calls
@@ -446,8 +447,10 @@ async def serve(root, seconds, case, delivery_project):
             or calls["hello"] < minimum_hellos
         ):
             raise AssertionError("Connected initial/restart witness changed the intended number of scientific executions")
+        # silent-defaults: allow-contract -- Direct inputs require no Upload download; uploaded inputs require exactly one.
         if calls["download"] != (0 if direct_case else 1):
             raise AssertionError("Connected initial/restart witness repeated or omitted Upload acquisition")
+        # silent-defaults: allow-contract -- The receipt distinguishes reader-only recovery from a scripted scientific execution.
         scope = (
             "local signed API; actual Compose and reader-supervisor recovery; no Job, model call or scientific input/inference"
             if case == "recovery"
