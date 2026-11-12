@@ -92,6 +92,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("DISTINCT_REPORT_CANARY", json.dumps(observed))
                 self.assertNotIn("messages", observed)
                 carrier.retire.assert_awaited()
+                # silent-defaults: allow-contract -- Attached cases inspect their Upload and source before reporting; cases without attachments report in one turn.
                 self.assertEqual(carrier.complete.await_count, 3 if case["attachment"] else 1)
                 if case["attachment"]:
                     messages = carrier.complete.await_args.args[0]
@@ -113,10 +114,8 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
 class InterpreterFormatChoiceProbeTests(unittest.IsolatedAsyncioTestCase):
     async def test_three_choices_use_production_tools_and_capture_arguments_without_preparation(self):
         cases = load_cases(Path("/fixture/interpreter_formats.json"), probe="formats")
-        carriers = [
-            format_carrier(case, changes={"alternate_location": "A", "member": None} if case["id"] == "pdb" else {})
-            for case in cases
-        ]
+        changes = {"mol": {}, "pdb": {"alternate_location": "A", "member": None}, "mol2": {}}
+        carriers = [format_carrier(case, changes=changes[case["id"]]) for case in cases]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "output"
@@ -133,6 +132,9 @@ class InterpreterFormatChoiceProbeTests(unittest.IsolatedAsyncioTestCase):
                 arguments = json.loads(observed["tool_arguments_json"])
                 self.assertEqual(arguments["source_format"], case["source_format"])
                 self.assertEqual(arguments["selection"], case["selection"])
+                if case["id"] == "pdb":
+                    self.assertEqual("A", arguments["alternate_location"])
+                    self.assertIsNone(arguments["member"])
                 self.assertEqual("angstrom", arguments["source_unit"])
                 self.assertEqual(3, observed["interpretation"]["visits"][-1]["turns_started"])
                 self.assertTrue(observed["passed"])

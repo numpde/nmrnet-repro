@@ -136,7 +136,7 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_wrong_category_or_attempted_preparation_stops_before_the_next_case(self):
         cases = load_cases(Path("/fixture/interpreter_ambiguity.json"), probe="ambiguity")
-        for prepare in (False, True):
+        for prepare, expected_attempts in ((False, []), (True, ["prepare_smiles"])):
             with self.subTest(prepare=prepare), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 output = root / "output"
@@ -150,7 +150,7 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
                 factory.assert_called_once()
                 self.assertEqual(1, carrier.complete.await_count)
                 observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
-                self.assertEqual(observed["preparation_attempts"], ["prepare_smiles"] if prepare else [])
+                self.assertEqual(observed["preparation_attempts"], expected_attempts)
                 self.assertFalse((output / (cases[1]["id"] + ".json")).exists())
                 self.assertFalse(json.loads((output / "result.json").read_bytes())["passed"])
 
