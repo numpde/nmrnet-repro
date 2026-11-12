@@ -357,7 +357,7 @@ class PackagesClientTests(unittest.TestCase):
         self.assertFalse(directory.is_symlink())
         self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode))
         self.assertIn(str(directory), result.stderr)
-        self.assertIn("Cannot confirm inference client retirement", result.stderr)
+        self.assertIn("Cannot confirm native client retirement", result.stderr)
         self.assertEqual(before_stages, set(self.stage.parent.iterdir()))
         self.assertFalse((self.root / "controller-returned").exists())
 
