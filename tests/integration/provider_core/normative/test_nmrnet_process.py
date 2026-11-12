@@ -713,6 +713,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
         async with ProcessPeers() as fixture:
             fixture.stall_periodic_hello()
             if after_outage:
+                expected_head = "hello-head-3-received"
+                expected_request = "request:latest-hello"
+                expected_hello_count = 3
                 original_mode = fixture.peer.response_mode
                 original_reply = fixture.peer.response_factory
 
@@ -735,9 +738,13 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
 
                 fixture.peer.response_mode = response_mode
                 fixture.peer.response_factory = response
+            else:
+                expected_head = "hello-head-2-received"
+                expected_request = "request:process-proof"
+                expected_hello_count = 2
             process = await fixture.start(child_script="interrupted_model_process.py")
             await asyncio.wait_for(fixture.discovered.wait(), 5)
-            await fixture.observed("hello-head-3-received" if after_outage else "hello-head-2-received", wait_seconds=5)
+            await fixture.observed(expected_head, wait_seconds=5)
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(0, process.returncode, msg=stderr.decode())
@@ -746,7 +753,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("Latest Hello acceptance was not confirmed", observation["operation"])
             rendered = json.dumps(observation)
             self.assertIn('"status": 200', rendered)
-            self.assertIn("request:latest-hello" if after_outage else "request:process-proof", rendered)
+            self.assertIn(expected_request, rendered)
             self.assertNotIn("request:prior-hello", rendered)
             self.assertIn("request cancelled", rendered)
             self.assertNotIn("PRIVATE", rendered)
@@ -756,7 +763,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             fixture.assert_lifetime_released()
             self.assertEqual(
                 sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests),
-                3 if after_outage else 2,
+                expected_hello_count,
             )
 
     async def test_sigterm_during_initial_hello_backoff_reports_uncertainty_without_admission(self):
