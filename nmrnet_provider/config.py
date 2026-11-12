@@ -55,6 +55,7 @@ ANALYSIS_KIND_REF = "peaks_from_mol"
 class ConfigurationRejected(ValueError):
     """Safe startup explanation; original file/parser evidence remains private."""
 
+    # silent-defaults: allow-contract -- Metadata refusal can precede a native error; the empty tuple records no independent close failure.
     def __init__(self, message, *, cause=None, cleanup_failures=()):
         super().__init__(f"Cannot configure NMRNet provider: {message}")
         self.cause = cause
@@ -213,6 +214,7 @@ def _configuration_document(path, read_file):
     return raw, document
 
 
+# silent-defaults: allow-contract -- Closed tables admit no optional keys unless this schema owner supplies them.
 def _fields(document, required, label, optional=frozenset()):
     if type(document) is not dict or not required <= document.keys() or document.keys() - required - optional:
         raise ConfigurationRejected(f"{label} must contain exactly its documented fields.")
@@ -224,6 +226,7 @@ def _path(value, label):
     return Path(value)
 
 
+# silent-defaults: allow-contract -- The shared API reader protocol omits secret for public CA inputs; callers mark credentials secret=True to require private caller-owned files.
 def read_startup_file(path, *, maximum_bytes, label, secret=False):
     """Keep NMRNet's startup context around the shared descriptor admission."""
     try:
