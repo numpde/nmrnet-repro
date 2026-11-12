@@ -66,10 +66,10 @@ def has_external_frontend(source):
 
 
 ROOT_ENTRY_MANIFEST = Path("/repository-source-inventory/root-entries")
-# The coordinator explicitly keeps checkout control, credentials and writable
+# The coordinator explicitly keeps checkout control, local IDE settings, credentials and writable
 # acquisition/runtime state outside source-check authority. Capturing their
 # names in the manifest proves classification without exposing their contents.
-PRIVATE_ROOT_ENTRIES = frozenset({".git", ".agents", ".codex", ".aws", ".work", "secrets"})
+PRIVATE_ROOT_ENTRIES = frozenset({".git", ".agents", ".codex", ".aws", ".idea", ".work", "secrets"})
 
 
 def root_entry_visibility_findings(manifest, root):
@@ -129,10 +129,16 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("pass\n")
             manifest = root / "host/bootstrap/acquisition/acquisition-manifest.json"
-            manifest.write_text(json.dumps({
-                "release_version": "1.2.3", "source_revision": "a" * 40, "dependency_inputs": {},
-                "payload_files": {"generated.py": {"sha256": "0" * 64, "size": 0, "mode": 0o644}},
-            }))
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "release_version": "1.2.3",
+                        "source_revision": "a" * 40,
+                        "dependency_inputs": {},
+                        "payload_files": {"generated.py": {"sha256": "0" * 64, "size": 0, "mode": 0o644}},
+                    }
+                )
+            )
             with patch.object(sources, "ROOT", root):
                 self.assertEqual(
                     [
@@ -175,13 +181,18 @@ class SourceInventoryUnitTests(unittest.TestCase):
             link = snapshot / "linked.py"
             link.symlink_to(generated)
             manifest = root / "host/bootstrap/acquisition/acquisition-manifest.json"
-            manifest.write_text(json.dumps({
-                "release_version": "1.2.3", "source_revision": "a" * 40, "dependency_inputs": {},
-                "payload_files": {
-                    name: {"sha256": "0" * 64, "size": 0, "mode": 0o644}
-                    for name in ("generated.py", "linked.py")
-                },
-            }))
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "release_version": "1.2.3",
+                        "source_revision": "a" * 40,
+                        "dependency_inputs": {},
+                        "payload_files": {
+                            name: {"sha256": "0" * 64, "size": 0, "mode": 0o644} for name in ("generated.py", "linked.py")
+                        },
+                    }
+                )
+            )
             with patch.object(sources, "ROOT", root):
                 self.assertEqual({generated, manifest}, sources.generated_sdk_sources())
                 visible = sources.iter_repo_text_files()
@@ -201,7 +212,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
             root = Path(directory)
             (root / "tools").mkdir()
             (root / "stale.txt").write_text("fixture")
-            manifest = "d\ttools\0f\tnew-source.py\0d\t.pytest_cache\0l\tlinked.py\0d\t.work\0d\t.aws\0d\tsecrets\0"
+            manifest = "d\ttools\0f\tnew-source.py\0d\t.pytest_cache\0l\tlinked.py\0d\t.work\0d\t.aws\0d\t.idea\0d\tsecrets\0"
             self.assertEqual(
                 [
                     "new-source.py: public source root is invisible to repository checks",
