@@ -805,7 +805,7 @@ class InferenceClientConfigTests(unittest.TestCase):
             'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_CLEANUP_OBSERVATION"; '
             'command rm "$@"; '
             + (f'builtin kill -{signum} "$BASHPID"; ' if phase == "removal" else "")
-            + ("" if phase == "capture" else "return 9;")
+            + ("" if phase == "capture" else "return 9")
             + ';; *) command rm "$@";; esac; }'
         )
         chmod = (
@@ -842,12 +842,16 @@ class InferenceClientConfigTests(unittest.TestCase):
             os.close(write_fd)
             write_fd = None
             reporting_processes = []
+            if phase != "capture":
+                deadline = time.monotonic() + 30
+                while not observation.is_file() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(
+                    observation.is_file(),
+                    msg=f"Build did not reach owned cleanup; caller status {process.poll()!r}",
+                )
             if phase in {"reporting", "capture"}:
                 deadline = time.monotonic() + (30 if phase == "capture" else 3)
-                while phase == "reporting" and not observation.exists() and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                if phase == "reporting":
-                    self.assertTrue(observation.exists())
                 blocked = False
                 while not blocked and time.monotonic() < deadline:
                     pending = [process.pid]
