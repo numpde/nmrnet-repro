@@ -30,6 +30,7 @@ def project_name(checkout, deployment):
     return "nmrnet-" + hashlib.sha256((str(checkout) + "\0" + deployment).encode()).hexdigest()[:20]
 
 
+# silent-defaults: allow-contract -- Frozen inputs and provider socket consumers are read-only; only native and proxy socket owners explicitly request writes.
 def _bind(source, target, *, readonly=True):
     return {
         "type": "bind",
@@ -62,6 +63,7 @@ def _provider_stop_seconds(config):
     return sum((startup, draining_shutdown, 2 * settlement, setup_settlement, final_dependencies))
 
 
+# silent-defaults: allow-contract -- The common service profile caps memory and total memory-plus-swap at 512 MiB; prediction explicitly receives its larger scientific budget.
 def _service(image, interpreter, module, *, uid, gid, labels, stop_seconds, memory="512m"):
     return {
         "image": image,
@@ -218,8 +220,10 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
     native = config.service.native
     for role in ("prediction", "reader", "smiles"):
         prediction = role == "prediction"
+        # silent-defaults: allow-contract -- Prediction uses its scientific image's system interpreter; reader and SMILES use the geometry image's isolated RDKit environment.
         interpreter = "/usr/local/bin/python" if prediction else "/opt/rdkit/environment/bin/python"
         image = identity["image_id"] if prediction else identity["geometry_image_id"]
+        # silent-defaults: allow-contract -- Prediction has a fixed 4 GiB scientific budget; reader and SMILES retain the common 512 MiB profile without additional swap.
         service = _service(
             image,
             interpreter,
@@ -360,6 +364,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         # control still uses only admitted full IDs, never a name as authority.
         service["container_name"] = project + "-" + role + "-" + bundle.name
         service["labels"].update(labels)
+        # silent-defaults: allow-contract -- Interpreter and store run the shared proxy, whose status producer identifies itself as proxy; other producers publish their service role.
         status_role = "proxy" if role in ("interpreter", "store") else role
         status_path = "/run/status.json"
         startup = native.allocation_seconds
