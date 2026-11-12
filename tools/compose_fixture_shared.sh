@@ -26,7 +26,11 @@ finish() {
     checker_finish
 }
 trap finish EXIT
-fail() { printf 'Cannot %s disposable shared fixture: %s\n' "$action" "$1" >&2; exit "${2:-2}"; }
+fail() {
+    printf 'Cannot %s disposable shared fixture: %s\n' "$action" "$1" >&2
+    if [[ $# -gt 1 && -n $2 ]]; then exit "$2"; fi
+    exit 2
+}
 checker_metadata "$operation_directory/image" image inspect --format '{{.Id}} {{index .Config.Labels "org.nmr-provider-tools.role"}} {{index .Config.Labels "org.nmr-provider-tools.inputs"}}' "$image" || fail 'image inspection failed.'
 IFS= read -r observed < "$operation_directory/image"
 [[ $observed =~ ^(sha256:[0-9a-f]{64})\ delivery\ ([0-9a-f]{64})$ && ${BASH_REMATCH[1]} == "$image" ]] \

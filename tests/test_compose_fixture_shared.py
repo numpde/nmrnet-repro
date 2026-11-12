@@ -64,7 +64,7 @@ checker_call() {
     [[ $1 == fake ]] || return 1
     shift
     printf '%s\n' "$*" >> "$TEST_ROOT/mutations"
-    [[ ${FAIL_OPERATION-} != "$description" ]] || return 1
+    [[ ${FAIL_OPERATION-} != "$description" ]] || return 37
     case "$1" in
         stop) ;;
         rm) [[ ${!#} != "$PROXY_ID" ]] || rm "$TEST_ROOT/proxy"; [[ ${!#} != "$INIT_ID" ]] || rm "$TEST_ROOT/init" ;;
@@ -148,7 +148,7 @@ class DisposableSharedFixtureTests(unittest.TestCase):
     def test_preflight_rejects_existing_project_or_volume(self):
         for collision in ("project", "volume"):
             with self.subTest(collision=collision):
-                self.assertNotEqual(self.invoke("preflight", COLLISION=collision).returncode, 0)
+                self.assertEqual(2, self.invoke("preflight", COLLISION=collision).returncode)
                 self.assertFalse((self.root / "mutations").exists())
         self.assertEqual(0, self.invoke("preflight").returncode)
 
@@ -172,7 +172,7 @@ class DisposableSharedFixtureTests(unittest.TestCase):
     def test_uncertain_mutation_retains_reservation_and_stops(self):
         self.start()
         result = self.invoke("retire", FAIL_OPERATION="stop disposable proxy container")
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(37, result.returncode)
         self.assertTrue((self.root / "reservation").exists())
         self.assertEqual(1, len((self.root / "mutations").read_text().splitlines()))
         self.assertTrue((self.root / (self.project + "-queue")).exists())
