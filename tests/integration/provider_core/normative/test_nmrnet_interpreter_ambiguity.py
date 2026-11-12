@@ -49,7 +49,7 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fragment, key, selection = selected_files(root)
-            selected, profile = admit_selection(fragment, selection=selection, key_file=key)
+            selected, profile = admit_selection(fragment, selection=selection, key_file=key, probe="ambiguity")
             self.assertEqual(
                 (selected.timeout_seconds, selected.endpoints[0].retirement_seconds),
                 (240, 5),
@@ -65,17 +65,17 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
     def test_deadline_covers_every_exchange_close_and_final_retirement(self):
         with tempfile.TemporaryDirectory() as directory:
             selected = settings(Path(directory))
-            self.assertEqual({"process_seconds": 260, "host_seconds": 280}, batch_budget(selected))
+            self.assertEqual({"process_seconds": 260, "host_seconds": 280}, batch_budget(selected, probe="ambiguity"))
 
     async def test_fixed_batch_records_attributed_categories_without_preparation_or_transcripts(self):
-        cases = load_cases(Path("/fixture/interpreter_ambiguity.json"))
+        cases = load_cases(Path("/fixture/interpreter_ambiguity.json"), probe="ambiguity")
         carriers = [scripted_carrier(case) for case in cases]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "output"
             output.mkdir(mode=0o700)
             with patch("interpreter_ambiguity.ChatEndpoint", side_effect=carriers):
-                result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64)
+                result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="ambiguity")
             self.assertEqual(result, 0)
             summary = json.loads((output / "result.json").read_bytes())
             self.assertFalse(summary["authenticated_api_jobs"])

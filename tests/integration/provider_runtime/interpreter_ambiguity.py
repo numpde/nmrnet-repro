@@ -48,7 +48,7 @@ def _encoded(document):
 _CASE_COUNTS = {"ambiguity": 4, "formats": 3}
 
 
-def batch_budget(settings, *, probe="ambiguity"):
+def batch_budget(settings, *, probe):
     """Cover every admitted turn, its close, and a final retirement per case.
 
     ChatEndpoint.complete includes connection close; a timed-out operation can
@@ -65,7 +65,7 @@ def batch_budget(settings, *, probe="ambiguity"):
     return {"process_seconds": seconds, "host_seconds": seconds + 20}
 
 
-def admit_selection(fragment, *, selection, key_file, ca_file=None, probe="ambiguity"):
+def admit_selection(fragment, *, selection, key_file, ca_file=None, probe):
     """Admit one unchanged fragment using only its individually selected grants."""
     try:
         table, inputs = interpreter_fragment(fragment)
@@ -131,7 +131,7 @@ def admit_selection(fragment, *, selection, key_file, ca_file=None, probe="ambig
     return settings, profile
 
 
-def load_cases(path, *, probe="ambiguity"):
+def load_cases(path, *, probe):
     """Read the bounded reviewed fixture; its hash accompanies every decision."""
     # This public source fixture has a read-only source grant, rather than a
     # private startup-file grant. Its checkout's ambient group mode is unrelated
@@ -292,7 +292,7 @@ async def _hold():
             continue
 
 
-async def run_batch(settings, cases, *, output, configuration_sha256, probe="ambiguity"):
+async def run_batch(settings, cases, *, output, configuration_sha256, probe):
     """Run each fixed case once and stop at the first refusal or operational error."""
     secrets = (settings.endpoints[0].spec.api_key,)
     passed = 0
@@ -464,7 +464,7 @@ async def _run_signalled(operation):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("admit", "run"))
-    parser.add_argument("--probe", choices=tuple(_CASE_COUNTS), default="ambiguity")
+    parser.add_argument("--probe", choices=tuple(_CASE_COUNTS), required=True)
     parser.add_argument("--interpreter-config", required=True, type=Path)
     parser.add_argument("--selection", required=True, type=Path)
     parser.add_argument("--key-file", required=True, type=Path)
