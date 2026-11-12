@@ -120,6 +120,7 @@ def upstream_net_input(atoms, coordinates, dictionary, selected_token, label_mas
     normalized = NormalizeDataset(cropped, "coordinates")
 
     tokens = TokenizeDataset(KeyDataset(normalized, "atoms"), dictionary, max_seq_len=130)
+    # silent-defaults: allow-contract -- Upstream token selection accepts an optional mask dataset; absence selects by element alone.
     token_mask = KeyDataset(normalized, "atoms_target_mask") if label_mask is not None else None
     selection = SelectTokenDataset(tokens, token_mask_dataset=token_mask, selected_token=selected_token)
     tokens = AppendTokenDataset(PrependTokenDataset(tokens, dictionary.bos()), dictionary.eos())
@@ -148,8 +149,10 @@ def read_receipted_bytes(path, identity):
     LMDB opens a filename rather than a byte stream, so parity tests copy only
     these verified bytes into private container scratch before opening it.
     """
-    size = identity.get("size") if isinstance(identity, dict) else None
-    digest = identity.get("sha256") if isinstance(identity, dict) else None
+    if not isinstance(identity, dict):
+        raise ValueError("Cannot read prediction fixture: receipted file size is outside the 64 MiB test bound")
+    size = identity.get("size")
+    digest = identity.get("sha256")
     if type(size) is not int or not 0 <= size <= MAX_REFERENCE_FILE_BYTES:
         raise ValueError("Cannot read prediction fixture: receipted file size is outside the 64 MiB test bound")
     if not isinstance(digest, str) or len(digest) != 64:
@@ -439,6 +442,14 @@ class PredictionModelParityTests(unittest.TestCase):
         model.assert_not_called()
         scaler.inverse_transform.assert_not_called()
 
+    def test_receipted_fixture_rejects_nonobject_before_opening(self):
+        with (
+            mock.patch.object(artifacts, "regular_file") as opened,
+            self.assertRaisesRegex(ValueError, "receipted file size is outside"),
+        ):
+            read_receipted_bytes(Path("/unused"), [])
+        opened.assert_not_called()
+
     def test_receipted_fixture_bytes_reject_initial_oversize_before_reading(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fixture.bin"
@@ -453,7 +464,7 @@ class PredictionModelParityTests(unittest.TestCase):
                 def fileno(self):
                     return self.stream.fileno()
 
-                def read(self, size=-1):
+                def read(self, size):
                     read_sizes.append(size)
                     return self.stream.read(size)
 
@@ -486,7 +497,7 @@ class PredictionModelParityTests(unittest.TestCase):
                 def fileno(self):
                     return self.stream.fileno()
 
-                def read(self, size=-1):
+                def read(self, size):
                     nonlocal grew
                     read_sizes.append(size)
                     if not grew:
@@ -576,6 +587,7 @@ class PredictionModelParityTests(unittest.TestCase):
                         torch.testing.assert_close(actual[name], expected[name], rtol=0, atol=0, msg=name)
 
                     logical_length = len(atoms) + 2
+                    # silent-defaults: allow-contract -- These one-atom and cropped 128-atom fixtures pad their two boundary tokens to a multiple of eight.
                     padded_length = 8 if len(atoms) == 1 else 136
                     self.assertEqual(actual["src_tokens"].shape, (1, padded_length))
                     self.assertEqual(actual["src_coord"].shape, (1, padded_length, 3))
@@ -870,7 +882,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
             def fileno(self):
                 return self.stream.fileno()
 
-            def read(self, size=-1):
+            def read(self, size):
                 read_sizes.append(size)
                 return self.stream.read(size)
 
@@ -901,7 +913,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
             def fileno(self):
                 return self.stream.fileno()
 
-            def read(self, size=-1):
+            def read(self, size):
                 nonlocal grew
                 read_sizes.append(size)
                 if not grew:
