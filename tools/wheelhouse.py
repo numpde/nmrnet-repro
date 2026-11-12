@@ -169,6 +169,8 @@ def select_wheels(lock, pool, report_output=None, lock_fd=None):
         raise ValueError(f"Cannot select wheels: shared pool is not a directory: {pool}")
     with tempfile.TemporaryDirectory(prefix="wheel-selection-") as temporary:
         report = Path(temporary) / "report.json"
+        # silent-defaults: allow-contract -- A caller-owned pool lease passes to pip; callers without one pass no descriptor.
+        inherited_lease = () if lock_fd is None else (lock_fd,)
         subprocess.run(
             [
                 sys.executable,
@@ -194,7 +196,7 @@ def select_wheels(lock, pool, report_output=None, lock_fd=None):
                 str(lock),
             ],
             check=True,
-            pass_fds=() if lock_fd is None else (lock_fd,),
+            pass_fds=inherited_lease,
         )
         identity = wheel_inputs_from_report(lock, pool, report)
         if report_output is not None:
