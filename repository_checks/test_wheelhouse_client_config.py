@@ -224,7 +224,7 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--env",
                 "NMRNET_IN_CONTAINER=1",
                 "--user",
-                f"{os.getuid()}:{os.getgid()}",
+                f"{self.fixture.environment['NMRNET_FIXTURE_UID']}:{self.fixture.environment['NMRNET_FIXTURE_GID']}",
                 "--cap-drop",
                 "ALL",
                 "--security-opt",
