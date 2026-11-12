@@ -101,15 +101,28 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
             admissions = {line[1:] for line in policy if line.startswith("!")}
             self.assertTrue(admissions)
             recursive = {line for line in admissions if "**" in line}
-            # silent-defaults: allow-contract -- Only the inference context admits the two reviewed uninmr directory and Python recursions; the package-lock context must admit none; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_build_context_has_only_reviewed_recursive_exceptions
+            # silent-defaults: allow-contract -- Inference needs the pinned upstream Python source, the two declared runtime package roots, and staged wheel inputs; package-lock needs none; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_build_context_has_only_reviewed_recursive_exceptions
             self.assertEqual(
-                recursive, {"NMRNetplusplus/uninmr/**/", "NMRNetplusplus/uninmr/**/*.py"} if "inference" in name else set()
+                recursive,
+                {
+                    "NMRNetplusplus/uninmr/**/",
+                    "NMRNetplusplus/uninmr/**/*.py",
+                    "nmrnet_provider/**",
+                    "nmrnet_inference/**",
+                    "wheelhouse/**",
+                }
+                if "inference" in name
+                else set(),
             )
             self.assertTrue(
-                all(path.split("/")[0] in {"containers", "tools", "requirements", "NMRNetplusplus"} for path in admissions)
+                all(
+                    path.split("/")[0]
+                    in {"containers", "host", "tools", "requirements", "NMRNetplusplus", "nmrnet_provider", "nmrnet_inference", "wheelhouse"}
+                    for path in admissions
+                )
             )
             self.assertFalse(
-                any(path in admissions for path in (".git/", ".work/", "secrets/", ".env", "NMRNetplusplus/**", "tools/**"))
+                any(path in admissions for path in (".git/", ".work/", "secrets/", ".env", "NMRNetplusplus/**", "tools/**", "host/**"))
             )
 
     def test_launcher_binds_every_external_base_to_a_full_digest(self):
@@ -119,9 +132,15 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
                 values = re.findall(r"^readonly " + variable + r"='([^']+)'$", source, re.MULTILINE)
                 self.assertEqual(1, len(values))
                 self.assertRegex(values[0], r"^[a-z0-9.-]+/[A-Za-z0-9_./:@-]+@sha256:[0-9a-f]{64}$")
-                # silent-defaults: allow-contract -- The declared launcher table maps uv_image to UV_IMAGE and python_image to PYTHON_BASE; each pinned value must reach its matching build argument; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_launcher_binds_every_external_base_to_a_full_digest
-                argument = "UV_IMAGE" if variable == "uv_image" else "PYTHON_BASE"
-                self.assertIn('--build-arg "' + argument + "=$" + variable + '"', source)
+                if name == "inference_image.sh":
+                    # silent-defaults: allow-contract -- Inference uses a digest-pinned Dockerfile FROM and separately admits that exact base locally before the streamed build; it has no base build argument; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_launcher_binds_every_external_base_to_a_full_digest
+                    dockerfile = (ROOT / "containers/inference/Dockerfile").read_text()
+                    self.assertIn("FROM " + values[0] + "\n", dockerfile)
+                    self.assertIn('image inspect --format \'{{.Id}}\' "$python_image"', source)
+                else:
+                    # silent-defaults: allow-contract -- The package launcher passes each pinned base through its corresponding build argument; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_launcher_binds_every_external_base_to_a_full_digest
+                    argument = "UV_IMAGE" if variable == "uv_image" else "PYTHON_BASE"
+                    self.assertIn('--build-arg "' + argument + "=$" + variable + '"', source)
 
 
 class ImmutableBuildInputTests(unittest.TestCase):
@@ -286,16 +305,23 @@ class ImmutableBuildInputTests(unittest.TestCase):
                     result = fixture.run("inference_image.sh", action)
                     self.assertEqual(0, result.returncode, msg=result.stderr)
                     runs = [call["arguments"] for call in fixture.calls()[before:] if call["arguments"][:1] == ["run"]]
-                    self.assertEqual(1, len(runs))
                     if action == "import":
+                        self.assertEqual(1, len(runs))
                         self.assertEqual(runs[0][-1], "sha256:" + "b" * 64)
                         self.assertNotIn("--mount", runs[0])
                     else:
-                        self.assertIn("tools.wheelhouse", runs[0])
-                        self.assertIn("check", runs[0])
-                        mounts = [runs[0][index + 1] for index, argument in enumerate(runs[0]) if argument == "--mount"]
-                        self.assertTrue(mounts)
-                        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+                        # silent-defaults: allow-contract -- The builder selects science and runtime wheels in separate offline containers, each with only read-only inputs; proof=repository_checks/test_build_inputs_port.py::ImmutableBuildInputTests.test_inference_build_and_import_are_offline_without_secret_device_grants
+                        self.assertEqual(2, len(runs))
+                        selected_locks = []
+                        for run in runs:
+                            lock_mount = next(value for value in run if ",dst=/input/requirements.lock," in value)
+                            selected_locks.append(lock_mount.split(",dst=", 1)[0].rsplit("/", 1)[-1])
+                            self.assertIn("tools.wheelhouse", run)
+                            self.assertIn("report", run)
+                            mounts = [run[index + 1] for index, argument in enumerate(run) if argument == "--mount"]
+                            self.assertTrue(mounts)
+                            self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+                        self.assertEqual(["inference.lock", "provider-core-native-install.lock"], selected_locks)
             for call in fixture.calls():
                 arguments = call["arguments"]
                 if arguments[0] not in {"build", "run"}:
