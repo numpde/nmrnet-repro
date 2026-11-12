@@ -13,6 +13,7 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
+import os
 import re
 import shlex
 import subprocess
@@ -95,11 +96,31 @@ def make_targets(source):
 
 class RepositoryConventionTests(unittest.TestCase):
     def test_batch_worker_target_invokes_only_the_fixed_qualification_case(self):
-        target = subprocess.run(
-            ["make", "--dry-run", "prediction/worker-parity/batch"], cwd=ROOT, capture_output=True, text=True, check=False
-        )
-        self.assertEqual(0, target.returncode, msg=target.stderr)
-        self.assertEqual(["bash tools/baseline.sh batch-worker-parity"], target.stdout.splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            binary = fixture / "bin"
+            binary.mkdir()
+            (binary / "docker").symlink_to(ROOT / "tests/test_docker_context_selection.py")
+            context_calls = fixture / "context-calls"
+            target = subprocess.run(
+                ["make", "--dry-run", "prediction/worker-parity/batch", "DOCKER_CONTEXT=fixture-local"],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "PATH": str(binary) + os.pathsep + os.environ["PATH"],
+                    "FAKE_CONTEXT_CALLS": str(context_calls),
+                    "FAKE_LOCAL_ENDPOINT": "unix:///fixture.sock",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, target.returncode, msg=target.stderr)
+            self.assertEqual(["bash tools/baseline.sh batch-worker-parity"], target.stdout.splitlines())
+            self.assertEqual(
+                ["context inspect --format {{.Endpoints.docker.Host}} fixture-local"],
+                context_calls.read_text().splitlines(),
+            )
 
     def test_authored_production_sources_require_the_shared_guard(self):
         self.assertTrue(list((ROOT / "tools").rglob("*.py")), msg="production source inventory is empty")
