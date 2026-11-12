@@ -305,11 +305,30 @@ esac
                 Path(line.removeprefix(prefix)).unlink(missing_ok=True)
 
     def calls(self):
+        """Read engine argv and check the code boundary shared by deployment helpers."""
         count = int((self.root / "count").read_text()) if (self.root / "count").exists() else 0
-        return [
+        calls = [
             [item.decode() for item in (self.root / f"call-{index}").read_bytes().split(b"\0")[:-1]]
             for index in range(1, count + 1)
         ]
+        deployment_operations = {
+            "lifetime-owner",
+            "initialize-lifetime",
+            "prepare-runtime",
+            "freeze",
+            "old-api-route",
+            "client-inputs",
+        }
+        for call in calls:
+            if call[0] != "run" or not deployment_operations.intersection(call):
+                continue
+            python = "/opt/provider/environment/bin/python"
+            self.assertIn(python, call)
+            arguments = call[call.index(python) + 2 :]
+            self.assertEqual(["-I", "-B", "/opt/provider/provider_deployment.py"], arguments[:3])
+            mounts = [call[index + 1] for index, value in enumerate(call[:-1]) if value == "--mount"]
+            self.assertFalse(any("dst=/input/provider_deployment.py" in mount for mount in mounts))
+        return calls
 
     def test_missing_or_executable_names_refuse_before_any_engine_call(self):
         for name in ("", "../fixture", "fixture; touch sentinel", "$(touch sentinel)", "x\nup"):

@@ -148,6 +148,14 @@ class ProviderDependencyAdmissionTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Cannot capture controller image inputs", result.stderr)
 
+    def test_changed_deployment_helper_refuses_committed_capture(self):
+        """Deployment control code must enter the image from committed source."""
+        with ImageSource() as fixture:
+            (fixture.repository / "tools/provider_deployment.py").write_text("changed deployment control code\n")
+            result, _ = fixture.capture()
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("Cannot capture controller image inputs", result.stderr)
+
     def test_pip_refuses_missing_or_changed_locked_wheels_before_installing_bindings(self):
         for mutation in ("missing", "changed"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:

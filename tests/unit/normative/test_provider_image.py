@@ -57,6 +57,7 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(0, first.returncode, msg=first.stderr)
             captured = {str(path.relative_to(before / "context")) for path in (before / "context").rglob("*") if path.is_file()}
             self.assertIn("nmrnet_provider/process.py", captured)
+            self.assertIn("tools/provider_deployment.py", captured)
             self.assertNotIn("tools/provider_proxy.py", captured)
             self.assertNotIn("tools/bound_http_proxy.py", captured)
             self.assertFalse(any(name.startswith("packages/provider-core/") for name in captured))

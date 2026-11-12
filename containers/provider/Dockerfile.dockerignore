@@ -20,6 +20,7 @@ nmrnet_provider/smiles_worker.py
 !tools/artifacts.py
 !tools/wheelhouse.py
 !tools/provider_environment.py
+!tools/provider_deployment.py
 !tools/baseline_prepare.py
 !tools/container_resources.py
 !wheelhouse/

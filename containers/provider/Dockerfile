@@ -20,6 +20,8 @@ RUN --mount=type=bind,from=runtime_wheels,source=/wheels,target=/runtime-wheels 
         --install-lock /opt/build/requirements/provider-core-install.lock --runtime-wheels /runtime-wheels \
     && /opt/provider/environment/bin/python -I -B -m nmrnet_provider.process --help \
     && rm -rf /opt/build
+# Deployment control code belongs to the selected image; source mounts carry inputs only.
+COPY tools/provider_deployment.py /opt/provider/provider_deployment.py
 WORKDIR /opt/provider
 USER 65532:65532
 ENTRYPOINT ["/opt/provider/environment/bin/python", "-I", "-B", "-m", "nmrnet_provider.process"]

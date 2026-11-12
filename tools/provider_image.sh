@@ -11,6 +11,7 @@ provider_image_inputs=(containers/provider/Dockerfile containers/provider/Docker
     host/bootstrap/acquisition/acquisition_tool/installer/tools/installer.py
     host/bootstrap/acquisition/acquisition_tool/installer/wheels/pip-26.2.2-py3-none-any.whl
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py
+    tools/provider_deployment.py
     tools/provider_environment.py tools/provider_image.sh tools/core_image.sh tools/streamed_build.sh host/git_stream_sources.py tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
 # Capture controller bindings; shared runtime code enters only as a locked wheel.
 for provider_input in "$repository_root"/nmrnet_provider/*.py; do

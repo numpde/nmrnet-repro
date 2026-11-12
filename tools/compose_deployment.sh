@@ -388,13 +388,12 @@ select_shared_runtime() {
 }
 initialize_lifetime() {
     image_record provider
-    helper_grants=(--mount "type=bind,src=$bundle/compose.json,dst=$bundle/compose.json,readonly"
-        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
+    helper_grants=(--mount "type=bind,src=$bundle/compose.json,dst=$bundle/compose.json,readonly")
     local owner image volume uid gid extra
     lifetime_query=$(umask 077; mktemp /tmp/nmrnet-lifetime-query.XXXXXXXX)
     # Keep the helper in this shell so its retirement fact and container name
     # remain available to finish(); only its small stdout projection is captured.
-    helper "$selected_image" /opt/provider/environment/bin/python /input/provider_deployment.py lifetime-owner --bundle "$bundle" > "$lifetime_query"
+    helper "$selected_image" /opt/provider/environment/bin/python /opt/provider/provider_deployment.py lifetime-owner --bundle "$bundle" > "$lifetime_query"
     IFS= read -r owner < "$lifetime_query"
     rm -- "$lifetime_query"
     lifetime_query=
@@ -416,9 +415,8 @@ initialize_lifetime() {
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
         --log-opt mode=non-blocking --log-opt max-buffer-size=1m \
         --mount "type=volume,src=$volume,dst=/lifetime,volume-nocopy" \
-        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly" \
         --entrypoint /opt/provider/environment/bin/python "$image" -I -B \
-        /input/provider_deployment.py initialize-lifetime --uid "$uid" --gid "$gid"
+        /opt/provider/provider_deployment.py initialize-lifetime --uid "$uid" --gid "$gid"
     helper_name=
 }
 if [[ $action == install || $action == update ]]; then
@@ -461,9 +459,8 @@ if [[ $action == install || $action == update ]]; then
     done
     runtime_helper_add_chown=$helper_add_chown
     helper_add_chown=false helper_add_dac_override=true
-    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime,readonly"
-        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
-    helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
+    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime,readonly")
+    helper "$controller_image" /opt/provider/environment/bin/python /opt/provider/provider_deployment.py prepare-runtime \
         --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid" --check-only
     helper_add_chown=$runtime_helper_add_chown helper_add_dac_override=false
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
@@ -480,7 +477,7 @@ if [[ $action == install || $action == update ]]; then
     [[ $revision =~ ^[0-9a-f]{40}$ ]] || exit 2
     mapfile -t inference_selectors < "$repository_root/containers/inference/image-inputs.txt"
     selectors=("${provider_image_inputs[@]}" "${geometry_image_inputs[@]}" "${inference_selectors[@]}"
-        artifacts/prediction-models.json tools/provider_deployment.py requirements/inference.lock requirements/unicore-source.json)
+        artifacts/prediction-models.json requirements/inference.lock requirements/unicore-source.json)
     mapfile -t source_names < <(repository_git -C "$repository_root" ls-tree -r --name-only HEAD -- "${selectors[@]}")
     read -r _git_mode _git_type upstream_revision _git_path < <(repository_git -C "$repository_root" ls-tree HEAD -- NMRNetplusplus)
     [[ $upstream_revision =~ ^[0-9a-f]{40}$ ]] || exit 2
@@ -492,7 +489,6 @@ if [[ $action == install || $action == update ]]; then
         source_arguments+=(--source "$name")
     done
     (( ${#source_arguments[@]} > 0 )) || exit 2
-    helper_grants+=(--mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
     for configuration in provider.toml deployment.toml; do
         file=$repository_root/config/deployments/$deployment_name/$configuration
         path "$file"
@@ -510,7 +506,7 @@ if [[ $action == install || $action == update ]]; then
         path "$file"
         helper_grants+=(--mount "type=bind,src=$file,dst=$file,readonly")
     done
-    helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py freeze \
+    helper "$controller_image" /opt/provider/environment/bin/python /opt/provider/provider_deployment.py freeze \
         --source-root /source "${source_arguments[@]}" \
         --definition "$repository_root/config/deployments/$deployment_name/provider.toml" \
         --settings "$repository_root/config/deployments/$deployment_name/deployment.toml" \
@@ -525,10 +521,9 @@ if [[ $action == install || $action == update ]]; then
         drain_provider
         run 120 "${compose[@]}" down --timeout 60
     fi
-    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime"
-        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
+    helper_grants=(--mount "type=bind,src=$root/runtime,dst=/runtime")
     helper_add_dac_override=$runtime_helper_add_chown
-    helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py prepare-runtime \
+    helper "$controller_image" /opt/provider/environment/bin/python /opt/provider/provider_deployment.py prepare-runtime \
         --runtime-root /runtime --uid "$caller_uid" --gid "$caller_gid"
     helper_add_dac_override=false
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
@@ -562,9 +557,8 @@ if [[ $action == retire-api-route ]]; then
     [[ -d $route_directory && $(stat -c '%u:%a' -- "$route_directory") == "$caller_uid:700" ]] \
         || { refuse 'the old API route must be the caller-owned private directory.'; exit 2; }
     image_record provider
-    helper_grants=(--mount "type=bind,src=$bundle/compose.json,dst=$bundle/compose.json,readonly"
-        --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
-    helper "$selected_image" /opt/provider/environment/bin/python /input/provider_deployment.py old-api-route \
+    helper_grants=(--mount "type=bind,src=$bundle/compose.json,dst=$bundle/compose.json,readonly")
+    helper "$selected_image" /opt/provider/environment/bin/python /opt/provider/provider_deployment.py old-api-route \
         --bundle "$bundle" --directory "$route_directory"
     rm -rf --one-file-system -- "$route_directory"
     printf 'Retired the old API route directory.\n'
@@ -624,9 +618,8 @@ case $action in
         image_record provider; controller_image=$selected_image
         [[ -v NMRNET_OUTPUT_INPUT && -n $NMRNET_OUTPUT_INPUT ]] || exit 2
         path "$NMRNET_OUTPUT_INPUT"
-        helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle,readonly"
-            --mount "type=bind,src=$repository_root/tools/provider_deployment.py,dst=/input/provider_deployment.py,readonly")
-        helper "$controller_image" /opt/provider/environment/bin/python /input/provider_deployment.py client-inputs --bundle "$bundle" \
+        helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle,readonly")
+        helper "$controller_image" /opt/provider/environment/bin/python /opt/provider/provider_deployment.py client-inputs --bundle "$bundle" \
             --prediction-image-id "$prediction_image" --client-root "$NMRNET_OUTPUT_INPUT"
         ;;
 esac
