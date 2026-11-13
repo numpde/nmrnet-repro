@@ -2,7 +2,7 @@
   "dependency_inputs": {
     "linux_idmap-0.3.3-py3-none-any.whl": "2f9b47529fe36acf636f3a6a8a62198bed41ee331002d95268fc8ba0c77e3dfc",
     "pip-26.2.2-py3-none-any.whl": "fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70",
-    "wheelhouse-tool-0.6.17.pyz": "8c8ad0ca2c1ee6147e6da525bc302254935b606726bfe4b0ec1ee9021371d58c"
+    "wheelhouse-tool-0.6.18.pyz": "8c8ad0ca2c1ee6147e6da525bc302254935b606726bfe4b0ec1ee9021371d58c"
   },
   "payload_files": {
     "acquisition_tool/__init__.py": {
@@ -57,8 +57,8 @@
     },
     "acquisition_tool/source_update.py": {
       "mode": 420,
-      "sha256": "4649409591210cb3ee0dffae186bf10ccb23991f67a237d0444eb5c65064c4e1",
-      "size": 13895
+      "sha256": "28a110e4fd136a28af3dad5027557bedc3938757fc6f326c7aea8f8c0b2c0b2b",
+      "size": 14015
     },
     "compose/acquisition.yml": {
       "mode": 420,
@@ -172,8 +172,8 @@
     },
     "provider_core/bound_http_proxy.py": {
       "mode": 420,
-      "sha256": "0b69dbe569b8f976b208919a9f1bffd7c3214b811d01fd812f92a953c41821b3",
-      "size": 35517
+      "sha256": "f3534749430248f0d5cf3a56f85f57157d04ce3e6ec5a20c60d6c39a9ca1f7dc",
+      "size": 35586
     },
     "provider_core/container_guard.py": {
       "mode": 420,
@@ -196,6 +196,6 @@
       "size": 23751
     }
   },
-  "release_version": "0.6.17",
-  "source_revision": "1546fbb3fa6b03700e4bf20f393368f0d870cafb"
+  "release_version": "0.6.18",
+  "source_revision": "429901aeb3a422fb361842c9a9187a57ff818370"
 }
