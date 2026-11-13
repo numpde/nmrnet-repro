@@ -59,9 +59,8 @@ exec {deployment_lock}< "$root"
 flock --nonblock "$deployment_lock" || { refuse 'another command is active; nothing was queued.'; exit 2; }
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
-source "$repository_root/tools/user_namespace_map.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
-helper_name= map_probe_name= map_probe_id= map_probe_removal_attempted=false map_query= lifetime_query= stop_query=
+helper_name= map_query= lifetime_query= stop_query=
 helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false helper_add_dac_override=false
 service_host_uid=$caller_uid service_host_gid=$caller_gid
 finish() {
@@ -75,18 +74,7 @@ finish() {
         fi
         cleanup_diagnostic=$inference_diagnostic
     fi
-    if [[ -n $map_probe_id && $map_probe_removal_attempted == false && $inference_retirement_confirmed == true ]]; then
-        map_probe_removal_attempted=true
-        if inference_native 'retire deployment identity probe' 15 stdio "${engine[@]}" rm --force "$map_probe_id"; then
-            if [[ $inference_retirement_confirmed == true ]]; then
-                map_probe_name= map_probe_id=
-            fi
-        else
-            cleanup=$?
-            cleanup_diagnostic=$inference_diagnostic
-        fi
-    fi
-    if [[ -n $map_query && -z $map_probe_name && $inference_retirement_confirmed == true ]]; then
+    if [[ -n $map_query && $inference_retirement_confirmed == true ]]; then
         rm -f -- "$map_query" || cleanup=$?
     fi
     if [[ $inference_retirement_confirmed == true && -n $lifetime_query ]]; then
@@ -106,8 +94,6 @@ finish() {
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Inspect Docker Compose status/logs and retain the selected configuration; an interrupted client does not prove Engine-side rollback. No automatic retry was sent.\n' >&2
         [[ -z $helper_name ]] || printf 'Configuration helper, if still present: %s\n' "$helper_name" >&2
-        [[ -z $map_probe_name ]] || printf 'Identity probe, if still present: %s\n' "$map_probe_name" >&2
-        [[ -z $map_probe_id ]] || printf 'Identity probe ID: %s\n' "$map_probe_id" >&2
         [[ -z $map_query ]] || printf 'Identity inspection metadata retained at %q.\n' "$map_query" >&2
     fi
     exit "$status"
@@ -117,51 +103,27 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; exit 2; }
 run() { local seconds=$1; shift; inference_native "$role Compose $action" "$seconds" stdio "${engine[@]}" "$@"; }
+map_engine_identity() {
+    local image=$1 python=$2 user_uid=$3 user_gid=$4 extra
+    python3 -I -S -B "$repository_root/host/bootstrap/acquisition/acquisition_tool/source_update.py" \
+        verify --source-dir "$repository_root/host/bootstrap/acquisition"
+    map_query=$(umask 077; mktemp /tmp/nmrnet-identity.XXXXXXXX)
+    controller_native 'deployment identity' untimed stdio \
+        env -u PYTHONHOME "PYTHONPATH=$repository_root/host/bootstrap/acquisition" \
+        python3 -P -S -B -m linux_idmap._cli \
+        --endpoint "$NMRNET_DOCKER_ENDPOINT_INPUT" --image "$image" --interpreter "$python" \
+        --user-uid "$user_uid" --user-gid "$user_gid" --uid "$caller_uid" --uid 0 --gid "$caller_gid" --gid 0 \
+        --memory-bytes 67108864 --pids-limit 8 --nano-cpus 250000000 --values > "$map_query"
+    IFS=' ' read -r mapped_service_uid mapped_root_uid mapped_service_gid mapped_root_gid extra < "$map_query"
+    [[ $mapped_service_uid =~ ^[0-9]+$ && $mapped_root_uid =~ ^[0-9]+$ && $mapped_service_gid =~ ^[0-9]+$ \
+        && $mapped_root_gid =~ ^[0-9]+$ && -z $extra ]] \
+        && cmp -s "$map_query" <(printf '%s %s %s %s\n' "$mapped_service_uid" "$mapped_root_uid" "$mapped_service_gid" "$mapped_root_gid") \
+        || { refuse 'the selected Engine identity is invalid.'; return 2; }
+    rm -- "$map_query"
+    map_query=
+}
 map_helper_identity() {
-    local image=$1 python=$2 pid running extra created mapped_service_uid mapped_service_gid mapped_root_uid mapped_root_gid probe_starttime
-    local helper_uuid map_probe_token
-    require_initial_user_and_pid_namespaces \
-        || { refuse 'host UID/GID mapping requires the initial user and PID namespaces.'; return 2; }
-    IFS= read -r helper_uuid < /proc/sys/kernel/random/uuid
-    map_query=$(umask 077; mktemp /tmp/nmrnet-helper-map.XXXXXXXX)
-    map_probe_name=nmrnet-map-${helper_uuid//-/}
-    map_probe_token=nmrnet-map-token-${helper_uuid//-/}
-    # The host caller verifies the exact command line through its selected /proc.
-    run 30 create --pull never --name "$map_probe_name" --network none --read-only --user 0:0 \
-        --cap-drop ALL --security-opt no-new-privileges:true --cpus 0.25 --memory 64m \
-        --memory-swap 64m --pids-limit 8 --entrypoint "$python" "$image" -I -B -c 'import time; time.sleep(60)' "$map_probe_token" \
-        > "$map_query"
-    [[ $inference_retirement_confirmed == true ]] \
-        || { refuse 'selected Engine identity probe creation has not settled.'; return 2; }
-    IFS= read -r created < "$map_query" || { refuse 'selected Engine identity probe creation returned no container ID.'; return 2; }
-    [[ $created =~ ^[0-9a-f]{64}$ ]] && cmp -s -- "$map_query" <(printf '%s\n' "$created") \
-        || { refuse 'selected Engine identity probe creation returned a malformed container ID.'; return 2; }
-    map_probe_id=$created
-    run 20 start "$map_probe_id" >/dev/null
-    [[ $inference_retirement_confirmed == true ]] \
-        || { refuse 'selected Engine identity probe start has not settled.'; return 2; }
-    run 20 inspect --format '{{.State.Pid}} {{.State.Running}}' "$map_probe_id" > "$map_query"
-    [[ $inference_retirement_confirmed == true ]] \
-        || { refuse 'selected Engine identity inspection has not settled.'; return 2; }
-    IFS=' ' read -r pid running extra < "$map_query" || return 2
-    [[ $pid =~ ^[1-9][0-9]*$ && $running == true && -z $extra ]] \
-        && cmp -s -- "$map_query" <(printf '%s %s\n' "$pid" "$running") \
-        || { refuse 'cannot establish the selected Engine helper identity.'; return 2; }
-    probe_starttime=$(probe_process_starttime "$pid") \
-        && probe_process_has_token "$pid" "$map_probe_token" \
-        || { refuse 'cannot bind the selected Engine mapping to its exact probe process.'; return 2; }
-    mapped_service_uid=$(host_id_for_container_id "/proc/$pid/uid_map" "$caller_uid") \
-        || { refuse 'the selected Engine does not map the provider UID into the helper namespace.'; return 2; }
-    mapped_service_gid=$(host_id_for_container_id "/proc/$pid/gid_map" "$caller_gid") \
-        || { refuse 'the selected Engine does not map the provider GID into the helper namespace.'; return 2; }
-    probe_process_is_same "$pid" "$map_probe_token" "$probe_starttime" \
-        || { refuse 'the selected Engine probe changed while its UID/GID maps were read.'; return 2; }
-    mapped_root_uid=$(host_id_for_container_id "/proc/$pid/uid_map" 0) \
-        || { refuse 'the selected Engine does not map container root into the helper namespace.'; return 2; }
-    mapped_root_gid=$(host_id_for_container_id "/proc/$pid/gid_map" 0) \
-        || { refuse 'the selected Engine does not map container root group into the helper namespace.'; return 2; }
-    probe_process_is_same "$pid" "$map_probe_token" "$probe_starttime" \
-        || { refuse 'the selected Engine probe changed while its UID/GID maps were read.'; return 2; }
+    map_engine_identity "$1" "$2" 0 0
     if [[ $mapped_service_uid == "$caller_uid" && $mapped_service_gid == "$caller_gid" ]]; then
         helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false
     elif [[ $mapped_root_uid == "$caller_uid" && $mapped_root_gid == "$caller_gid" ]]; then
@@ -170,19 +132,40 @@ map_helper_identity() {
         refuse 'the selected Engine maps neither the provider identity nor container root to the installing host user.'
         return 2
     fi
-    map_probe_removal_attempted=true
-    inference_native 'retire deployment identity probe' 20 stdio "${engine[@]}" rm --force "$map_probe_id"
-    [[ $inference_retirement_confirmed == true ]] \
-        || { refuse 'selected Engine identity probe retirement has not settled.'; return 2; }
-    wait_for_probe_process_retirement "$pid" "$probe_starttime" \
-        || { refuse 'cannot confirm the selected Engine identity probe process has retired.'; return 2; }
-    run 15 ps --all --no-trunc --filter "id=$map_probe_id" --format '{{.ID}}' > "$map_query"
-    [[ $inference_retirement_confirmed == true && ! -s $map_query ]] \
-        || { refuse 'cannot confirm the selected Engine identity probe has retired.'; return 2; }
-    map_probe_name= map_probe_id=
-    rm -- "$map_query"
-    map_query=
     service_host_uid=$mapped_service_uid service_host_gid=$mapped_service_gid
+}
+grant_prediction_model_access() {
+    local image=$1 directory acl owner_only intended
+    local -a pending=() granted=()
+    map_engine_identity "$image" /usr/local/bin/python "$caller_uid" "$caller_gid"
+    [[ $mapped_service_uid == "$service_host_uid" && $mapped_service_gid == "$service_host_gid" ]] \
+        || { refuse 'the model and configuration identities differ on the selected Engine.'; return 2; }
+    [[ $mapped_service_uid != "$caller_uid" ]] || return 0
+    owner_only=$'user::rwx\ngroup::---\nother::---'
+    intended=$(printf 'user::rwx\nuser:%s:--x\ngroup::---\nmask::--x\nother::---' "$mapped_service_uid")
+    for directory in "$repository_root/.work/prepared/weight" "$repository_root/.work/prepared/checkpoints"; do
+        path "$directory"
+        [[ -d $directory && ! -L $directory && $(stat -c '%u' -- "$directory") == "$caller_uid" ]] \
+            || { refuse 'prepared model roots must be caller-owned directories without symlinks.'; return 2; }
+        acl=$(getfacl --physical --omit-header --numeric -- "$directory") \
+            || { refuse 'cannot inspect prepared model access.'; return 2; }
+        [[ $acl == "$intended" ]] && continue
+        [[ $acl == "$owner_only" ]] \
+            || { refuse 'prepared model root has an unexpected ACL; preserve it and inspect access.'; return 2; }
+        pending+=("$directory")
+    done
+    for directory in "${pending[@]}"; do
+        if [[ $(getfacl --physical --omit-header --numeric -- "$directory") != "$owner_only" ]] \
+            || ! setfacl --physical --modify "u:$mapped_service_uid:--x,m::--x" -- "$directory" \
+            || [[ $(getfacl --physical --omit-header --numeric -- "$directory") != "$intended" ]]; then
+            printf 'Prepared model access may have changed at %q; confirmed grants in this operation:' "$directory" >&2
+            for acl in "${granted[@]}"; do printf ' %q' "$acl" >&2; done
+            printf '\n' >&2
+            refuse 'prepared model traversal grant could not be confirmed; inspect the listed paths.'
+            return 2
+        fi
+        granted+=("$directory")
+    done
 }
 capture_stop_metadata() {
     # Preserve the native owner's facts in this shell; only bounded Engine
@@ -462,6 +445,7 @@ if [[ $action == install || $action == update ]]; then
     helper_grants=(--mount "type=bind,src=$bundle,dst=$bundle")
     image_record inference; scientific_image=$selected_image
     admit_recorded_image inference "$scientific_image"
+    grant_prediction_model_access "$scientific_image"
     image_record preparation; geometry_image=$selected_image
     admit_recorded_image geometry "$geometry_image"
     source "$repository_root/tools/git_metadata.sh"

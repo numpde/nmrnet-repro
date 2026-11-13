@@ -258,6 +258,10 @@ settings in nmr-provider-tools. No socket grant belongs in the public provider d
 <code>.work/provider/</code>, <code>.work/preparation/</code> and <code>.work/inference/</code>.
 Install admits those image records and captures the model selection from
 <code>artifacts/prediction-models.json</code>; up uses the frozen generation.</p>
+<p>For a rootless Engine, install uses the released identity probe to identify the
+prediction runner's host UID and grants it traversal of the private prepared
+<code>weight</code> and <code>checkpoints</code> roots. It requires <code>getfacl</code>
+and <code>setfacl</code>, and refuses unexpected existing ACLs rather than changing them.</p>
 <pre><code class="language-sh">make -C /path/to/nmr-provider-tools delivery/deployment/up SHARED_SETTINGS=/path/to/nmr-provider-tools/config/deployments/localhost/settings.toml SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE
 
 make provider/deployment/install DEPLOYMENT=&lt;name&gt; SHARED_RUNTIME_IMAGE=sha256:YOUR_SHARED_IMAGE

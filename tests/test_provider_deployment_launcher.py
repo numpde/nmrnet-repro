@@ -34,28 +34,14 @@ class DeploymentLauncherTests(unittest.TestCase):
         self.home.mkdir(mode=0o700)
         tools = self.root / "tools"
         tools.mkdir()
-        (self.root / "host").mkdir()
+        (self.root / "host/bootstrap/acquisition/acquisition_tool").mkdir(parents=True)
+        (self.root / "host/bootstrap/acquisition/acquisition_tool/source_update.py").write_text("")
         shutil.copyfile(ROOT / "host/compose_image_ids.py", self.root / "host/compose_image_ids.py")
-        for name in ("compose_deployment.sh", "provider_deployment.sh", "image_lifecycle.sh", "user_namespace_map.sh"):
+        for name in ("compose_deployment.sh", "provider_deployment.sh", "image_lifecycle.sh"):
             shutil.copyfile(ROOT / "tools" / name, tools / name)
-        # Tests can opt into a rootless host mapping. The map parser itself is
-        # exercised against synthetic maps by its own tests.
-        (tools / "user_namespace_map.sh").write_text("""
-require_initial_user_and_pid_namespaces() { return 0; }
-probe_process_starttime() { printf '123\\n'; }
-probe_process_has_token() { return 0; }
-probe_process_is_same() { return 0; }
-wait_for_probe_process_retirement() { return 0; }
-container_id_for_host_id() { printf '%s\\n' "$2"; }
-host_id_for_container_id() {
-    if [[ ${TEST_MAPPED_IDENTITIES-false} != true ]]; then printf '%s\\n' "$2";
-    elif [[ $2 == 0 ]]; then printf '%s\\n' "$TEST_CALLER_UID";
-    else printf '%s\\n' "$((100000 + $2))"; fi
-}
-""")
         (
             tools / "docker_client.sh"
-        ).write_text("""docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); }
+        ).write_text("""docker_client_prepare() { engine=(bash "$repository_root/tools/record-engine.sh" "$repository_root"); NMRNET_DOCKER_ENDPOINT_INPUT=unix:///fixture/docker.sock; }
 docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanup"; }
 """)
         (tools / "inference_native.sh").write_text("""inference_native() {
@@ -71,14 +57,8 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
         inference_retirement_confirmed=${TEST_GENERATION_INSPECT_RETIRED-${TEST_RETIRED-true}}
     elif [[ $operation == 'provider stop inspection' && " $* " == *' ps --quiet '* ]]; then
         inference_retirement_confirmed=${TEST_PROJECT_RETIRED-${TEST_RETIRED-true}}
-    elif [[ $operation == 'retire deployment identity probe' ]]; then
-        inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
-    elif [[ " $* " == *' ps --all --no-trunc --filter id='* ]]; then
-        inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
     elif [[ $operation == 'retire deployment configuration helper' ]]; then
         inference_retirement_confirmed=${TEST_RETIRED-true}
-    elif [[ " $* " == *' nmrnet-map-'* || " $* " == *' 0000000000000000000000000000000000000000000000000000000000000006 '* ]]; then
-        inference_retirement_confirmed=${TEST_MAP_RETIRED-true}
     elif [[ " $* " == *' run --rm --pull never --name nmrnet-config-'* ]]; then
         inference_retirement_confirmed=${TEST_RETIRED-true}
     else
@@ -90,6 +70,18 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
         else inference_diagnostic=${TEST_PRIMARY_DIAGNOSTIC-}; fi
     fi
     return "$status"
+}
+controller_native() {
+    printf '%s\\n' "$*" >> "$repository_root/model-mapping"
+    if [[ ${TEST_MAP_STATUS-0} != 0 ]]; then
+        printf '%s\\n' 'Identity probe did not confirm retirement.' >&2
+        return "$TEST_MAP_STATUS"
+    fi
+    if [[ ${TEST_MAPPED_IDENTITIES-false} == true ]]; then
+        printf '%s %s %s %s\\n' "$TEST_MAPPED_UID" "$TEST_CALLER_UID" "$TEST_MAPPED_GID" "$TEST_CALLER_GID"
+    else
+        printf '%s 0 %s 0\\n' "$TEST_CALLER_UID" "$TEST_CALLER_GID"
+    fi
 }
 """)
         (tools / "provider_image.sh").write_text("provider_image_inputs=(tools/provider_deployment.py)\n")
@@ -109,8 +101,6 @@ count=0
 count=$((count + 1)); printf '%s\n' "$count" > "$root/count"
 printf '%s\0' "$@" > "$root/call-$count"
 case $1 in
- create) [[ ${TEST_CREATE_STATUS-0} == 0 ]] || exit "$TEST_CREATE_STATUS"; printf '%064d\n' 6 ;;
- start) ;;
  ps)
     [[ ${TEST_PS_STATUS-0} == 0 ]] || exit "$TEST_PS_STATUS"
     if [[ " $* " == *' --filter volume='* ]]; then
@@ -235,8 +225,7 @@ path.write_text(json.dumps(plan))
     : > "$root/provider-stopped"
     ;;
  rm)
-    if [[ ${3-} =~ ^0{63}6$ ]]; then [[ ${TEST_MAP_RM_STATUS-0} == 0 ]] || exit "$TEST_MAP_RM_STATUS"
-    else [[ ${TEST_RM_STATUS-0} == 0 ]] || exit "$TEST_RM_STATUS"; fi
+    [[ ${TEST_RM_STATUS-0} == 0 ]] || exit "$TEST_RM_STATUS"
     ;;
  *) exit 91 ;;
 esac
@@ -314,12 +303,6 @@ esac
             timeout=5,
             check=False,
         )
-
-    def remove_retained_identity_metadata(self, result):
-        prefix = "Identity inspection metadata retained at "
-        for line in result.stderr.splitlines():
-            if line.startswith(prefix):
-                Path(line.removeprefix(prefix)).unlink(missing_ok=True)
 
     def calls(self):
         """Read engine argv and check the code boundary shared by deployment helpers."""
@@ -436,7 +419,6 @@ esac
         )
         start = next(index for index, call in enumerate(calls) if call[0] == "compose" and "up" in call)
         freeze_call = calls[freeze]
-        probe_create = next(call for call in calls if call[0] == "create")
         self.assertLess(check, freeze)
         self.assertLess(freeze, stop)
         self.assertLess(stop, down)
@@ -447,7 +429,9 @@ esac
         self.assertNotIn("CHOWN", check_call)
         self.assertEqual("sha256:" + "d" * 64, freeze_call[freeze_call.index("--image-id") + 1])
         self.assertEqual("sha256:" + "e" * 64, freeze_call[freeze_call.index("--geometry-image-id") + 1])
-        self.assertEqual("never", probe_create[probe_create.index("--pull") + 1])
+        probes = (self.root / "model-mapping").read_text().splitlines()
+        self.assertEqual(2, len(probes))
+        self.assertTrue(all("linux_idmap._cli" in probe for probe in probes))
         self.assertNotEqual(self.current_target(), "bundles/generation-original")
 
     def test_update_admits_every_recorded_scientific_image_before_draining(self):
@@ -710,21 +694,18 @@ esac
         self.assertTrue(obsolete.is_dir())
         self.assertIn("Retained previous configuration generations.", result.stdout)
 
-    def test_identity_probe_create_failure_does_not_remove_an_unadmitted_name(self):
-        result = self.run_command("install", changes={"TEST_CREATE_STATUS": "7"})
+    def test_identity_probe_failure_prevents_configuration(self):
+        result = self.run_command("install", changes={"TEST_MAP_STATUS": "7"})
         self.assertEqual(7, result.returncode, msg=result.stderr)
-        self.assertFalse(any(call[0] == "rm" for call in self.calls()))
-        self.assertIn("Identity probe, if still present:", result.stderr)
-        self.remove_retained_identity_metadata(result)
+        self.assertFalse(any("freeze" in call for call in self.calls()))
+        self.assertEqual(1, len((self.root / "model-mapping").read_text().splitlines()))
 
-    def test_identity_probe_removal_is_not_retried_after_an_uncertain_attempt(self):
-        result = self.run_command("install", changes={"TEST_MAP_RM_STATUS": "9"})
-        self.assertEqual(9, result.returncode, msg=result.stderr)
-        removals = [call for call in self.calls() if call[0] == "rm"]
-        self.assertEqual(1, len(removals))
-        self.assertRegex(removals[0][2], r"^[0-9a-f]{64}$")
-        self.assertIn("Identity probe ID:", result.stderr)
-        self.remove_retained_identity_metadata(result)
+    def test_unretired_identity_probe_does_not_continue_or_retry(self):
+        result = self.run_command("install", changes={"TEST_MAP_STATUS": "3"})
+        self.assertEqual(3, result.returncode, msg=result.stderr)
+        self.assertIn("did not confirm retirement", result.stderr)
+        self.assertFalse(any("freeze" in call for call in self.calls()))
+        self.assertEqual(1, len((self.root / "model-mapping").read_text().splitlines()))
 
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command("install")
@@ -758,16 +739,10 @@ esac
         self.assertEqual(selected.stat().st_mode & 0o777, 0o555)
         self.assertEqual((selected / "compose.json").stat().st_mode & 0o777, 0o444)
         self.assertFalse(self.bundle.exists())
-        probes = [call for call in self.calls() if call[0] in ("create", "start")]
-        self.assertEqual([call[0] for call in probes], ["create", "start"])
-        admitted_id = f"{6:064d}"
-        self.assertEqual(probes[1][1], admitted_id)
-        inspected = next(
-            call for call in self.calls() if call[0] == "inspect" and any(".State.Pid" in argument for argument in call)
-        )
-        self.assertEqual(inspected[-1], admitted_id)
-        removed = next(call for call in self.calls() if call[0] == "rm")
-        self.assertEqual(removed[-1], admitted_id)
+        probes = (self.root / "model-mapping").read_text().splitlines()
+        self.assertEqual(2, len(probes))
+        self.assertIn("--interpreter /opt/provider/environment/bin/python --user-uid 0 --user-gid 0", probes[0])
+        self.assertIn(f"--interpreter /usr/local/bin/python --user-uid {os.getuid()} --user-gid {os.getgid()}", probes[1])
         freeze_user = next(call[call.index("--user") + 1] for call in self.calls() if "freeze" in call)
         self.assertEqual(freeze_user, f"{os.getuid()}:{os.getgid()}")
 
@@ -780,6 +755,20 @@ esac
         mapped_gid = os.getgid() + 100000
         fake_bin = self.root / "fake-bin"
         fake_bin.mkdir()
+        for name in ("weight", "checkpoints"):
+            (self.root / ".work/prepared" / name).mkdir(parents=True, mode=0o700)
+        fake_acl = self.root / "fake-acl.sh"
+        fake_acl.write_text("""getfacl() {
+directory=${@: -1}
+if [[ -f $directory/.fixture-acl ]]; then cat "$directory/.fixture-acl"
+else printf 'user::rwx\\ngroup::---\\nother::---\\n'; fi
+}
+setfacl() {
+directory=${@: -1}
+if [[ ${TEST_ACL_FAIL-false} == true && $directory == */checkpoints ]]; then return 1; fi
+printf 'user::rwx\\nuser:%s:--x\\ngroup::---\\nmask::--x\\nother::---\\n' "$TEST_MAPPED_UID" > "$directory/.fixture-acl"
+}
+""")
         fake_stat = fake_bin / "stat"
         fake_stat.write_text("""#!/usr/bin/env bash
 if [[ ${1-} == -c && ${2-} == '%u:%g:%a' && ${4-} == "$TEST_RUNTIME_ROOT/"* ]]; then
@@ -789,18 +778,43 @@ else
 fi
 """)
         fake_stat.chmod(0o755)
-        result = self.run_command(
-            "install",
-            changes={
-                "PATH": f"{fake_bin}:{os.environ['PATH']}",
-                "TEST_MAPPED_IDENTITIES": "true",
-                "TEST_RUNTIME_ROOT": str(runtime_root),
-                "TEST_MAPPED_UID": str(mapped_uid),
-                "TEST_MAPPED_GID": str(mapped_gid),
-            },
-        )
+        changes = {
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "BASH_ENV": str(fake_acl),
+            "TEST_MAPPED_IDENTITIES": "true",
+            "TEST_RUNTIME_ROOT": str(runtime_root),
+            "TEST_MAPPED_UID": str(mapped_uid),
+            "TEST_MAPPED_GID": str(mapped_gid),
+        }
+        result = self.run_command("install", changes=changes)
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Installed provider configuration.", result.stdout)
+        mapping = (self.root / "model-mapping").read_text()
+        self.assertIn("linux_idmap._cli", mapping)
+        self.assertIn("--uid " + str(os.getuid()), mapping)
+        self.assertIn("--memory-bytes 67108864 --pids-limit 8 --nano-cpus 250000000", mapping)
+        for name in ("weight", "checkpoints"):
+            acl = (self.root / ".work/prepared" / name / ".fixture-acl").read_text()
+            self.assertIn(f"user:{mapped_uid}:--x", acl)
+        weight_acl = self.root / ".work/prepared/weight/.fixture-acl"
+        checkpoint_acl = self.root / ".work/prepared/checkpoints/.fixture-acl"
+        weight_acl.unlink()
+        checkpoint_acl.write_text("unexpected existing access\n")
+        selected = self.current_target()
+        refused = self.run_command("install", changes=changes)
+        self.assertNotEqual(0, refused.returncode)
+        self.assertIn("unexpected ACL", refused.stderr)
+        self.assertFalse(weight_acl.exists())
+        self.assertEqual("unexpected existing access\n", checkpoint_acl.read_text())
+        self.assertEqual(selected, self.current_target())
+        checkpoint_acl.unlink()
+        failed = self.run_command("install", changes=changes | {"TEST_ACL_FAIL": "true"})
+        self.assertNotEqual(0, failed.returncode)
+        self.assertIn(str(weight_acl.parent), failed.stderr)
+        self.assertIn(str(checkpoint_acl.parent), failed.stderr)
+        self.assertIn(f"user:{mapped_uid}:--x", weight_acl.read_text())
+        self.assertFalse(checkpoint_acl.exists())
+        self.assertEqual(selected, self.current_target())
 
     def test_retirement_preserves_current_stopped_borrowers_and_original_inputs(self):
         bundles = self.provider / "bundles"
@@ -1027,9 +1041,7 @@ fi
             },
         )
         self.assertEqual(7, result.returncode, msg=result.stderr)
-        self.assertEqual(
-            [call[0] for call in self.calls()], ["ps", "ps", "image", "image", "create", "start", "inspect", "rm", "ps", "run"]
-        )
+        self.assertEqual([call[0] for call in self.calls()], ["ps", "ps", "image", "image", "run"])
         self.assertFalse((self.root / "cleanup").exists())
         self.assertIn("Configuration helper, if still present:", result.stderr)
 
