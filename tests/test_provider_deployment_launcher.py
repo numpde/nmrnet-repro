@@ -74,6 +74,9 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
 controller_native() {
     printf '%s\\n' "$*" >> "$repository_root/model-mapping"
     if [[ ${TEST_MAP_STATUS-0} != 0 ]]; then
+        if [[ ${TEST_MAP_PARTIAL-false} == true ]]; then
+            printf '%s 0 %s 0\\n' "$TEST_CALLER_UID" "$TEST_CALLER_GID"
+        fi
         printf '%s\\n' 'Identity probe did not confirm retirement.' >&2
         return "$TEST_MAP_STATUS"
     fi
@@ -697,6 +700,14 @@ esac
     def test_identity_probe_failure_prevents_configuration(self):
         result = self.run_command("install", changes={"TEST_MAP_STATUS": "7"})
         self.assertEqual(7, result.returncode, msg=result.stderr)
+        self.assertFalse(any("freeze" in call for call in self.calls()))
+        self.assertEqual(1, len((self.root / "model-mapping").read_text().splitlines()))
+
+    def test_failed_identity_probe_output_does_not_authorize_configuration(self):
+        selected = self.current_target()
+        result = self.run_command("install", changes={"TEST_MAP_STATUS": "143", "TEST_MAP_PARTIAL": "true"})
+        self.assertEqual(143, result.returncode, msg=result.stderr)
+        self.assertEqual(selected, self.current_target())
         self.assertFalse(any("freeze" in call for call in self.calls()))
         self.assertEqual(1, len((self.root / "model-mapping").read_text().splitlines()))
 
