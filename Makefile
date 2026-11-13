@@ -218,6 +218,8 @@ test/unit/packages/wheelhouse:
 test/repository/wheelhouse:
 	bash tools/container.sh $@
 .PHONY: test/repository/provider
+# This lane checks source conventions and consumer launcher grants; deployment
+# launcher behavior belongs to test/unit/provider/deployment.
 test/repository/provider:
 	bash tools/container.sh $@
 .PHONY: packages/preparation/wheelhouse packages/preparation/wheelhouse/check
@@ -330,7 +332,7 @@ help:
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
-		'make test/repository/provider          Check consumer source, launcher grants, Make inventory and import conventions.' \
+		'make test/repository/provider          Check consumer source, consumer launcher grants, Make inventory and import conventions.' \
 		'make provider/prepare                   Acquire dependencies/models and build images; choose cache and interface once.' \
 		'make provider/deployment/install DEPLOYMENT=<name> [SHARED_RUNTIME_IMAGE=sha256:<id>] [RETAIN_PRIOR=1] Freeze and select inputs while stopped.' \
 		'make provider/deployment/update DEPLOYMENT=<name> DOCKER_CONTEXT=<local-context> WHEELHOUSE=<shared-pool> [RETAIN_PRIOR=1] Build, drain, install and start the provider.' \
@@ -348,7 +350,7 @@ help:
 		'make test/integration/provider/deployment/capacity Qualify H128/C128 input/output capacity through the connected Compose path (opt-in).' \
 		'make test/integration/provider/deployment/successive Run two distinct Jobs through one service, then check restart without replay (opt-in).' \
 		'make test/integration/provider/deployment/recovery Check idle delivery restart and reader-process recovery without scientific work (opt-in).' \
-		'make test/unit/provider/deployment     Check finite deployment and API-client orchestration offline.' \
+		'make test/unit/provider/deployment     Check deployment launcher and API-client orchestration offline.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
