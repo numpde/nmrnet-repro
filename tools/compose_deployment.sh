@@ -60,7 +60,8 @@ flock --nonblock "$deployment_lock" || { refuse 'another command is active; noth
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
-helper_name= map_query= lifetime_query= stop_query=
+identity_retirement_confirmed=true
+helper_name= lifetime_query= stop_query=
 helper_uid=$caller_uid helper_gid=$caller_gid helper_add_chown=false helper_add_dac_override=false
 service_host_uid=$caller_uid service_host_gid=$caller_gid
 finish() {
@@ -74,9 +75,6 @@ finish() {
         fi
         cleanup_diagnostic=$inference_diagnostic
     fi
-    if [[ -n $map_query && $inference_retirement_confirmed == true ]]; then
-        rm -f -- "$map_query" || cleanup=$?
-    fi
     if [[ $inference_retirement_confirmed == true && -n $lifetime_query ]]; then
         rm -f -- "$lifetime_query" || cleanup=$?
     fi
@@ -87,14 +85,15 @@ finish() {
             printf 'Deployment inspection metadata remains owned by an unretired client: %q.\n' "$stop_query" >&2
         fi
     fi
-    if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || cleanup=$?; fi
+    if [[ $inference_retirement_confirmed == true && $identity_retirement_confirmed == true ]]; then
+        docker_client_cleanup || cleanup=$?
+    fi
     [[ $status != 0 || $cleanup == 0 ]] || status=$cleanup
     [[ -z $primary_diagnostic ]] || printf '%s\n' "$primary_diagnostic" >&2
     [[ -z $cleanup_diagnostic ]] || printf '%s\n' "$cleanup_diagnostic" >&2
     if [[ $status != 0 ]]; then
         printf 'Deployment command did not complete. Inspect Docker Compose status/logs and retain the selected configuration; an interrupted client does not prove Engine-side rollback. No automatic retry was sent.\n' >&2
         [[ -z $helper_name ]] || printf 'Configuration helper, if still present: %s\n' "$helper_name" >&2
-        [[ -z $map_query ]] || printf 'Identity inspection metadata retained at %q.\n' "$map_query" >&2
     fi
     exit "$status"
 }
@@ -104,23 +103,33 @@ trap 'exit 143' TERM HUP
 docker_client_prepare run || { printf '%s\n' "$docker_client_diagnostic" >&2; exit 2; }
 run() { local seconds=$1; shift; inference_native "$role Compose $action" "$seconds" stdio "${engine[@]}" "$@"; }
 map_engine_identity() {
-    local image=$1 python=$2 user_uid=$3 user_gid=$4 extra
+    local image=$1 python=$2 user_uid=$3 user_gid=$4 map_directory status=0
+    local -a mapped_ids=()
     python3 -I -S -B "$repository_root/host/bootstrap/acquisition/acquisition_tool/source_update.py" \
         verify --source-dir "$repository_root/host/bootstrap/acquisition"
-    map_query=$(umask 077; mktemp /tmp/nmrnet-identity.XXXXXXXX)
-    controller_native 'deployment identity' untimed stdio \
-        env -u PYTHONHOME "PYTHONPATH=$repository_root/host/bootstrap/acquisition" \
-        python3 -P -S -B -m linux_idmap._cli \
-        --endpoint "$NMRNET_DOCKER_ENDPOINT_INPUT" --image "$image" --interpreter "$python" \
-        --user-uid "$user_uid" --user-gid "$user_gid" --uid "$caller_uid" --uid 0 --gid "$caller_gid" --gid 0 \
-        --memory-bytes 67108864 --pids-limit 8 --nano-cpus 250000000 --values > "$map_query"
-    IFS=' ' read -r mapped_service_uid mapped_root_uid mapped_service_gid mapped_root_gid extra < "$map_query"
-    [[ $mapped_service_uid =~ ^[0-9]+$ && $mapped_root_uid =~ ^[0-9]+$ && $mapped_service_gid =~ ^[0-9]+$ \
-        && $mapped_root_gid =~ ^[0-9]+$ && -z $extra ]] \
-        && cmp -s "$map_query" <(printf '%s %s %s %s\n' "$mapped_service_uid" "$mapped_root_uid" "$mapped_service_gid" "$mapped_root_gid") \
-        || { refuse 'the selected Engine identity is invalid.'; return 2; }
-    rm -- "$map_query"
-    map_query=
+    source "$repository_root/host/bootstrap/acquisition/acquisition_tool/owner.sh"
+    map_directory=$(umask 077; mktemp -d /tmp/nmrnet-identity.XXXXXXXX)
+    acquisition_project_ids mapped_ids 4 "$NMRNET_DOCKER_ENDPOINT_INPUT" "$image" "$map_directory/retired" \
+        --interpreter "$python" --user-uid "$user_uid" --user-gid "$user_gid" \
+        --memory-bytes 67108864 --pids-limit 8 --nano-cpus 250000000 \
+        --map uid forward "$caller_uid" --map uid forward 0 \
+        --map gid forward "$caller_gid" --map gid forward 0 || status=$?
+    if ! cmp -s "$map_directory/retired" <(printf 'retired\n'); then
+        identity_retirement_confirmed=false
+        printf 'Identity probe retirement is unconfirmed; inspection metadata remains at %q.\n' "$map_directory" >&2
+        [[ $status != 0 ]] || status=2
+        return "$status"
+    fi
+    if ! rm -- "$map_directory/retired"; then
+        printf 'Cannot remove identity retirement receipt at %q.\n' "$map_directory/retired" >&2
+        [[ $status != 0 ]] || status=2
+    elif ! rmdir -- "$map_directory"; then
+        printf 'Cannot remove identity inspection directory at %q.\n' "$map_directory" >&2
+        [[ $status != 0 ]] || status=2
+    fi
+    [[ $status == 0 ]] || return "$status"
+    mapped_service_uid=${mapped_ids[0]} mapped_root_uid=${mapped_ids[1]}
+    mapped_service_gid=${mapped_ids[2]} mapped_root_gid=${mapped_ids[3]}
 }
 map_helper_identity() {
     map_engine_identity "$1" "$2" 0 0

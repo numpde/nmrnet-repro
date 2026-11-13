@@ -36,6 +36,23 @@ class DeploymentLauncherTests(unittest.TestCase):
         tools.mkdir()
         (self.root / "host/bootstrap/acquisition/acquisition_tool").mkdir(parents=True)
         (self.root / "host/bootstrap/acquisition/acquisition_tool/source_update.py").write_text("")
+        (self.root / "host/bootstrap/acquisition/acquisition_tool/owner.sh").write_text("""acquisition_project_ids() {
+    local -n output=$1
+    local receipt=$5
+    printf '%s\\n' "$*" >> "$repository_root/model-mapping"
+    if [[ ${TEST_MAP_UNRETIRED-false} != true ]]; then printf 'retired\\n' > "$receipt"; fi
+    if [[ ${TEST_MAP_STATUS-0} != 0 ]]; then
+        if [[ ${TEST_MAP_PARTIAL-false} == true ]]; then printf '%s 0 %s 0\\n' "$TEST_CALLER_UID" "$TEST_CALLER_GID"; fi
+        printf '%s\\n' 'Identity probe did not confirm retirement.' >&2
+        return "$TEST_MAP_STATUS"
+    fi
+    if [[ ${TEST_MAPPED_IDENTITIES-false} == true ]]; then
+        output=("$TEST_MAPPED_UID" "$TEST_CALLER_UID" "$TEST_MAPPED_GID" "$TEST_CALLER_GID")
+    else
+        output=("$TEST_CALLER_UID" 0 "$TEST_CALLER_GID" 0)
+    fi
+}
+""")
         shutil.copyfile(ROOT / "host/compose_image_ids.py", self.root / "host/compose_image_ids.py")
         for name in ("compose_deployment.sh", "provider_deployment.sh", "image_lifecycle.sh"):
             shutil.copyfile(ROOT / "tools" / name, tools / name)
@@ -70,21 +87,6 @@ docker_client_cleanup() { printf 'client-cleanup\\n' >> "$repository_root/cleanu
         else inference_diagnostic=${TEST_PRIMARY_DIAGNOSTIC-}; fi
     fi
     return "$status"
-}
-controller_native() {
-    printf '%s\\n' "$*" >> "$repository_root/model-mapping"
-    if [[ ${TEST_MAP_STATUS-0} != 0 ]]; then
-        if [[ ${TEST_MAP_PARTIAL-false} == true ]]; then
-            printf '%s 0 %s 0\\n' "$TEST_CALLER_UID" "$TEST_CALLER_GID"
-        fi
-        printf '%s\\n' 'Identity probe did not confirm retirement.' >&2
-        return "$TEST_MAP_STATUS"
-    fi
-    if [[ ${TEST_MAPPED_IDENTITIES-false} == true ]]; then
-        printf '%s %s %s %s\\n' "$TEST_MAPPED_UID" "$TEST_CALLER_UID" "$TEST_MAPPED_GID" "$TEST_CALLER_GID"
-    else
-        printf '%s 0 %s 0\\n' "$TEST_CALLER_UID" "$TEST_CALLER_GID"
-    fi
 }
 """)
         (tools / "provider_image.sh").write_text("provider_image_inputs=(tools/provider_deployment.py)\n")
@@ -434,7 +436,7 @@ esac
         self.assertEqual("sha256:" + "e" * 64, freeze_call[freeze_call.index("--geometry-image-id") + 1])
         probes = (self.root / "model-mapping").read_text().splitlines()
         self.assertEqual(2, len(probes))
-        self.assertTrue(all("linux_idmap._cli" in probe for probe in probes))
+        self.assertTrue(all("--map uid forward" in probe for probe in probes))
         self.assertNotEqual(self.current_target(), "bundles/generation-original")
 
     def test_update_admits_every_recorded_scientific_image_before_draining(self):
@@ -712,11 +714,20 @@ esac
         self.assertEqual(1, len((self.root / "model-mapping").read_text().splitlines()))
 
     def test_unretired_identity_probe_does_not_continue_or_retry(self):
-        result = self.run_command("install", changes={"TEST_MAP_STATUS": "3"})
+        result = self.run_command("install", changes={"TEST_MAP_STATUS": "3", "TEST_MAP_UNRETIRED": "true"})
         self.assertEqual(3, result.returncode, msg=result.stderr)
         self.assertIn("did not confirm retirement", result.stderr)
         self.assertFalse(any("freeze" in call for call in self.calls()))
         self.assertEqual(1, len((self.root / "model-mapping").read_text().splitlines()))
+
+    def test_identity_values_without_retirement_do_not_authorize_configuration(self):
+        selected = self.current_target()
+        result = self.run_command("install", changes={"TEST_MAP_UNRETIRED": "true"})
+        self.assertEqual(2, result.returncode, msg=result.stderr)
+        self.assertIn("retirement is unconfirmed", result.stderr)
+        self.assertEqual(selected, self.current_target())
+        self.assertFalse(any("freeze" in call for call in self.calls()))
+        self.assertFalse((self.root / "cleanup").exists())
 
     def test_provider_freeze_has_narrow_readonly_sources_and_fixed_helper_grants(self):
         result = self.run_command("install")
@@ -752,6 +763,16 @@ esac
         self.assertFalse(self.bundle.exists())
         probes = (self.root / "model-mapping").read_text().splitlines()
         self.assertEqual(2, len(probes))
+        for probe in probes:
+            args = probe.split()
+            self.assertEqual(args[:4], ["mapped_ids", "4", "unix:///fixture/docker.sock", IMAGE])
+            self.assertTrue(args[4].startswith("/tmp/nmrnet-identity."))
+            self.assertTrue(args[4].endswith("/retired"))
+            self.assertEqual(
+                args[-16:],
+                ["--map", "uid", "forward", str(os.getuid()), "--map", "uid", "forward", "0",
+                 "--map", "gid", "forward", str(os.getgid()), "--map", "gid", "forward", "0"],
+            )
         self.assertIn("--interpreter /opt/provider/environment/bin/python --user-uid 0 --user-gid 0", probes[0])
         self.assertIn(f"--interpreter /usr/local/bin/python --user-uid {os.getuid()} --user-gid {os.getgid()}", probes[1])
         freeze_user = next(call[call.index("--user") + 1] for call in self.calls() if "freeze" in call)
@@ -801,8 +822,8 @@ fi
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertIn("Installed provider configuration.", result.stdout)
         mapping = (self.root / "model-mapping").read_text()
-        self.assertIn("linux_idmap._cli", mapping)
-        self.assertIn("--uid " + str(os.getuid()), mapping)
+        self.assertIn("--map uid forward " + str(os.getuid()), mapping)
+        self.assertIn(f"--map uid forward {os.getuid()} --map uid forward 0 --map gid forward {os.getgid()} --map gid forward 0", mapping)
         self.assertIn("--memory-bytes 67108864 --pids-limit 8 --nano-cpus 250000000", mapping)
         for name in ("weight", "checkpoints"):
             acl = (self.root / ".work/prepared" / name / ".fixture-acl").read_text()
