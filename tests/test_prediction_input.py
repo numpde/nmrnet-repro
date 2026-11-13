@@ -453,6 +453,21 @@ class PredictionSessionTests(unittest.TestCase):
             session.execute(handle)
         self.assertEqual(2, loader.call_count)
 
+    def test_prepared_handle_cannot_move_between_prediction_sessions(self):
+        first = predict.PredictionSession(PredictionDictionary, mock.Mock(return_value=(object(), object())))
+        second = predict.PredictionSession(PredictionDictionary, mock.Mock(return_value=(object(), object())))
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
+            first_handle = first.prepare((encoded_request(),))
+            second_handle = second.prepare((encoded_request(),))
+
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            second.execute(first_handle)
+        with mock.patch.object(prediction_model, "predict_composed_element", return_value=((0, 42.5),)):
+            first_result = tuple(first.execute(first_handle))
+            second_result = tuple(second.execute(second_handle))
+        self.assertEqual(1, len(first_result))
+        self.assertEqual(1, len(second_result))
+
     def test_preparation_owns_current_handle_and_loads_no_model(self):
         dictionary = PredictionDictionary()
         loader = mock.Mock(return_value=(object(), object()))
