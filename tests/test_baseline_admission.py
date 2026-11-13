@@ -23,7 +23,6 @@ from unittest.mock import patch
 
 from tests import test_baseline_launcher as launcher_fixture
 
-
 # Allow several native startup phases and the 30-second metadata deadline before
 # the test reports a timeout; descendant-held pipes can delay subprocess cleanup.
 BASELINE_LAUNCH_WATCHDOG = 75
