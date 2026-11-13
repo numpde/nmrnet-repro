@@ -422,6 +422,23 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(writer.closed)
         self.assertEqual(1, len(writer.sent))
 
+    async def test_prepared_handle_cannot_move_between_worker_clients(self):
+        replies = frame(
+            {"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}
+        ) + frame({"kind": "result", "allocation": "test-allocation", "result": [{}]})
+        first, first_writer = self.client(replies)
+        second, second_writer = self.client(replies)
+        first_handle = await first.prepare((b"first",))
+        second_handle = await second.prepare((b"second",))
+
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            await second.execute(first_handle)
+        self.assertEqual(1, len(second_writer.sent))
+        self.assertEqual(({},), await first.execute(first_handle))
+        self.assertEqual(({},), await second.execute(second_handle))
+        self.assertEqual(2, len(first_writer.sent))
+        self.assertEqual(2, len(second_writer.sent))
+
     async def test_model_failure_frame_is_distinct_from_general_execution_failure(self):
         replies = frame(
             {"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32, "declaration_sha256": "d" * 64}
