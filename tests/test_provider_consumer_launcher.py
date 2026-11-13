@@ -41,12 +41,18 @@ class ConsumerLauncherTests(unittest.TestCase):
             "delivery": ["test_nmrnet_service_recovery.py"],
         }
         with tempfile.TemporaryDirectory() as pool:
+            host_bin = Path(pool) / "host-bin"
+            host_bin.mkdir()
+            (host_bin / "id").symlink_to(Path("/workspace/repository_checks/fixtures/containers/id.sh"))
             for name, patterns in selections.items():
                 with self.subTest(selection=name):
                     result = subprocess.run(
                         ["bash", "tools/container.sh", "--print", "test/integration/provider-core/" + name],
                         env={
                             **os.environ,
+                            "PATH": str(host_bin) + ":" + os.environ["PATH"],
+                            "NMRNET_FIXTURE_UID": "1000",
+                            "NMRNET_FIXTURE_GID": "1000",
                             "NMRNET_DOCKER_CONTEXT_INPUT": "test-local",
                             "NMRNET_DOCKER_CONTEXT_INPUT_ORIGIN": "command line",
                             "NMRNET_DOCKER_ENDPOINT_INPUT": "unix:///var/run/docker.sock",
