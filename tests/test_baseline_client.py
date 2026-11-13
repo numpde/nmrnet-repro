@@ -145,10 +145,10 @@ class BaselineClientTests(unittest.TestCase):
                     process = subprocess.Popen(
                         command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
                     )
-                    self.addCleanup(admission_fixture.BaselineAdmissionTests.retire_probe, self, process)
-                    self.await_file(observation)
-                    observed = json.loads(observation.read_text())
+                    observed = None
                     try:
+                        self.await_file(observation)
+                        observed = json.loads(observation.read_text())
                         channel = Path("/proc", str(observed["pid"]), "wchan")
                         deadline = time.monotonic() + 2
                         while (
@@ -161,11 +161,12 @@ class BaselineClientTests(unittest.TestCase):
                         self.assertEqual(128 + signum, process.wait(timeout=4))
                         self.assertFalse(Path(observed["config"]).parent.exists())
                     finally:
-                        self.retire_fixture(observed["pid"])
-                        self.retire_fixture(observed["descendant"])
-                        if process.poll() is None:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        process.communicate(timeout=4)
+                        try:
+                            if observed is not None:
+                                self.retire_fixture(observed["pid"])
+                                self.retire_fixture(observed["descendant"])
+                        finally:
+                            self.stop_client(process)
 
     def test_unknown_inspect_anchor_retains_config_and_stops_before_run(self):
         helper = self.root / "tools/inference_native.sh"
