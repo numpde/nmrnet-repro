@@ -24,11 +24,23 @@ class BaselineClientTests(unittest.TestCase):
     retain_cleanup = admission_fixture.BaselineAdmissionTests.retain_cleanup
     assert_no_run = admission_fixture.BaselineAdmissionTests.assert_no_run
 
-    def await_file(self, path):
-        deadline = time.monotonic() + 3
+    def await_file(self, path, process):
+        deadline = time.monotonic() + admission_fixture.BASELINE_LAUNCH_WATCHDOG
+        exit_observation = None
         while not path.exists() and time.monotonic() < deadline:
+            exit_observation = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            if exit_observation is not None:
+                break
             time.sleep(0.01)
-        self.assertTrue(path.exists(), msg=f"fixture did not publish {path.name}")
+        if not path.exists():
+            message = (
+                f"fixture did not publish {path.name}; "
+                f"launcher exit={exit_observation}; admission marker exists={self.observation.exists()}; "
+                f"engine call log exists={self.calls.exists()}"
+            )
+            if self.calls.exists():
+                message += f"; engine calls={self.calls.read_text()}"
+            self.fail(message)
 
     def retire_fixture(self, identifier):
         with suppress(ProcessLookupError):
@@ -110,7 +122,7 @@ class BaselineClientTests(unittest.TestCase):
         )
         observed = None
         try:
-            self.await_file(observation)
+            self.await_file(observation, process)
             observed = json.loads(observation.read_text())
             for pipe, expected in ((process.stdout, b"stdout\0\r\n"), (process.stderr, b"stderr\0\r\n")):
                 self.assertEqual([pipe], select.select([pipe], [], [], 2)[0])
@@ -147,7 +159,7 @@ class BaselineClientTests(unittest.TestCase):
                     )
                     observed = None
                     try:
-                        self.await_file(observation)
+                        self.await_file(observation, process)
                         observed = json.loads(observation.read_text())
                         channel = Path("/proc", str(observed["pid"]), "wchan")
                         deadline = time.monotonic() + 2
@@ -179,7 +191,7 @@ class BaselineClientTests(unittest.TestCase):
         process = subprocess.Popen(
             command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
         )
-        self.await_file(self.observation)
+        self.await_file(self.observation, process)
         observed = json.loads(self.observation.read_text())
         config = Path(self.engine_calls()[0]["config"])
         os.kill(observed["anchor"], signal.SIGKILL)
@@ -203,7 +215,7 @@ class BaselineClientTests(unittest.TestCase):
             command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
         )
         self.addCleanup(admission_fixture.BaselineAdmissionTests.retire_probe, self, process)
-        self.await_file(observation)
+        self.await_file(observation, process)
         observed = json.loads(observation.read_text())
         config = Path(observed["config"])
         sentinel = config / "caller-state"
@@ -270,7 +282,7 @@ class BaselineClientTests(unittest.TestCase):
                     )
                     os.close(write_fd)
                     write_fd = None
-                    self.await_file(self.observation)
+                    self.await_file(self.observation, process)
                     receipt = json.loads(self.observation.read_text())
                     directory = Path(receipt["directory"])
                     self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(directory)], check=True)
@@ -395,7 +407,7 @@ class BaselineClientTests(unittest.TestCase):
                 )
                 observed = None
                 try:
-                    self.await_file(observation)
+                    self.await_file(observation, process)
                     observed = json.loads(observation.read_text())
                     channel = Path("/proc", str(observed["pid"]), "wchan")
                     deadline = time.monotonic() + 2

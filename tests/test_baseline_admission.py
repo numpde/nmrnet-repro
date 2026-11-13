@@ -24,6 +24,11 @@ from unittest.mock import patch
 from tests import test_baseline_launcher as launcher_fixture
 
 
+# Allow several native startup phases and the 30-second metadata deadline before
+# the test reports a timeout; descendant-held pipes can delay subprocess cleanup.
+BASELINE_LAUNCH_WATCHDOG = 75
+
+
 class BaselineAdmissionTests(unittest.TestCase):
     def setUp(self):
         launcher_fixture.BaselineRunLauncherTests.setUp(self)
@@ -52,8 +57,8 @@ class BaselineAdmissionTests(unittest.TestCase):
     def command(self, action, additions):
         return ["/bin/bash", str(self.root / "tools/baseline.sh"), action], self.environment | additions
 
-    # silent-defaults: allow-contract -- Omitted inputs select run admission with a five-second local subprocess observation bound; the consumer checks exact metadata and receipt removal before the inert run; proof=tests/test_baseline_admission.py::BaselineAdmissionTests.test_run_admits_one_exact_identity_and_label_before_dispatch
-    def call(self, action="run", *, additions=None, timeout=5):
+    # silent-defaults: allow-contract -- Omitted inputs select run admission with a bounded local subprocess observation; the consumer checks exact metadata and receipt removal before the inert run; proof=tests/test_baseline_admission.py::BaselineAdmissionTests.test_run_admits_one_exact_identity_and_label_before_dispatch
+    def call(self, action="run", *, additions=None, timeout=BASELINE_LAUNCH_WATCHDOG):
         # silent-defaults: allow-contract -- Omitted additions keep the owned admission scenario; supplied entries override only their selected inputs; proof=tests/test_baseline_admission.py::BaselineAdmissionTests.test_removal_selector_is_owned_despite_ambient_failure
         command, environment = self.command(action, {} if additions is None else additions)
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=timeout, check=False)
